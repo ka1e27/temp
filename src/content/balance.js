@@ -33,8 +33,8 @@ export const UNITS = {
 export const SITES = {
   farm:       { gold: 2.0, train: 0,    cap: 30, hp: 100, hpRegen: 2.0, defMult: 1.00 },
   stronghold: { gold: 0,   train: 1.00, cap: 45, hp: 250, hpRegen: 4.0, defMult: 1.25 },
-  camp:       { gold: 4.0, train: 1.25, cap: 80, hp: 600, hpRegen: 8.0, defMult: 1.40 },
-  castle:     { gold: 4.0, train: 1.25, cap: 80, hp: 600, hpRegen: 8.0, defMult: 1.60 },
+  camp:       { gold: 4.0, train: 1.25, cap: 80, hp: 480, hpRegen: 5.0, defMult: 1.40 },
+  castle:     { gold: 4.0, train: 1.25, cap: 80, hp: 480, hpRegen: 5.0, defMult: 1.60 },
 };
 
 /** Per-level multipliers for in-battle site upgrades (index 0 = level 1). */
@@ -54,17 +54,17 @@ export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.75 };
 
 export const AI_TIERS = [
   { reactionTicks: 45, aggression: 0.60, commitRatio: 0.45, safetyMargin: 1.60,
-    economyMult: 0.85, concurrent: 1, retreatDiscipline: 0.10, adaptComposition: false,
-    ramAppetite: 0.1 },
-  { reactionTicks: 32, aggression: 0.85, commitRatio: 0.55, safetyMargin: 1.40,
-    economyMult: 1.00, concurrent: 1, retreatDiscipline: 0.35, adaptComposition: false,
-    ramAppetite: 0.4 },
+    economyMult: 0.65, concurrent: 1, retreatDiscipline: 0.10, adaptComposition: false,
+    ramAppetite: 0.1, staging: false },
+  { reactionTicks: 32, aggression: 0.75, commitRatio: 0.50, safetyMargin: 1.50,
+    economyMult: 0.85, concurrent: 1, retreatDiscipline: 0.35, adaptComposition: false,
+    ramAppetite: 0.4, staging: false },
   { reactionTicks: 22, aggression: 1.00, commitRatio: 0.70, safetyMargin: 1.25,
-    economyMult: 1.15, concurrent: 2, retreatDiscipline: 0.65, adaptComposition: true,
-    ramAppetite: 0.8 },
+    economyMult: 1.05, concurrent: 2, retreatDiscipline: 0.65, adaptComposition: true,
+    ramAppetite: 0.8, staging: true },
   { reactionTicks: 15, aggression: 1.20, commitRatio: 0.80, safetyMargin: 1.15,
     economyMult: 1.35, concurrent: 3, retreatDiscipline: 0.90, adaptComposition: true,
-    ramAppetite: 1.0 },
+    ramAppetite: 1.0, staging: true },
 ];
 
 /** Anti-stalemate ladder, keyed off seconds since the last OWNERSHIP CHANGE —
@@ -91,7 +91,7 @@ export const BOOSTERS = {
 };
 
 /** Expedition = base + perRegion * regionsConquered + StandingArmy upgrade. */
-export const EXPEDITION = { base: 8, perRegion: 4 };
+export const EXPEDITION = { base: 14, perRegion: 4 };
 
 export const RALLY_MIN_GARRISON = 8;
 export const SEND_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
@@ -105,7 +105,7 @@ export const CENTIGOLD = 100;
 /** Squad travel. secondsPerHex = hexSecondsPerSpeed / slowestUnitSpeed, so a
  *  militia (55) crosses a hex in ~1.1s and a ram (30) in 2.0s — one ram really
  *  does halve a stack's march, which is what telegraphs a siege push. */
-export const MOVEMENT = { hexSecondsPerSpeed: 60, minTicks: 1 };
+export const MOVEMENT = { hexSecondsPerSpeed: 38, minTicks: 1 };
 
 /** Territory flood. Strength falls off linearly with distance from the site;
  *  two factions within `contestRatio` of each other paint a hatched band. */
@@ -126,13 +126,14 @@ export const MAPGEN = {
   adjacency: { minDegree: 2, maxDegree: 4, targetAvgDegree: 2.8 },
   enemyStrongholdShare: 0.34,
   neutralStrongholdShare: 0.25,
-  playerStrongholdEvery: 3,
+  playerStrongholdEvery: 2,
   neutralScaleShare: 0.5, // neutrals feel enemyMult at half strength
   trainType: { camp: 'militia', castle: 'militia', stronghold: 'spearmen', farm: 'militia' },
   /** Starting garrisons before enemyMult. The player's camp is deliberately
    *  empty: the expedition deploys into it at tick 0. */
   garrison: {
-    player: { camp: {}, farm: { militia: 2 }, stronghold: { militia: 2, spearmen: 1 } },
+    player: { camp: {}, farm: { militia: 5, spearmen: 2 },
+              stronghold: { militia: 4, spearmen: 3 } },
     enemy: {
       castle: { militia: 4, spearmen: 3 },
       farm: { militia: 4 },

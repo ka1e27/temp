@@ -91,16 +91,23 @@ test('the enemy difficulty dial rides the TIER bucket, AI knobs ride multiplicat
 // Expedition
 // ===========================================================================
 
-test('expedition = 8 + 4 x regionsConquered + 4 x Standing Army level', () => {
-  assert.equal(expeditionSize(world([])), EXPEDITION.base);
-  assert.equal(expeditionSize(world(['riverfen'])), 12);
-  assert.equal(expeditionSize(world(['riverfen', 'ashford'])), 16);
-  assert.equal(expeditionSize(world(['riverfen', 'ashford', 'ironwood'])), 20);
-  assert.equal(expeditionSize(world(['riverfen', 'ashford', 'ironwood', 'saltmere'])), 24);
-  // ...which is exactly the plan's per-region expedition column: 8/12/16/20/24.
-  assert.equal(expeditionSize(world([], { standingArmy: 1 })), 12);
-  assert.equal(expeditionSize(world([], { standingArmy: 6 })), 8 + 24);
-  assert.equal(expeditionSize(world(['riverfen', 'ashford'], { standingArmy: 3 })), 16 + 12);
+test('expedition = base + perRegion x regionsConquered + Standing Army levels', () => {
+  const { base, perRegion } = EXPEDITION;
+  assert.equal(expeditionSize(world([])), base);
+  assert.equal(expeditionSize(world(['riverfen'])), base + perRegion);
+  assert.equal(expeditionSize(world(['riverfen', 'ashford'])), base + perRegion * 2);
+  assert.equal(expeditionSize(world(['riverfen', 'ashford', 'ironwood'])), base + perRegion * 3);
+  assert.equal(
+    expeditionSize(world(['riverfen', 'ashford', 'ironwood', 'saltmere'])), base + perRegion * 4,
+  );
+  // Standing Army adds 4 per level on top, making it the most directly felt
+  // purchase in the shop.
+  assert.equal(expeditionSize(world([], { standingArmy: 1 })), base + 4);
+  assert.equal(expeditionSize(world([], { standingArmy: 6 })), base + 24);
+  assert.equal(
+    expeditionSize(world(['riverfen', 'ashford'], { standingArmy: 3 })),
+    base + perRegion * 2 + 12,
+  );
 });
 
 test('distribution is exact for every size and unlock set', () => {
@@ -194,11 +201,11 @@ test('configHash is NOT stored inside the config (it could never match itself)',
 
 test('the expedition really lands in the player mods and grows with the empire', () => {
   const early = buildBattleConfig(world([]), 'riverfen', [], null);
-  assert.equal(total(early.player.expedition), 8);
+  assert.equal(total(early.player.expedition), EXPEDITION.base);
   const late = buildBattleConfig(
     world(['riverfen', 'ashford', 'ironwood', 'saltmere'], { standingArmy: 2 }), 'kaldan', [], null,
   );
-  assert.equal(total(late.player.expedition), 24 + 8);
+  assert.equal(total(late.player.expedition), EXPEDITION.base + EXPEDITION.perRegion * 4 + 8);
   assert.equal(total(late.enemy.expedition), 0, 'the enemy head start is land, not a free army');
 });
 

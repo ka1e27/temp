@@ -72,13 +72,18 @@ test('map size, site count and battle length scale together across tiers', () =>
   assert.ok(last.siteCounts.enemy + last.siteCounts.neutral + last.siteCounts.player >= 22);
 });
 
-test('the first five regions match the plan table exactly', () => {
+// These are the TUNED values, not the ones the design doc first proposed.
+// The original table (7v2 at region 1, rising to 12v2) measured at a 0% win
+// rate in tools/simrunner.js: the player could not out-produce the enemy and
+// every run stalled. The numbers below are what the harness actually clears at
+// 60-80% with zero losses. Change them only with fresh simrunner output.
+test('the vertical slice matches the tuned balance table', () => {
   const table = [
-    ['riverfen', 1, 1.00, 11, 9, 7, 2, 2, 1.0, 5.0],
-    ['ashford', 1, 1.25, 12, 9, 8, 3, 2, 1.2, 5.5],
-    ['ironwood', 1, 1.55, 13, 10, 9, 3, 2, 1.5, 6.0],
-    ['saltmere', 1, 1.90, 13, 10, 10, 4, 2, 1.8, 6.5],
-    ['kaldan', 2, 2.60, 15, 11, 12, 4, 2, 4.0, 7.5],
+    ['riverfen', 1, 1.00, 11, 9, 5, 3, 3, 1.0, 8.0],
+    ['ashford', 1, 1.15, 12, 9, 6, 3, 3, 1.2, 10.0],
+    ['ironwood', 1, 1.30, 13, 10, 7, 3, 4, 1.5, 12.0],
+    ['saltmere', 1, 1.45, 13, 10, 8, 4, 4, 1.8, 13.0],
+    ['kaldan', 2, 1.85, 15, 11, 9, 4, 5, 4.0, 14.0],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;

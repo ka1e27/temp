@@ -83,21 +83,23 @@ try {
 
   // ---- 4. the simulation runs --------------------------------------------
   const t0 = await page.eval(() => ({
-    gold: window.__game.state.battle.factions.player.goldCg,
+    earned: window.__game.state.battle.factions.player.goldEarnedCg,
     tick: window.__game.state.battle.tick,
   }));
   await page.sleep(5000);
   const t1 = await page.eval(() => {
     const b = window.__game.state.battle;
     return {
+      earned: b.factions.player.goldEarnedCg,
       gold: b.factions.player.goldCg, tick: b.tick, squads: b.squads.length,
-      enemySquads: b.squads.filter((s) => s.owner === 'enemy').length,
       status: b.status,
     };
   });
   if (t1.tick - t0.tick < 30) throw new Error(`simulation stalled (${t0.tick} -> ${t1.tick})`);
-  if (t1.gold <= t0.gold) throw new Error('player gold is not accruing from farms');
-  step(`sim running: tick ${t0.tick}->${t1.tick}, gold ${t0.gold}->${t1.gold}`);
+  // Check income, not balance: with strongholds training, the balance can fall
+  // while farms are producing perfectly well.
+  if (t1.earned <= t0.earned) throw new Error('farms are producing no gold');
+  step(`sim running: tick ${t0.tick}->${t1.tick}, earned ${t0.earned}->${t1.earned}cg`);
 
   // ---- 5. a real drag order ----------------------------------------------
   const drag = await page.eval(() => {

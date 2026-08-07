@@ -124,15 +124,13 @@ export function createBattleInput(o) {
   /** Double-tap grabs the whole connected friendly front — the fast way to
    *  order a whole flank without a box drag. */
   function selectFront(id) {
-    const st = getState();
     const seen = new Set([id]);
     const queue = [id];
     while (queue.length) {
-      const cur = st.sites.find((x) => x.id === queue.shift());
+      const cur = site(queue.shift());
       if (!cur) continue;
       for (const n of cur.adj) {
-        const nb = st.sites.find((x) => x.id === n);
-        if (nb && nb.owner === 'player' && !seen.has(n)) { seen.add(n); queue.push(n); }
+        if (!seen.has(n) && site(n)?.owner === 'player') { seen.add(n); queue.push(n); }
       }
     }
     view.selection.length = 0;
@@ -318,9 +316,7 @@ export function createBattleInput(o) {
   }
 
   function spread() {
-    const it = pointers.values();
-    const a = it.next().value;
-    const b = it.next().value;
+    const [a, b] = pointers.values();
     return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
   }
 

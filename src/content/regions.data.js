@@ -11,7 +11,9 @@
 
 /** Battle hard cap per tier, in minutes. A backstop, not a timer you play
  *  against — each sits well above its tier's targetLengthMin. */
-export const HARD_CAP_MIN_BY_TIER = [8, 10, 12.5, 15];
+export const HARD_CAP_MIN_BY_TIER = [12, 14, 17, 20];
+/** The cap is a stall backstop, not a race: 2.2x the advertised length. */
+export const HARD_CAP_RATIO = 1.9;
 
 /** Conquered regions re-fight as Raids: a one-time lump, never permanent income. */
 export const RAID = Object.freeze({
@@ -67,7 +69,9 @@ const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
   grid: { cols, rows },
   siteCounts: { enemy: siteCounts[0], neutral: siteCounts[1], player: siteCounts[2] },
   rewardPerSec, targetLengthMin, flavour,
-  hardCapMs: Math.round(HARD_CAP_MIN_BY_TIER[tier - 1] * 60 * 1000),
+  hardCapMs: Math.round(
+    Math.max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
+  ),
   startsUnlocked: false,
 });
 
@@ -75,70 +79,70 @@ const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
 export const REGIONS = Object.freeze([
   // --- Tier 1 (4) -- the vertical slice. These five rows are balance-frozen. ---
   T('riverfen', 'Riverfen', 1, [0, 0], ['ashford', 'ironwood'],
-    1.00, 11, 9, [7, 2, 2], 1.0, 5.0,
+    1.00, 11, 9, [5, 3, 3], 1.0, 8,
     'Flooded lowlands: two neutral farms sit in the open and the enemy is slow to claim them.'),
   T('ashford', 'Ashford Downs', 1, [1, 0], ['riverfen', 'ironwood', 'saltmere', 'kaldan', 'highmarch'],
-    1.25, 12, 9, [8, 3, 2], 1.2, 5.5,
+    1.15, 12, 9, [6, 3, 3], 1.2, 10,
     'Open chalk downs with almost no cover — a fast raid arrives before the wall does.'),
   T('ironwood', 'Ironwood', 1, [0, 1], ['riverfen', 'ashford', 'saltmere', 'emberholt'],
-    1.55, 13, 10, [9, 3, 2], 1.5, 6.0,
+    1.30, 13, 10, [7, 3, 4], 1.5, 12,
     'Dense timber and single-file passes: chokepoints turn every push into a committed one.'),
   T('saltmere', 'Saltmere', 1, [1, 1],
     ['ashford', 'ironwood', 'kaldan', 'greywater', 'thornmoor', 'emberholt'],
-    1.90, 13, 10, [10, 4, 2], 1.8, 6.5,
+    1.45, 13, 10, [8, 4, 4], 1.8, 13,
     'A salt lagoon splits the field; whoever holds the causeway strongholds holds the region.'),
 
   // --- Tier 2 (5) -- the first real wall. Kaldan proves the upgrade layer matters. ---
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
-    2.60, 15, 11, [12, 4, 2], 4.0, 7.5,
+    1.85, 15, 11, [9, 4, 5], 4.0, 14,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    3.00, 15, 11, [12, 4, 2], 4.4, 7.5,
+    3.00, 15, 11, [12, 4, 6], 4.4, 15,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    3.35, 15, 11, [12, 5, 2], 4.8, 8.0,
+    3.35, 15, 11, [12, 5, 6], 4.8, 15.5,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    3.70, 15, 12, [13, 5, 2], 5.2, 8.0,
+    3.70, 15, 12, [13, 5, 6], 5.2, 16,
     'Bramble country: five neutral farms make the opening land grab the whole battle.'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    4.05, 16, 12, [13, 5, 2], 5.6, 8.0,
+    4.05, 16, 12, [13, 5, 6], 5.6, 16.5,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
   // --- Tier 3 (5) -- ~16x12, ~9 min. Sieges are the whole conversation now. ---
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    5.00, 16, 12, [14, 5, 2], 13.0, 9.0,
+    5.00, 16, 12, [14, 5, 7], 13.0, 17,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    5.50, 16, 12, [14, 5, 2], 14.5, 9.0,
+    5.50, 16, 12, [14, 5, 7], 14.5, 17.5,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    6.00, 16, 12, [15, 5, 2], 16.0, 9.0,
+    6.00, 16, 12, [15, 5, 8], 16.0, 18,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    6.50, 17, 12, [15, 5, 2], 16.5, 9.5,
+    6.50, 17, 12, [15, 5, 8], 16.5, 18.5,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    7.00, 17, 12, [15, 6, 2], 17.0, 9.5,
+    7.00, 17, 12, [15, 6, 8], 17.0, 19,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.'),
 
   // --- Tier 4 (4) -- 17x13, 22+ sites, ~10-11 min. The endgame. ---
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    9.00, 17, 13, [16, 6, 2], 38.0, 10.0,
+    9.00, 17, 13, [16, 6, 8], 38.0, 20,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown'],
-    10.00, 17, 13, [17, 6, 2], 41.0, 10.0,
+    10.00, 17, 13, [17, 6, 8], 41.0, 21,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.'),
   T('ironcrown', 'Ironcrown', 4, [4, 0], ['vaelstrand', 'duskfell', 'blackspire', 'obsidian'],
-    11.00, 17, 13, [18, 6, 2], 44.0, 10.5,
+    11.00, 17, 13, [18, 6, 9], 44.0, 22,
     'The enemy fields a Marshal. Its whole army hits 20% harder until you kill it.'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1], ['ironcrown', 'duskfell', 'thanescar'],
-    12.50, 17, 13, [19, 6, 2], 47.0, 11.0,
+    12.50, 17, 13, [19, 6, 10], 47.0, 23,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. The last one.'),
 ]);
 

@@ -250,6 +250,10 @@ function frontDistance(state) {
 }
 
 function consolidate(state, knobs, out, busy) {
+  // Tier 1 does not mass its rear army forward. Staging is what turns a
+  // scattered garrison into a rolling offensive, and a first-time player needs
+  // room to make the opening mistakes the region is meant to teach.
+  if (!knobs.staging) return;
   const dist = frontDistance(state);
   for (const site of state.sites.filter((s) => s.owner === ME).sort(byId)) {
     const d = dist[site.id];

@@ -11,6 +11,7 @@ import { drainEvents } from '../battle/events.js';
 import { buildBattleConfig } from '../meta/modifiers.js';
 import { generateBattleMap } from '../battle/mapgen.js';
 import { createBattleView } from '../render/battleView.js';
+import { createFx, fxFromEvent } from '../render/fx.js';
 import { createBattleInput, createView } from '../screens/battle-input.js';
 import { createBattleHud, travelSecondsFor } from '../screens/battle-hud.js';
 import { qs } from '../ui/dom.js';
@@ -23,6 +24,7 @@ export function createBattleScene(ctx) {
   let input = null;
   let hud = null;
   let board = null;
+  let fx = null;
   let config = null;
   let finished = false;
 
@@ -46,7 +48,8 @@ export function createBattleScene(ctx) {
       // adjusting your expedition rather than reloading the page.
       ctx.state.session.snapshot = JSON.stringify(ctx.state.battle);
 
-      board = createBattleView({ bg: qs('#board-bg'), fx: qs('#board-fx') });
+      fx = createFx();
+      board = createBattleView({ bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx });
       const presentation = createView();
       input = createBattleInput({
         canvas: qs('#board-fx'), board, view: presentation, getState, bus: ctx.bus,
@@ -71,7 +74,7 @@ export function createBattleScene(ctx) {
 
     exit() {
       ctx.state.battle = null;
-      view = input = hud = board = null;
+      view = input = hud = board = fx = null;
       delete document.body.dataset.scene;
     },
 
@@ -84,7 +87,10 @@ export function createBattleScene(ctx) {
       // The sim never touches the bus. It appends notifications to
       // state.events and we drain them here, AFTER the tick, so a listener can
       // never mutate state the simulation is mid-way through iterating.
-      for (const ev of drainEvents(battle)) ctx.bus.emit(`battle:${ev.type}`, ev);
+      for (const ev of drainEvents(battle)) {
+        fxFromEvent(fx, ev, board.palette, board.hexSize);
+        ctx.bus.emit(`battle:${ev.type}`, ev);
+      }
 
       if (battle.status !== 'running') finish(battle);
     },

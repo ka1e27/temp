@@ -256,8 +256,38 @@ export function buildAdjacency(sites) {
     add(a, b);
   }
 
+  guaranteeSoftOpening(sites, edges, add, taken, pairs);
+
   edges.sort((x, y) => segKey(x[0], x[1]).localeCompare(segKey(y[0], y[1])));
   return edges;
+}
+
+/**
+ * Every home base must border at least one FARM it does not own.
+ *
+ * Without this, a camp can generate boxed in behind a stronghold — 250 HP
+ * repairing at 4/s, against an 8-unit expedition doing 4.8 siege damage. The
+ * opening move is then technically legal and practically impossible, and the
+ * whole battle stalls before it starts. A farm (100 HP, 2/s) is the soft target
+ * that makes the first move exist.
+ */
+function guaranteeSoftOpening(sites, edges, add, taken, pairs) {
+  const byId = Object.fromEntries(sites.map((s) => [s.id, s]));
+  for (const home of sites.filter((s) => s.kind === 'camp' || s.kind === 'castle')) {
+    const neighbours = edges
+      .filter((e) => e[0] === home.id || e[1] === home.id)
+      .map(([a, b]) => byId[a === home.id ? b : a]);
+    if (neighbours.some((n) => n.kind === 'farm' && n.owner !== home.owner)) continue;
+
+    // Nearest farm this base does not already own. `pairs` is distance-sorted,
+    // so the first match is the closest one.
+    const link = pairs.find((p) => {
+      if (taken.has(segKey(p.a, p.b))) return false;
+      const other = p.a === home.id ? byId[p.b] : p.b === home.id ? byId[p.a] : null;
+      return other && other.kind === 'farm' && other.owner !== home.owner;
+    });
+    if (link) add(link.a, link.b);
+  }
 }
 
 // --- entry point -----------------------------------------------------------

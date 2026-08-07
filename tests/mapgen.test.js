@@ -104,9 +104,16 @@ test('the site graph is one connected component with a sane degree spread', () =
 
       const degrees = ids.map((id) => adj[id].length);
       assert.ok(Math.min(...degrees) >= 1, 'no isolated site');
-      assert.ok(Math.max(...degrees) <= MAPGEN.adjacency.maxDegree + 1, 'degree stays readable');
+      // +2 rather than +1: the soft-opening guarantee may add an edge to a site
+      // already at the cap. A map where a home base has no reachable soft target
+      // has no legal opening move, which is worse than a slightly busy node.
+      assert.ok(Math.max(...degrees) <= MAPGEN.adjacency.maxDegree + 2, 'degree stays readable');
       const avg = (adjacency.length * 2) / ids.length;
-      assert.ok(avg >= 2.4 && avg <= 3.2, `average degree ${avg} outside the design range`);
+      // Upper bound allows for the soft-opening edge: every home base is
+      // guaranteed a bordering farm it does not own, which can add an edge
+      // beyond the target average. Without it a camp can generate walled in
+      // behind a stronghold and the battle has no legal opening move.
+      assert.ok(avg >= 2.4 && avg <= 3.6, `average degree ${avg} outside the design range`);
     }
   }
 });
