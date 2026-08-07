@@ -66,6 +66,13 @@ body {
   cursor: grabbing;
 }
 
+/* A booster is armed and the next click lands it somewhere. The cursor has to
+   say so, because the board looks identical either way and firing a 120-second
+   cooldown at the wrong site is not recoverable. */
+#board-fx.is-targeting {
+  cursor: cell;
+}
+
 /* The HUD floats over the board but must not steal the empty space between
    its panels — clicks there belong to the canvas. Interactive children opt
    back in individually. */
@@ -116,12 +123,8 @@ body {
   backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 
-/* --- Type roles -----------------------------------------------------------
-   The one number a screen is ABOUT gets .t-display. There is at most one per
-   screen; if a second appears the screen has stopped making a point. */
+/* --- Type roles --------------------------------------------------------- */
 
-.t-display { font: var(--w-bold) var(--t-2xl) / 1 var(--font-num); letter-spacing: -0.02em; }
-.t-title { font: var(--w-bold) var(--t-xl) / 1.15 var(--font); letter-spacing: -0.01em; }
 .row { display: flex; align-items: center; gap: var(--s-2); }
 .col { display: flex; flex-direction: column; gap: var(--s-1); }
 .num { font-family: var(--font-num); }
@@ -144,22 +147,11 @@ body {
 }
 
 /* --- State: locked / available / owned ------------------------------------
-   Three channels so ownership is never colour alone:
-     1. fill + edge in --state          2. a hatch (locked only)
-     3. a text tag from ::after on .state-tag
-   Contexts re-point --state; the treatment is identical everywhere. */
-
-[data-state="locked"] { --state: var(--c-neutral); color: var(--c-text-dim); }
-[data-state="available"] { --state: var(--c-accent); }
-[data-state="owned"] { --state: var(--c-player); }
-.state-tag {
-  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  letter-spacing: var(--track-tag); text-transform: uppercase; color: var(--state);
-}
-
-[data-state="locked"] > .state-tag::after { content: "LOCKED"; }
-[data-state="available"] > .state-tag::after { content: "OPEN"; }
-[data-state="owned"] > .state-tag::after { content: "HELD"; }
+   Ownership is never colour alone: a --state hue on the edge, a hatch for
+   locked, and a word. The rules live in scenes.css keyed on [data-status],
+   which is the attribute the screens actually emit. A parallel [data-state]
+   vocabulary used to sit here and matched nothing — two grammars for one idea,
+   with the unused one looking authoritative. */
 
 /* --- Buttons -------------------------------------------------------------
    Declared ONCE. Height is --hit so the same control works under a thumb, and

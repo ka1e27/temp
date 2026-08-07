@@ -14,7 +14,11 @@ import { createBattleView } from '../render/battleView.js';
 import { createFx, fxFromEvent } from '../render/fx.js';
 import { createBattleInput, createView } from '../screens/battle-input.js';
 import { createBattleHud, travelSecondsFor } from '../screens/battle-hud.js';
+import { saveBattle, clearBattle } from '../meta/resume.js';
 import { qs } from '../ui/dom.js';
+
+/** Checkpoint cadence. A refresh should cost seconds, not the whole fight. */
+const RESUME_EVERY_MS = 4000;
 
 /**
  * @param {object} ctx {state, bus, scenes, root, hudRoot}
@@ -28,6 +32,7 @@ export function createBattleScene(ctx) {
   let coach = null;
   let config = null;
   let finished = false;
+  let lastResumeAt = 0;
 
   /**
    * Coach marks are optional: the game must run whether or not ui/coach.js
@@ -69,25 +74,28 @@ export function createBattleScene(ctx) {
     id: 'battle',
 
     enter(params) {
-      const { regionId, boosters, composition } = params;
+      const { regionId, boosters, composition, resume } = params;
       finished = false;
 
-      // ---- meta -> battle -------------------------------------------------
-      // `composition` comes from the pre-battle loadout screen. modifiers.js
-      // treats it as ratios and refits it to the expedition budget, so the
-      // screen can never mint troops.
-      config = buildBattleConfig(
-        ctx.state.meta, regionId, boosters, generateBattleMap,
-        composition ? { composition } : undefined,
-      );
-      assertBattleConfig(config);
-      ctx.state.battle = startBattle(config);
+      if (resume) {
+        // Picked back up mid-fight after a refresh. The state was validated on
+        // the way out of storage, so it is stepped exactly as it was left.
+        config = resume.config;
+        ctx.state.battle = resume.battle;
+      } else {
+        // ---- meta -> battle -----------------------------------------------
+        // `composition` comes from the pre-battle loadout screen. modifiers.js
+        // treats it as ratios and refits it to the expedition budget, so the
+        // screen can never mint troops.
+        config = buildBattleConfig(
+          ctx.state.meta, regionId, boosters, generateBattleMap,
+          composition ? { composition } : undefined,
+        );
+        assertBattleConfig(config);
+        ctx.state.battle = startBattle(config);
+      }
       ctx.state.session.pendingConfig = config;
-
-      // Keep the tick-0 snapshot in memory so Retry is instant. ~5KB, and it
-      // matters: the intended experience is failing a hard region twice and
-      // adjusting your expedition rather than reloading the page.
-      ctx.state.session.snapshot = JSON.stringify(ctx.state.battle);
+      lastResumeAt = 0;
 
       fx = createFx();
       board = createBattleView({ bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx });
@@ -141,6 +149,14 @@ export function createBattleScene(ctx) {
       }
 
       coach?.update();
+
+      // Checkpoint often enough that a refresh costs seconds, not the fight.
+      const now = Date.now();
+      if (now - lastResumeAt > RESUME_EVERY_MS) {
+        lastResumeAt = now;
+        saveBattle(ctx.storage, battle, config, now);
+      }
+
       if (battle.status !== 'running') finish(battle);
     },
 
@@ -158,6 +174,8 @@ export function createBattleScene(ctx) {
   // ---- battle -> meta ---------------------------------------------------
   function finish(battle) {
     finished = true;
+    // The fight is decided; a resume blob now would replay a finished battle.
+    clearBattle(ctx.storage);
     const outcome = toOutcome(battle, config);
     assertBattleOutcome(outcome, config);
     ctx.state.session.lastOutcome = outcome;

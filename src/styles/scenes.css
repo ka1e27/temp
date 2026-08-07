@@ -288,9 +288,9 @@
 .shop-row:hover { background: var(--plate-bg-2); }
 /* Owned reads here exactly as a held region reads on the map: the state hue on
    the leading edge, plus a word. */
-.shop-row[data-maxed='1'],
-.shop-row[data-state='owned'] { --state: var(--c-player); box-shadow: inset 2px 0 0 var(--state); opacity: 0.72; }
-.shop-row[data-state='locked'] { --state: var(--c-neutral); opacity: 0.55; }
+.shop-row[data-maxed='1'] {
+  --state: var(--c-player); box-shadow: inset 2px 0 0 var(--state); opacity: 0.72;
+}
 .shop-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .shop-name { font-weight: var(--w-bold); }
 .shop-desc { font-size: var(--t-sm); color: var(--c-text-dim); }

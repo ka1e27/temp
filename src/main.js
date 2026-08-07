@@ -6,6 +6,7 @@ import { createBus } from './core/bus.js';
 import { createSceneStack } from './core/scenes.js';
 import { createStorageAdapter, bootstrapGame, createAutosaver } from './meta/save.js';
 import { tick as tickIdle } from './meta/idle.js';
+import { loadBattle } from './meta/resume.js';
 import { createScreens } from './screens/index.js';
 import { qs } from './ui/dom.js';
 
@@ -75,14 +76,24 @@ ctx.loop = loop;
 ctx.autosaver = autosaver;
 ctx.storage = storage;
 
-// The menu owns the boot decision and can explain a refused save; on a brand
-// new save it routes straight into region 1 rather than making anyone read a
-// menu before their first game.
-scenes.replace(ctx.screens.mainmenu, {
-  offline: boot.offline,
-  blocked: boot.blocked,
-  reason: boot.reason,
-});
+// An interrupted battle wins over every other boot route. A fight runs 8-14
+// minutes and losing one to an accidental refresh is the papercut that stops
+// people playing — so resume it rather than asking, since Withdraw is a real
+// button if they would rather leave. Anything stale, corrupt or from an older
+// contract was already discarded on the way out of storage.
+const interrupted = loadBattle(storage, Date.now());
+if (interrupted.ok) {
+  scenes.replace(ctx.screens.battle, { resume: interrupted });
+} else {
+  // The menu owns the boot decision and can explain a refused save; on a brand
+  // new save it routes straight into region 1 rather than making anyone read a
+  // menu before their first game.
+  scenes.replace(ctx.screens.mainmenu, {
+    offline: boot.offline,
+    blocked: boot.blocked,
+    reason: boot.reason,
+  });
+}
 loop.start();
 
 // Long absences are handled by the closed-form offline calculation, never by

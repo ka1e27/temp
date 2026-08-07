@@ -180,6 +180,14 @@
 .booster.is-armed .booster-key { color: var(--c-accent); }
 .booster.is-rejected { animation: hd-nope var(--d-slow) var(--ease); }
 
+/* Slow-motion is held, not toggled, so it needs a state you can see at a
+   glance without reading the label — you are holding a key and want to know
+   it took. */
+.hud-speeds.is-slow {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-accent) 55%, transparent);
+}
+.hud-speeds.is-slow .label { color: var(--c-accent); }
+
 /* --- Selection / site panel ----------------------------------------------
    Opens for EVERY site, farms included, and carries the Upgrade action. */
 
