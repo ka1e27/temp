@@ -114,9 +114,11 @@ export function createSceneStack({ onError } = {}) {
       try { entry.scene.update?.(dtMs); } catch (err) { fail(err, 'update', entry.scene.id); }
     },
 
-    render(alpha) {
+    /** `frameMs` is forwarded so a scene can age wall-clock animations (fx,
+     *  transitions) independently of the fixed simulation step. */
+    render(alpha, frameMs) {
       for (const scene of this.visible()) {
-        try { scene.render?.(alpha); } catch (err) { fail(err, 'render', scene.id); }
+        try { scene.render?.(alpha, frameMs); } catch (err) { fail(err, 'render', scene.id); }
       }
     },
   };

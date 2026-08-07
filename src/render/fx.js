@@ -132,8 +132,23 @@ const easeOut = (t) => 1 - (1 - t) * (1 - t);
  * @param {object} ev  {type, x, y, owner, amount}
  * @param {object} p   palette
  */
-export function fxFromEvent(fx, ev, p, hexSize = 34) {
-  const color = p.owner[ev.owner] || p.accent;
+/**
+ * Map a sim event to an effect at the right place on the board.
+ *
+ * Sim events carry `siteId`, never coordinates — the simulation has no idea
+ * where anything is on screen, and it must not. This previously read `ev.x`
+ * and `ev.y`, so every spawn landed at NaN and canvas silently drew nothing:
+ * no capture flash, no siege impact, no floating number had ever appeared.
+ * `locate` resolves a site id to a world position.
+ *
+ * @param {(siteId:string)=>({x:number,y:number}|null)} locate
+ */
+export function fxFromEvent(fx, ev, p, hexSize = 34, locate = null) {
+  const at = ev.siteId != null && locate ? locate(ev.siteId) : null;
+  if (at) { ev = { ...ev, x: at.x, y: at.y }; }
+  if (!Number.isFinite(ev.x) || !Number.isFinite(ev.y)) return;
+  // `site-captured` carries from/to rather than owner; prefer the new holder.
+  const color = p.owner[ev.to ?? ev.owner] || p.accent;
   switch (ev.type) {
     case 'site-captured':
       fx.spawn('shock', ev.x, ev.y, { color, life: 0.8, r0: hexSize * 0.4, r1: hexSize * 2.4 });
@@ -146,7 +161,7 @@ export function fxFromEvent(fx, ev, p, hexSize = 34) {
       fx.spawn('ring', ev.x, ev.y, { color: p.danger, life: 0.35, r0: hexSize * 0.5, r1: hexSize * 0.8 });
       break;
     case 'units-trained':
-      fx.spawn('float', ev.x, ev.y, { color: p.gold, life: 1.1, text: `+${ev.amount}` });
+      fx.spawn('float', ev.x, ev.y, { color: p.gold, life: 1.1, text: `+${ev.count ?? ev.amount ?? 1}` });  // events use `count`
       break;
     default:
       break;

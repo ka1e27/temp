@@ -49,8 +49,8 @@ const loop = createLoop({
     scenes.update(dtMs);
     autosaver.update(state, Date.now());
   },
-  render(alpha) {
-    scenes.render(alpha);
+  render(alpha, frameMs) {
+    scenes.render(alpha, frameMs);
   },
   now: () => performance.now(),
   raf: (cb) => requestAnimationFrame(cb),
