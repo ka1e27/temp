@@ -67,6 +67,8 @@ export function createMeta() {
     /** boosterId -> charges owned. */
     boosters: {},
     stats: createStats(),
+    /** Coach marks run once, in region 1 only, and never replay after this. */
+    tutorialSeen: false,
     /** Reserved so prestige can land later with no migration. */
     legacy: { points: 0, resets: 0 },
   };
@@ -132,6 +134,10 @@ export function fromPersisted(data, { now = 0 } = {}) {
   meta.upgrades = sanitizeLevels(m.upgrades);
   meta.boosters = sanitizeLevels(m.boosters);
   meta.stats = { ...createStats(), ...(m.stats ?? {}) };
+  // Absent on saves written before onboarding existed: those players have
+  // already learned the game, so defaulting to "seen" would be wrong only for
+  // a brand-new save, which gets this from createMeta() instead.
+  meta.tutorialSeen = m.tutorialSeen === true;
   meta.legacy = { points: 0, resets: 0, ...(m.legacy ?? {}) };
 
   for (const [id, rec] of Object.entries(m.regions ?? {})) {

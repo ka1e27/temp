@@ -25,8 +25,35 @@ export function createBattleScene(ctx) {
   let hud = null;
   let board = null;
   let fx = null;
+  let coach = null;
   let config = null;
   let finished = false;
+
+  /**
+   * Coach marks are optional: the game must run whether or not ui/coach.js
+   * exists yet, so this loads it lazily and never lets a missing tutorial stop
+   * a battle. Onboarding is additive, never load-bearing.
+   */
+  function mountCoach() {
+    if (ctx.state.meta.tutorialSeen) return null;
+    let live = null;
+    let disposed = false;
+    import('../ui/coach.js')
+      .then((m) => {
+        if (disposed || !m.createCoach) return;
+        live = m.createCoach({
+          root: ctx.hudRoot,
+          bus: ctx.bus,
+          getState,
+          getMeta: () => ctx.state.meta,
+        });
+      })
+      .catch(() => { /* no coach module yet — play on */ });
+    return {
+      update: () => live?.update?.(),
+      dispose: () => { disposed = true; live?.dispose?.(); live = null; },
+    };
+  }
 
   const getState = () => ctx.state.battle;
 
@@ -42,11 +69,17 @@ export function createBattleScene(ctx) {
     id: 'battle',
 
     enter(params) {
-      const { regionId, boosters } = params;
+      const { regionId, boosters, composition } = params;
       finished = false;
 
       // ---- meta -> battle -------------------------------------------------
-      config = buildBattleConfig(ctx.state.meta, regionId, boosters, generateBattleMap);
+      // `composition` comes from the pre-battle loadout screen. modifiers.js
+      // treats it as ratios and refits it to the expedition budget, so the
+      // screen can never mint troops.
+      config = buildBattleConfig(
+        ctx.state.meta, regionId, boosters, generateBattleMap,
+        composition ? { composition } : undefined,
+      );
       assertBattleConfig(config);
       ctx.state.battle = startBattle(config);
       ctx.state.session.pendingConfig = config;
@@ -65,8 +98,14 @@ export function createBattleScene(ctx) {
       hud = createBattleHud({
         root: ctx.hudRoot, getState, view: presentation, input, board,
         bus: ctx.bus, travelSeconds: travelSecondsFor,
+        // The HUD must not reach the loop directly; presentation never drives
+        // the clock. It asks, and the shell decides.
+        onSetSpeed: (n) => ctx.loop?.setSpeed(n),
+        getSpeed: () => ctx.loop?.speed ?? 1,
       });
       view = presentation;
+
+      coach = mountCoach();
 
       document.body.dataset.scene = 'battle';
       // Exposed for the browser smoke test, which drives real drag gestures
@@ -77,6 +116,7 @@ export function createBattleScene(ctx) {
         () => input?.dispose(),
         () => hud?.dispose(),
         () => board?.dispose(),
+        () => coach?.dispose(),
       ];
     },
 
@@ -100,6 +140,7 @@ export function createBattleScene(ctx) {
         ctx.bus.emit(`battle:${ev.type}`, ev);
       }
 
+      coach?.update();
       if (battle.status !== 'running') finish(battle);
     },
 

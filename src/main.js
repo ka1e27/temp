@@ -41,13 +41,23 @@ const ctx = {
 };
 createScreens(ctx);
 
+let lastIdleAt = Date.now();
+
 const loop = createLoop({
   update(dtMs) {
-    // Idle income accrues in EVERY scene, including mid-battle. Playing the
-    // game must never cost you the income you would have earned idling.
-    tickIdle(state, dtMs, Date.now(), bus);
+    const now = Date.now();
+    // Idle income accrues in EVERY scene, including mid-battle: playing must
+    // never cost you the income you would have earned idling.
+    //
+    // It accrues on the WALL clock, never the simulation clock. The battle
+    // speed control makes the loop tick up to 4x as often, and paying per tick
+    // would turn it into a money printer. Clamped because a long stall is the
+    // offline calculation's job, not this one's.
+    const realMs = Math.min(Math.max(0, now - lastIdleAt), 1000);
+    lastIdleAt = now;
+    tickIdle(state, realMs, now, bus);
     scenes.update(dtMs);
-    autosaver.update(state, Date.now());
+    autosaver.update(state, now);
   },
   render(alpha, frameMs) {
     scenes.render(alpha, frameMs);
@@ -56,6 +66,10 @@ const loop = createLoop({
   raf: (cb) => requestAnimationFrame(cb),
   cancelRaf: (id) => cancelAnimationFrame(id),
 });
+
+// Scenes are built before the loop exists, so the battle HUD reads the speed
+// control off ctx lazily rather than capturing it.
+ctx.loop = loop;
 
 scenes.replace(ctx.screens.worldmap, { offline: boot.offline });
 loop.start();
