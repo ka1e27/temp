@@ -61,3 +61,15 @@ simulation run headless in tests and stay deterministic.
 `src/battle/contract.js`, which is validated at runtime in both directions.
 
 All tuning numbers live in `src/content/balance.js` — a balance pass is a one-file diff.
+
+## Play it
+
+Deployed to GitHub Pages on every push to `main`, gated on the test suite:
+
+**https://ka1e27.github.io/temp/**
+
+Add `?dev=1` for the developer overlay (battle speed, grant crowns, jump to any
+region, state inspector).
+
+Progress is saved to `localStorage`, so it is per-browser and the link is safe
+to share — nobody plays on anybody else's save.

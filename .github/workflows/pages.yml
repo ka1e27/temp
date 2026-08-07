@@ -1,0 +1,65 @@
+# Publish the game to GitHub Pages.
+#
+# There is nothing to build: the game is zero-dependency ES modules and static
+# assets, and Pages serves it over https, which is all the modules ever needed
+# (the local `file://` restriction that index.html guards against does not
+# apply here). So the "build" is a test run plus an upload of the repo.
+#
+# Tests gate the deploy on purpose — a broken push should not become the
+# playable link people are testing against.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a queued deploy finish rather than cancelling it, but never run two at
+# once against the same environment.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No `npm ci`: the project has no dependencies, and adding one would be
+      # the first thing to break that promise.
+      - name: Unit tests
+        run: npm test
+      - name: File size and purity gates
+        run: npm run check
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on the first time this runs, so the site needs no
+          # manual setup in repository settings.
+          enablement: true
+      - name: Package the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Served from a subpath (/temp/), which works because every asset
+          # reference in index.html is relative.
+          path: .
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
