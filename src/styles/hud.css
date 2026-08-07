@@ -1,0 +1,248 @@
+/* The in-battle HUD. DOM, not canvas: text stays crisp, is selectable by
+   assistive tech, and costs nothing per frame.
+   #hud itself is pointer-events:none (see base.css) — only the controls below
+   opt back in, so clicks on empty HUD space fall through to the board. */
+
+.hud-corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+}
+.hud-tl { top: 0; left: 0; align-items: flex-start; }
+.hud-tr { top: 0; right: 0; align-items: flex-end; }
+
+/* --- Gold + income -------------------------------------------------------- */
+
+.hud-gold {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+}
+.hud-gold .hud-value {
+  font: var(--w-bold) var(--t-xl) / 1 var(--font-num);
+  color: var(--c-gold);
+}
+.hud-rate {
+  font: var(--w-normal) var(--t-sm) / 1 var(--font-num);
+  color: var(--c-text-dim);
+}
+.hud-objective {
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+  padding-left: var(--s-1);
+}
+.hud-clock {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+}
+.hud-clock .hud-value {
+  font: var(--w-bold) var(--t-lg) / 1 var(--font-num);
+}
+.hud-clock.is-urgent .hud-value { color: var(--c-danger); }
+
+/* --- Bottom dock ---------------------------------------------------------- */
+
+.hud-dock {
+  position: absolute;
+  left: 50%;
+  bottom: var(--s-3);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-3);
+  padding: 0 var(--s-3);
+}
+.hud-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-2);
+}
+.hud-group-label {
+  position: absolute;
+  top: 0;
+  left: var(--s-1);
+  transform: translateY(-1.4em);
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+/* --- Strength selector: set once, applies to every order ------------------ */
+
+.seg {
+  min-width: 40px;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-2);
+  background: var(--c-surface-2);
+  color: var(--c-text-dim);
+  font: var(--w-bold) var(--t-sm) / 1.6 var(--font-num);
+  text-align: center;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease);
+}
+.seg:hover { color: var(--c-text); }
+.seg.is-on {
+  background: color-mix(in srgb, var(--c-player) 22%, var(--c-surface-2));
+  color: var(--c-player);
+  box-shadow: inset 0 0 0 1px var(--c-player);
+}
+
+/* --- Unit filter chips ---------------------------------------------------- */
+
+.chip {
+  --chip: var(--c-neutral);
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--c-surface-2);
+  font-size: var(--t-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-text);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: opacity var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
+}
+.chip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+.chip.is-on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 60%, transparent); }
+.chip.is-off { opacity: 0.34; }
+.chip.is-locked { opacity: 0.18; pointer-events: none; }
+.chip-key {
+  font-family: var(--font-num);
+  color: var(--c-text-dim);
+}
+
+/* --- Boosters: charges and a cooldown sweep ------------------------------- */
+
+.booster {
+  position: relative;
+  width: var(--hit);
+  height: var(--hit);
+  border-radius: var(--r-2);
+  background: var(--c-surface-2);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  transition: box-shadow var(--d-fast) var(--ease);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+}
+.booster:hover { box-shadow: inset 0 0 0 1px var(--c-accent); }
+.booster-key {
+  font: var(--w-bold) var(--t-sm) / 1 var(--font-num);
+  color: var(--c-text);
+}
+.booster-name {
+  position: absolute;
+  bottom: 2px;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+.booster-charges {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
+  color: var(--c-accent);
+}
+/* Cooldown is a conic sweep driven by one custom property, so the update is a
+   single style write per booster per 10Hz refresh. */
+.booster-cd {
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 calc(var(--cd, 0) * 360deg),
+    rgba(0, 0, 0, 0.68) calc(var(--cd, 0) * 360deg) 360deg
+  );
+  pointer-events: none;
+}
+.booster.is-empty { opacity: 0.4; }
+.booster.is-empty .booster-charges { color: var(--c-text-dim); }
+
+/* --- Outcome preview -----------------------------------------------------
+   The design's load-bearing promise: this panel calls the same resolveField()
+   the simulation calls, so it is a guarantee, not a prediction. */
+
+/* Sits ABOVE the dock rather than beside it: at 1280px the boosters and the
+   preview fight for the same corner, and clipping the booster bar is worse
+   than stacking. */
+.hud-preview {
+  position: absolute;
+  right: var(--s-3);
+  bottom: calc(var(--hit) + var(--s-6) + var(--s-3));
+  min-width: 360px;
+  max-width: 640px;
+  padding: var(--s-3);
+  display: none;
+  flex-direction: column;
+  gap: var(--s-2);
+  border-left: 3px solid var(--c-neutral);
+}
+.hud-preview.is-open { display: flex; }
+.hud-preview.is-win { border-left-color: var(--c-player); }
+.hud-preview.is-loss { border-left-color: var(--c-danger); }
+.hud-preview.is-reinforce { border-left-color: var(--c-accent); }
+
+.pv-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+.pv-verdict { font-weight: var(--w-bold); letter-spacing: 0.1em; }
+.is-win .pv-verdict { color: var(--c-player); }
+.is-loss .pv-verdict { color: var(--c-danger); }
+.is-reinforce .pv-verdict { color: var(--c-accent); }
+
+.pv-line {
+  font: var(--w-bold) var(--t-md) / 1.45 var(--font-num);
+  color: var(--c-text);
+  word-spacing: 0.05em;
+}
+.pv-note {
+  font-size: var(--t-sm);
+  color: var(--c-warn);
+}
+.pv-note.is-blocked { color: var(--c-danger); }
+.pv-caveats { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.pv-caveat {
+  padding: 2px var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-line);
+  font-size: var(--t-xs);
+  color: var(--c-text-dim);
+}
+
+/* --- Composition readout (mirrors the on-canvas garrison bar) ------------- */
+
+.pv-comp {
+  display: flex;
+  height: var(--bar-h);
+  border-radius: var(--r-1);
+  overflow: hidden;
+  background: var(--c-surface-2);
+}
+.pv-comp span { display: block; height: 100%; }

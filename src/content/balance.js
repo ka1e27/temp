@@ -70,10 +70,17 @@ export const AI_TIERS = [
 /** Anti-stalemate ladder, keyed off seconds since the last OWNERSHIP CHANGE —
  *  besieging a wall you cannot breach does not reset the clock. */
 export const ATTRITION = [
-  { afterSec: 150, farmMult: 0.75, regenMult: 1.0,  garrisonBleed: 0 },
-  { afterSec: 210, farmMult: 0.75, regenMult: 0.5,  garrisonBleed: 1 },
-  { afterSec: 270, farmMult: 0.50, regenMult: 0.0,  garrisonBleed: 1 },
+  { afterSec: 150, farmMult: 0.75, regenMult: 1.0,  garrisonBleed: 0,
+    trainMult: 1, trainCostMult: 1 },
+  { afterSec: 210, farmMult: 0.75, regenMult: 0.5,  garrisonBleed: 1,
+    trainMult: 1, trainCostMult: 1 },
+  { afterSec: 270, farmMult: 0.50, regenMult: 0.0,  garrisonBleed: 1,
+    trainMult: 2, trainCostMult: 2 },
 ];
+/** Oversized garrisons bleed every this many seconds from stage 2 onward. */
+export const ATTRITION_BLEED_SEC = 5;
+/** The ladder is only re-evaluated every N ticks; it moves on a 30s scale. */
+export const ATTRITION_CHECK_TICKS = 10;
 
 export const BOOSTERS = {
   rally:    { charges: 2, cooldownSec: 75,  radius: 2, fraction: 0.5 },
@@ -89,3 +96,68 @@ export const EXPEDITION = { base: 8, perRegion: 4 };
 export const RALLY_MIN_GARRISON = 8;
 export const SEND_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
 export const CENTIGOLD = 100;
+
+// --------------------------------------------------------------------------
+// Battle-engine tuning. Shape and pacing knobs, added by the battle engine so
+// that no simulation file hardcodes a number.
+// --------------------------------------------------------------------------
+
+/** Squad travel. secondsPerHex = hexSecondsPerSpeed / slowestUnitSpeed, so a
+ *  militia (55) crosses a hex in ~1.1s and a ram (30) in 2.0s — one ram really
+ *  does halve a stack's march, which is what telegraphs a siege push. */
+export const MOVEMENT = { hexSecondsPerSpeed: 60, minTicks: 1 };
+
+/** Territory flood. Strength falls off linearly with distance from the site;
+ *  two factions within `contestRatio` of each other paint a hatched band. */
+export const INFLUENCE = { contestRatio: 0.15, levelBonus: 0.25 };
+
+/** Map generation. Shape only — power lives in `garrison` below and is scaled
+ *  by the region's enemyMult. */
+export const MAPGEN = {
+  minSeparation: 3,       // hexes between any two sites...
+  minSeparationFloor: 2,  // ...relaxed to this so placement always terminates
+  edgeMargin: 1,          // keep sites off the outer ring
+  homeBandFrac: 0.25,     // camp/castle sit inside this fraction of their edge
+  ownBandFrac: 0.42,      // a faction's other sites stay inside this fraction
+  neutralBand: [0.28, 0.72],
+  blockedFrac: 0.11,      // share of hexes turned into mountain/water
+  blockedClusterMax: 3,
+  siteClearance: 1,       // no blocked hex within this radius of a site
+  adjacency: { minDegree: 2, maxDegree: 4, targetAvgDegree: 2.8 },
+  enemyStrongholdShare: 0.34,
+  neutralStrongholdShare: 0.25,
+  playerStrongholdEvery: 3,
+  neutralScaleShare: 0.5, // neutrals feel enemyMult at half strength
+  trainType: { camp: 'militia', castle: 'militia', stronghold: 'spearmen', farm: 'militia' },
+  /** Starting garrisons before enemyMult. The player's camp is deliberately
+   *  empty: the expedition deploys into it at tick 0. */
+  garrison: {
+    player: { camp: {}, farm: { militia: 2 }, stronghold: { militia: 2, spearmen: 1 } },
+    enemy: {
+      castle: { militia: 4, spearmen: 3 },
+      farm: { militia: 4 },
+      stronghold: { militia: 3, spearmen: 3 },
+    },
+    neutral: { farm: { militia: 3 }, stronghold: { militia: 2, spearmen: 3 } },
+  },
+};
+
+/** AI knobs that are the SAME at every tier. Per-tier knobs live in AI_TIERS. */
+export const AI = {
+  freeLunchDefence: 25,     // "leave a farm on 3 militia and it will be taken"
+  defendMargin: 1.10,       // reinforce to close the gap x1.1
+  threatHorizonTicks: 60,
+  garrisonFloor: 3,         // never strip a front site below this
+  reliefMarginSec: 10,      // breach must beat relief by this much or pull out
+  siteValue: { farm: 100, stronghold: 150, camp: 400, castle: 400 },
+  consolidationBonus: 0.15, // per adjacent site already held
+  sampleDecay: 0.7,         // exponential decay on the observed player army
+  ramTrainShare: 0.5,       // share of strongholds that take rams when hungry
+  stagingCapMult: 2,        // how far over a garrison cap the AI will mass to strike
+  thinkJitter: 0.2,
+  /** Rock-paper-scissors answer to whatever the player fields most. */
+  counterPick: {
+    militia: 'raiders', spearmen: 'militia', raiders: 'spearmen',
+    rams: 'raiders', marshal: 'spearmen',
+  },
+};

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "savedAt": 1700000000000,
+  "treasury": 1234.5,
+  "regions": {
+    "riverfen": "conquered",
+    "ashford": "conquered",
+    "ironwood": "available",
+    "saltmere": "locked"
+  },
+  "upgrades": {
+    "tithe": 2,
+    "standingArmy": 1,
+    "unlockRaiders": 1
+  },
+  "boosters": {
+    "rally": 3
+  },
+  "settings": {
+    "speed": 1,
+    "sound": true
+  },
+  "legacy": {
+    "points": 0,
+    "resets": 0
+  }
+}

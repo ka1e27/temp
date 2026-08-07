@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Hex Dominion — render harness</title>
+<link rel="icon" href="data:,">
+
+<link rel="stylesheet" href="./src/styles/tokens.css">
+<link rel="stylesheet" href="./src/styles/base.css">
+<link rel="stylesheet" href="./src/styles/hud.css">
+<link rel="stylesheet" href="./src/styles/screens.css">
+<script>
+if (location.protocol === 'file:') {
+  document.documentElement.innerHTML =
+    '<body style="font:16px/1.6 system-ui;padding:3rem;background:#0b0d12;color:#e7ebf3">' +
+    '<h1 style="color:#3ddc97">Run a local server</h1><pre>npm start</pre></body>';
+}
+</script>
+</head>
+<body>
+  <div id="game">
+    <canvas id="board-bg"></canvas>
+    <canvas id="board-fx"></canvas>
+    <div id="hud"></div>
+    <div id="screen-root"></div>
+  </div>
+
+<script type="module">
+// ===========================================================================
+// RENDER HARNESS. The simulation is being written in parallel, so this page
+// stands in for it: a HAND-WRITTEN battle state built through the real
+// createBattleState() factory (guaranteeing the exact shape from
+// battle/state.js), then driven by a dumb ticker.
+//
+// Nothing here belongs to the game — main.js will wire the same modules to the
+// real sim. This exists so the renderer, the HUD and the input layer can be
+// verified end to end before sim.js lands.
+// ===========================================================================
+import { createBattleState } from './src/battle/state.js';
+import { makeMods, CONTRACT_VERSION } from './src/battle/contract.js';
+import { UNIT_IDS } from './src/content/balance.js';
+import { recomputeInfluence } from './src/battle/influence.js';
+
+import { TICK_MS } from './src/core/loop.js';
+import { createBus } from './src/core/bus.js';
+import { createBattleView } from './src/render/battleView.js';
+import { createFx } from './src/render/fx.js';
+import { createBattleInput, createView } from './src/screens/battle-input.js';
+import { createBattleHud } from './src/screens/battle-hud.js';
+
+const COLS = 13;
+const ROWS = 10;
+const NONE = { militia: 0, spearmen: 0, raiders: 0, rams: 0, marshal: 0 };
+
+const SITES = [
+  { id: 'p-camp',   kind: 'camp',       hex: [0, 9],  owner: 'player',  level: 1, garrison: { militia: 14, spearmen: 6, raiders: 2, rams: 1 }, hp: 600, trainType: 'raiders' },
+  { id: 'p-hold',   kind: 'stronghold', hex: [1, 6],  owner: 'player',  level: 2, garrison: { spearmen: 10, militia: 6, rams: 2 },             hp: 210, trainType: 'rams' },
+  { id: 'p-farm',   kind: 'farm',       hex: [4, 7],  owner: 'player',  level: 1, garrison: { militia: 2 },                                    hp: 38 },
+  // The enemy's forward stronghold: close enough to p-hold that the two
+  // influence fields overlap, which is what produces a contested band.
+  { id: 'e-hold3',  kind: 'stronghold', hex: [2, 4],  owner: 'enemy',   level: 2, garrison: { militia: 5, spearmen: 2 },                       hp: 296 },
+  // Still neutral, and under player siege — exercises the neutral site colour
+  // and a stage-2 capture at the same time.
+  { id: 'n-farm',   kind: 'farm',       hex: [7, 6],  owner: 'neutral', level: 1, garrison: {},                                                hp: 55 },
+  { id: 'e-farm4',  kind: 'farm',       hex: [1, 1],  owner: 'enemy',   level: 1, garrison: { militia: 3 },                                    hp: 100 },
+  { id: 'e-farm2',  kind: 'farm',       hex: [3, 2],  owner: 'enemy',   level: 1, garrison: { militia: 4, spearmen: 2 },                       hp: 100 },
+  { id: 'e-hold1',  kind: 'stronghold', hex: [5, 1],  owner: 'enemy',   level: 1, garrison: { spearmen: 9, militia: 6, rams: 1 },              hp: 250 },
+  { id: 'e-farm1',  kind: 'farm',       hex: [7, 3],  owner: 'enemy',   level: 1, garrison: { militia: 6 },                                    hp: 100 },
+  { id: 'e-farm5',  kind: 'farm',       hex: [6, 5],  owner: 'enemy',   level: 1, garrison: { militia: 4 },                                    hp: 100 },
+  { id: 'e-hold2',  kind: 'stronghold', hex: [9, 2],  owner: 'enemy',   level: 2, garrison: { militia: 10, raiders: 3 },                       hp: 320 },
+  { id: 'e-farm3',  kind: 'farm',       hex: [10, 4], owner: 'enemy',   level: 1, garrison: { militia: 5 },                                    hp: 100 },
+  { id: 'e-castle', kind: 'castle',     hex: [8, 0],  owner: 'enemy',   level: 1, garrison: { spearmen: 10, militia: 8, raiders: 4, rams: 2, marshal: 1 }, hp: 600 },
+];
+
+const ADJ = [
+  ['p-camp', 'p-hold'], ['p-camp', 'p-farm'], ['p-hold', 'p-farm'],
+  ['p-hold', 'e-hold3'], ['p-farm', 'n-farm'],
+  ['e-hold3', 'e-farm2'], ['n-farm', 'e-farm1'], ['n-farm', 'e-farm5'], ['e-farm5', 'e-farm1'],
+  ['e-farm2', 'e-farm4'], ['e-farm2', 'e-hold1'], ['e-farm4', 'e-hold1'],
+  ['e-farm1', 'e-hold2'], ['e-farm1', 'e-farm3'], ['e-hold2', 'e-farm3'],
+  ['e-hold1', 'e-castle'], ['e-hold2', 'e-castle'],
+];
+
+// Mountain ridges: the chokepoints that make the front line mean something.
+const BLOCKED = [[3, 5], [4, 5], [7, 4], [8, 4], [-1, 6], [0, 6], [6, 2], [7, 2],
+  [0, 3], [8, 6], [2, 8], [3, 8], [6, 7], [10, 1], [11, 3], [4, 3]];
+
+const state = createBattleState({
+  contractVersion: CONTRACT_VERSION,
+  battleId: 'demo',
+  seed: 7,
+  region: { id: 'riverfen', name: 'Riverfen', tier: 1 },
+  grid: { cols: COLS, rows: ROWS, blocked: BLOCKED },
+  sites: SITES,
+  adjacency: ADJ,
+  player: makeMods({ startGold: 486, expedition: NONE, unlockedUnits: UNIT_IDS }),
+  enemy: makeMods({ startGold: 212, expedition: NONE, unlockedUnits: UNIT_IDS }),
+  boosters: { rally: 2, march: 3, bombard: 1, fortify: 2, tithe: 2 },
+  rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 1 },
+});
+
+const site = (id) => state.sites.find((s) => s.id === id);
+
+// Live sieges: a stage-2 capture in progress on each side.
+site('n-farm').siege = { owner: 'player', comp: { ...NONE, militia: 9, rams: 1 } };
+site('p-farm').siege = { owner: 'enemy', comp: { ...NONE, raiders: 4, militia: 6 } };
+site('p-camp').rallyTarget = 'p-hold';
+site('p-camp').trainProgress = 0.62;
+site('p-hold').trainProgress = 0.35;
+site('p-hold').brownout = 0.62;          // over-extended: amber training ring
+site('e-hold1').trainProgress = 0.8;
+site('e-hold2').trainProgress = 0.25;
+state.boosters.rally.cdTicks = 320;
+state.boosters.bombard.charges = 0;
+state.boosters.bombard.cdTicks = 780;
+state.tick = 300;
+
+state.squads = [
+  { id: 1, owner: 'player', from: 'p-hold', to: 'e-hold3', comp: { ...NONE, militia: 12, rams: 1 }, spawnTick: 280, arriveTick: 350, retreating: false },
+  { id: 2, owner: 'player', from: 'p-farm', to: 'n-farm', comp: { ...NONE, militia: 6, raiders: 2 }, spawnTick: 285, arriveTick: 340, retreating: false },
+  { id: 3, owner: 'enemy',  from: 'e-hold1', to: 'e-hold3', comp: { ...NONE, spearmen: 8, militia: 4 }, spawnTick: 275, arriveTick: 355, retreating: false },
+  { id: 4, owner: 'enemy',  from: 'e-farm1', to: 'n-farm', comp: { ...NONE, raiders: 5 }, spawnTick: 290, arriveTick: 335, retreating: true },
+  { id: 5, owner: 'player', from: 'p-camp', to: 'p-hold', comp: { ...NONE, militia: 9, spearmen: 3 }, spawnTick: 282, arriveTick: 344, retreating: false },
+];
+state.nextSquadId = 6;
+
+// --- Territory influence ----------------------------------------------------
+// Straight from battle/influence.js, so what the renderer is verified against
+// is the REAL field, not a lookalike. It emits 'player' | 'enemy' |
+// 'contested' and simply omits unclaimed hexes; the renderer treats a missing
+// key as bare terrain and also understands 'neutral' if a future map projects
+// it, so both shapes render correctly.
+recomputeInfluence(state);
+state.influenceVersion = 1;
+
+// --- Wiring -----------------------------------------------------------------
+const bus = createBus();
+const fx = createFx({ max: 96 });
+const board = createBattleView({
+  bg: document.getElementById('board-bg'),
+  fx: document.getElementById('board-fx'),
+  fxLayer: fx,
+});
+const view = createView({ fraction: 1 });
+const input = createBattleInput({
+  canvas: document.getElementById('board-fx'),
+  board, view, bus, getState: () => state,
+});
+const hud = createBattleHud({
+  root: document.getElementById('hud'),
+  getState: () => state, view, input, board, bus,
+});
+
+// Open on a live order so the harness exercises the drag arc, the snapped
+// target, the outcome preview and the training picker in one frame.
+view.selection = ['p-hold'];
+view.armed = 'p-hold';
+view.trainPickerFor = 'p-hold';
+view.dragFrom = 'p-hold';
+view.dragTo = 'e-hold3';
+board.sitePos(site('e-hold3'), view.pointer);
+bus.on('ui:command', (c) => console.log('command', JSON.stringify(c)));
+
+// --- Fake loop --------------------------------------------------------------
+// The real game runs core/loop.js at a fixed 10Hz and hands `alpha` to the
+// renderer. Same contract here, minus a simulation.
+let acc = 0;
+let last = performance.now();
+const p = board.palette;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = now - last;
+  last = now;
+  if (dt > 250) dt = 250;
+  acc += dt;
+  while (acc >= TICK_MS) {
+    acc -= TICK_MS;
+    state.tick++;
+    for (const sq of state.squads) {
+      if (state.tick >= sq.arriveTick) {
+        const span = sq.arriveTick - sq.spawnTick;
+        sq.spawnTick = state.tick;
+        sq.arriveTick = state.tick + span;
+        board.sitePos(site(sq.to), TMP);
+        fx.spawn('burst', TMP.x, TMP.y, { color: p.owner[sq.owner], life: 0.5, r0: 14, r1: 46 });
+      }
+    }
+    if (state.tick % 12 === 0) {
+      for (const s of state.sites) {
+        if (!s.siege) continue;
+        board.sitePos(s, TMP);
+        fx.spawn('ring', TMP.x, TMP.y, { color: p.danger, life: 0.4, r0: 16, r1: 30 });
+      }
+    }
+  }
+  fx.update(dt / 1000);
+  board.draw(state, acc / TICK_MS, view);
+  hud.update();
+  if (!window.__ready) window.__ready = true;
+}
+const TMP = { x: 0, y: 0 };
+requestAnimationFrame(frame);
+
+window.__demo = { state, view, board, hud, input, fx, bus };
+</script>
+</body>
+</html>

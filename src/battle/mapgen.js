@@ -1,0 +1,328 @@
+// Battle map generation: the {grid, sites, adjacency} third of a BattleConfig.
+//
+// Seeded and deterministic — the same (regionSpec, seed) always produces the
+// same map, byte for byte, so a battle is reproducible from its config alone.
+// Two invariants are VERIFIED here rather than hoped for:
+//   1. every site can reach every other site over unblocked hexes;
+//   2. the derived site graph is one connected component.
+// PURE.
+import { distance, findPath, neighbors, toPixel, key } from '../core/hex.js';
+import { createRng, deriveSeed } from '../core/rng.js';
+import { MAPGEN, SITES, SITE_LEVELS, UNIT_IDS } from '../content/balance.js';
+
+// --- grid geometry (offset <-> axial). mapgen owns the grid's shape, so the
+// --- rest of battle/ imports these rather than re-deriving them. -----------
+
+/** Offset (col,row) -> axial. Pointy-top, rows shifted every second row. */
+export const axialFromOffset = (col, row) => ({ q: col - Math.floor(row / 2), r: row });
+/** Inverse of axialFromOffset. */
+export const offsetFromAxial = (h) => ({ col: h.q + Math.floor(h.r / 2), row: h.r });
+
+/** Is this hex inside the rectangular play area? */
+export function inGrid(grid, h) {
+  const { col, row } = offsetFromAxial(h);
+  return row >= 0 && row < grid.rows && col >= 0 && col < grid.cols;
+}
+
+/** Every hex of the grid, row-major — a stable iteration order. */
+export function gridHexes(cols, rows) {
+  const out = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) out.push(axialFromOffset(col, row));
+  }
+  return out;
+}
+
+const k = (h) => key(h.q, h.r);
+
+function shuffle(rng, arr) {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = rng.int(0, i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// --- site placement --------------------------------------------------------
+
+/** Which kinds go where, in a fixed order so placement is reproducible. */
+function planSites(spec) {
+  const plan = [{ owner: 'player', kind: 'camp', band: [0, MAPGEN.homeBandFrac] },
+    { owner: 'enemy', kind: 'castle', band: [1 - MAPGEN.homeBandFrac, 1] }];
+
+  const playerExtra = Math.max(0, (spec.playerSites ?? 2) - 1);
+  for (let i = 0; i < playerExtra; i++) {
+    const kind = (i + 1) % MAPGEN.playerStrongholdEvery === 0 ? 'stronghold' : 'farm';
+    plan.push({ owner: 'player', kind, band: [0, MAPGEN.ownBandFrac] });
+  }
+
+  const enemyExtra = Math.max(0, (spec.enemySites ?? 6) - 1);
+  const enemyForts = Math.min(enemyExtra, Math.max(1, Math.round(enemyExtra * MAPGEN.enemyStrongholdShare)));
+  for (let i = 0; i < enemyExtra; i++) {
+    plan.push({
+      owner: 'enemy', kind: i < enemyForts ? 'stronghold' : 'farm',
+      band: [1 - MAPGEN.ownBandFrac, 1],
+    });
+  }
+
+  const neutral = spec.neutralSites ?? 0;
+  const neutralForts = Math.round(neutral * MAPGEN.neutralStrongholdShare);
+  for (let i = 0; i < neutral; i++) {
+    plan.push({
+      owner: 'neutral', kind: i < neutralForts ? 'stronghold' : 'farm',
+      band: MAPGEN.neutralBand,
+    });
+  }
+  return plan;
+}
+
+function bandCandidates(grid, [lo, hi]) {
+  const m = MAPGEN.edgeMargin;
+  const out = [];
+  const span = Math.max(1, grid.cols - 1);
+  for (let row = m; row < grid.rows - m; row++) {
+    for (let col = m; col < grid.cols - m; col++) {
+      const t = col / span;
+      if (t >= lo && t <= hi) out.push(axialFromOffset(col, row));
+    }
+  }
+  return out.length ? out : gridHexes(grid.cols, grid.rows);
+}
+
+/** First hex of a shuffled band that clears every placed site, relaxing the
+ *  separation rather than failing — placement must always terminate. */
+function pickHex(rng, cands, placed, wide) {
+  const pool = shuffle(rng, cands);
+  for (let sep = MAPGEN.minSeparation; sep >= MAPGEN.minSeparationFloor; sep--) {
+    for (const h of pool) {
+      if (placed.every((p) => distance(p, h) >= sep)) return h;
+    }
+  }
+  for (const h of shuffle(rng, wide)) {
+    if (placed.every((p) => distance(p, h) >= MAPGEN.minSeparationFloor)) return h;
+  }
+  return pool[0];
+}
+
+const KIND_TAG = { farm: 'f', stronghold: 's', camp: 'c', castle: 'k' };
+
+function scaleGarrison(base, mult) {
+  const out = {};
+  for (const u of UNIT_IDS) {
+    const n = base[u] || 0;
+    if (n > 0) out[u] = Math.max(1, Math.round(n * mult));
+  }
+  return out;
+}
+
+// --- blocked terrain -------------------------------------------------------
+
+function scatterBlocked(rng, grid, siteHexes) {
+  const target = Math.round(grid.cols * grid.rows * MAPGEN.blockedFrac);
+  const blocked = new Set();
+  const nearSite = (h) => siteHexes.some((s) => distance(s, h) <= MAPGEN.siteClearance);
+  const pool = shuffle(rng, gridHexes(grid.cols, grid.rows).filter((h) => !nearSite(h)));
+
+  let i = 0;
+  while (blocked.size < target && i < pool.length) {
+    let cur = pool[i++];
+    if (blocked.has(k(cur))) continue;
+    const runLen = 1 + rng.int(0, MAPGEN.blockedClusterMax);
+    for (let n = 0; n < runLen && blocked.size < target; n++) {
+      blocked.add(k(cur));
+      const opts = neighbors(cur)
+        .filter((h) => inGrid(grid, h) && !nearSite(h) && !blocked.has(k(h)));
+      if (!opts.length) break;
+      cur = opts[rng.int(0, opts.length)];
+    }
+  }
+  return blocked;
+}
+
+/**
+ * Guarantee every site is reachable from every other. Because reachability is
+ * transitive we only test site[0] -> each; where a path is missing we clear the
+ * terrain along the unobstructed route, which strictly shrinks the blocked set
+ * and therefore always terminates.
+ */
+function repairConnectivity(grid, blocked, siteHexes) {
+  const open = (h) => inGrid(grid, h) && !blocked.has(k(h));
+  const anywhere = (h) => inGrid(grid, h);
+  const from = siteHexes[0];
+  for (let i = 1; i < siteHexes.length; i++) {
+    let guard = 0;
+    while (!findPath(from, siteHexes[i], open) && guard++ < 64) {
+      const raw = findPath(from, siteHexes[i], anywhere);
+      if (!raw) break; // the rectangle itself is connected, so this cannot fire
+      let cleared = 0;
+      for (const h of raw) if (blocked.delete(k(h))) cleared++;
+      if (!cleared) break;
+    }
+  }
+}
+
+// --- the site graph --------------------------------------------------------
+
+const segKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+/** 2D orientation sign; used to test whether two graph edges cross. */
+const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+function crosses(e1, e2, pix) {
+  const [a, b] = e1;
+  const [c, d] = e2;
+  if (a === c || a === d || b === c || b === d) return false;
+  const p = pix[a]; const q = pix[b]; const r = pix[c]; const s = pix[d];
+  const d1 = Math.sign(cross(p, q, r));
+  const d2 = Math.sign(cross(p, q, s));
+  const d3 = Math.sign(cross(r, s, p));
+  const d4 = Math.sign(cross(r, s, q));
+  return d1 !== d2 && d3 !== d4;
+}
+
+function components(ids, edges) {
+  const adj = Object.fromEntries(ids.map((id) => [id, []]));
+  for (const [a, b] of edges) { adj[a].push(b); adj[b].push(a); }
+  const seen = {};
+  const groups = [];
+  for (const id of ids) {
+    if (seen[id]) continue;
+    const stack = [id];
+    const group = [];
+    seen[id] = true;
+    while (stack.length) {
+      const cur = stack.pop();
+      group.push(cur);
+      for (const n of adj[cur]) if (!seen[n]) { seen[n] = true; stack.push(n); }
+    }
+    groups.push(group.sort());
+  }
+  return groups;
+}
+
+/**
+ * Connect each site to its nearest neighbours, then FORCE connectivity, then
+ * top up to the target average degree. Edges that would cross an existing edge
+ * are skipped unless connectivity depends on them — a planar-ish graph makes
+ * drag targets unambiguous.
+ */
+export function buildAdjacency(sites) {
+  const { minDegree, maxDegree, targetAvgDegree } = MAPGEN.adjacency;
+  const ids = sites.map((s) => s.id);
+  const pix = Object.fromEntries(sites.map((s) => [s.id, toPixel({ q: s.hex[0], r: s.hex[1] }, 1)]));
+  const hexOf = Object.fromEntries(sites.map((s) => [s.id, { q: s.hex[0], r: s.hex[1] }]));
+
+  const pairs = [];
+  for (let i = 0; i < sites.length; i++) {
+    for (let j = i + 1; j < sites.length; j++) {
+      pairs.push({ a: ids[i], b: ids[j], d: distance(hexOf[ids[i]], hexOf[ids[j]]) });
+    }
+  }
+  pairs.sort((x, y) => x.d - y.d || segKey(x.a, x.b).localeCompare(segKey(y.a, y.b)));
+
+  const deg = Object.fromEntries(ids.map((id) => [id, 0]));
+  const edges = [];
+  const taken = new Set();
+  const add = (a, b) => {
+    taken.add(segKey(a, b)); edges.push([a, b]); deg[a]++; deg[b]++;
+  };
+
+  for (const { a, b } of pairs) {
+    if (taken.has(segKey(a, b))) continue;
+    if (deg[a] >= maxDegree || deg[b] >= maxDegree) continue;
+    if (deg[a] >= minDegree && deg[b] >= minDegree) continue;
+    if (edges.some((e) => crosses([a, b], e, pix))) continue;
+    add(a, b);
+  }
+
+  // Connectivity beats planarity and beats the degree cap: an isolated cluster
+  // is an unplayable map, a crossed line is only ugly.
+  let guard = 0;
+  while (components(ids, edges).length > 1 && guard++ < ids.length * 4) {
+    const groups = components(ids, edges);
+    const home = new Map();
+    groups.forEach((g, gi) => g.forEach((id) => home.set(id, gi)));
+    const best = pairs.find((p) => home.get(p.a) !== home.get(p.b) && !taken.has(segKey(p.a, p.b)));
+    if (!best) break;
+    add(best.a, best.b);
+  }
+
+  for (const { a, b } of pairs) {
+    if (edges.length * 2 >= ids.length * targetAvgDegree) break;
+    if (taken.has(segKey(a, b))) continue;
+    if (deg[a] >= maxDegree || deg[b] >= maxDegree) continue;
+    if (edges.some((e) => crosses([a, b], e, pix))) continue;
+    add(a, b);
+  }
+
+  edges.sort((x, y) => segKey(x[0], x[1]).localeCompare(segKey(y[0], y[1])));
+  return edges;
+}
+
+// --- entry point -----------------------------------------------------------
+
+/**
+ * @param {object} regionSpec {cols, rows, enemySites, neutralSites, playerSites,
+ *                             enemyMult, tier}
+ * @param {number} seed
+ * @returns {{grid:object, sites:object[], adjacency:string[][]}}
+ */
+export function generateBattleMap(regionSpec, seed) {
+  const spec = regionSpec ?? {};
+  const cols = Math.max(5, spec.cols ?? 11);
+  const rows = Math.max(5, spec.rows ?? 9);
+  const enemyMult = spec.enemyMult ?? 1;
+  const rng = createRng(deriveSeed(seed >>> 0, 'mapgen'));
+  const grid = { cols, rows, blocked: [] };
+
+  const plan = planSites(spec);
+  const wide = bandCandidates(grid, [0, 1]);
+  const placed = [];
+  const sites = [];
+  const counters = {};
+
+  for (const entry of plan) {
+    const hex = pickHex(rng, bandCandidates(grid, entry.band), placed, wide);
+    placed.push(hex);
+    const n = (counters[entry.kind] = (counters[entry.kind] ?? 0) + 1);
+    const id = entry.kind === 'camp' ? 'camp'
+      : entry.kind === 'castle' ? 'castle'
+        : `${entry.owner[0]}${KIND_TAG[entry.kind]}${String(n).padStart(2, '0')}`;
+
+    const mult = entry.owner === 'enemy' ? enemyMult
+      : entry.owner === 'neutral' ? 1 + (enemyMult - 1) * MAPGEN.neutralScaleShare : 1;
+    const base = MAPGEN.garrison[entry.owner][entry.kind] ?? {};
+    const hpMax = SITES[entry.kind].hp * SITE_LEVELS[0].hp;
+
+    sites.push({
+      id,
+      kind: entry.kind,
+      hex: [hex.q, hex.r],
+      owner: entry.owner,
+      level: 1,
+      garrison: scaleGarrison(base, mult),
+      hp: hpMax,
+      hpMax,
+      hpRegen: SITES[entry.kind].hpRegen,
+      trainType: MAPGEN.trainType[entry.kind],
+    });
+  }
+
+  const blocked = scatterBlocked(rng, grid, placed);
+  repairConnectivity(grid, blocked, placed);
+  grid.blocked = [...blocked]
+    .map((s) => s.split(',').map(Number))
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+
+  return { grid, sites, adjacency: buildAdjacency(sites) };
+}
+
+/** True when every site can reach every other over unblocked hexes. Exported
+ *  so tests (and the dev overlay) can assert the invariant directly. */
+export function verifyReachable(grid, sites) {
+  const blocked = new Set(grid.blocked.map(([q, r]) => key(q, r)));
+  const open = (h) => inGrid(grid, h) && !blocked.has(k(h));
+  const hexes = sites.map((s) => ({ q: s.hex[0], r: s.hex[1] }));
+  return hexes.every((h) => findPath(hexes[0], h, open) !== null);
+}

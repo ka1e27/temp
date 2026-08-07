@@ -1,0 +1,109 @@
+/* ===========================================================================
+   Design tokens — the single source of truth for every colour, space, size,
+   radius and duration in the game, CANVAS INCLUDED.
+   render/palette.js reads these exact custom properties once at boot, so the
+   canvas and the DOM can never drift apart. Nothing downstream may use a raw
+   value; a visual tuning pass stays a single-file diff.
+   =========================================================================== */
+:root {
+  /* --- Ground -------------------------------------------------------------
+     Near-black, low chroma, so the three faction hues are the only strong
+     colour on screen. That is what makes the territory flood read instantly. */
+  --c-bg: #0b0d12;
+  --c-surface: #12151d;
+  --c-surface-2: #1a1f2b;
+  --c-line: #263041;
+  --c-text: #e7ebf3;
+  --c-text-dim: #93a0b8;
+
+  /* --- Factions & signals ------------------------------------------------ */
+  --c-player: #3ddc97;
+  --c-enemy: #ff5c5c;
+  --c-neutral: #6b7688;
+  --c-gold: #ffc857;
+  --c-accent: #5aa9ff;
+  --c-warn: #ffc857;
+  --c-danger: #ff5c5c;
+
+  /* --- Unit identity ------------------------------------------------------
+     The same five hues appear in the garrison composition bar, the filter
+     chips and the training picker, so "that's a spearwall" is one colour,
+     learned once, recognised everywhere. */
+  --c-militia: #e8e8ec;
+  --c-spearmen: #5bd6a6;
+  --c-raiders: #ffc857;
+  --c-rams: #b07cff;
+  --c-marshal: #ff8a3d;
+
+  /* --- Canvas scalars -----------------------------------------------------
+     Numeric tokens read by palette.js. Kept here so territory opacity is
+     tuned in the same file as everything else. */
+  --a-flood: 0.20;
+  --a-flood-strong: 0.42;
+  --a-grid: 0.5;
+  --a-blocked: 0.9;
+
+  /* --- Spacing: 4px scale ------------------------------------------------ */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  /* --- Type: five sizes, no more ----------------------------------------- */
+  --t-xs: 10px;
+  --t-sm: 12px;
+  --t-md: 14px;
+  --t-lg: 18px;
+  --t-xl: 24px;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-num: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --lh: 1.4;
+  --w-normal: 500;
+  --w-bold: 700;
+
+  /* --- Radii ------------------------------------------------------------- */
+  --r-1: 3px;
+  --r-2: 6px;
+  --r-3: 10px;
+  --r-pill: 999px;
+
+  /* --- Motion: 120-220ms, nothing slower --------------------------------- */
+  --d-fast: 120ms;
+  --d-mid: 170ms;
+  --d-slow: 220ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+  /* --- Elevation & layering ---------------------------------------------- */
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 2px 0 rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+  --z-board: 0;
+  --z-hud: 10;
+  --z-screen: 20;
+
+  /* --- Fixed control metrics --------------------------------------------- */
+  --hit: 44px; /* minimum touch target, also the training-picker chip size */
+  --bar-h: 6px;
+}
+
+/* This is an idle game: numbers change constantly and proportional digits
+   make them jitter, which reads as "broken" long before it reads as "wrong".
+   Tabular figures everywhere, no exceptions. */
+:root,
+.num,
+.hud-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --d-fast: 1ms;
+    --d-mid: 1ms;
+    --d-slow: 1ms;
+  }
+}

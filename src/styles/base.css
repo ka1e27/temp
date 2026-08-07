@@ -1,0 +1,152 @@
+/* Reset + the board shell. Layout only; every value comes from tokens.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: var(--w-normal) var(--t-md) / var(--lh) var(--font);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+body {
+  /* The board is a direct-manipulation surface: text selection and the iOS
+     tap highlight both fight drag orders. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#game {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Two canvases, exactly overlapping. #board-bg holds terrain, the territory
+   flood and site base shapes and is repainted only when bgDirty is set;
+   #board-fx holds everything that moves and is cleared every frame. */
+#board-bg,
+#board-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Without this, a drag order becomes a page scroll on touch. */
+  touch-action: none;
+}
+
+#board-bg {
+  z-index: var(--z-board);
+  background: var(--c-bg);
+}
+
+#board-fx {
+  z-index: calc(var(--z-board) + 1);
+  cursor: crosshair;
+}
+
+#board-fx.is-dragging {
+  cursor: grabbing;
+}
+
+/* The HUD floats over the board but must not steal the empty space between
+   its panels — clicks there belong to the canvas. Interactive children opt
+   back in individually. */
+#hud {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-hud);
+  pointer-events: none;
+}
+
+#hud button,
+#hud [data-interactive] {
+  pointer-events: auto;
+}
+
+#screen-root {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-screen);
+  pointer-events: none;
+}
+
+#screen-root:empty {
+  display: none;
+}
+
+/* --- Shared primitives ---------------------------------------------------- */
+
+.panel {
+  background: color-mix(in srgb, var(--c-surface) 88%, transparent);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(6px);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.num {
+  font-family: var(--font-num);
+}
+
+.dim {
+  color: var(--c-text-dim);
+}
+
+.label {
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
