@@ -1,4 +1,8 @@
-/* Reset + the board shell. Layout only; every value comes from tokens.css. */
+/* Reset, the board shell, and the SHARED PRIMITIVES every screen is built
+   from: one plate, one button, one state grammar, one focus ring, one set of
+   keyframes. Nothing below this file may redeclare `.panel` or `.btn` — they
+   used to be defined twice (here and in scenes.css) and the later file silently
+   won, so the frosted plate this file describes never once rendered. */
 
 *,
 *::before,
@@ -84,69 +88,245 @@ body {
   pointer-events: none;
 }
 
-#screen-root:empty {
-  display: none;
-}
+#screen-root:empty { display: none; }
 
-/* --- Shared primitives ---------------------------------------------------- */
+/* --- The plate ------------------------------------------------------------
+   Frosted, lit along its top edge, sitting over the board. ONE panel language:
+   variants adjust weight, never material. */
 
 .panel {
-  background: color-mix(in srgb, var(--c-surface) 88%, transparent);
-  border: 1px solid var(--c-line);
+  position: relative;
+  background: var(--plate-bg);
+  border: var(--hairline);
   border-radius: var(--r-3);
-  box-shadow: var(--shadow-1);
-  backdrop-filter: blur(6px);
+  box-shadow: var(--plate-sheen), var(--shadow-1);
+  backdrop-filter: blur(var(--plate-blur)) saturate(1.15);
+  -webkit-backdrop-filter: blur(var(--plate-blur)) saturate(1.15);
 }
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
+.panel.raised { box-shadow: var(--plate-sheen), var(--shadow-2); }
+
+/* A plate that reports a STATE carries a rule in the signal hue along its
+   leading edge — the HUD preview and the results card already spoke this
+   dialect, so it is now the system's. */
+.panel.edged { border-left-width: var(--plate-edge); border-left-color: var(--state); }
+.panel.edged-top { border-top-width: var(--plate-edge); border-top-color: var(--state); }
+.panel.quiet {
+  background: var(--plate-bg-2); box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 
-.col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
+/* The faint hex weave that ties the DOM screens to the canvas board. */
+.weave::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  opacity: var(--tex-alpha); background: var(--tex-weave);
+  mask-image: radial-gradient(120% 90% at 50% 30%, #000 0%, transparent 78%);
 }
 
-.num {
-  font-family: var(--font-num);
-}
+/* --- Type roles -----------------------------------------------------------
+   The one number a screen is ABOUT gets .t-display. There is at most one per
+   screen; if a second appears the screen has stopped making a point. */
 
-.dim {
-  color: var(--c-text-dim);
-}
-
+.t-display { font: var(--w-bold) var(--t-2xl) / 1 var(--font-num); letter-spacing: -0.02em; }
+.t-title { font: var(--w-bold) var(--t-xl) / 1.15 var(--font); letter-spacing: -0.01em; }
+.row { display: flex; align-items: center; gap: var(--s-2); }
+.col { display: flex; flex-direction: column; gap: var(--s-1); }
+.num { font-family: var(--font-num); }
+.dim { color: var(--c-text-dim); }
 .label {
-  font-size: var(--t-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--c-text-dim);
+}
+
+/* Crowns are the game's one currency, so they get the game's one currency
+   mark — in the treasury, in the shop and on the results card alike. */
+.crowns::before {
+  content: "\25C6"; margin-right: 0.34em; font-size: 0.7em;
+  color: var(--c-gold); opacity: 0.85; vertical-align: 0.08em;
 }
 
 .sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* --- State: locked / available / owned ------------------------------------
+   Three channels so ownership is never colour alone:
+     1. fill + edge in --state          2. a hatch (locked only)
+     3. a text tag from ::after on .state-tag
+   Contexts re-point --state; the treatment is identical everywhere. */
+
+[data-state="locked"] { --state: var(--c-neutral); color: var(--c-text-dim); }
+[data-state="available"] { --state: var(--c-accent); }
+[data-state="owned"] { --state: var(--c-player); }
+.state-tag {
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
+  letter-spacing: var(--track-tag); text-transform: uppercase; color: var(--state);
+}
+
+[data-state="locked"] > .state-tag::after { content: "LOCKED"; }
+[data-state="available"] > .state-tag::after { content: "OPEN"; }
+[data-state="owned"] > .state-tag::after { content: "HELD"; }
+
+/* Diagonal hatch: what "you cannot have this yet" looks like without colour. */
+.hatched::after {
+  content: "";
   position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--c-text) 7%, transparent) 0 1px,
+    transparent 1px 7px
+  );
+}
+
+/* --- Buttons -------------------------------------------------------------
+   Declared ONCE. Height is --hit so the same control works under a thumb, and
+   the border is a real border so a 3px state edge can replace it. */
+
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: var(--hit);
+  padding: 0 var(--s-4);
+  border: var(--hairline);
+  border-radius: var(--r-2);
+  background: var(--plate-bg-2);
+  color: var(--c-text);
+  font: var(--w-bold) var(--t-md) / 1 var(--font);
   white-space: nowrap;
+  transition:
+    background var(--d-fast) var(--ease),
+    border-color var(--d-fast) var(--ease),
+    transform var(--d-fast) var(--ease),
+    color var(--d-fast) var(--ease);
 }
 
-button {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
+.btn:hover {
+  background: color-mix(in srgb, var(--c-surface-2) 92%, var(--c-text));
+  border-color: color-mix(in srgb, var(--c-line) 60%, var(--c-text-dim));
 }
 
-button:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--c-accent);
-  outline-offset: 2px;
+.btn:active { transform: translateY(1px); }
+
+.btn.primary {
+  background: color-mix(in srgb, var(--c-player) 20%, var(--c-surface-2));
+  border-color: color-mix(in srgb, var(--c-player) 50%, transparent); color: #eafff5;
+}
+.btn.primary:hover {
+  background: color-mix(in srgb, var(--c-player) 32%, var(--c-surface-2));
+  border-color: var(--c-player);
+}
+
+.btn.ghost { background: transparent; color: var(--c-text-dim); }
+.btn.ghost:hover { color: var(--c-text); background: var(--plate-bg-2); }
+
+.btn.sm { min-height: var(--hit-sm); padding: 0 var(--s-3); font-size: var(--t-sm); }
+
+.btn[disabled],
+.btn:disabled { cursor: not-allowed; opacity: 0.45; transform: none; }
+.btn:disabled:hover { background: var(--plate-bg-2); border-color: var(--c-line); }
+
+/* --- Focus: one ring, on everything, never removed ------------------------ */
+
+:focus-visible { outline: var(--focus-w) solid var(--c-accent); outline-offset: var(--focus-offset); }
+
+.btn:focus-visible, .seg:focus-visible, .chip:focus-visible,
+.booster:focus-visible, .train-chip:focus-visible, .wm-hex:focus-visible {
+  outline: var(--focus-w) solid var(--c-accent);
+  outline-offset: var(--focus-offset); box-shadow: var(--focus-glow);
+}
+
+/* Windows high-contrast strips author colours; the ring must survive it. */
+@media (forced-colors: active) {
+  :focus-visible { outline: 3px solid Highlight; }
+  .panel { border: 1px solid CanvasText; }
+}
+
+/* --- Motion vocabulary ----------------------------------------------------
+   Four moments earn an animation: capture, income tick, purchase, unlock.
+   Everything else is a transition or nothing at all. */
+
+@keyframes hd-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes hd-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Capture. A conquered hex floods from its centre outward — the campaign's
+   core feedback, and the reason --d-flood is allowed to be slow.
+   hd-fill has only a `from`: the missing 100% keyframe resolves to the
+   element's OWN background, so one rule works for any faction hue. */
+@keyframes hd-fill { from { background-color: var(--c-surface-2); } }
+@keyframes hd-flood {
+  from { opacity: 0; transform: scale(0.15); }
+  60% { opacity: 1; }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Deal-in: the world map assembles rather than appearing. */
+@keyframes hd-deal {
+  from { opacity: 0; transform: translateY(10px) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Income tick and purchase: a value that changed says so. */
+@keyframes hd-pop {
+  0% { transform: none; }
+  35% { transform: translateY(-2px) scale(1.07); }
+  100% { transform: none; }
+}
+
+/* A number leaving the treasury / arriving in it. */
+@keyframes hd-float {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-14px); }
+}
+
+/* Unlock / purchase confirmation sweeping across a row. */
+@keyframes hd-sheen {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(200%); }
+}
+
+/* The one thing allowed to loop: "this is your move". */
+@keyframes hd-beacon {
+  0%, 100% { opacity: 0.28; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.045); }
+}
+
+/* Rejected command. */
+@keyframes hd-nope {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+}
+
+/* Utility hooks for the JS layer: toggle the class, the animation replays. */
+.is-bump { animation: hd-pop var(--d-slow) var(--ease-out); }
+.is-rejected { animation: hd-nope var(--d-slow) var(--ease); }
+.tick-float {
+  position: absolute; pointer-events: none; color: var(--c-gold);
+  font: var(--w-bold) var(--t-sm) / 1 var(--font-num);
+  animation: hd-float var(--d-slower) var(--ease-out) forwards;
+}
+
+/* Reduced motion: durations already collapse to 1ms via tokens.css, but a
+   looping beacon has no duration to collapse. Stop it outright. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

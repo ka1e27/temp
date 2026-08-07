@@ -1,0 +1,252 @@
+// What a gesture MEANS, separated from how the gesture was made.
+//
+// battle-input.js recognises pointer and key events; this module turns them
+// into game orders — selection, sends, rally points, retreats, armed boosters
+// and squad picking. The split keeps each file readable and puts every
+// state.commands[] append in one place.
+//
+// THE HARD RULE: presentation never mutates simulation state. Every intent
+// becomes a plain command object appended to `state.commands[]`, which the sim
+// validates and applies at the top of the next tick. That buys free input
+// buffering, a replayable command log, and a UI that structurally cannot
+// corrupt the sim.
+import { UNIT_IDS } from '../content/balance.js';
+import { arcPoint, squadProgress, squadBow } from '../render/routes.js';
+import { needsTarget } from './battle-keys.js';
+
+/** Click slop for picking an in-flight squad off its arc, as a fraction of a
+ *  hex. Deliberately tight: a stray click near a route must still deselect. */
+const SQUAD_PICK = 0.5;
+
+// Module-scope scratch: nothing on the click path allocates.
+const _a = { x: 0, y: 0 };
+const _b = { x: 0, y: 0 };
+const _p = { x: 0, y: 0 };
+
+/** Enabled unit ids in canonical order — stable, so the command log hashes
+ *  identically across runs. */
+export const filterList = (filter) => UNIT_IDS.filter((u) => filter[u] !== false);
+
+/**
+ * Command constructors, in one block so the seam with battle/commands.js is a
+ * single place to look. Field names match that module's canonical readers —
+ * it tolerates aliases, but a clean command log is worth more than leaning on
+ * that tolerance, because the log is also the determinism test's input.
+ */
+export const cmd = {
+  send: (from, to, fraction, filter) => ({ t: 'SEND', from, to, fraction, filter }),
+  rally: (site, target) => ({ t: 'RALLY', site, target: target ?? null }),
+  retreat: (site) => ({ t: 'RETREAT', site }),
+  retreatSquad: (squadId) => ({ t: 'RETREAT_SQUAD', squadId }),
+  booster: (id, site) => ({ t: 'BOOSTER', id, site: site ?? null }),
+  train: (site, unit) => ({ t: 'TRAIN', site, unit }),
+  upgrade: (site) => ({ t: 'UPGRADE', site }),
+  withdraw: () => ({ t: 'WITHDRAW' }),
+};
+
+/**
+ * @param {{canvas:HTMLCanvasElement, board:object, view:object,
+ *          getState:()=>object, bus?:object}} o
+ */
+export function createOrders(o) {
+  const { canvas, board, view, getState, bus } = o;
+
+  const push = (c) => {
+    getState().commands.push(c);
+    view.lastCommand = c;
+    bus?.emit('ui:command', c);
+    return c;
+  };
+
+  const site = (id) => getState().sites.find((x) => x.id === id) || null;
+  const canSend = (from, to) => !!from && !!to && from.id !== to.id
+    && from.owner === 'player' && from.adj.includes(to.id);
+
+  /** Snap the drag to a LEGAL target: a direct hit on an adjacent site, else
+   *  the nearest adjacent site the pointer is leaning toward. Snapping is what
+   *  teaches the adjacency rule without a tutorial line. */
+  function snapTarget(from, wx, wy) {
+    const hit = board.siteAt(getState(), wx, wy);
+    if (hit && (hit.id === from.id || from.adj.includes(hit.id))) return hit;
+    let best = null;
+    let bestD = board.hexSize * 2.4;
+    for (const id of from.adj) {
+      const t = site(id);
+      if (!t) continue;
+      board.sitePos(t, _a);
+      const d = Math.hypot(wx - _a.x, wy - _a.y);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    return best;
+  }
+
+  function issueSend(from, to) {
+    if (!canSend(from, to)) return false;
+    push(cmd.send(from.id, to.id, view.fraction, filterList(view.filter)));
+    return true;
+  }
+
+  function selectOnly(id) {
+    view.selection.length = 0;
+    if (id) view.selection.push(id);
+    view.selectedSquad = null;
+    const sel = id ? site(id) : null;
+    // The picker is for sites that can actually train. Farms cannot, and used
+    // to open NOTHING at all as a result — they now open the site panel, which
+    // hangs off `selection` and so covers every site on the board.
+    view.trainPickerFor = sel && sel.owner === 'player' && sel.kind !== 'farm' ? id : null;
+    bus?.emit('ui:selection', view.selection);
+  }
+
+  /** Double-tap grabs the whole connected friendly front — the fast way to
+   *  order a whole flank without a box drag. */
+  function selectFront(id) {
+    const seen = new Set([id]);
+    const queue = [id];
+    while (queue.length) {
+      const cur = site(queue.shift());
+      if (!cur) continue;
+      for (const n of cur.adj) {
+        if (!seen.has(n) && site(n)?.owner === 'player') { seen.add(n); queue.push(n); }
+      }
+    }
+    view.selection.length = 0;
+    for (const k of seen) view.selection.push(k);
+    view.trainPickerFor = null;
+    view.selectedSquad = null;
+    bus?.emit('ui:selection', view.selection);
+  }
+
+  function boxSelect(box) {
+    if (!box) return;
+    const st = getState();
+    const x0 = Math.min(box.x0, box.x1); const x1 = Math.max(box.x0, box.x1);
+    const y0 = Math.min(box.y0, box.y1); const y1 = Math.max(box.y0, box.y1);
+    view.selection.length = 0;
+    for (const si of st.sites) {
+      if (si.owner !== 'player') continue;
+      board.sitePos(si, _a);
+      if (_a.x >= x0 && _a.x <= x1 && _a.y >= y0 && _a.y <= y1) view.selection.push(si.id);
+    }
+    view.armed = view.selection.length === 1 ? view.selection[0] : null;
+    view.trainPickerFor = null;
+    view.selectedSquad = null;
+    bus?.emit('ui:selection', view.selection);
+  }
+
+  /** Rally makes a site auto-send once its garrison passes the threshold — the
+   *  idle affordance inside the battle, and the cure for back-line micro. */
+  function setRally(wx, wy) {
+    const target = board.siteAt(getState(), wx, wy);
+    // Copied: a `ui:command` listener is allowed to change the selection.
+    const sources = view.selection.length ? view.selection.slice()
+      : (view.armed ? [view.armed] : []);
+    if (!sources.length) return;
+    for (const id of sources) {
+      const src = site(id);
+      if (!src || src.owner !== 'player') continue;
+      if (!target || target.id === id) push(cmd.rally(id, null));
+      else if (src.adj.includes(target.id)) push(cmd.rally(id, target.id));
+    }
+  }
+
+  function retreatSelection() {
+    for (const id of view.selection) {
+      const src = site(id);
+      if (!src) continue;
+      if (src.owner === 'player' || src.siege?.owner === 'player') push(cmd.retreat(id));
+    }
+  }
+
+  // ---- armed boosters -----------------------------------------------------
+  // Rally, Bombard and Fortify all answer 'needs-target', and every input path
+  // in the game sent `site: null` — three of five boosters were unreachable
+  // through the keyboard AND the HUD. Pressing one now ARMS it, and the next
+  // site click fires it there.
+
+  function syncArm() {
+    canvas?.classList.toggle('is-targeting', !!view.armedBooster);
+    bus?.emit('ui:armed-booster', view.armedBooster);
+  }
+
+  /** @returns {boolean} true when the booster is now armed and waiting. */
+  function armBooster(id) {
+    if (!needsTarget(id)) {           // march and tithe act on what you already have
+      view.armedBooster = null;
+      syncArm();
+      push(cmd.booster(id, null));
+      return false;
+    }
+    view.armedBooster = view.armedBooster === id ? null : id;  // press again to cancel
+    syncArm();
+    return !!view.armedBooster;
+  }
+
+  function cancelBooster() {
+    if (!view.armedBooster) return false;
+    view.armedBooster = null;
+    syncArm();
+    return true;
+  }
+
+  function fireBooster(siteId) {
+    const id = view.armedBooster;
+    if (!id) return false;
+    view.armedBooster = null;
+    syncArm();
+    push(cmd.booster(id, siteId));
+    return true;
+  }
+
+  // ---- squads -------------------------------------------------------------
+
+  /** Nearest in-flight squad to a world point, so `R` can reach one. Squads are
+   *  drawn along the bowed arcs routes.js walks, so hit-testing reuses that
+   *  geometry rather than guessing at it. */
+  function squadAt(st, wx, wy) {
+    const r = board.hexSize * SQUAD_PICK;
+    let best = null;
+    let bestD = r * r;
+    for (let i = 0; i < st.squads.length; i++) {
+      const sq = st.squads[i];
+      const from = site(sq.from);
+      const to = site(sq.to);
+      if (!from || !to) continue;
+      board.sitePos(from, _a);
+      board.sitePos(to, _b);
+      arcPoint(_a.x, _a.y, _b.x, _b.y, squadBow(sq), squadProgress(sq, st.tick), _p);
+      const dx = wx - _p.x;
+      const dy = wy - _p.y;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = sq; }
+    }
+    return best;
+  }
+
+  /** Order the selected squad home. A squad that has already ARRIVED is no
+   *  longer in `state.squads`, so forget it rather than sending an order the
+   *  sim can only answer with 'unknown-squad'.
+   *  @returns {boolean} true when a live squad was turned around. */
+  function retreatSelectedSquad() {
+    const id = view.selectedSquad;
+    if (id == null) return false;
+    const sq = getState().squads.find((x) => x.id === id);
+    if (!sq) { view.selectedSquad = null; return false; }
+    push(cmd.retreatSquad(sq.id));
+    return true;
+  }
+
+  function selectSquad(sq) {
+    view.selection.length = 0;
+    view.trainPickerFor = null;
+    view.armed = null;
+    view.selectedSquad = sq.id;
+    bus?.emit('ui:selection', view.selection);
+  }
+
+  return {
+    push, site, canSend, snapTarget, issueSend,
+    selectOnly, selectFront, boxSelect, setRally, retreatSelection,
+    armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
+  };
+}

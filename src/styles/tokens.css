@@ -53,18 +53,27 @@
   --s-7: 48px;
   --s-8: 64px;
 
-  /* --- Type: five sizes, no more ----------------------------------------- */
+  /* --- Type: seven sizes, and every one has a job -------------------------
+     xs  micro-label (uppercase, tracked)     lg  panel heading
+     sm  supporting copy                      xl  screen heading
+     md  body / control                       2xl the ONE number a screen is about
+                                              3xl the verdict on the results card
+     A screen that uses more than three of these is not making a point. */
   --t-xs: 10px;
   --t-sm: 12px;
   --t-md: 14px;
   --t-lg: 18px;
   --t-xl: 24px;
+  --t-2xl: 32px;
+  --t-3xl: 40px;
 
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-num: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --lh: 1.4;
   --w-normal: 500;
   --w-bold: 700;
+  --track-label: 0.08em; /* uppercase micro-labels */
+  --track-tag: 0.12em;   /* state tags: LOCKED / OPEN / HELD */
 
   /* --- Radii ------------------------------------------------------------- */
   --r-1: 3px;
@@ -72,11 +81,18 @@
   --r-3: 10px;
   --r-pill: 999px;
 
-  /* --- Motion: 120-220ms, nothing slower --------------------------------- */
+  /* --- Motion: 120-220ms for state, up to 560ms for a conquest ------------
+     Feedback is fast; the empire flooding with your colour is the one moment
+     allowed to take its time, because it is the reward. */
   --d-fast: 120ms;
   --d-mid: 170ms;
   --d-slow: 220ms;
+  --d-slower: 320ms;
+  --d-flood: 560ms;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-out: cubic-bezier(0.16, 0.84, 0.44, 1);
+  --stagger: 45ms;  /* per-tier delay when the world map deals itself in */
+  --d-beacon: 2.8s; /* the ONE looping animation: "this is your move" */
 
   /* --- Elevation & layering ---------------------------------------------- */
   --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.35);
@@ -85,9 +101,48 @@
   --z-hud: 10;
   --z-screen: 20;
 
+  /* --- Panel language: ONE plate, declared once in base.css ---------------
+     Frosted, hairline-lit along the top edge, floating over the board. Every
+     surface in the game is this plate or a variant of it. */
+  --plate-bg: color-mix(in srgb, var(--c-surface) 84%, transparent);
+  --plate-bg-2: color-mix(in srgb, var(--c-surface-2) 88%, transparent);
+  --plate-blur: 10px;
+  --plate-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --plate-edge: 3px; /* the signal-hue rule a stateful plate carries */
+  --scrim: color-mix(in srgb, #06080c 76%, transparent);
+  --hairline: 1px solid var(--c-line);
+  --tex-alpha: 0.032; /* the faint hex weave under every screen */
+  /* Three hairlines at 60 degrees: the DOM screens quoting the board's
+     geometry. Static, so it costs exactly one paint. */
+  --tex-weave:
+    repeating-linear-gradient(60deg, var(--c-text) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(-60deg, var(--c-text) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(0deg, var(--c-text) 0 1px, transparent 1px 58px);
+
+  /* --- Focus: one ring, everywhere, never removed ------------------------- */
+  --focus-w: 2px;
+  --focus-offset: 2px;
+  --focus-glow: 0 0 0 4px color-mix(in srgb, var(--c-accent) 26%, transparent);
+
+  /* --- State: locked / available / owned ----------------------------------
+     One grammar, three channels (fill, edge, text tag). The HUE is a variable
+     each context re-points: a world region you do not own is an enemy target,
+     an upgrade you cannot afford is a gold one. The treatment never changes,
+     so the player learns it once. */
+  --state: var(--c-neutral);
+  --c-locked: color-mix(in srgb, var(--c-neutral) 40%, var(--c-bg));
+
   /* --- Fixed control metrics --------------------------------------------- */
   --hit: 44px; /* minimum touch target, also the training-picker chip size */
+  --hit-sm: 32px; /* compact controls; grows to --hit on a coarse pointer */
   --bar-h: 6px;
+  --sidebar: clamp(280px, 24vw, 360px);
+  /* How much room the bottom dock claims. Everything that floats above it
+     measures from this one number, so a wrapping dock never gets overlapped. */
+  --dock-h: calc(var(--hit) + var(--s-6));
+  --hex-w: 88px;
+  --hex-h: 100px;
+  --hex-clip: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
 }
 
 /* This is an idle game: numbers change constantly and proportional digits
@@ -105,5 +160,9 @@
     --d-fast: 1ms;
     --d-mid: 1ms;
     --d-slow: 1ms;
+    --d-slower: 1ms;
+    --d-flood: 1ms;
+    --stagger: 0ms;
+    --d-beacon: 1ms;
   }
 }

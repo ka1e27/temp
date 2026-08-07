@@ -2,21 +2,23 @@
 // for mouse, trackpad and touch, which is why there is no separate touch
 // handler anywhere in this file.
 //
-// THE HARD RULE: presentation never mutates simulation state. Every intent
-// here becomes a plain command object appended to `state.commands[]`, which the
-// sim validates and applies at the top of the next tick. That buys free input
-// buffering, a replayable command log, and a UI that structurally cannot
-// corrupt the sim.
+// This file recognises GESTURES: presses, drags, taps, pinches, keys. What a
+// gesture means in game terms — and every append to state.commands[] — lives in
+// battle-orders.js, so the hard rule (presentation never mutates simulation
+// state) has exactly one place to be checked.
 //
 // The commit-size decision is GLOBAL (strength selector + unit filters), never
 // a modal between intent and action — a dialog in a real-time game is a bug.
-import { UNIT_IDS, SEND_FRACTIONS } from '../content/balance.js';
+import { SEND_FRACTIONS } from '../content/balance.js';
 import { createDisposer } from '../ui/dom.js';
+import { BOOSTER_BY_KEY, FILTER_BY_KEY, SPEED_KEYS } from './battle-keys.js';
+import { createOrders, cmd } from './battle-orders.js';
+
+export { cmd, filterList } from './battle-orders.js';
 
 const TAP_SLOP = 6;       // CSS px of travel still counted as a tap
 const TWO_FINGER_MS = 260;
-const BOOSTER_KEYS = { z: 'rally', x: 'march', c: 'bombard', v: 'fortify', b: 'tithe' };
-const FILTER_KEYS = { q: 'militia', w: 'spearmen', e: 'raiders', r: 'rams', t: 'marshal' };
+const DOUBLE_TAP_MS = 320;
 
 /** Shared presentation state. Read by the renderer and the HUD, written only
  *  here. Never touched by the simulation. */
@@ -26,6 +28,10 @@ export function createView(init = {}) {
     filter: { militia: true, spearmen: true, raiders: true, rams: true, marshal: true },
     selection: [],
     armed: null,        // click-then-click source
+    /** Booster waiting for a target site. The next site click fires it there;
+     *  Esc, the same key again, or a click on empty board cancels. */
+    armedBooster: null,
+    selectedSquad: null,
     hoverId: null,
     dragFrom: null,
     dragTo: null,
@@ -37,27 +43,6 @@ export function createView(init = {}) {
   };
 }
 
-/** Enabled unit ids in canonical order — stable, so the command log hashes
- *  identically across runs. */
-export const filterList = (filter) => UNIT_IDS.filter((u) => filter[u] !== false);
-
-/**
- * Command constructors, in one block so the seam with battle/commands.js is a
- * single place to look. Field names match that module's canonical readers —
- * it tolerates aliases, but a clean command log is worth more than leaning on
- * that tolerance, because the log is also the determinism test's input.
- */
-export const cmd = {
-  send: (from, to, fraction, filter) => ({ t: 'SEND', from, to, fraction, filter }),
-  rally: (site, target) => ({ t: 'RALLY', site, target: target ?? null }),
-  retreat: (site) => ({ t: 'RETREAT', site }),
-  retreatSquad: (squadId) => ({ t: 'RETREAT_SQUAD', squadId }),
-  booster: (id, site) => ({ t: 'BOOSTER', id, site: site ?? null }),
-  train: (site, unit) => ({ t: 'TRAIN', site, unit }),
-  upgrade: (site) => ({ t: 'UPGRADE', site }),
-  withdraw: () => ({ t: 'WITHDRAW' }),
-};
-
 /**
  * @param {{canvas:HTMLCanvasElement, board:object, view:object,
  *          getState:()=>object, bus?:object}} o
@@ -67,6 +52,7 @@ export function createBattleInput(o) {
   const { canvas, board, view, getState, bus } = o;
   const off = createDisposer();
   const cam = board.camera;
+  const ord = createOrders(o);
   const w = { x: 0, y: 0 };
   const s = { x: 0, y: 0 };
   const pointers = new Map();
@@ -75,69 +61,6 @@ export function createBattleInput(o) {
   let pinchDist = 0;
   let lastTapAt = 0;
   let lastTapId = null;
-
-  const push = (c) => {
-    getState().commands.push(c);
-    view.lastCommand = c;
-    bus?.emit('ui:command', c);
-    return c;
-  };
-
-  const site = (id) => getState().sites.find((x) => x.id === id) || null;
-  const canSend = (from, to) => !!from && !!to && from.id !== to.id
-    && from.owner === 'player' && from.adj.includes(to.id);
-
-  /** Snap the drag to a LEGAL target: a direct hit on an adjacent site, else
-   *  the nearest adjacent site the pointer is leaning toward. Snapping is what
-   *  teaches the adjacency rule without a tutorial line. */
-  function snapTarget(from, wx, wy) {
-    const st = getState();
-    const hit = board.siteAt(st, wx, wy);
-    if (hit && (hit.id === from.id || from.adj.includes(hit.id))) return hit;
-    let best = null;
-    let bestD = board.hexSize * 2.4;
-    for (const id of from.adj) {
-      const t = site(id);
-      if (!t) continue;
-      board.sitePos(t, s);
-      const d = Math.hypot(wx - s.x, wy - s.y);
-      if (d < bestD) { bestD = d; best = t; }
-    }
-    return best;
-  }
-
-  function issueSend(from, to) {
-    if (!canSend(from, to)) return false;
-    push(cmd.send(from.id, to.id, view.fraction, filterList(view.filter)));
-    return true;
-  }
-
-  function selectOnly(id) {
-    view.selection.length = 0;
-    if (id) view.selection.push(id);
-    const st = getState();
-    const sel = id ? st.sites.find((x) => x.id === id) : null;
-    view.trainPickerFor = sel && sel.owner === 'player' && sel.kind !== 'farm' ? id : null;
-    bus?.emit('ui:selection', view.selection);
-  }
-
-  /** Double-tap grabs the whole connected friendly front — the fast way to
-   *  order a whole flank without a box drag. */
-  function selectFront(id) {
-    const seen = new Set([id]);
-    const queue = [id];
-    while (queue.length) {
-      const cur = site(queue.shift());
-      if (!cur) continue;
-      for (const n of cur.adj) {
-        if (!seen.has(n) && site(n)?.owner === 'player') { seen.add(n); queue.push(n); }
-      }
-    }
-    view.selection.length = 0;
-    for (const k of seen) view.selection.push(k);
-    view.trainPickerFor = null;
-    bus?.emit('ui:selection', view.selection);
-  }
 
   function clearDrag() {
     view.dragFrom = null;
@@ -161,14 +84,17 @@ export function createBattleInput(o) {
       return;
     }
     // Right button or middle button: rally and pan respectively.
-    if (ev.button === 2) { setRally(w.x, w.y); return; }
+    if (ev.button === 2) { ord.setRally(w.x, w.y); return; }
     if (ev.button === 1 || ev.shiftKey) { panning = true; return; }
 
-    const st = getState();
-    const hit = board.siteAt(st, w.x, w.y);
+    const hit = board.siteAt(getState(), w.x, w.y);
     press = { id: hit?.id ?? null, sx: s.x, sy: s.y, moved: false, at: performance.now() };
     view.pointer.x = w.x;
     view.pointer.y = w.y;
+
+    // While a booster is armed the press means "aim here" and nothing else: no
+    // drag order, no box select. The release picks the site.
+    if (view.armedBooster) return;
 
     if (hit && hit.owner === 'player') {
       view.dragFrom = hit.id;
@@ -204,16 +130,15 @@ export function createBattleInput(o) {
       return;
     }
 
-    const st = getState();
     if (press && !press.moved && Math.hypot(s.x - press.sx, s.y - press.sy) > TAP_SLOP) {
       press.moved = true;
     }
-    const hover = board.siteAt(st, w.x, w.y);
+    const hover = board.siteAt(getState(), w.x, w.y);
     view.hoverId = hover?.id ?? null;
 
     if (view.dragFrom) {
-      const from = site(view.dragFrom);
-      const t = from ? snapTarget(from, w.x, w.y) : null;
+      const from = ord.site(view.dragFrom);
+      const t = from ? ord.snapTarget(from, w.x, w.y) : null;
       view.dragTo = t && t.id !== from.id ? t.id : null;
     } else if (view.box) {
       view.box.x1 = w.x;
@@ -232,7 +157,7 @@ export function createBattleInput(o) {
       if (rec && rec.moved < 8 && performance.now() - rec.at < TWO_FINGER_MS && pointers.size === 0) {
         board.pointer(ev, s);
         cam.screenToWorld(s.x, s.y, w);
-        setRally(w.x, w.y);
+        ord.setRally(w.x, w.y);
       }
       if (pointers.size === 0) panning = false;
       return;
@@ -241,19 +166,18 @@ export function createBattleInput(o) {
 
     board.pointer(ev, s);
     cam.screenToWorld(s.x, s.y, w);
-    const st = getState();
-    const from = view.dragFrom ? site(view.dragFrom) : null;
+    const from = view.dragFrom ? ord.site(view.dragFrom) : null;
 
     if (from && press.moved) {
       // Drag order. Releasing back on the source is an explicit cancel.
-      const to = view.dragTo ? site(view.dragTo) : null;
-      if (to && to.id !== from.id) { issueSend(from, to); selectOnly(from.id); }
-      else selectOnly(from.id);
+      const to = view.dragTo ? ord.site(view.dragTo) : null;
+      if (to && to.id !== from.id) ord.issueSend(from, to);
+      ord.selectOnly(from.id);
       view.armed = from.id;
     } else if (view.box && press.moved) {
-      boxSelect();
+      ord.boxSelect(view.box);
     } else {
-      tap(board.siteAt(st, w.x, w.y));
+      tap(board.siteAt(getState(), w.x, w.y));
     }
     clearDrag();
     press = null;
@@ -263,56 +187,40 @@ export function createBattleInput(o) {
    *  two input styles can never disagree about what is legal. */
   function tap(hit) {
     const now = performance.now();
-    if (!hit) { view.armed = null; selectOnly(null); return; }
 
-    if (hit.id === lastTapId && now - lastTapAt < 320 && hit.owner === 'player') {
-      selectFront(hit.id);
+    // An armed booster consumes the next click wherever it lands: on a site it
+    // fires there, on empty board it cancels — the same shape as Esc.
+    if (view.armedBooster) {
+      if (hit) ord.fireBooster(hit.id);
+      else ord.cancelBooster();
+      return;
+    }
+
+    if (!hit) {
+      // Nothing under the pointer: an in-flight squad is the next best thing to
+      // hit, which is the only way to reach RETREAT_SQUAD.
+      const sq = ord.squadAt(getState(), w.x, w.y);
+      view.armed = null;
+      if (sq) ord.selectSquad(sq);
+      else ord.selectOnly(null);
+      return;
+    }
+
+    if (hit.id === lastTapId && now - lastTapAt < DOUBLE_TAP_MS && hit.owner === 'player') {
+      ord.selectFront(hit.id);
       lastTapAt = 0;
       return;
     }
     lastTapId = hit.id;
     lastTapAt = now;
 
-    const armed = view.armed ? site(view.armed) : null;
-    if (armed && armed.id !== hit.id && issueSend(armed, hit)) {
+    const armed = view.armed ? ord.site(view.armed) : null;
+    if (armed && armed.id !== hit.id && ord.issueSend(armed, hit)) {
       view.armed = null;
       return;
     }
     view.armed = hit.owner === 'player' ? hit.id : null;
-    selectOnly(hit.id);
-  }
-
-  function boxSelect() {
-    const b = view.box;
-    if (!b) return;
-    const st = getState();
-    const x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1);
-    const y0 = Math.min(b.y0, b.y1), y1 = Math.max(b.y0, b.y1);
-    view.selection.length = 0;
-    for (const si of st.sites) {
-      if (si.owner !== 'player') continue;
-      board.sitePos(si, s);
-      if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) view.selection.push(si.id);
-    }
-    view.armed = view.selection.length === 1 ? view.selection[0] : null;
-    view.trainPickerFor = null;
-    bus?.emit('ui:selection', view.selection);
-  }
-
-  /** Rally makes a site auto-send once its garrison passes the threshold — the
-   *  idle affordance inside the battle, and the cure for back-line micro. */
-  function setRally(wx, wy) {
-    const st = getState();
-    const target = board.siteAt(st, wx, wy);
-    const sources = view.selection.length ? view.selection.slice()
-      : (view.armed ? [view.armed] : []);
-    if (!sources.length) return;
-    for (const id of sources) {
-      const src = site(id);
-      if (!src || src.owner !== 'player') continue;
-      if (!target || target.id === id) push(cmd.rally(id, null));
-      else if (src.adj.includes(target.id)) push(cmd.rally(id, target.id));
-    }
+    ord.selectOnly(hit.id);
   }
 
   function spread() {
@@ -332,30 +240,38 @@ export function createBattleInput(o) {
       bus?.emit('ui:fraction', view.fraction);
       return;
     }
-    if (k === 'escape') { view.armed = null; selectOnly(null); clearDrag(); return; }
+    // Esc unwinds one step at a time: the aiming reticle first, then selection.
+    if (k === 'escape') {
+      if (ord.cancelBooster()) return;
+      view.armed = null;
+      ord.selectOnly(null);
+      clearDrag();
+      return;
+    }
 
     // `R` is documented twice in the design — as retreat and as the rams
     // filter. Resolved by context, which is unambiguous in practice: retreat
     // needs something selected, and you set filters when nothing is.
     // Shift+R always means the filter.
-    if (k === 'r' && !ev.shiftKey && view.selection.length) { retreatSelection(); return; }
-    if (FILTER_KEYS[k]) {
-      const u = FILTER_KEYS[k];
+    if (k === 'r' && !ev.shiftKey) {
+      if (ord.retreatSelectedSquad()) return;
+      if (view.selection.length) { ord.retreatSelection(); return; }
+    }
+    if (FILTER_BY_KEY[k]) {
+      const u = FILTER_BY_KEY[k];
       view.filter[u] = !view.filter[u];
       bus?.emit('ui:filter', view.filter);
       return;
     }
-    if (BOOSTER_KEYS[k]) { push(cmd.booster(BOOSTER_KEYS[k])); return; }
-    if (k === ' ') { ev.preventDefault(); bus?.emit('ui:slowmo'); return; }
+    if (BOOSTER_BY_KEY[k]) { ord.armBooster(BOOSTER_BY_KEY[k]); return; }
+    if (SPEED_KEYS[k] !== undefined) { bus?.emit('ui:speed-step', SPEED_KEYS[k]); return; }
+    // Slow-mo is HELD, not toggled, so keyup has to be heard for it to end.
+    if (k === ' ') { ev.preventDefault(); if (!ev.repeat) bus?.emit('ui:slowmo'); return; }
     if (k === 'p') { bus?.emit('ui:pause'); }
   }
 
-  function retreatSelection() {
-    for (const id of view.selection) {
-      const src = site(id);
-      if (!src) continue;
-      if (src.owner === 'player' || src.siege?.owner === 'player') push(cmd.retreat(id));
-    }
+  function onKeyUp(ev) {
+    if (ev.key === ' ') bus?.emit('ui:slowmo-end');
   }
 
   function onWheel(ev) {
@@ -373,21 +289,32 @@ export function createBattleInput(o) {
   off.listen(canvas, 'contextmenu', (ev) => ev.preventDefault());
   off.listen(canvas, 'wheel', onWheel, { passive: false });
   off.listen(window, 'keydown', onKey);
+  off.listen(window, 'keyup', onKeyUp);
 
   return {
     view,
     /** Exposed so HUD chips route through exactly the same code as the keys. */
     setFraction(f) { view.fraction = f; bus?.emit('ui:fraction', f); },
     toggleFilter(u) { view.filter[u] = !view.filter[u]; bus?.emit('ui:filter', view.filter); },
-    useBooster(id) { push(cmd.booster(id)); },
-    setTrain(siteId, unit) { push(cmd.train(siteId, unit)); },
-    upgrade(siteId) { push(cmd.upgrade(siteId)); },
-    retreat: retreatSelection,
-    retreatSquad(id) { push(cmd.retreatSquad(id)); },
+    /** Arms a targeted booster (rally / bombard / fortify) so the next site
+     *  click fires it there; fires an untargeted one (march / tithe) at once. */
+    useBooster: ord.armBooster,
+    cancelBooster: ord.cancelBooster,
+    /** Fire the armed booster at a site — the click path, exposed for tests. */
+    fireBooster: ord.fireBooster,
+    setTrain(siteId, unit) { ord.push(cmd.train(siteId, unit)); },
+    upgrade(siteId) { ord.push(cmd.upgrade(siteId)); },
+    retreat: ord.retreatSelection,
+    retreatSquad(id) {
+      if (id == null) return ord.retreatSelectedSquad();
+      ord.push(cmd.retreatSquad(id));
+      return true;
+    },
     /** Leaves the region unconquered (design section 9). Deliberately NOT bound
      *  to a key: Esc deselects, and ending a battle on a stray keypress is the
-     *  kind of thing you only regret once. A HUD button calls this. */
-    withdraw() { push(cmd.withdraw()); },
+     *  kind of thing you only regret once. The HUD's confirm-style Withdraw
+     *  button (battle-panel.js) is the only caller. */
+    withdraw() { ord.push(cmd.withdraw()); },
     dispose: off.dispose,
   };
 }

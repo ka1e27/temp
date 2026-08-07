@@ -6,10 +6,15 @@
 <title>Hex Dominion — render harness</title>
 <link rel="icon" href="data:,">
 
+<!-- EXACTLY what index.html loads, in EXACTLY the same order. The harness was
+     missing scenes.css, which redeclared .panel and .btn and therefore changed
+     how every plate and every button rendered — so this page was showing a
+     different game to the one that ships. Keep these five lines in sync. -->
 <link rel="stylesheet" href="./src/styles/tokens.css">
 <link rel="stylesheet" href="./src/styles/base.css">
 <link rel="stylesheet" href="./src/styles/hud.css">
 <link rel="stylesheet" href="./src/styles/screens.css">
+<link rel="stylesheet" href="./src/styles/scenes.css">
 <script>
 if (location.protocol === 'file:') {
   document.documentElement.innerHTML =

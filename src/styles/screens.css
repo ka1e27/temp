@@ -1,5 +1,7 @@
-/* Screen-level DOM: the on-board training picker, hint strips, and the shared
-   overlay/dialog shell used by the menu, shop and results scenes. */
+/* On-board overlays (training picker, coach strip), the shared dialog shell,
+   the main menu and the pre-battle loadout.
+   `.btn` is NOT declared here — it lives once in base.css. The copy that used
+   to sit in this file (plus a `.btn-primary` no call site ever used) is gone. */
 
 /* --- Stronghold training picker -------------------------------------------
    The highest-frequency decision in the game, so it lives ON the site rather
@@ -8,146 +10,231 @@
    --dx/--dy offset along the arc. */
 
 .hud-train {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
+  position: absolute; left: 0; top: 0; width: 0; height: 0;
   transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
-  display: none;
+  /* Not display:none — a picker that pops in is a picker you did not see open.
+     visibility (not just opacity) so hidden chips are not hit-testable even
+     though #hud children opt into pointer-events. */
+  opacity: 0; visibility: hidden;
+  transition: opacity var(--d-mid) var(--ease), visibility 0s linear var(--d-mid);
 }
-.hud-train.is-open { display: block; }
+.hud-train.is-open { opacity: 1; visibility: visible; transition-delay: 0s; }
 
 .train-chip {
-  position: absolute;
-  width: var(--hit);
-  height: var(--hit);
+  --sc: 0.6;
+  position: absolute; width: var(--hit); height: var(--hit);
   margin: calc(var(--hit) / -2) 0 0 calc(var(--hit) / -2);
-  transform: translate3d(var(--dx, 0px), var(--dy, 0px), 0) scale(var(--sc, 1));
-  border-radius: 50%;
-  background: var(--c-surface);
+  transform: translate3d(var(--dx, 0px), var(--dy, 0px), 0) scale(var(--sc));
+  border-radius: 50%; background: var(--c-surface);
   box-shadow: inset 0 0 0 2px var(--chip, var(--c-line)), var(--shadow-2);
-  display: grid;
-  place-items: center;
-  gap: 0;
-  transition: transform var(--d-mid) var(--ease), box-shadow var(--d-fast) var(--ease);
+  display: grid; place-items: center; gap: 0;
+  transition: transform var(--d-mid) var(--ease-out), box-shadow var(--d-fast) var(--ease);
 }
-.train-chip:hover { --sc: 1.12; }
+.hud-train.is-open .train-chip { --sc: 1; }
+.hud-train.is-open .train-chip:hover { --sc: 1.12; }
 .train-chip.is-on {
   background: color-mix(in srgb, var(--chip) 26%, var(--c-surface));
   box-shadow: inset 0 0 0 2px var(--chip), var(--shadow-2);
 }
 .train-chip.is-locked { opacity: 0.25; pointer-events: none; }
-.train-chip-icon {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  background: var(--chip);
-}
-.train-chip-key {
-  font: var(--w-bold) 9px / 1 var(--font-num);
-  color: var(--c-text-dim);
-  margin-top: 2px;
-}
+.train-chip-icon { width: 12px; height: 12px; border-radius: 2px; background: var(--chip); }
+.train-chip-key { font: var(--w-bold) 9px / 1 var(--font-num); color: var(--c-text-dim); margin-top: 2px; }
 
-/* --- Hint / coach strip --------------------------------------------------- */
+/* --- Coach / hint strip ---------------------------------------------------
+   One line, centred over the board, never blocking it. It slides down as well
+   as fades, so it reads as arriving rather than materialising. */
 
 .hint {
-  position: absolute;
-  left: 50%;
-  top: var(--s-5);
-  transform: translateX(-50%);
-  padding: var(--s-2) var(--s-4);
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
-  border: 1px solid var(--c-line);
-  font-size: var(--t-sm);
-  color: var(--c-text);
-  opacity: 0;
-  transition: opacity var(--d-slow) var(--ease);
+  position: absolute; left: 50%; top: var(--s-5);
+  padding: var(--s-2) var(--s-5); border-radius: var(--r-pill);
+  background: var(--plate-bg); border: var(--hairline);
+  border-left-width: var(--plate-edge); border-left-color: var(--c-accent);
+  box-shadow: var(--plate-sheen), var(--shadow-1);
+  backdrop-filter: blur(var(--plate-blur)); -webkit-backdrop-filter: blur(var(--plate-blur));
+  font-size: var(--t-sm); color: var(--c-text);
+  max-width: min(560px, 88vw); text-align: center;
+  opacity: 0; transform: translate(-50%, -8px);
+  transition: opacity var(--d-slow) var(--ease), transform var(--d-slow) var(--ease-out);
 }
-.hint.is-on { opacity: 1; }
+.hint.is-on { opacity: 1; transform: translate(-50%, 0); }
 
-/* --- Selection readout (what R / Esc will act on) ------------------------- */
-
-.hud-selection {
-  position: absolute;
-  left: var(--s-3);
-  bottom: calc(var(--hit) + var(--s-6) + var(--s-3));
-  padding: var(--s-2) var(--s-3);
-  display: none;
-  flex-direction: column;
-  gap: var(--s-1);
-  min-width: 190px;
-}
-.hud-selection.is-open { display: flex; }
-.hud-selection-title {
-  font: var(--w-bold) var(--t-sm) / 1.2 var(--font);
-  letter-spacing: 0.04em;
-}
-.hud-selection-sub {
-  font: var(--w-normal) var(--t-xs) / 1.2 var(--font-num);
-  color: var(--c-text-dim);
-}
-
-/* --- Generic overlay shell (menu / results / shop) ------------------------ */
+/* --- Generic overlay + dialog shell --------------------------------------- */
 
 .overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--c-bg) 78%, transparent);
-  pointer-events: auto;
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: var(--scrim); pointer-events: auto;
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  animation: hd-enter var(--d-slow) var(--ease-out) both;
 }
 .dialog {
-  min-width: 320px;
-  max-width: 560px;
-  padding: var(--s-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-4);
+  width: min(460px, 92vw); padding: var(--s-6);
+  display: flex; flex-direction: column; gap: var(--s-4);
+  animation: hd-rise var(--d-slow) var(--ease-out) both;
 }
 .dialog h1 {
-  margin: 0;
-  font: var(--w-bold) var(--t-xl) / 1.2 var(--font);
-  letter-spacing: -0.01em;
+  margin: 0; font: var(--w-bold) var(--t-2xl) / 1.1 var(--font); letter-spacing: -0.02em;
 }
-.dialog p {
-  margin: 0;
-  color: var(--c-text-dim);
-  font-size: var(--t-md);
-}
-
-.btn {
-  padding: var(--s-2) var(--s-4);
-  border-radius: var(--r-2);
-  background: var(--c-surface-2);
-  box-shadow: inset 0 0 0 1px var(--c-line);
-  font: var(--w-bold) var(--t-md) / 1.4 var(--font);
-  transition: background var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
-}
-.btn:hover { box-shadow: inset 0 0 0 1px var(--c-accent); }
-.btn-primary {
-  background: color-mix(in srgb, var(--c-player) 20%, var(--c-surface-2));
-  color: var(--c-player);
-  box-shadow: inset 0 0 0 1px var(--c-player);
-}
-
-/* --- Keyboard legend ------------------------------------------------------ */
+.dialog p { margin: 0; color: var(--c-text-dim); font-size: var(--t-md); }
+.dialog .btn { width: 100%; }
 
 .keys {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-1) var(--s-3);
-  font-size: var(--t-xs);
-  color: var(--c-text-dim);
+  display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-3);
+  font-size: var(--t-xs); color: var(--c-text-dim);
 }
 .keys kbd {
   font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  padding: 2px 5px;
-  border-radius: var(--r-1);
-  background: var(--c-surface-2);
-  border: 1px solid var(--c-line);
-  color: var(--c-text);
+  padding: 2px 5px; border-radius: var(--r-1);
+  background: var(--c-surface-2); border: var(--hairline); color: var(--c-text);
+}
+
+/* --- Main menu ------------------------------------------------------------
+   A returning player should see their empire before they touch anything, so
+   the readout sits above the actions and Continue is the only lit button. */
+
+.menu-dialog { gap: var(--s-5); }
+.menu-empire {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: var(--s-1) var(--s-4); margin: 0;
+  padding: var(--s-3) 0; border-block: var(--hairline);
+}
+.menu-empire dt {
+  color: var(--c-text-dim); font-size: var(--t-xs);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+}
+.menu-empire dd {
+  margin: 0; text-align: right;
+  font: var(--w-bold) var(--t-md) / 1.6 var(--font-num); font-variant-numeric: tabular-nums;
+}
+.menu-empire dd:nth-of-type(2) { color: var(--c-gold); }
+.menu-empire dd:nth-of-type(3) { color: var(--c-player); }
+.menu-actions { display: flex; flex-direction: column; gap: var(--s-2); }
+.menu-io:empty { display: none; }
+.menu-drawer, .menu-confirm { display: flex; flex-direction: column; gap: var(--s-3); }
+.menu-confirm {
+  padding: var(--s-4); border-left-width: var(--plate-edge); border-left-color: var(--c-danger);
+}
+.menu-confirm p { font-size: var(--t-sm); }
+.menu-wipe { background: color-mix(in srgb, var(--c-danger) 22%, var(--c-surface-2)); }
+.menu-wipe:hover { background: color-mix(in srgb, var(--c-danger) 34%, var(--c-surface-2)); }
+.menu-text {
+  padding: var(--s-2); border-radius: var(--r-2);
+  background: var(--c-bg); border: var(--hairline); color: var(--c-text);
+  font: var(--w-normal) var(--t-xs) / 1.5 var(--font-num); resize: vertical;
+}
+.menu-status { min-height: 1.4em; font-size: var(--t-sm); color: var(--c-warn); }
+.menu-status:empty { display: none; }
+
+/* --- Pre-battle loadout ---------------------------------------------------
+   The last decision before a battle. Brief on the left (what you are walking
+   into), army and boosters on the right (what you are walking in with). */
+
+/* Header and footer are fixed and only the middle scrolls, so the launch
+   button is always reachable and focusing it never scrolls the brief away. */
+.prebattle {
+  background: radial-gradient(1100px 640px at 50% 0%, #141a26 0%, var(--c-bg) 68%);
+}
+.pb-wrap {
+  width: min(1120px, 94vw); height: 100%; margin: 0 auto;
+  display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-3) 0;
+}
+.pb-header {
+  display: flex; align-items: center; gap: var(--s-5);
+  padding: var(--s-3) var(--s-5); flex: none;
+}
+.pb-title { min-width: 0; }
+.pb-title h1 {
+  margin: 0; font: var(--w-bold) var(--t-xl) / 1.15 var(--font); letter-spacing: -0.01em;
+}
+.pb-flavour { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--t-sm); }
+.pb-header-actions { display: flex; gap: var(--s-2); margin-left: auto; }
+
+.pb-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3); align-items: start;
+}
+.pb-brief, .pb-army, .pb-boosters { padding: var(--s-4); }
+.pb-body h2 {
+  margin: 0 0 var(--s-1);
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
+  text-transform: uppercase; letter-spacing: var(--track-tag); color: var(--c-accent);
+}
+.pb-note { margin: 0 0 var(--s-4); color: var(--c-text-dim); font-size: var(--t-sm); }
+.pb-stats { display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0; }
+.pb-stats dt, .pb-stats dd {
+  display: flex; align-items: center; align-self: stretch; padding: var(--s-2) 0;
+  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.pb-stats dt {
+  color: var(--c-text-dim); font-size: var(--t-xs); padding-right: var(--s-4);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+}
+.pb-stats dd {
+  margin: 0; justify-content: flex-end;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+}
+.pb-stats dt:first-of-type, .pb-stats dd:first-of-type { border-top: 0; }
+/* What you are walking into (difficulty) and what it pays (last row) are the
+   two facts the loadout is weighed against. */
+.pb-stats dd:first-of-type {
+  font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-enemy);
+}
+.pb-stats dd:last-of-type { color: var(--c-gold); font-weight: var(--w-bold); }
+
+/* The troop total is what the whole panel is about. */
+.pb-budget {
+  display: flex; align-items: baseline; gap: var(--s-2); margin: 0 0 var(--s-3);
+}
+.pb-budget-n {
+  font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
+  letter-spacing: -0.02em; color: var(--c-player);
+}
+.pb-units, .pb-booster-list { list-style: none; margin: 0; padding: 0; }
+.pb-unit {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-2) 0; border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.pb-unit:first-child { border-top: 0; }
+.pb-unit-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.pb-unit-name { font-weight: var(--w-bold); }
+.pb-unit-stat { font-size: var(--t-xs); font-family: var(--font-num); }
+.pb-unit-adjust { display: flex; align-items: center; gap: var(--s-2); }
+.pb-step {
+  width: var(--hit-sm); min-height: var(--hit-sm); padding: 0;
+  font: var(--w-bold) var(--t-md) / 1 var(--font-num);
+}
+.pb-unit-count { min-width: 2.5em; text-align: center; font: var(--w-bold) var(--t-md) / 1 var(--font-num); }
+.pb-unit[data-unit='militia'] .pb-unit-name { color: var(--c-militia); }
+.pb-unit[data-unit='spearmen'] .pb-unit-name { color: var(--c-spearmen); }
+.pb-unit[data-unit='raiders'] .pb-unit-name { color: var(--c-raiders); }
+.pb-unit[data-unit='rams'] .pb-unit-name { color: var(--c-rams); }
+.pb-unit[data-unit='marshal'] .pb-unit-name { color: var(--c-marshal); }
+
+.pb-booster-row {
+  display: flex; flex-direction: column; gap: 2px; padding: var(--s-2) 0;
+  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.pb-booster-row:first-child { border-top: 0; }
+.pb-booster { --chip: var(--c-accent); justify-content: space-between; width: 100%; }
+.pb-booster:disabled { opacity: 0.4; cursor: not-allowed; }
+.pb-booster-name { text-transform: none; letter-spacing: 0; font-weight: var(--w-bold); }
+.pb-booster-count { margin-left: auto; }
+.pb-booster-note { font-size: var(--t-xs); padding-left: var(--s-4); }
+
+.pb-actions {
+  display: flex; align-items: center; gap: var(--s-4);
+  padding: var(--s-3) var(--s-4); flex: none;
+}
+.pb-go { min-height: calc(var(--hit) + var(--s-2)); font-size: var(--t-lg); flex: 1; }
+.pb-actions .keys { margin-left: auto; }
+
+@media (max-width: 1180px) {
+  .pb-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pb-brief { grid-column: 1 / -1; }
+  .pb-wrap { width: min(1120px, 97vw); }
+  .pb-go { font-size: var(--t-md); }
+}
+@media (max-width: 860px) {
+  .pb-body { grid-template-columns: minmax(0, 1fr); }
+  .pb-brief { grid-column: auto; }
 }

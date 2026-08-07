@@ -1,158 +1,231 @@
-/* World map, shop and results screens.
-   Kept separate from screens.css (which styles the battle HUD) so these two
-   areas can be authored independently. Everything here uses the shared tokens,
-   so the two halves of the game read as one system. */
+/* World map, shop and results — the campaign screens.
+   Shared primitives (.panel, .btn, focus, keyframes, the locked/available/owned
+   grammar) live in base.css and are NOT redeclared here: this file used to
+   define its own opaque .panel and .btn, which silently beat base.css and meant
+   the frosted plate never rendered. Contexts here only re-point --state. */
 
 /* #screen-root is pointer-events:none so empty HUD space lets clicks reach the
    battle canvas underneath. A full-screen scene must opt back IN, or every
-   button on it is unclickable while still looking perfectly fine.
-   Battle mounts nothing here (#screen-root:empty is display:none), so this
-   never blocks the board. */
+   button on it is unclickable while still looking perfectly fine. */
 .screen {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: auto;
-  font: var(--w-normal) var(--t-md) / var(--lh) var(--font);
-  color: var(--c-text);
+  position: absolute; inset: 0; overflow: hidden; pointer-events: auto;
+  font: var(--w-normal) var(--t-md) / var(--lh) var(--font); color: var(--c-text);
+  animation: hd-enter var(--d-slow) var(--ease-out) both;
 }
 
-/* ---------- world map ---------- */
+/* ---------- world map ----------
+   The campaign is one honeycomb. Locked ground is hatched and unnamed,
+   attackable ground carries the enemy hue and breathes, everything you hold
+   floods green and glows — so the empire visibly grows. */
 
 .worldmap {
-  display: flex;
-  flex-direction: column;
-  background:
-    radial-gradient(1200px 700px at 50% 18%, #141a26 0%, var(--c-bg) 70%);
+  display: flex; flex-direction: column;
+  background: radial-gradient(1200px 700px at 50% 18%, #141a26 0%, var(--c-bg) 70%);
+}
+/* The faint hex weave: the DOM screens quoting the board's geometry. */
+.worldmap::before,
+.results::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  opacity: var(--tex-alpha); background: var(--tex-weave);
+  mask-image: radial-gradient(120% 90% at 50% 26%, #000 0%, transparent 76%);
 }
 
 .wm-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-5);
-  margin: var(--s-4);
-  padding: var(--s-3) var(--s-4);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-5); margin: var(--s-4) var(--s-4) 0; padding: var(--s-3) var(--s-5);
 }
 
+/* Treasury and income are glanced at constantly, so they lead — label above
+   value, the crown count at display size. Placement is explicit because the
+   scene emits label/value/label/value as one flat row of four. */
 .wm-treasury {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s-2);
+  display: grid; grid-template-columns: max-content max-content;
+  column-gap: var(--s-7); row-gap: var(--s-1); align-items: baseline;
 }
-.wm-treasury .label {
-  font-size: var(--t-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
+.wm-treasury > :nth-child(1) { grid-area: 1 / 1; }
+.wm-treasury > :nth-child(2) { grid-area: 2 / 1; }
+.wm-treasury > :nth-child(3) { grid-area: 1 / 2; }
+.wm-treasury > :nth-child(4) { grid-area: 2 / 2; }
+.wm-treasury .label,
+.shop-treasury .label {
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--c-text-dim);
 }
 .wm-treasury .crowns {
-  font: var(--w-bold) var(--t-xl) / 1 var(--font-num);
-  color: var(--c-gold);
-  margin-right: var(--s-4);
+  font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
+  letter-spacing: -0.02em; color: var(--c-gold);
 }
-.wm-treasury .income {
-  font: var(--w-bold) var(--t-md) / 1 var(--font-num);
-  color: var(--c-player);
-}
+.wm-treasury .income { font: var(--w-bold) var(--t-lg) / 1 var(--font-num); color: var(--c-player); }
 
 .wm-body {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: var(--s-4);
-  padding: 0 var(--s-4) var(--s-4);
-  min-height: 0;
+  flex: 1; display: grid; min-height: 0;
+  grid-template-columns: minmax(0, 1fr) var(--sidebar);
+  gap: var(--s-4); padding: var(--s-4);
 }
+.wm-board { position: relative; margin: auto; transform: translate(var(--wm-ox, 0), var(--wm-oy, 0)); }
 
-.wm-board {
-  position: relative;
-  margin: auto;
-  transform: translate(var(--wm-ox, 0), var(--wm-oy, 0));
-}
-
-/* A region is one hex on one grid — the campaign literally looks like a
-   spreading empire as hexes flip to your colour. */
+/* A region is one hex on one grid. The map deals itself in outward from the
+   homeland: tier 1 first, tier 5 last.
+   Three stacked layers, all clipped to the SAME hexagon, because an inset
+   box-shadow follows the border box and gets sliced by the clip-path into two
+   vertical bars — which is what the ring used to look like:
+     element background  the ring          ::before  the fill
+     ::after             the animated state layer (flood / beacon / hatch) */
 .wm-hex {
-  position: absolute;
-  width: 88px;
-  height: 100px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 0;
-  border: 0;
-  cursor: pointer;
-  color: var(--c-text);
-  background: var(--c-surface-2);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  position: absolute; width: var(--hex-w); height: var(--hex-h);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: 0 var(--s-2); border: 0; cursor: pointer;
+  color: var(--c-text); background: var(--c-line); clip-path: var(--hex-clip);
   transition: transform var(--d-fast) var(--ease), filter var(--d-fast) var(--ease);
+  animation: hd-deal var(--d-slower) var(--ease-out) both;
+  animation-delay: calc(var(--tier, 1) * var(--stagger));
 }
+.wm-hex[data-tier='2'] { --tier: 2; }
+.wm-hex[data-tier='3'] { --tier: 3; }
+.wm-hex[data-tier='4'] { --tier: 4; }
+.wm-hex[data-tier='5'] { --tier: 5; }
 .wm-hex:hover { transform: scale(1.05); filter: brightness(1.15); }
-.wm-hex:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
 
-.wm-hex[data-status='locked'] {
-  background: #10131a;
-  color: #3a4356;
-  cursor: default;
+.wm-hex::before,
+.wm-hex::after {
+  content: ''; position: absolute; inset: 2px; z-index: 0; pointer-events: none;
+  clip-path: var(--hex-clip);
 }
-.wm-hex[data-status='locked']:hover { transform: none; filter: none; }
-
-.wm-hex[data-status='available'] {
-  background: color-mix(in srgb, var(--c-enemy) 26%, var(--c-surface-2));
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-enemy) 55%, transparent);
-}
-.wm-hex[data-status='conquered'] {
-  background: color-mix(in srgb, var(--c-player) 30%, var(--c-surface-2));
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-player) 60%, transparent);
-}
-.wm-hex.is-selected { box-shadow: inset 0 0 0 3px var(--c-accent); }
-
-.wm-name {
-  font-size: var(--t-sm);
-  font-weight: var(--w-bold);
-  text-align: center;
-  padding: 0 var(--s-2);
-  line-height: 1.15;
-}
+.wm-hex::before { background: var(--c-surface-2); }
+.wm-name, .wm-tier { position: relative; z-index: 1; }
+.wm-name { font-size: var(--t-sm); font-weight: var(--w-bold); text-align: center; line-height: 1.15; }
 .wm-tier {
   font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  color: var(--c-text-dim);
-  letter-spacing: 0.06em;
+  color: var(--c-text-dim); letter-spacing: 0.06em; text-align: center;
+}
+/* The non-colour channel: every state also reads as a word. */
+.wm-tier::after {
+  display: block; margin-top: 3px; color: var(--state);
+  font: var(--w-bold) 9px / 1 var(--font-num); letter-spacing: var(--track-tag);
 }
 
-.wm-detail { padding: var(--s-4); overflow-y: auto; }
-.wm-detail h2 { margin: 0 0 var(--s-1); font-size: var(--t-xl); }
-.wm-flavour {
-  margin: 0 0 var(--s-4);
-  color: var(--c-text-dim);
-  font-size: var(--t-sm);
+/* locked: terra incognita */
+.wm-hex[data-status='locked'] {
+  --state: var(--c-locked); cursor: default; color: var(--c-locked);
+  background: color-mix(in srgb, var(--c-line) 62%, var(--c-bg));
 }
-.wm-stats {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--s-2) var(--s-4);
-  margin: 0 0 var(--s-5);
+.wm-hex[data-status='locked']::before { background: color-mix(in srgb, var(--c-surface) 58%, var(--c-bg)); }
+.wm-hex[data-status='locked']::after {
+  background: repeating-linear-gradient(-45deg,
+    color-mix(in srgb, var(--c-text) 7%, transparent) 0 1px, transparent 1px 7px);
 }
-.wm-stats dt { color: var(--c-text-dim); font-size: var(--t-sm); }
-.wm-stats dd {
-  margin: 0;
-  text-align: right;
-  font-family: var(--font-num);
-  font-variant-numeric: tabular-nums;
+.wm-hex[data-status='locked'] .wm-tier { color: inherit; opacity: 0.75; }
+.wm-hex[data-status='locked']:hover { transform: none; filter: none; }
+
+/* available: an enemy holding, and your move */
+.wm-hex[data-status='available'] {
+  --state: var(--c-enemy);
+  background: color-mix(in srgb, var(--c-enemy) 62%, var(--c-surface-2));
 }
-.wm-hint { color: var(--c-text-dim); font-size: var(--t-sm); }
-.wm-go { width: 100%; margin-top: var(--s-3); }
+.wm-hex[data-status='available']::before { background: color-mix(in srgb, var(--c-enemy) 22%, var(--c-surface-2)); }
+.wm-hex[data-status='available']::after {
+  background: radial-gradient(70% 70% at 50% 50%,
+    color-mix(in srgb, var(--c-enemy) 34%, transparent) 0%, transparent 72%);
+  animation: hd-beacon var(--d-beacon) var(--ease) infinite;
+}
+
+/* conquered: it floods, and contiguous holdings bloom together as one mass */
+.wm-hex[data-status='conquered'] {
+  --state: var(--c-player);
+  background: color-mix(in srgb, var(--c-player) 62%, var(--c-surface-2));
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--c-player) 26%, transparent));
+}
+.wm-hex[data-status='conquered']::before {
+  background: color-mix(in srgb, var(--c-player) 26%, var(--c-surface-2));
+  animation: hd-fill var(--d-flood) var(--ease-out) both;
+  animation-delay: calc(var(--tier, 1) * var(--stagger) + var(--d-slower));
+}
+.wm-hex[data-status='conquered']::after {
+  background: radial-gradient(60% 60% at 50% 50%,
+    color-mix(in srgb, var(--c-player) 40%, transparent) 0%,
+    color-mix(in srgb, var(--c-player) 12%, transparent) 70%, transparent 100%);
+  animation: hd-flood var(--d-flood) var(--ease-out) both;
+  animation-delay: calc(var(--tier, 1) * var(--stagger) + var(--d-slower));
+}
+.wm-hex[data-status='conquered']:hover {
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--c-player) 40%, transparent)) brightness(1.12);
+}
+
+/* `data-mode` is the truth about what you can DO here, and it is what the tag
+   reports. An 'available' region you cannot yet reach stops calling for
+   attention; a raid that is ready calls for it in gold. */
+.wm-hex[data-mode='locked'] .wm-tier::after { content: 'LOCKED'; opacity: 0.7; }
+.wm-hex[data-mode='attack'] .wm-tier::after { content: 'OPEN'; }
+.wm-hex[data-mode='cooldown'] .wm-tier::after { content: 'HELD'; }
+.wm-hex[data-mode='raid'] .wm-tier::after { content: 'RAID'; }
+.wm-hex[data-status='available'][data-mode='locked'] { filter: saturate(0.5) brightness(0.86); }
+.wm-hex[data-mode='locked']::after { animation: none; }
+.wm-hex[data-mode='raid'] {
+  --state: var(--c-gold);
+  background: color-mix(in srgb, var(--c-gold) 62%, var(--c-surface-2));
+}
+.wm-hex[data-mode='raid']::after {
+  background: radial-gradient(70% 70% at 50% 50%,
+    color-mix(in srgb, var(--c-gold) 28%, transparent) 0%, transparent 72%);
+  animation: hd-beacon var(--d-beacon) var(--ease) infinite;
+}
+
+.wm-hex.is-selected { background: var(--c-accent); z-index: 1; }
+.wm-hex.is-selected::before,
+.wm-hex.is-selected::after { inset: 3px; }
+
+/* --- the decision panel -------------------------------------------------- */
+
+.wm-detail { display: flex; flex-direction: column; padding: var(--s-5); overflow-y: auto; }
+.wm-detail h2 { margin: 0 0 var(--s-1); font: var(--w-bold) var(--t-xl) / 1.15 var(--font); }
+.wm-flavour { margin: 0 0 var(--s-5); color: var(--c-text-dim); font-size: var(--t-sm); }
+
+/* The reward and the difficulty are what the player is actually deciding on,
+   so they lead the list at display weight and the rest is reference. Ordered
+   by position today; the `data-stat` hooks are honoured the moment they land. */
+.wm-stats, .results-stats {
+  display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0 0 var(--s-5);
+}
+/* Each cell stretches to the row and centres its own text. Baseline alignment
+   would offset a 10px label against a 32px number by a few pixels, and the row
+   rule would arrive as two mismatched dashes instead of one line. */
+.wm-stats dt, .wm-stats dd,
+.results-stats dt, .results-stats dd {
+  display: flex; align-items: center; align-self: stretch; padding: var(--s-2) 0;
+  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.wm-stats dt, .results-stats dt {
+  color: var(--c-text-dim); font-size: var(--t-xs); padding-right: var(--s-4);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+}
+.wm-stats dd, .results-stats dd {
+  margin: 0; justify-content: flex-end;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+}
+.wm-stats dt:nth-of-type(6), .wm-stats dd:nth-of-type(6),
+.wm-stats [data-stat='reward'] { order: -2; border-top: 0; }
+.wm-stats dt:nth-of-type(2), .wm-stats dd:nth-of-type(2),
+.wm-stats [data-stat='difficulty'] { order: -1; }
+.wm-stats dd:nth-of-type(6), .wm-stats dd[data-stat='reward'] {
+  font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
+  letter-spacing: -0.02em; color: var(--c-gold); padding-top: 0;
+}
+.wm-stats dd:nth-of-type(2), .wm-stats dd[data-stat='difficulty'] {
+  font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-enemy);
+}
+
+.wm-hint {
+  margin: 0 0 var(--s-3); padding-left: var(--s-3); border-left: 2px solid var(--c-line);
+  color: var(--c-text-dim); font-size: var(--t-sm);
+}
+/* The commitment: pinned to the foot of the panel and taller than any other
+   control on the screen, because it is the only one that starts a battle. */
+.wm-go { width: 100%; margin-top: auto; min-height: calc(var(--hit) + var(--s-2)); font-size: var(--t-lg); }
 
 .wm-offline {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  margin: var(--s-4) var(--s-4) 0;
-  padding: var(--s-3) var(--s-4);
-  border-left: 3px solid var(--c-gold);
+  display: flex; align-items: center; gap: var(--s-3);
+  margin: var(--s-4) var(--s-4) 0; padding: var(--s-3) var(--s-4);
+  border-left-width: var(--plate-edge); border-left-color: var(--c-gold);
 }
 .wm-offline strong { color: var(--c-gold); font-family: var(--font-num); }
 .wm-offline span { color: var(--c-text-dim); font-size: var(--t-sm); }
@@ -161,147 +234,165 @@
 /* ---------- shop ---------- */
 
 .shop-overlay {
-  display: grid;
-  place-items: center;
-  background: rgba(6, 8, 12, 0.72);
-  backdrop-filter: blur(3px);
+  display: grid; place-items: center; background: var(--scrim);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
 }
+.shop-treasury { display: flex; align-items: baseline; gap: var(--s-2); margin-left: auto; }
 .shop-panel {
-  width: min(820px, 92vw);
-  max-height: 86vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  width: min(860px, 92vw); max-height: 86vh; overflow: hidden;
+  display: flex; flex-direction: column;
+  animation: hd-rise var(--d-slow) var(--ease-out) both;
 }
+/* The header is a band INSIDE the plate, not a second plate stacked on one. */
 .shop-header {
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-4);
-  border-bottom: 1px solid var(--c-line);
+  display: flex; align-items: center; gap: var(--s-5);
+  padding: var(--s-4) var(--s-5); background: none; border: 0;
+  border-bottom: var(--hairline); border-radius: 0; box-shadow: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
 }
-.shop-header h2 { margin: 0; font-size: var(--t-lg); }
-.shop-treasury {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s-2);
-  margin-left: auto;
+.shop-header h2 { margin: 0; font: var(--w-bold) var(--t-lg) / 1.2 var(--font); }
+.shop-treasury .crowns {
+  color: var(--c-gold); margin-right: var(--s-3);
+  font: var(--w-bold) var(--t-lg) / 1 var(--font-num);
 }
-.shop-treasury .label {
-  font-size: var(--t-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--c-text-dim);
-}
-.shop-treasury .crowns { color: var(--c-gold); font-weight: var(--w-bold); }
-.shop-treasury .num { font-family: var(--font-num); }
+.shop-treasury .num { font-family: var(--font-num); color: var(--c-player); }
 
-.shop-list { overflow-y: auto; padding: var(--s-3) var(--s-4) var(--s-5); }
-.shop-group { margin-top: var(--s-5); }
+.shop-list { overflow-y: auto; padding: var(--s-4) var(--s-5) var(--s-6); }
+/* The list is taller than the plate: fade the cut edge so "there is more
+   below" is visible rather than inferred from a half-sliced row. */
+.shop-panel::after {
+  content: ''; position: absolute; inset: auto 0 0; height: var(--s-6);
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--c-surface));
+}
+.shop-group { margin-top: var(--s-6); }
 .shop-group:first-child { margin-top: 0; }
 .shop-group h3 {
-  margin: 0;
-  font-size: var(--t-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--c-accent);
+  display: flex; align-items: center; gap: var(--s-3); margin: 0;
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
+  text-transform: uppercase; letter-spacing: var(--track-tag); color: var(--c-accent);
 }
-.shop-group-note {
-  margin: 2px 0 var(--s-3);
-  font-size: var(--t-sm);
-  color: var(--c-text-dim);
+.shop-group h3::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, var(--c-line), transparent);
 }
+.shop-group-note { margin: var(--s-2) 0 var(--s-3); font-size: var(--t-sm); color: var(--c-text-dim); }
 
 .shop-row {
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-2) var(--s-3);
-  border-radius: var(--r-2);
-  border-bottom: 1px solid var(--c-line);
+  position: relative; display: flex; align-items: center; gap: var(--s-4);
+  padding: var(--s-2) var(--s-3); border-radius: var(--r-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+  box-shadow: inset 2px 0 0 transparent;
+  transition: background var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
 }
-.shop-row:hover { background: var(--c-surface-2); }
-.shop-row[data-maxed='1'] { opacity: 0.55; }
+.shop-row:hover { background: var(--plate-bg-2); }
+/* Owned reads here exactly as a held region reads on the map: the state hue on
+   the leading edge, plus a word. */
+.shop-row[data-maxed='1'],
+.shop-row[data-state='owned'] { --state: var(--c-player); box-shadow: inset 2px 0 0 var(--state); opacity: 0.72; }
+.shop-row[data-state='locked'] { --state: var(--c-neutral); opacity: 0.55; }
 .shop-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .shop-name { font-weight: var(--w-bold); }
 .shop-desc { font-size: var(--t-sm); color: var(--c-text-dim); }
 .shop-row-side { display: flex; align-items: center; gap: var(--s-3); }
 .shop-level {
-  font-family: var(--font-num);
-  font-size: var(--t-sm);
-  color: var(--c-text-dim);
-  min-width: 3.5em;
-  text-align: right;
+  font-family: var(--font-num); font-size: var(--t-xs);
+  letter-spacing: var(--track-label); color: var(--c-text-dim);
+  min-width: 3.5em; text-align: right;
 }
-.shop-maxed {
-  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  color: var(--c-player);
-  letter-spacing: 0.08em;
+.shop-maxed { font: var(--w-bold) var(--t-xs) / 1 var(--font-num); color: var(--c-player); letter-spacing: var(--track-tag); }
+/* Price is the decision, so it reads as money — in the currency's own mark. */
+.btn.buy {
+  min-width: 6.5em; font-family: var(--font-num); color: var(--c-gold);
+  border-color: color-mix(in srgb, var(--c-gold) 32%, transparent);
 }
-.btn.buy { min-width: 5.5em; font-family: var(--font-num); color: var(--c-gold); }
-.btn.buy:disabled { color: var(--c-text-dim); opacity: 0.5; cursor: not-allowed; }
+.btn.buy::before { content: '\25C6'; font-size: 0.7em; opacity: 0.8; }
+.btn.buy:hover { background: color-mix(in srgb, var(--c-gold) 14%, var(--c-surface-2)); }
+/* Cannot afford: dashed, like every other locked thing in the game. */
+.btn.buy:disabled { color: var(--c-text-dim); border-style: dashed; border-color: var(--c-line); }
+
+/* Purchase and unlock: a sweep across the row. JS toggles the class. */
+.shop-row.is-purchased::after,
+.shop-row.is-unlocked::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--c-gold) 22%, transparent), transparent);
+  animation: hd-sheen var(--d-slower) var(--ease-out) 1;
+}
+.shop-row.is-unlocked::after {
+  background: linear-gradient(90deg, transparent,
+    color-mix(in srgb, var(--c-player) 24%, transparent), transparent);
+}
 
 /* ---------- results ---------- */
 
 .results {
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(900px 600px at 50% 30%, #151b28 0%, var(--c-bg) 72%);
+  display: grid; place-items: center;
+  background: radial-gradient(900px 600px at 50% 30%, #151b28 0%, var(--c-bg) 72%);
 }
 .results-card {
-  width: min(520px, 92vw);
-  padding: var(--s-6);
-  text-align: center;
-  border-top: 3px solid var(--c-neutral);
+  --state: var(--c-neutral);
+  width: min(560px, 92vw); padding: var(--s-6); text-align: center; overflow: hidden;
+  border-top-width: var(--plate-edge); border-top-color: var(--state);
+  animation: hd-rise var(--d-slow) var(--ease-out) both;
 }
-.results-card[data-result='win'] { border-top-color: var(--c-player); }
+.results-card[data-result='win'] { --state: var(--c-player); }
 .results-card[data-result='loss'],
-.results-card[data-result='timeout'] { border-top-color: var(--c-enemy); }
-
-.results-title { margin: 0 0 var(--s-2); font-size: var(--t-xl); }
-.results-sub { margin: 0 0 var(--s-5); color: var(--c-text-dim); font-size: var(--t-sm); }
-.results-stats {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--s-2) var(--s-4);
-  margin: 0 0 var(--s-5);
-  text-align: left;
+.results-card[data-result='timeout'] { --state: var(--c-enemy); }
+/* The verdict as a word, in the result's hue, above the headline. */
+.results-card::before {
+  content: 'OUTCOME'; display: block; margin-bottom: var(--s-3); color: var(--state);
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num); letter-spacing: var(--track-tag);
 }
-.results-stats dt { color: var(--c-text-dim); font-size: var(--t-sm); }
-.results-stats dd {
-  margin: 0;
-  text-align: right;
-  font-family: var(--font-num);
-  font-variant-numeric: tabular-nums;
-}
-.results-actions { display: flex; gap: var(--s-3); justify-content: center; }
-
-/* ---------- shared controls ---------- */
-
-.panel {
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: var(--r-3);
-  box-shadow: var(--shadow-1);
+.results-card[data-result='win']::before { content: 'VICTORY'; }
+.results-card[data-result='loss']::before { content: 'DEFEAT'; }
+.results-card[data-result='timeout']::before { content: 'TIME UP'; }
+.results-card[data-result='retreat']::before { content: 'WITHDRAWN'; }
+.results-card[data-result='retreat'] { --state: var(--c-warn); }
+.results-card::after {
+  content: ''; position: absolute; inset: 0 0 auto; height: 140px; pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--state) 14%, transparent), transparent);
 }
 
-.btn {
-  font: var(--w-bold) var(--t-md) / 1 var(--font);
-  color: var(--c-text);
-  background: var(--c-surface-2);
-  border: 1px solid var(--c-line);
-  border-radius: var(--r-2);
-  padding: var(--s-2) var(--s-4);
-  cursor: pointer;
-  transition: background var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease);
+.results-title {
+  position: relative; margin: 0 0 var(--s-2); text-wrap: balance;
+  font: var(--w-bold) var(--t-2xl) / 1.1 var(--font); letter-spacing: -0.02em;
 }
-.btn:hover { background: #222839; border-color: #33405a; }
-.btn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
-.btn.primary {
-  background: color-mix(in srgb, var(--c-player) 22%, var(--c-surface-2));
-  border-color: color-mix(in srgb, var(--c-player) 45%, transparent);
-  color: #eafff5;
+.results-sub { position: relative; margin: 0 0 var(--s-6); color: var(--c-text-dim); font-size: var(--t-sm); }
+.results-stats { text-align: left; }
+/* The payoff line — crowns, or the income the win just bought — closes the
+   list and is the only number on the card at display weight. */
+.results-stats dd:last-of-type,
+.results-stats dd[data-stat='payoff'] { font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-gold); }
+.results-card[data-result='win'] .results-stats dd:last-of-type { color: var(--c-player); }
+.results-actions {
+  position: relative; display: flex; align-items: center;
+  gap: var(--s-3); justify-content: center;
 }
-.btn.primary:hover { background: color-mix(in srgb, var(--c-player) 32%, var(--c-surface-2)); }
-.btn.ghost { background: transparent; }
+.results-actions .btn { flex: 1; }
+.results-hint { margin: 0; flex: 1; text-align: left; font-size: var(--t-sm); }
+
+/* ---------- fluid from 1024px up ---------- */
+
+@media (max-width: 1180px) {
+  .wm-header { margin: var(--s-3) var(--s-3) 0; padding: var(--s-3) var(--s-4); }
+  .wm-body { padding: var(--s-3); gap: var(--s-3); }
+  .wm-detail { padding: var(--s-4); }
+  .wm-treasury { column-gap: var(--s-5); }
+  .shop-list { padding: var(--s-3) var(--s-4) var(--s-5); }
+  .shop-header { padding: var(--s-3) var(--s-4); }
+}
+
+/* Below the target range the sidebar stops being a sidebar rather than
+   crushing the board. Desktop-first: a safety net, not a phone layout. */
+@media (max-width: 860px) {
+  .wm-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto; }
+  .wm-detail { max-height: 44vh; }
+  .wm-go { min-height: var(--hit); }
+}
+
+/* Touch: compact desktop metrics grow to a real thumb target. */
+@media (pointer: coarse) {
+  .shop-row { padding: var(--s-3); }
+  .wm-hex { padding-bottom: var(--s-5); }
+}

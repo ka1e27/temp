@@ -1,248 +1,280 @@
 /* The in-battle HUD. DOM, not canvas: text stays crisp, is selectable by
    assistive tech, and costs nothing per frame.
    #hud itself is pointer-events:none (see base.css) — only the controls below
-   opt back in, so clicks on empty HUD space fall through to the board. */
+   opt back in, so clicks on empty HUD space fall through to the board.
+   Everything that floats measures off --dock-h, so the dock can wrap without
+   anything landing on top of it. On-board overlays (training picker, coach
+   strip) live in screens.css. */
 
 .hud-corner {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  padding: var(--s-3);
+  position: absolute; display: flex; flex-direction: column;
+  gap: var(--s-2); padding: var(--s-3); max-width: 46vw;
 }
 .hud-tl { top: 0; left: 0; align-items: flex-start; }
 .hud-tr { top: 0; right: 0; align-items: flex-end; }
 
-/* --- Gold + income -------------------------------------------------------- */
+/* --- Gold + income --------------------------------------------------------
+   The most-glanced number in the battle, so it is the biggest thing in the
+   corner: label above, treasury at display size, rate alongside at baseline. */
 
 .hud-gold {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
+  display: grid; grid-template-columns: max-content max-content;
+  column-gap: var(--s-2); row-gap: var(--s-1); align-items: baseline;
+  padding: var(--s-2) var(--s-4);
+}
+.hud-gold::before {
+  content: 'GOLD'; grid-column: 1 / -1;
+  font-size: var(--t-xs); letter-spacing: var(--track-label); color: var(--c-text-dim);
 }
 .hud-gold .hud-value {
-  font: var(--w-bold) var(--t-xl) / 1 var(--font-num);
-  color: var(--c-gold);
+  font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
+  letter-spacing: -0.02em; color: var(--c-gold);
 }
-.hud-rate {
-  font: var(--w-normal) var(--t-sm) / 1 var(--font-num);
-  color: var(--c-text-dim);
-}
+/* Income arriving: JS toggles .is-bump on the value (see base.css). */
+.hud-rate { font: var(--w-bold) var(--t-sm) / 1 var(--font-num); color: var(--c-player); }
+
 .hud-objective {
-  font-size: var(--t-xs);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
-  padding-left: var(--s-1);
+  font-size: var(--t-xs); letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--c-text-dim); padding-left: var(--s-2);
+  border-left: 2px solid color-mix(in srgb, var(--c-accent) 45%, transparent);
 }
-.hud-clock {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
-}
-.hud-clock .hud-value {
-  font: var(--w-bold) var(--t-lg) / 1 var(--font-num);
-}
+.hud-clock { display: flex; align-items: baseline; gap: var(--s-2); padding: var(--s-2) var(--s-3); }
+.hud-clock .hud-value { font: var(--w-bold) var(--t-lg) / 1 var(--font-num); }
+.hud-clock.is-urgent { border-color: color-mix(in srgb, var(--c-danger) 55%, transparent); }
 .hud-clock.is-urgent .hud-value { color: var(--c-danger); }
 
-/* --- Bottom dock ---------------------------------------------------------- */
+/* One-line status: rejections, and what an armed booster is waiting for. It
+   occupies no space at all when silent. */
+.hud-alert {
+  padding: var(--s-1) var(--s-3); border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--c-warn) 16%, var(--plate-bg));
+  border: 1px solid color-mix(in srgb, var(--c-warn) 45%, transparent);
+  font-size: var(--t-sm); color: var(--c-warn);
+  opacity: 0; transform: translateY(-4px);
+  transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease-out);
+}
+.hud-alert:empty { display: none; }
+.hud-alert.is-open { opacity: 1; transform: none; }
+
+/* Withdraw is destructive, so it is quiet until it is armed — then it is the
+   loudest thing in the corner. */
+.hud-withdraw { min-height: var(--hit-sm); font-size: var(--t-sm); }
+.hud-withdraw.is-confirming {
+  color: var(--c-danger);
+  border-color: color-mix(in srgb, var(--c-danger) 60%, transparent);
+  background: color-mix(in srgb, var(--c-danger) 14%, var(--c-surface-2));
+  animation: hd-pop var(--d-slow) var(--ease-out);
+}
+
+/* --- Bottom dock ----------------------------------------------------------
+   A row of grouped plates that WRAPS: it used to be a non-wrapping flex row of
+   four segments, five chips and five boosters, and it ran off both edges of a
+   1280px viewport. Row gap leaves room for the floating group labels. */
 
 .hud-dock {
-  position: absolute;
-  left: 50%;
-  bottom: var(--s-3);
-  transform: translateX(-50%);
-  display: flex;
-  align-items: flex-end;
-  gap: var(--s-3);
-  padding: 0 var(--s-3);
+  position: absolute; left: 50%; bottom: var(--s-3); transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center;
+  gap: var(--s-6) var(--s-3); padding: 0 var(--s-3);
+  /* `left: 50%` caps a shrink-to-fit box at HALF the viewport, which is what
+     made the dock wrap at 1440px. max-content opts out; max-width re-clamps. */
+  width: max-content; max-width: calc(100vw - var(--s-5));
 }
 .hud-group {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--s-1);
-  padding: var(--s-2);
+  position: relative; display: flex; align-items: center;
+  gap: var(--s-1); padding: var(--s-2);
 }
 .hud-group-label {
-  position: absolute;
-  top: 0;
-  left: var(--s-1);
-  transform: translateY(-1.4em);
-  font-size: var(--t-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
+  position: absolute; top: 0; left: var(--s-1); transform: translateY(-1.4em);
+  font-size: var(--t-xs); letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--c-text-dim); white-space: nowrap;
 }
 
-/* --- Strength selector: set once, applies to every order ------------------ */
+/* --- Segmented controls: strength, and battle speed ---------------------- */
 
 .seg {
-  min-width: 40px;
-  padding: var(--s-1) var(--s-2);
-  border-radius: var(--r-2);
-  background: var(--c-surface-2);
-  color: var(--c-text-dim);
-  font: var(--w-bold) var(--t-sm) / 1.6 var(--font-num);
-  text-align: center;
-  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease);
+  min-width: 44px; min-height: var(--hit-sm);
+  padding: var(--s-1) var(--s-2); border-radius: var(--r-2);
+  background: var(--c-surface-2); color: var(--c-text-dim);
+  font: var(--w-bold) var(--t-sm) / 1.6 var(--font-num); text-align: center;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease),
+    box-shadow var(--d-fast) var(--ease);
 }
 .seg:hover { color: var(--c-text); }
 .seg.is-on {
   background: color-mix(in srgb, var(--c-player) 22%, var(--c-surface-2));
-  color: var(--c-player);
-  box-shadow: inset 0 0 0 1px var(--c-player);
+  color: var(--c-player); box-shadow: inset 0 0 0 1px var(--c-player);
+}
+/* Locked speed (4x behind Tactician) reads exactly like every other locked
+   thing in the game: dashed, dim, and it says so on hover. */
+.seg.is-locked {
+  color: var(--c-locked); opacity: 0.6; cursor: not-allowed;
+  box-shadow: inset 0 0 0 1px transparent;
+  background: repeating-linear-gradient(-45deg,
+    color-mix(in srgb, var(--c-text) 6%, transparent) 0 1px, transparent 1px 7px),
+    var(--c-surface-2);
+}
+.hud-speeds .hud-pause.is-on {
+  background: color-mix(in srgb, var(--c-warn) 22%, var(--c-surface-2));
+  color: var(--c-warn); box-shadow: inset 0 0 0 1px var(--c-warn);
 }
 
-/* --- Unit filter chips ---------------------------------------------------- */
+/* --- Unit filter chips ----------------------------------------------------
+   On and off differ by outline AND opacity AND a filled-vs-hollow swatch, so
+   the state never rests on colour alone. */
 
 .chip {
   --chip: var(--c-neutral);
-  display: flex;
-  align-items: center;
-  gap: var(--s-1);
-  padding: var(--s-1) var(--s-2);
-  border-radius: var(--r-pill);
-  background: var(--c-surface-2);
-  font-size: var(--t-xs);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--c-text);
-  box-shadow: inset 0 0 0 1px transparent;
+  display: flex; align-items: center; gap: var(--s-1);
+  min-height: var(--hit-sm); padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-pill); background: var(--c-surface-2);
+  font-size: var(--t-xs); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--c-text); box-shadow: inset 0 0 0 1px transparent;
   transition: opacity var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
 }
 .chip::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--chip);
+  content: ''; width: 8px; height: 8px; border-radius: 2px;
+  background: var(--chip); box-shadow: inset 0 0 0 1px var(--chip);
 }
 .chip.is-on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 60%, transparent); }
 .chip.is-off { opacity: 0.34; }
+.chip.is-off::before { background: transparent; }
 .chip.is-locked { opacity: 0.18; pointer-events: none; }
-.chip-key {
-  font-family: var(--font-num);
-  color: var(--c-text-dim);
-}
+.chip-key { font-family: var(--font-num); color: var(--c-text-dim); }
 
-/* --- Boosters: charges and a cooldown sweep ------------------------------- */
+/* --- Boosters: charges, a cooldown sweep, and an armed state -------------- */
 
 .booster {
-  position: relative;
-  width: var(--hit);
-  height: var(--hit);
-  border-radius: var(--r-2);
-  background: var(--c-surface-2);
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  transition: box-shadow var(--d-fast) var(--ease);
+  position: relative; width: var(--hit); height: var(--hit);
+  border-radius: var(--r-2); background: var(--c-surface-2);
+  display: grid; place-items: center; overflow: hidden;
   box-shadow: inset 0 0 0 1px var(--c-line);
+  transition: box-shadow var(--d-fast) var(--ease), transform var(--d-fast) var(--ease);
 }
 .booster:hover { box-shadow: inset 0 0 0 1px var(--c-accent); }
-.booster-key {
-  font: var(--w-bold) var(--t-sm) / 1 var(--font-num);
-  color: var(--c-text);
-}
+.booster-key { font: var(--w-bold) var(--t-sm) / 1 var(--font-num); color: var(--c-text); }
 .booster-name {
-  position: absolute;
-  bottom: 2px;
-  font-size: 8px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
+  position: absolute; bottom: 2px; font-size: 8px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--c-text-dim);
 }
 .booster-charges {
-  position: absolute;
-  top: 2px;
-  right: 4px;
-  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  color: var(--c-accent);
+  position: absolute; top: 2px; right: 4px;
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num); color: var(--c-accent);
 }
 /* Cooldown is a conic sweep driven by one custom property, so the update is a
    single style write per booster per 10Hz refresh. */
 .booster-cd {
-  position: absolute;
-  inset: 0;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0 calc(var(--cd, 0) * 360deg),
-    rgba(0, 0, 0, 0.68) calc(var(--cd, 0) * 360deg) 360deg
-  );
-  pointer-events: none;
+  position: absolute; inset: 0; pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0 calc(var(--cd, 0) * 360deg),
+    rgba(0, 0, 0, 0.68) calc(var(--cd, 0) * 360deg) 360deg);
 }
 .booster.is-empty { opacity: 0.4; }
 .booster.is-empty .booster-charges { color: var(--c-text-dim); }
+/* Armed: the next click on the board targets this booster. Ring plus lift, so
+   "the cursor means something different now" is unmistakable. */
+.booster.is-armed {
+  transform: translateY(-3px);
+  box-shadow: inset 0 0 0 2px var(--c-accent),
+    0 0 0 3px color-mix(in srgb, var(--c-accent) 26%, transparent);
+}
+.booster.is-armed .booster-key { color: var(--c-accent); }
+.booster.is-rejected { animation: hd-nope var(--d-slow) var(--ease); }
+
+/* --- Selection / site panel ----------------------------------------------
+   Opens for EVERY site, farms included, and carries the Upgrade action. */
+
+.hud-selection {
+  position: absolute; left: var(--s-3); bottom: calc(var(--dock-h) + var(--s-3));
+  display: flex; flex-direction: column; gap: var(--s-1);
+  padding: var(--s-3); min-width: 200px;
+  border-left-width: var(--plate-edge); border-left-color: var(--c-accent);
+  opacity: 0; visibility: hidden; transform: translateY(6px);
+  transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease-out),
+    visibility 0s linear var(--d-fast);
+}
+.hud-selection.is-open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.hud-selection-title {
+  font: var(--w-bold) var(--t-sm) / 1.2 var(--font); letter-spacing: 0.04em;
+}
+.hud-selection-sub { font: var(--w-normal) var(--t-xs) / 1.3 var(--font-num); color: var(--c-text-dim); }
+.hud-site-stat { color: var(--c-text); }
+.hud-upgrade { min-height: var(--hit-sm); margin-top: var(--s-1); font-size: var(--t-sm); }
+.hud-upgrade.is-disabled { opacity: 0.45; }
 
 /* --- Outcome preview -----------------------------------------------------
    The design's load-bearing promise: this panel calls the same resolveField()
-   the simulation calls, so it is a guarantee, not a prediction. */
-
-/* Sits ABOVE the dock rather than beside it: at 1280px the boosters and the
+   the simulation calls, so it is a guarantee, not a prediction.
+   Sits ABOVE the dock rather than beside it: at 1280px the boosters and the
    preview fight for the same corner, and clipping the booster bar is worse
    than stacking. */
+
 .hud-preview {
-  position: absolute;
-  right: var(--s-3);
-  bottom: calc(var(--hit) + var(--s-6) + var(--s-3));
-  min-width: 360px;
-  max-width: 640px;
-  padding: var(--s-3);
-  display: none;
-  flex-direction: column;
-  gap: var(--s-2);
-  border-left: 3px solid var(--c-neutral);
+  --state: var(--c-neutral);
+  position: absolute; right: var(--s-3); bottom: calc(var(--dock-h) + var(--s-3));
+  width: max-content; min-width: min(360px, 42vw); max-width: min(640px, 52vw);
+  padding: var(--s-3) var(--s-4); display: flex; flex-direction: column; gap: var(--s-2);
+  border-left-width: var(--plate-edge); border-left-color: var(--state);
+  opacity: 0; visibility: hidden; transform: translateY(6px);
+  transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease-out),
+    visibility 0s linear var(--d-fast);
 }
-.hud-preview.is-open { display: flex; }
-.hud-preview.is-win { border-left-color: var(--c-player); }
-.hud-preview.is-loss { border-left-color: var(--c-danger); }
-.hud-preview.is-reinforce { border-left-color: var(--c-accent); }
+.hud-preview.is-open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.hud-preview.is-win { --state: var(--c-player); }
+.hud-preview.is-loss { --state: var(--c-danger); }
+.hud-preview.is-reinforce { --state: var(--c-accent); }
 
 .pv-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s-2);
-  font-size: var(--t-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--c-text-dim);
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3);
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--c-text-dim);
 }
-.pv-verdict { font-weight: var(--w-bold); letter-spacing: 0.1em; }
-.is-win .pv-verdict { color: var(--c-player); }
-.is-loss .pv-verdict { color: var(--c-danger); }
-.is-reinforce .pv-verdict { color: var(--c-accent); }
-
+.pv-verdict { font-weight: var(--w-bold); letter-spacing: var(--track-tag); color: var(--state); }
 .pv-line {
   font: var(--w-bold) var(--t-md) / 1.45 var(--font-num);
-  color: var(--c-text);
-  word-spacing: 0.05em;
+  color: var(--c-text); word-spacing: 0.05em;
 }
-.pv-note {
-  font-size: var(--t-sm);
-  color: var(--c-warn);
-}
+.pv-note { font-size: var(--t-sm); color: var(--c-warn); }
+.pv-note:empty { display: none; }
 .pv-note.is-blocked { color: var(--c-danger); }
 .pv-caveats { display: flex; flex-wrap: wrap; gap: var(--s-1); }
 .pv-caveat {
-  padding: 2px var(--s-2);
-  border-radius: var(--r-pill);
-  background: var(--c-surface-2);
-  border: 1px solid var(--c-line);
-  font-size: var(--t-xs);
-  color: var(--c-text-dim);
+  padding: 2px var(--s-2); border-radius: var(--r-pill);
+  background: var(--c-surface-2); border: var(--hairline);
+  font-size: var(--t-xs); color: var(--c-text-dim);
 }
-
-/* --- Composition readout (mirrors the on-canvas garrison bar) ------------- */
-
+/* Mirrors the on-canvas garrison bar, so the same five hues mean the same five
+   things in both places. */
 .pv-comp {
-  display: flex;
-  height: var(--bar-h);
-  border-radius: var(--r-1);
-  overflow: hidden;
-  background: var(--c-surface-2);
+  display: flex; height: var(--bar-h); border-radius: var(--r-1);
+  overflow: hidden; background: var(--c-surface-2);
 }
 .pv-comp span { display: block; height: 100%; }
+
+/* --- Fluid from 1024px up -------------------------------------------------
+   The dock wraps rather than overflowing, and the preview stops fighting it
+   for the same corner. */
+
+@media (max-width: 1320px) {
+  .hud-gold { padding: var(--s-2) var(--s-3); }
+  .hud-gold .hud-value { font-size: var(--t-xl); }
+  .hud-dock { gap: var(--s-5) var(--s-2); }
+  .hud-group { padding: var(--s-1) var(--s-2); }
+  .seg { min-width: 38px; }
+  .chip { padding: var(--s-1) var(--s-2); }
+  .hud-preview { max-width: min(520px, 58vw); }
+}
+
+/* Two dock rows below this, so everything floating above it moves up. */
+@media (max-width: 1080px) {
+  :root { --dock-h: calc(var(--hit) * 2 + var(--s-8)); }
+  .hud-preview { min-width: min(320px, 46vw); max-width: 62vw; }
+  .hud-corner { max-width: 60vw; }
+  .booster-name { display: none; }
+}
+
+/* Touch: compact desktop metrics grow to a real thumb target. */
+@media (pointer: coarse) {
+  .seg, .chip { min-height: var(--hit); }
+  .seg { min-width: var(--hit); }
+  .hud-withdraw, .hud-upgrade { min-height: var(--hit); }
+}
