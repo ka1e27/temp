@@ -84,6 +84,9 @@ export function createSession() {
     lastOutcome: null,
     speed: 1,
     dev: false,
+    /** The boot decision (menu, or straight into region 1) is taken exactly
+     *  once per session, by whichever of mainmenu/worldmap main.js opens with. */
+    booted: false,
     /** Set by any meta mutation; meta/save.js clears it after a successful write. */
     dirty: false,
   };

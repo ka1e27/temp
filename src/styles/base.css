@@ -116,13 +116,6 @@ body {
   backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 
-/* The faint hex weave that ties the DOM screens to the canvas board. */
-.weave::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  opacity: var(--tex-alpha); background: var(--tex-weave);
-  mask-image: radial-gradient(120% 90% at 50% 30%, #000 0%, transparent 78%);
-}
-
 /* --- Type roles -----------------------------------------------------------
    The one number a screen is ABOUT gets .t-display. There is at most one per
    screen; if a second appears the screen has stopped making a point. */
@@ -167,19 +160,6 @@ body {
 [data-state="locked"] > .state-tag::after { content: "LOCKED"; }
 [data-state="available"] > .state-tag::after { content: "OPEN"; }
 [data-state="owned"] > .state-tag::after { content: "HELD"; }
-
-/* Diagonal hatch: what "you cannot have this yet" looks like without colour. */
-.hatched::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    -45deg,
-    color-mix(in srgb, var(--c-text) 7%, transparent) 0 1px,
-    transparent 1px 7px
-  );
-}
 
 /* --- Buttons -------------------------------------------------------------
    Declared ONCE. Height is --hit so the same control works under a thumb, and

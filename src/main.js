@@ -68,10 +68,21 @@ const loop = createLoop({
 });
 
 // Scenes are built before the loop exists, so the battle HUD reads the speed
-// control off ctx lazily rather than capturing it.
+// control off ctx lazily rather than capturing it. The autosaver is exposed so
+// a destructive action (New Campaign, Import) can flush immediately instead of
+// waiting out the 5s tick.
 ctx.loop = loop;
+ctx.autosaver = autosaver;
+ctx.storage = storage;
 
-scenes.replace(ctx.screens.worldmap, { offline: boot.offline });
+// The menu owns the boot decision and can explain a refused save; on a brand
+// new save it routes straight into region 1 rather than making anyone read a
+// menu before their first game.
+scenes.replace(ctx.screens.mainmenu, {
+  offline: boot.offline,
+  blocked: boot.blocked,
+  reason: boot.reason,
+});
 loop.start();
 
 // Long absences are handled by the closed-form offline calculation, never by
