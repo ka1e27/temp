@@ -117,6 +117,7 @@ export function createPreBattleScene(ctx) {
   let carried = null;
   let pending = null;
   let focusKey = null;
+  let ownable = new Set();
 
   const meta = () => ctx.state.meta;
   const units = () => unlockedUnits(meta());
@@ -132,7 +133,8 @@ export function createPreBattleScene(ctx) {
       if (!brief) { pending = toMap; return []; }
 
       chosen = initialComposition(meta(), params?.composition);
-      carried = new Set(params?.boosters ?? defaultSelection(meta()));
+      ownable = new Set(defaultSelection(meta()));
+      carried = new Set(params?.boosters ?? ownable);
 
       document.body.dataset.scene = 'prebattle';
       announce = h('p.sr-only', { 'aria-live': 'polite' });
@@ -173,7 +175,7 @@ export function createPreBattleScene(ctx) {
       // Buying charges or a unit from the shop overlay changes what this screen
       // is offering, so it rebuilds rather than going stale behind the dialog.
       const offs = ['meta:booster-purchased', 'meta:upgrade-purchased']
-        .map((ev) => ctx.bus.on(ev, refit));
+        .map((ev) => ctx.bus.on(ev, () => rebuild(false)));
 
       return [
         () => document.removeEventListener('keydown', onKey),
@@ -232,7 +234,7 @@ export function createPreBattleScene(ctx) {
         on: { click: launch },
       }),
       h('button.btn.pb-reset', {
-        type: 'button', text: 'Reset to default', on: { click: resetToDefault },
+        type: 'button', text: 'Reset to default', on: { click: () => rebuild(true) },
       }),
       h('div.keys', {}, h('span', {}, h('kbd', { text: 'Enter' }), ' launch'),
         h('span', {}, h('kbd', { text: 'Esc' }), ' back')));
@@ -324,6 +326,9 @@ export function createPreBattleScene(ctx) {
     for (const b of inventory(meta())) {
       const usable = b.unlocked && b.count > 0;
       any = any || usable;
+      // A charge bought from the shop overlay mid-loadout is one you meant to
+      // bring; one you switched off yourself stays off.
+      if (usable && !ownable.has(b.id)) { ownable.add(b.id); carried.add(b.id); }
       mount(list, boosterRow(b, usable, usable ? null : (b.unlocked ? 'No charges' : UI.locked)));
     }
     mount(boosterBody, list);
@@ -365,18 +370,16 @@ export function createPreBattleScene(ctx) {
 
   // --- transitions ---------------------------------------------------------
 
-  /** Unlocks bought from the shop overlay can change both the budget and the
-   *  roster, so re-fit rather than keeping a stale split. */
-  function refit() {
+  /**
+   * Rebuild both strips. An unlock bought from the shop overlay can change the
+   * budget AND the roster, so the split is re-fitted rather than left stale;
+   * `reset` throws the player's edits away and starts from the defaults.
+   */
+  function rebuild(reset) {
     if (!root) return;
-    chosen = fitComposition(expeditionSize(meta()), units(), chosen);
-    renderArmy();
-    renderBoosters();
-  }
-
-  function resetToDefault() {
-    chosen = distributeExpedition(expeditionSize(meta()), units());
-    carried = new Set(defaultSelection(meta()));
+    const total = expeditionSize(meta());
+    chosen = reset ? distributeExpedition(total, units()) : fitComposition(total, units(), chosen);
+    if (reset) { ownable = new Set(defaultSelection(meta())); carried = new Set(ownable); }
     renderArmy();
     renderBoosters();
   }
