@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Hex Dominion</title>
+<link rel="stylesheet" href="./src/styles/tokens.css">
+<link rel="stylesheet" href="./src/styles/base.css">
+<link rel="stylesheet" href="./src/styles/hud.css">
+<link rel="stylesheet" href="./src/styles/screens.css">
+<script>
+// Classic (non-module) script so it still runs when module loading is blocked.
+// ES modules are always fetched in CORS mode; a file:// document has origin
+// `null`, so every import fails and the page renders blank with no explanation.
+// No browser flag fixes this. Fail loudly with instructions instead.
+if (location.protocol === 'file:') {
+  document.documentElement.innerHTML =
+    '<body style="font:16px/1.6 system-ui,sans-serif;padding:3rem;max-width:40rem;' +
+    'margin:auto;background:#0b0d12;color:#e7ebf3">' +
+    '<h1 style="color:#3ddc97">Run a local server</h1>' +
+    '<p>ES modules cannot load from <code>file://</code>, so opening this file ' +
+    'directly will never work.</p>' +
+    '<pre style="background:#12151d;padding:1rem;border-radius:8px;border:1px solid #263041">' +
+    'npm start</pre>' +
+    '<p>then open <a href="http://localhost:8080" style="color:#5aa9ff">' +
+    'http://localhost:8080</a>.</p></body>';
+}
+</script>
+</head>
+<body>
+  <div id="game">
+    <canvas id="board-bg"></canvas>
+    <canvas id="board-fx"></canvas>
+    <div id="hud"></div>
+    <div id="screen-root"></div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

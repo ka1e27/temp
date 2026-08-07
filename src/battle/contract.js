@@ -1,0 +1,176 @@
+// ============================================================================
+// THE SEAM between the meta layer and the battle engine.
+//   meta/modifiers.js  --BattleConfig-->  battle/state.js
+//   battle/outcome.js  --BattleOutcome--> meta/rewards.js
+//
+// battle/* must NEVER import meta/*, and meta/* must NEVER import battle/*
+// except for this one file. screens/battle.js is the only broker.
+//
+// FROZEN. Changing a field requires bumping CONTRACT_VERSION.
+// ============================================================================
+// PURE.
+import { fnv1a, stableStringify } from '../core/hash.js';
+
+export const CONTRACT_VERSION = 1;
+
+/** @typedef {'farm'|'stronghold'|'camp'|'castle'} SiteKind */
+/** @typedef {'player'|'enemy'|'neutral'} Faction */
+/** @typedef {'militia'|'spearmen'|'raiders'|'rams'|'marshal'} UnitId */
+/** @typedef {Record<UnitId, number>} Composition */
+
+/**
+ * Per-faction tuning. Meta computes these from region tier + purchased upgrades.
+ * Battle applies them blindly and never asks why. 1.0 == baseline.
+ * @typedef {object} FactionMods
+ * @property {number} startGold
+ * @property {Composition} expedition  deployed at the home site on tick 0
+ * @property {number} goldRateMult
+ * @property {number} trainSpeedMult
+ * @property {number} trainCostMult
+ * @property {number} unitAtkMult
+ * @property {number} unitDefMult
+ * @property {number} marchSpeedMult
+ * @property {number} farmYieldMult
+ * @property {number} garrisonCapBonus
+ * @property {number} siegeDmgMult
+ * @property {number} structureRegenMult
+ * @property {UnitId[]} unlockedUnits  non-empty
+ */
+
+/**
+ * Everything a battle needs. Fully JSON-serializable: no functions, no
+ * undefined, no class instances. That is what makes battles replayable,
+ * headless-testable, and independent of the meta layer.
+ * @typedef {object} BattleConfig
+ */
+
+/**
+ * Facts about what happened. Contains NO economy decisions — battle reports
+ * observations, meta/rewards.js turns them into crowns. Keeps economy math in
+ * exactly one place.
+ * @typedef {object} BattleOutcome
+ */
+
+export const DEFAULT_MODS = Object.freeze({
+  startGold: 300,
+  expedition: { militia: 8, spearmen: 0, raiders: 0, rams: 0, marshal: 0 },
+  goldRateMult: 1,
+  trainSpeedMult: 1,
+  trainCostMult: 1,
+  unitAtkMult: 1,
+  unitDefMult: 1,
+  marchSpeedMult: 1,
+  farmYieldMult: 1,
+  garrisonCapBonus: 0,
+  siegeDmgMult: 1,
+  structureRegenMult: 1,
+  unlockedUnits: ['militia', 'spearmen'],
+});
+
+/** @param {Partial<FactionMods>} [o] @returns {FactionMods} */
+export const makeMods = (o = {}) => ({
+  ...DEFAULT_MODS,
+  ...o,
+  expedition: { ...DEFAULT_MODS.expedition, ...(o.expedition ?? {}) },
+  unlockedUnits: o.unlockedUnits ?? [...DEFAULT_MODS.unlockedUnits],
+});
+
+/** Stable hash over the sim-relevant parts of a config. */
+export function hashBattleConfig(cfg) {
+  return fnv1a(stableStringify(cfg));
+}
+
+// --------------------------------------------------------------------------
+// Validation. Runs at the seam in dev. Throws with a field path so the error
+// names the module at fault instead of surfacing 40 frames later.
+// --------------------------------------------------------------------------
+
+const SITE_KINDS = ['farm', 'stronghold', 'camp', 'castle'];
+const FACTIONS = ['player', 'enemy', 'neutral'];
+const NUMERIC_MODS = Object.keys(DEFAULT_MODS).filter(
+  (k) => typeof DEFAULT_MODS[k] === 'number',
+);
+
+function checkMods(m, path, errs) {
+  if (!m || typeof m !== 'object') { errs.push(`${path}: missing`); return; }
+  for (const k of NUMERIC_MODS) {
+    if (typeof m[k] !== 'number' || !Number.isFinite(m[k]) || m[k] < 0) {
+      errs.push(`${path}.${k}: expected finite number >= 0, got ${m[k]}`);
+    }
+  }
+  if (!Array.isArray(m.unlockedUnits) || m.unlockedUnits.length === 0) {
+    errs.push(`${path}.unlockedUnits: must be a non-empty array`);
+  }
+  if (!m.expedition || typeof m.expedition !== 'object') {
+    errs.push(`${path}.expedition: must be a composition object`);
+  }
+}
+
+/** @returns {BattleConfig} @throws {TypeError} */
+export function assertBattleConfig(c) {
+  if (!c || typeof c !== 'object') throw new TypeError('BattleConfig: not an object');
+  const e = [];
+
+  if (c.contractVersion !== CONTRACT_VERSION) {
+    e.push(`contractVersion: expected ${CONTRACT_VERSION}, got ${c.contractVersion}`);
+  }
+  if (!c.battleId) e.push('battleId: required');
+  if (!Number.isInteger(c.seed)) e.push('seed: must be an integer');
+
+  const sites = c.sites ?? [];
+  const ids = new Set();
+  if (sites.length < 2) e.push('sites: need at least 2');
+  for (const s of sites) {
+    if (ids.has(s.id)) e.push(`sites: duplicate id "${s.id}"`);
+    ids.add(s.id);
+    if (!SITE_KINDS.includes(s.kind)) e.push(`sites[${s.id}].kind: unknown "${s.kind}"`);
+    if (!FACTIONS.includes(s.owner)) e.push(`sites[${s.id}].owner: unknown "${s.owner}"`);
+    if (!Array.isArray(s.hex) || s.hex.length !== 2) {
+      e.push(`sites[${s.id}].hex: expected [q,r]`);
+    }
+    if (!(s.hp > 0) || !(s.hpMax > 0)) e.push(`sites[${s.id}]: hp and hpMax must be > 0`);
+  }
+
+  for (const pair of c.adjacency ?? []) {
+    const [a, b] = pair;
+    if (!ids.has(a) || !ids.has(b)) e.push(`adjacency: dangling edge ${a}->${b}`);
+    if (a === b) e.push(`adjacency: self-loop on ${a}`);
+  }
+
+  if (!sites.some((s) => s.kind === 'camp' && s.owner === 'player')) {
+    e.push('sites: player needs a starting camp');
+  }
+  if (!sites.some((s) => s.kind === 'castle' && s.owner === 'enemy')) {
+    e.push('sites: enemy needs a starting castle');
+  }
+
+  checkMods(c.player, 'player', e);
+  checkMods(c.enemy, 'enemy', e);
+
+  if (!c.rules || typeof c.rules !== 'object') e.push('rules: missing');
+  else if (!(c.rules.hardCapMs > 0)) e.push('rules.hardCapMs: must be > 0');
+
+  if (e.length) throw new TypeError(`Invalid BattleConfig:\n  - ${e.join('\n  - ')}`);
+  return c;
+}
+
+/** @returns {BattleOutcome} @throws {TypeError} */
+export function assertBattleOutcome(o, cfg) {
+  const e = [];
+  if (!o || typeof o !== 'object') throw new TypeError('BattleOutcome: not an object');
+  if (o.contractVersion !== CONTRACT_VERSION) e.push('contractVersion mismatch');
+  if (o.battleId !== cfg.battleId) e.push('battleId does not match config');
+  if (o.configHash !== hashBattleConfig(cfg)) {
+    e.push('configHash mismatch (was the config mutated mid-battle?)');
+  }
+  if (!['win', 'loss', 'timeout', 'retreat'].includes(o.result)) {
+    e.push(`result: unknown "${o.result}"`);
+  }
+  if (!(o.durationMs >= 0)) e.push('durationMs: must be >= 0');
+  // Battle reports facts; meta computes money. Enforce it.
+  if (o.rewards !== undefined) {
+    e.push('rewards: battle must not set this; meta/rewards.js owns it');
+  }
+  if (e.length) throw new TypeError(`Invalid BattleOutcome:\n  - ${e.join('\n  - ')}`);
+  return o;
+}
