@@ -11,7 +11,21 @@
 // PURE.
 import { fnv1a, stableStringify } from '../core/hash.js';
 
-export const CONTRACT_VERSION = 1;
+// v2: FactionMods gained `features` (shop unlocks that change battle or HUD
+// behaviour), and `boosters` is now validated. Before v2, five purchasable
+// upgrades crossed no seam at all and therefore did nothing.
+export const CONTRACT_VERSION = 2;
+
+/** Booster ids the battle engine knows how to run. */
+export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
+
+/** Shop unlocks that have to reach the battle layer or its HUD. */
+export const FEATURE_IDS = [
+  'exactPreview',   // Field Manual  — preview shows exact survivor counts
+  'scoutReport',    // Scout Report  — enemy composition visible before entering
+  'doubleSpeed',    // Tactician     — unlocks 4x battle speed
+  'standingOrders', // Standing Orders — captured sites auto-reinforce the front
+];
 
 /** @typedef {'farm'|'stronghold'|'camp'|'castle'} SiteKind */
 /** @typedef {'player'|'enemy'|'neutral'} Faction */
@@ -64,7 +78,11 @@ export const DEFAULT_MODS = Object.freeze({
   garrisonCapBonus: 0,
   siegeDmgMult: 1,
   structureRegenMult: 1,
+  ramImpactHp: 0,
   unlockedUnits: ['militia', 'spearmen'],
+  /** Shop unlocks. Without this field a purchased upgrade cannot influence a
+   *  battle at all — which is how five of them shipped doing nothing. */
+  features: [],
 });
 
 /** @param {Partial<FactionMods>} [o] @returns {FactionMods} */
@@ -73,7 +91,11 @@ export const makeMods = (o = {}) => ({
   ...o,
   expedition: { ...DEFAULT_MODS.expedition, ...(o.expedition ?? {}) },
   unlockedUnits: o.unlockedUnits ?? [...DEFAULT_MODS.unlockedUnits],
+  features: o.features ?? [],
 });
+
+/** Does this faction have a given shop unlock? */
+export const hasMod = (mods, feature) => (mods?.features ?? []).includes(feature);
 
 /** Stable hash over the sim-relevant parts of a config. */
 export function hashBattleConfig(cfg) {
@@ -100,6 +122,15 @@ function checkMods(m, path, errs) {
   }
   if (!Array.isArray(m.unlockedUnits) || m.unlockedUnits.length === 0) {
     errs.push(`${path}.unlockedUnits: must be a non-empty array`);
+  }
+  if (m.features !== undefined) {
+    if (!Array.isArray(m.features)) {
+      errs.push(`${path}.features: must be an array of feature ids`);
+    } else {
+      for (const f of m.features) {
+        if (!FEATURE_IDS.includes(f)) errs.push(`${path}.features: unknown feature "${f}"`);
+      }
+    }
   }
   if (!m.expedition || typeof m.expedition !== 'object') {
     errs.push(`${path}.expedition: must be a composition object`);
@@ -146,6 +177,23 @@ export function assertBattleConfig(c) {
 
   checkMods(c.player, 'player', e);
   checkMods(c.enemy, 'enemy', e);
+
+  // Boosters were unvalidated in v1, so a shape mismatch between the producer
+  // (an array) and the consumer (an object lookup) silently dropped every
+  // charge the player had bought. Nothing downstream noticed. Validate it.
+  if (c.boosters !== undefined) {
+    if (!Array.isArray(c.boosters)) {
+      e.push('boosters: must be an array of {id, charges} — not a map');
+    } else {
+      for (const b of c.boosters) {
+        if (!b || typeof b !== 'object') { e.push('boosters: entries must be objects'); continue; }
+        if (!BOOSTER_IDS.includes(b.id)) e.push(`boosters: unknown id "${b.id}"`);
+        if (!Number.isInteger(b.charges) || b.charges < 0) {
+          e.push(`boosters[${b.id}].charges: expected a non-negative integer, got ${b.charges}`);
+        }
+      }
+    }
+  }
 
   if (!c.rules || typeof c.rules !== 'object') e.push('rules: missing');
   else if (!(c.rules.hardCapMs > 0)) e.push('rules.hardCapMs: must be > 0');

@@ -32,7 +32,7 @@ function fixture(sites, adjacency = []) {
     adjacency,
     player: makeMods({ expedition: emptyComp() }),
     enemy: makeMods({ expedition: emptyComp() }),
-    boosters: {},
+    boosters: [],
     rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 1 },
   });
 }

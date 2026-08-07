@@ -35,7 +35,7 @@ function build(over = {}) {
       ?? [['camp', 'pf'], ['pf', 'es'], ['pf', 'es2'], ['es', 'castle'], ['es2', 'castle']],
     player: makeMods({ startGold: 300, expedition: NO_EXPEDITION, ...(over.player ?? {}) }),
     enemy: makeMods({ startGold: 300, expedition: NO_EXPEDITION, ...(over.enemy ?? {}) }),
-    boosters: {},
+    boosters: [],
     rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: over.tier ?? 1 },
   }));
   return state;

@@ -36,7 +36,7 @@ export function sampleBattleConfig(overrides = {}) {
       goldRateMult: 0.85,
       unlockedUnits: ['militia', 'spearmen'],
     }),
-    boosters: { rally: 2, march: 3 },
+    boosters: [{ id: 'march', charges: 3 }, { id: 'rally', charges: 2 }],
     rules: { victory: 'capture-castle', hardCapMs: 8 * 60 * 1000, aiTier: 1 },
     ...overrides,
   };

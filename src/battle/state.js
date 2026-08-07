@@ -53,12 +53,33 @@ function makeFaction() {
   };
 }
 
+/**
+ * The contract delivers boosters as an ARRAY of {id, charges} — that is what
+ * meta/boosters.js `toConfigBoosters` produces, and sorting it keeps the
+ * configHash stable. This once read `available[id]` against that array, which
+ * silently yields undefined for every id, so no battle ever had a single
+ * booster charge. Be permissive here (a plain map is also accepted) and strict
+ * in `assertBattleConfig`, so a malformed producer fails loudly at the seam
+ * rather than quietly losing the player's purchases.
+ */
 function makeBoosters(available) {
+  const granted = new Map();
+  if (Array.isArray(available)) {
+    for (const entry of available) {
+      if (!entry) continue;
+      const id = typeof entry === 'string' ? entry : entry.id;
+      const n = typeof entry === 'string' ? 1 : entry.charges;
+      if (id && n > 0) granted.set(id, (granted.get(id) ?? 0) + n);
+    }
+  } else if (available && typeof available === 'object') {
+    for (const [id, n] of Object.entries(available)) if (n > 0) granted.set(id, n);
+  }
+
   const out = {};
   for (const [id, spec] of Object.entries(BOOSTERS)) {
-    const granted = available?.[id] ?? 0;
-    if (!granted) continue;
-    out[id] = { charges: granted, max: granted, cdTicks: 0, cdMax: sec(spec.cooldownSec) };
+    const n = granted.get(id) ?? 0;
+    if (!n) continue;
+    out[id] = { charges: n, max: n, used: 0, cdTicks: 0, cdMax: sec(spec.cooldownSec) };
   }
   return out;
 }

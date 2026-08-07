@@ -157,7 +157,7 @@ test('a generated map is a valid BattleConfig', () => {
     ...map,
     player: makeMods({ startGold: 300 }),
     enemy: makeMods({ startGold: 200 }),
-    boosters: {},
+    boosters: [],
     rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 1 },
   });
   assert.equal(cfg.sites.length, SPEC.playerSites + SPEC.enemySites + SPEC.neutralSites);

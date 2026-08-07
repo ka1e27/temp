@@ -31,7 +31,7 @@ function road(over = {}) {
     adjacency: [['camp', 'f1'], ['f1', 'castle']],
     player: makeMods(over.player ?? {}),
     enemy: makeMods(over.enemy ?? {}),
-    boosters: {},
+    boosters: [],
     rules: { victory: 'capture-castle', hardCapMs: 60000, aiTier: 1 },
   });
 }

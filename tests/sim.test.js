@@ -33,7 +33,7 @@ function build(over = {}) {
     adjacency: over.adjacency ?? [['camp', 'f1'], ['f1', 'sh'], ['sh', 'castle']],
     player: makeMods({ startGold: 300, expedition: NO_EXPEDITION, ...(over.player ?? {}) }),
     enemy: makeMods({ startGold: 200, expedition: NO_EXPEDITION, ...(over.enemy ?? {}) }),
-    boosters: over.boosters ?? {},
+    boosters: over.boosters ?? [],
     rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 1, ...(over.rules ?? {}) },
   });
   const state = startBattle(cfg);
@@ -316,7 +316,7 @@ function region(seed, over = {}) {
     ...map,
     player: makeMods({ startGold: 300, expedition: { militia: 8 } }),
     enemy: makeMods({ startGold: 200, expedition: NO_EXPEDITION }),
-    boosters: { rally: 2 },
+    boosters: [{ id: 'rally', charges: 2 }],
     rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 2 },
     ...over,
   });

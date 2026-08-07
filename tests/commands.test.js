@@ -31,7 +31,7 @@ function build(over = {}) {
     adjacency: over.adjacency ?? [['camp', 'f1'], ['f1', 'sh'], ['sh', 'castle']],
     player: makeMods({ startGold: 300, expedition: NO_EXPEDITION, ...(over.player ?? {}) }),
     enemy: makeMods({ startGold: 200, expedition: NO_EXPEDITION, ...(over.enemy ?? {}) }),
-    boosters: over.boosters ?? {},
+    boosters: over.boosters ?? [],
     rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 1, ...(over.rules ?? {}) },
   });
   const state = startBattle(cfg);
@@ -98,7 +98,7 @@ test('a rally point turns a rear site into passive income', () => {
 });
 
 test('Emergency Fortify is the siege-breaker it says it is', () => {
-  const s = build({ boosters: { fortify: 1 } });
+  const s = build({ boosters: [{ id: 'fortify', charges: 1 }] });
   const f1 = at(s, 'f1');
   f1.owner = 'player';
   f1.garrison = comp({ spearmen: 4 });
@@ -112,7 +112,7 @@ test('Emergency Fortify is the siege-breaker it says it is', () => {
   assert.ok(dropPerTick > 0 && dropPerTick < 1.2, 'and it drains at the siege rate, not instantly');
 
   // ...and while the shield is up, an assault lands at half power.
-  const raw = build({ boosters: { fortify: 1 } });
+  const raw = build({ boosters: [{ id: 'fortify', charges: 1 }] });
   const target = at(raw, 'f1');
   target.owner = 'player';
   target.garrison = comp({ spearmen: 4 });
@@ -126,7 +126,7 @@ test('Emergency Fortify is the siege-breaker it says it is', () => {
 });
 
 test('the HUD spelling of an order is accepted, not silently dropped', () => {
-  const s = build({ boosters: { bombard: 1 } });
+  const s = build({ boosters: [{ id: 'bombard', charges: 1 }] });
   s.commands.push({ t: 'RALLY', from: 'camp', to: 'f1' });          // site/target aliases
   s.commands.push({ t: 'BOOSTER', id: 'bombard', target: 'sh' });   // site alias
   step(s);
@@ -146,7 +146,7 @@ test('the HUD spelling of an order is accepted, not silently dropped', () => {
 });
 
 test('boosters resolve before arrivals and respect charges', () => {
-  const s = build({ boosters: { bombard: 1, tithe: 1 } });
+  const s = build({ boosters: [{ id: 'bombard', charges: 1 }, { id: 'tithe', charges: 1 }] });
   const sh = at(s, 'sh');
   sh.hp = 40;
   const gold = s.factions.player.goldCg;
