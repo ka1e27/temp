@@ -48,12 +48,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # ONE-TIME SETUP, done by a repo admin before this can ever succeed:
+      #   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
+      #
+      # It cannot be automated from here. `enablement: true` was tried and the
+      # workflow token refused it — `pages: write` grants permission to DEPLOY
+      # to a Pages site, not to CREATE one, so the API answers "Resource not
+      # accessible by integration". Creating the site needs admin rights the
+      # Actions token deliberately does not have.
       - name: Configure Pages
         uses: actions/configure-pages@v5
-        with:
-          # Turns Pages on the first time this runs, so the site needs no
-          # manual setup in repository settings.
-          enablement: true
       - name: Package the site
         uses: actions/upload-pages-artifact@v3
         with:
