@@ -3,10 +3,16 @@
    areas can be authored independently. Everything here uses the shared tokens,
    so the two halves of the game read as one system. */
 
+/* #screen-root is pointer-events:none so empty HUD space lets clicks reach the
+   battle canvas underneath. A full-screen scene must opt back IN, or every
+   button on it is unclickable while still looking perfectly fine.
+   Battle mounts nothing here (#screen-root:empty is display:none), so this
+   never blocks the board. */
 .screen {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  pointer-events: auto;
   font: var(--w-normal) var(--t-md) / var(--lh) var(--font);
   color: var(--c-text);
 }

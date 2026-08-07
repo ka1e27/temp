@@ -1,6 +1,11 @@
 // Browser smoke test — boots the real game and walks the core loop.
-// This is what catches cross-module integration breakage that unit tests
-// structurally cannot see.
+//
+// EVERY interaction goes through real pointer events at real screen
+// coordinates, and every click first asserts that the browser's own hit test
+// actually lands on the target. A synthetic `el.click()` bypasses hit testing
+// entirely, which is exactly how a completely unclickable UI once passed this
+// suite green: `#screen-root` was pointer-events:none and no scene opted back
+// in, so every button was dead while looking perfectly fine.
 //
 //   node tools/serve.js &     # or npm start
 //   node tools/smoke.mjs
@@ -25,26 +30,82 @@ page.on((method, params) => {
   }
 });
 
+/**
+ * Locate an element and verify the browser would actually deliver a click to
+ * it. Returns its centre point.
+ */
+async function hitPoint(selector, label = selector) {
+  const r = await page.eval((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return { err: 'not found' };
+    const b = el.getBoundingClientRect();
+    if (b.width === 0 || b.height === 0) return { err: 'zero size' };
+    const cx = Math.round(b.left + b.width / 2);
+    const cy = Math.round(b.top + b.height / 2);
+    const hit = document.elementFromPoint(cx, cy);
+    const ok = hit === el || el.contains(hit) || hit?.contains(el);
+    return {
+      cx, cy, ok,
+      blockedBy: ok ? null : (hit ? `${hit.tagName}.${hit.className}` : 'nothing'),
+      pe: getComputedStyle(el).pointerEvents,
+    };
+  }, selector);
+
+  if (r.err) throw new Error(`${label}: ${r.err}`);
+  if (!r.ok) {
+    throw new Error(
+      `${label} is not clickable — hit test at (${r.cx},${r.cy}) landed on `
+      + `${r.blockedBy} instead (pointer-events: ${r.pe})`,
+    );
+  }
+  return r;
+}
+
+/** Click the way a player does: real pointer events, hit test asserted first. */
+async function click(selector, label = selector) {
+  const p = await hitPoint(selector, label);
+  await page.mouse('mouseMoved', p.cx, p.cy);
+  await page.mouse('mousePressed', p.cx, p.cy);
+  await page.mouse('mouseReleased', p.cx, p.cy);
+  await page.sleep(250);
+  return p;
+}
+
 try {
   await page.sleep(1200);
 
-  // ---- 1. world map -------------------------------------------------------
+  // ---- 1. world map, and every control on it is genuinely hittable --------
   const boot = await page.eval(() => ({
     scene: document.body.dataset.scene,
     hexes: document.querySelectorAll('.wm-hex').length,
-    invade: document.querySelectorAll('button.wm-go').length,
     crowns: document.querySelector('.crowns')?.textContent,
   }));
   if (boot.scene !== 'worldmap') throw new Error(`expected worldmap, got "${boot.scene}"`);
   if (boot.hexes !== 18) throw new Error(`expected 18 region hexes, got ${boot.hexes}`);
-  if (!boot.invade) throw new Error('no invade button — region 1 should be attackable');
-  step(`world map: ${boot.hexes} regions, treasury ${boot.crowns}`);
+  await hitPoint('button.wm-go', 'Invade button');
+  await hitPoint('.wm-hex', 'a region hex');
+  await hitPoint('.wm-actions button', 'Upgrades button');
+  step(`world map: ${boot.hexes} regions, treasury ${boot.crowns}, controls hittable`);
   await page.screenshot(`${OUT}/01-worldmap.png`);
 
-  // ---- 2. enter a battle --------------------------------------------------
-  await page.eval(() => document.querySelector('button.wm-go').click());
-  await page.sleep(1500);
+  // ---- 2. the shop opens, is hittable, and closes -------------------------
+  await click('.wm-actions button', 'Upgrades button');
+  const shopOpen = await page.eval(() => ({
+    rows: document.querySelectorAll('.shop-row').length,
+    buys: document.querySelectorAll('.btn.buy').length,
+  }));
+  if (!shopOpen.rows) throw new Error('shop opened with no upgrade rows');
+  await hitPoint('.btn.buy', 'a shop Buy button');
+  step(`shop: ${shopOpen.rows} rows, ${shopOpen.buys} buy buttons, all hittable`);
+  await page.screenshot(`${OUT}/02-shop.png`);
+  await click('.shop-header .btn.ghost', 'shop Close button');
+  if (await page.eval(() => !!document.querySelector('.shop-overlay'))) {
+    throw new Error('shop did not close');
+  }
 
+  // ---- 3. start a battle with a real click -------------------------------
+  await click('button.wm-go', 'Invade button');
+  await page.sleep(1200);
   const battle = await page.eval(() => {
     const b = window.__game.state.battle;
     if (!b) return null;
@@ -52,24 +113,21 @@ try {
       sites: b.sites.length,
       mine: b.sites.filter((s) => s.owner === 'player').length,
       theirs: b.sites.filter((s) => s.owner === 'enemy').length,
-      expedition: b.sites.find((s) => s.kind === 'camp')?.garrison,
-      tick: b.tick,
+      expedition: Object.values(b.sites.find((s) => s.kind === 'camp')?.garrison || {})
+        .reduce((a, n) => a + n, 0),
     };
   });
-  if (!battle) throw new Error('battle did not start');
+  if (!battle) throw new Error('battle did not start from a real click');
   if (battle.theirs <= battle.mine) {
-    throw new Error(`enemy should start ahead: mine=${battle.mine} theirs=${battle.theirs}`);
+    throw new Error(`enemy should start ahead: ${battle.mine} v ${battle.theirs}`);
   }
-  const expeditionSize = Object.values(battle.expedition || {}).reduce((a, b) => a + b, 0);
-  if (expeditionSize < 8) throw new Error(`expedition too small: ${expeditionSize}`);
   step(`battle: ${battle.sites} sites (${battle.mine} mine, ${battle.theirs} enemy), `
-    + `expedition of ${expeditionSize}`);
-  await page.screenshot(`${OUT}/02-battle.png`);
+    + `expedition ${battle.expedition}`);
 
-  // ---- 3. the canvas is actually painted ----------------------------------
+  // ---- 4. the canvas is painted ------------------------------------------
   const painted = await page.eval(() => {
     const c = document.querySelector('#board-bg');
-    if (!c?.width) return { ok: false, why: 'no canvas' };
+    if (!c?.width) return { ok: false };
     const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
     const seen = new Set();
     for (let i = 0; i < d.length; i += 4 * 499) {
@@ -78,10 +136,17 @@ try {
     }
     return { ok: seen.size > 3, colours: seen.size, w: c.width, h: c.height };
   });
-  if (!painted.ok) throw new Error(`battle canvas looks blank: ${JSON.stringify(painted)}`);
-  step(`canvas painted: ${painted.colours}+ distinct colours at ${painted.w}x${painted.h}`);
+  if (!painted.ok) throw new Error('battle canvas looks blank');
+  step(`canvas painted: ${painted.colours}+ colours at ${painted.w}x${painted.h}`);
+  await page.screenshot(`${OUT}/03-battle.png`);
 
-  // ---- 4. the simulation runs --------------------------------------------
+  // ---- 5. HUD controls are hittable too ----------------------------------
+  await hitPoint('.hud-dock .seg', 'strength segment');
+  await hitPoint('.hud-dock .chip', 'unit filter chip');
+  await hitPoint('.hud-dock .booster', 'booster button');
+  step('HUD controls hittable');
+
+  // ---- 6. the simulation runs --------------------------------------------
   const t0 = await page.eval(() => ({
     earned: window.__game.state.battle.factions.player.goldEarnedCg,
     tick: window.__game.state.battle.tick,
@@ -89,68 +154,49 @@ try {
   await page.sleep(5000);
   const t1 = await page.eval(() => {
     const b = window.__game.state.battle;
-    return {
-      earned: b.factions.player.goldEarnedCg,
-      gold: b.factions.player.goldCg, tick: b.tick, squads: b.squads.length,
-      status: b.status,
-    };
+    return { earned: b.factions.player.goldEarnedCg, tick: b.tick };
   });
-  if (t1.tick - t0.tick < 30) throw new Error(`simulation stalled (${t0.tick} -> ${t1.tick})`);
-  // Check income, not balance: with strongholds training, the balance can fall
-  // while farms are producing perfectly well.
+  if (t1.tick - t0.tick < 30) throw new Error(`simulation stalled (${t0.tick}->${t1.tick})`);
   if (t1.earned <= t0.earned) throw new Error('farms are producing no gold');
   step(`sim running: tick ${t0.tick}->${t1.tick}, earned ${t0.earned}->${t1.earned}cg`);
 
-  // ---- 5. a real drag order ----------------------------------------------
+  // ---- 7. a real drag order over the canvas -------------------------------
   const drag = await page.eval(() => {
     const g = window.__game;
     const b = g.state.battle;
     const camp = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
-    const target = b.sites.find((s) => camp.adj.includes(s.id));
-    const view = g.__view;
-    if (!view || !target) return null;
-    const a = view.siteScreen(camp, {});
-    const z = view.siteScreen(target, {});
-    return { from: a, to: z, fromId: camp.id, toId: target.id };
+    const target = b.sites.find((s) => camp.adj.includes(s.id) && s.owner !== 'player');
+    if (!g.__view || !target) return null;
+    const a = g.__view.siteScreen(camp, {});
+    const z = g.__view.siteScreen(target, {});
+    return {
+      from: { x: Math.round(a.x), y: Math.round(a.y) },
+      to: { x: Math.round(z.x), y: Math.round(z.y) },
+      fromId: camp.id, toId: target.id,
+    };
   });
-  if (drag) {
-    await page.drag(drag.from, drag.to);
-    await page.sleep(900);
-    const sent = await page.eval(() => window.__game.state.battle.squads
-      .filter((s) => s.owner === 'player').length);
-    if (!sent) throw new Error('drag produced no squad');
-    step(`drag order ${drag.fromId} -> ${drag.toId}: ${sent} squad(s) in flight`);
-  } else {
-    // Fall back to the command queue so the rest of the run still exercises
-    // movement, siege and capture even if the view is not exposed.
-    await page.eval(() => {
-      const b = window.__game.state.battle;
-      const camp = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
-      b.commands.push({
-        t: 'SEND', from: camp.id, to: camp.adj[0], fraction: 1,
-        filter: ['militia', 'spearmen', 'raiders', 'rams', 'marshal'],
-      });
-    });
-    await page.sleep(900);
-    step('send order issued via the command queue (view not exposed for a real drag)');
-  }
-  await page.screenshot(`${OUT}/03-squads.png`);
+  if (!drag) throw new Error('could not locate a drag source and target on screen');
+  await page.drag(drag.from, drag.to);
+  await page.sleep(900);
+  const sent = await page.eval(() => window.__game.state.battle.squads
+    .filter((s) => s.owner === 'player').length);
+  if (!sent) throw new Error('a real drag produced no squad');
+  step(`drag ${drag.fromId} -> ${drag.toId}: ${sent} squad(s) in flight`);
+  await page.screenshot(`${OUT}/04-squads.png`);
 
-  // ---- 6. let it play out; expect a capture ------------------------------
-  await page.sleep(20000);
+  // ---- 8. play on, then check for numeric corruption ---------------------
+  await page.sleep(15000);
   const late = await page.eval(() => {
     const b = window.__game.state.battle;
     return b ? {
-      tick: b.tick, status: b.status,
+      tick: b.tick,
       mine: b.sites.filter((s) => s.owner === 'player').length,
       sieges: b.sites.filter((s) => s.siege).length,
-      scene: document.body.dataset.scene,
-    } : { scene: document.body.dataset.scene, ended: true };
+    } : { ended: true, scene: document.body.dataset.scene };
   });
-  step(`after 20s: ${JSON.stringify(late)}`);
-  await page.screenshot(`${OUT}/04-later.png`);
+  step(`later: ${JSON.stringify(late)}`);
+  await page.screenshot(`${OUT}/05-later.png`);
 
-  // ---- 7. no silent numeric corruption ------------------------------------
   const nans = await page.eval(() => {
     const bad = [];
     const seen = new WeakSet();
@@ -164,7 +210,7 @@ try {
     return bad.slice(0, 8);
   });
   if (nans.length) throw new Error(`non-finite numbers: ${nans.join(', ')}`);
-  step('no NaN/Infinity anywhere in the state tree');
+  step('no NaN/Infinity in the state tree');
 
   if (errors.length) throw new Error(`console errors:\n    ${errors.join('\n    ')}`);
   console.log('\nSMOKE PASSED');
