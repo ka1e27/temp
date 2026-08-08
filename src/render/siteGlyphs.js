@@ -15,11 +15,16 @@
 //                      how full its garrison is, so troop mass reads as AREA
 //                      before a single digit is read. A stripped site is a
 //                      hollow outline; a massed one is a solid block.
-//   RINGS = TROUBLE.   Wall damage and siege are the ONLY things that draw a
+//   RINGS = TROUBLE.   Wall damage and siege are the only ALARMS that draw a
 //                      ring, and they always sit outside the whole structure.
 //                      When every site carried a permanent ring the board was a
 //                      field of identical dots and nothing could be found; now
 //                      a ring means "look here".
+//   GOLD = RANK.       The one standing exception, subordinate by construction:
+//                      siteRank.js cuts a gold gauge into one cell per step of
+//                      the ladder — absent at level 1, never an alarm hue, never
+//                      growing, always INSIDE the rings above. Storeys say
+//                      "upgraded"; the gauge says how far.
 //
 // Everything draws in WORLD space and allocates nothing.
 import { UNIT_IDS, SITES, SITE_LEVELS } from '../content/balance.js';
@@ -28,6 +33,7 @@ import {
   levelScale, storeyCount, storeyScale, storeyRise, traceStructure,
   siteRingR, siteRingDy, siteFootYAt,
 } from './siteShapes.js';
+import { drawRankGauge, rankBand } from './siteRank.js';
 
 export { SITE_R, siteRadius, traceSiteShape, siteTier } from './siteShapes.js';
 
@@ -122,6 +128,8 @@ export function drawSiteBase(ctx, site, cx, cy, r, p, px) {
   }
   // Outline weight IS the hierarchy: a farm is hairline, a home base is bold.
   block(ctx, site.kind, false, cx, cy, R, p, wash, edge, px * (1.7 + tier * 1.15), moat);
+  // Rank last, so the gold seats in the moat rather than being painted over.
+  drawRankGauge(ctx, site, lv, cx, cy, r, p, px);
 }
 
 /**
@@ -264,7 +272,8 @@ export function drawHpRing(ctx, site, cx, cy, r, p, px) {
   // Centred on the STRUCTURE, not the site: a tall level-3 keep is not centred
   // on its own hex, and a ring that ignored that would hang off it.
   const my = cy - r * siteRingDy(site.kind, lv);
-  const rad = r * siteRingR(site.kind, lv) + px * 3;
+  // Stepped out over the rank gauge; 0 at level 1, so this has not moved.
+  const rad = r * siteRingR(site.kind, lv) + px * (3 + rankBand(lv));
   ctx.lineWidth = px * 3.5;
   ctx.lineCap = 'butt';
 
@@ -291,7 +300,7 @@ export function drawHpRing(ctx, site, cx, cy, r, p, px) {
 export function drawSiegeRing(ctx, site, cx, cy, r, p, px, spin) {
   if (!site.siege) return;
   const lv = builtLevel(site);
-  const rad = r * siteRingR(site.kind, lv) + px * 9;
+  const rad = r * siteRingR(site.kind, lv) + px * (9 + rankBand(lv));
   DASH[0] = px * 3;
   DASH[1] = px * 4;
   ctx.setLineDash(DASH);

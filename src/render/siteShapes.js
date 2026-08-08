@@ -16,6 +16,7 @@
 //
 // Every outline is a static flat [x,y,...] array in unit space, traced with a
 // plain loop. Nothing here allocates.
+import { SITE_LEVELS } from '../content/balance.js';
 
 const TAU = Math.PI * 2;
 
@@ -151,18 +152,73 @@ export const siteOuter = (kind) => extentsOf(kind).outer;
 //
 // The wall and siege rings are circles drawn outside the whole thing, so growth
 // has to stay measurable — see siteRingR().
+//
+// HOW MANY LEVELS THERE ARE IS CONTENT, NOT GEOMETRY. Everything below is
+// generated from SITE_LEVELS.length, so a balance pass that lengthens the
+// upgrade ladder re-spaces the whole shape system instead of walking off the
+// end of a hand-written table.
 
-/** Whole-structure scale by level. Modest: the storeys are the loud cue and
- *  this is the supporting one, and a farm that outgrows a stronghold would
- *  break the size ordering that tells the two apart. */
-export const LEVEL_SCALE = new Float64Array([1, 1.16, 1.34]);
-export const MAX_LEVEL = LEVEL_SCALE.length;
+/** Levels the content defines. Never a literal — `balance.js` owns this. */
+export const MAX_LEVEL = Math.max(1, SITE_LEVELS.length);
 
-/** Storey i (added by level i+2): radius and how far it is lifted, both in
- *  units of the SCALED body radius. Each storey's own foot sits below the body's
- *  top edge, so the stack is a stepped tower and never a floating pile. */
-const STOREY_S = new Float64Array([0.80, 0.54]);
-const STOREY_Y = new Float64Array([0.58, 1.14]);
+/** The hand-tuned ramp this board was drawn against: a level-3 site is 34%
+ *  wider than a level-1 one. Used verbatim while the ladder is this short, so
+ *  a three-level game is pixel-for-pixel what it always was. */
+const BASE_SCALE = [1, 1.16, 1.34];
+/** Ceiling for ANY ladder length. 0.38r (farm) * 1.4 < 0.54r (stronghold), so a
+ *  MAXED farm still cannot outgrow a bare military site however many levels get
+ *  added: kind outranks level, at every count. */
+const SCALE_TOP = 1.4;
+
+/**
+ * Whole-structure scale by level. Modest: the storeys are the loud cue and this
+ * is the supporting one. A longer ladder keeps the same CEILING and re-spaces
+ * the steps under it — the top cannot move, so the extra levels share out the
+ * room that is already there rather than each demanding their own.
+ */
+export function levelRamp(n) {
+  const out = new Float64Array(Math.max(1, n));
+  for (let i = 0; i < out.length; i++) {
+    out[i] = out.length <= BASE_SCALE.length
+      ? BASE_SCALE[i]
+      : SCALE_TOP ** (i / (out.length - 1));
+  }
+  return out;
+}
+export const LEVEL_SCALE = levelRamp(MAX_LEVEL);
+
+/**
+ * Storey i (added by level i+2): radius and how far it is lifted, both in units
+ * of the SCALED body radius. Each storey's own foot sits below the body's top
+ * edge, so the stack is a stepped tower and never a floating pile.
+ *
+ * The first two are hand-placed; past that the ladder CONVERGES — each storey
+ * is 62% of the one below and rises a shrinking share of the last step — so a
+ * level-7 keep is a level-4 keep wearing finials, not a skyscraper. That bound
+ * is the point: it keeps siteRingR() (and therefore everything that orbits a
+ * site) finite, and it is why past three or four levels the exact number is
+ * read off the RANK GAUGE in siteRank.js rather than counted off a roofline
+ * nobody can resolve.
+ *
+ * The one thing a long ladder does move is the FIRST storey, lifted a fraction
+ * higher: the level ramp above gets shallower the more levels there are, so
+ * without it a camp's first upgrade would disappear behind its own pennant —
+ * the tallest thing a level-1 body already owns.
+ */
+export function storeyLadder(n) {
+  const s = new Float64Array(Math.max(0, n));
+  const y = new Float64Array(s.length);
+  if (s.length > 0) { s[0] = 0.80; y[0] = s.length > BASE_SCALE.length - 1 ? 0.62 : 0.58; }
+  if (s.length > 1) { s[1] = 0.54; y[1] = 1.14; }
+  for (let i = 2; i < s.length; i++) {
+    s[i] = s[i - 1] * 0.62;
+    y[i] = y[i - 1] + (y[i - 1] - y[i - 2]) * 0.55;
+  }
+  return { s, y };
+}
+const LADDER = storeyLadder(MAX_LEVEL - 1);
+const STOREY_S = LADDER.s;
+const STOREY_Y = LADDER.y;
 
 const lvIndex = (level) => {
   const n = ((level | 0) || 1) - 1;

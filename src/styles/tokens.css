@@ -21,6 +21,12 @@
   --c-enemy: #ff5c5c;
   --c-neutral: #6b7688;
   --c-gold: #ffc857;
+  /* Site rank — the gold arc gauge that counts how far up the upgrade ladder a
+     site has been taken. Its own token rather than a reuse of --c-gold: gold is
+     the treasury and --c-warn shares its value, and a site's RANK must never be
+     mistakable for a warning. Pushed a step warmer and brighter so it separates
+     from the amber a wall ring turns under siege. */
+  --c-rank: #ffdd8f;
   --c-accent: #5aa9ff;
   /* Water. Its own token rather than a tint of --c-accent: a river is terrain
      and must never read as the selection/training highlight. */

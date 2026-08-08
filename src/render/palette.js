@@ -18,6 +18,7 @@ const VARS = {
   enemy: '--c-enemy',
   neutral: '--c-neutral',
   gold: '--c-gold',
+  rank: '--c-rank',
   accent: '--c-accent',
   water: '--c-water',
   warn: '--c-warn',
@@ -44,7 +45,8 @@ export const FALLBACK = Object.freeze({
   bg: '#0b0d12', surface: '#12151d', surface2: '#1a1f2b', line: '#263041',
   text: '#e7ebf3', textDim: '#93a0b8',
   player: '#3ddc97', enemy: '#ff5c5c', neutral: '#6b7688',
-  gold: '#ffc857', accent: '#5aa9ff', water: '#2b7a9e', warn: '#ffc857', danger: '#ff5c5c',
+  gold: '#ffc857', rank: '#ffdd8f', accent: '#5aa9ff',
+  water: '#2b7a9e', warn: '#ffc857', danger: '#ff5c5c',
   militia: '#e8e8ec', spearmen: '#5bd6a6', raiders: '#ffc857',
   rams: '#b07cff', marshal: '#ff8a3d',
   floodAlpha: 0.2, floodStrongAlpha: 0.42, gridAlpha: 0.5, blockedAlpha: 0.9,
@@ -95,6 +97,10 @@ const round3 = (n) => Math.round(n * 1000) / 1000;
  * seven fills for the whole map, on a canvas that repaints ~once a second.
  */
 export const PLATE_STEPS = 7;
+
+/** Steps in the site-rank gold ramp. Fixed, and sampled by a site's position in
+ *  the upgrade ladder, so lengthening SITE_LEVELS never touches a colour. */
+export const RANK_STEPS = 8;
 
 /**
  * Read the live token values off an element's computed style.
@@ -268,6 +274,19 @@ export function derive(c) {
   // accent as training, one notch brighter: both mean "paid for, not finished",
   // and the dashes are what keep the ghost from reading as built stone.
   p.building = withAlpha(c.accent, 0.85);
+  // Site rank. The gauge is cut into one cell per upgrade step and the gold
+  // WARMS toward ivory across them, so "nearly maxed" arrives as heat before a
+  // single cell is counted. A fixed number of steps, sampled by position in the
+  // ladder — the ramp never needs to know how many levels the content defines.
+  p.rank = new Array(RANK_STEPS);
+  for (let i = 0; i < RANK_STEPS; i++) {
+    p.rank[i] = mix(c.rank, c.text, (i / (RANK_STEPS - 1)) * 0.42);
+  }
+  // Steps not yet bought: the rank hue sunk almost all the way into the ground,
+  // so it reads as an empty rung rather than as a second, dimmer site. Drawn
+  // wider than the cells, so it doubles as the casing that keeps gold legible
+  // over a bright territory flood.
+  p.rankTrack = withAlpha(mix(c.bg, c.rank, 0.15), 0.85);
   p.selection = withAlpha(c.accent, 0.9);
   p.selectionFill = withAlpha(c.accent, 0.12);
   // Hover gets its own value rather than borrowing the box-select fill: it is
