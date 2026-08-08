@@ -12,12 +12,14 @@
 import { TICK_HZ } from '../core/loop.js';
 import {
   SITES, UNITS, BOOSTERS, ATTRITION, ATTRITION_BLEED_SEC, ATTRITION_CHECK_TICKS,
-  RALLY_MIN_GARRISON,
+  RALLY_KEEP,
 } from '../content/balance.js';
 import {
   resolveField, siegeDps, siteRegen, siteMaxHp, emptyComp, addComp, scaleComp, total,
 } from './combat.js';
-import { createBattleState, siteById, effectiveLevel, armySize, sitesOwned } from './state.js';
+import {
+  createBattleState, siteById, effectiveLevel, armySize, sitesOwned, rallyKeepOf,
+} from './state.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { spawnSquad, retreatTarget, clearPathCache } from './movement.js';
 import { drainCommands, subComp } from './commands.js';
@@ -62,6 +64,7 @@ function capture(state, site) {
   site.upgradeTicksLeft = 0;
   site.trainProgress = 0;
   site.rallyTarget = null;
+  site.rallyKeep = RALLY_KEEP.default;   // the standing order died with the wall
   site.shieldTicks = 0;
   pushEvent(state, EVENTS.SITE_CAPTURED, { siteId: site.id, kind: site.kind, from, to });
   state.meta.lastFlipTick = state.tick;
@@ -99,8 +102,11 @@ function rallyPhase(state) {
     const target = siteById(state, site.rallyTarget);
     if (!target || !site.adj.includes(target.id)) { site.rallyTarget = null; continue; }
     const n = total(site.garrison);
-    if (n <= RALLY_MIN_GARRISON) continue;
-    const send = scaleComp(site.garrison, (n - RALLY_MIN_GARRISON) / n);
+    // Per-site, not one global: a back-line farm keeps almost nothing, a front
+    // stronghold feeding a siege holds enough to survive the counter-attack.
+    const keep = rallyKeepOf(site);
+    if (n <= keep) continue;
+    const send = scaleComp(site.garrison, (n - keep) / n);
     if (total(send) === 0) continue;
     site.garrison = subComp(site.garrison, send);
     const squad = spawnSquad(state, {

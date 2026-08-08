@@ -36,6 +36,7 @@ export const filterList = (filter) => UNIT_IDS.filter((u) => filter[u] !== false
 export const cmd = {
   send: (from, to, fraction, filter) => ({ t: 'SEND', from, to, fraction, filter }),
   rally: (site, target) => ({ t: 'RALLY', site, target: target ?? null }),
+  rallyKeep: (site, keep) => ({ t: 'RALLY_KEEP', site, keep }),
   retreat: (site) => ({ t: 'RETREAT', site }),
   retreatSquad: (squadId) => ({ t: 'RETREAT_SQUAD', squadId }),
   booster: (id, site) => ({ t: 'BOOSTER', id, site: site ?? null }),
@@ -101,6 +102,22 @@ export function createOrders(o) {
     if (!to || to.id === from.id) { push(cmd.rally(from.id, null)); return true; }
     if (!from.adj.includes(to.id)) return false;
     push(cmd.rally(from.id, to.id));
+    return true;
+  }
+
+  /**
+   * How many troops that site's rally leaves at home. A separate order from the
+   * rally itself, so changing the number never disturbs the destination — and
+   * like every other intent it is only ever a command object. The sim owns the
+   * clamp; this refuses to address a site that is not yours, the same way
+   * issueRally does, rather than shipping an order that can only be rejected.
+   * @returns {boolean} true when a command was issued.
+   */
+  function issueRallyKeep(from, keep) {
+    const src = typeof from === 'string' ? site(from) : from;
+    if (!src || src.owner !== 'player') return false;
+    if (!Number.isInteger(keep)) return false;
+    push(cmd.rallyKeep(src.id, keep));
     return true;
   }
 
@@ -262,7 +279,7 @@ export function createOrders(o) {
   }
 
   return {
-    push, site, canSend, snapTarget, issueSend, issueRally,
+    push, site, canSend, snapTarget, issueSend, issueRally, issueRallyKeep,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
   };

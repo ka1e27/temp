@@ -13,7 +13,7 @@ import {
   SITES, SITE_UPGRADE, BOOSTERS, UNIT_IDS, CENTIGOLD,
 } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
-import { siteById } from './state.js';
+import { siteById, clampRallyKeep } from './state.js';
 import { spawnSquad, retreatTarget, reverseSquad, travelTicks } from './movement.js';
 import { applyGold, goldOf } from './economy.js';
 import { pushEvent, EVENTS } from './events.js';
@@ -95,6 +95,25 @@ function cmdRally(state, cmd, by) {
   if (!target) return 'unknown-target';
   if (!site.adj.includes(target.id)) return 'not-adjacent';
   site.rallyTarget = target.id;
+  return null;
+}
+
+/**
+ * How many troops a rallied site holds back. Its own verb rather than a field
+ * on RALLY, because the number and the destination are set by different
+ * gestures — a drag picks the target, the panel's stepper picks the hold-back —
+ * and neither should have to know the other's current value to leave it alone.
+ *
+ * A non-integer is REFUSED (that is a caller bug); an out-of-range integer is
+ * CLAMPED, because a stepper walking off the end of its range is normal use.
+ */
+function cmdRallyKeep(state, cmd, by) {
+  const site = siteById(state, cmd.site ?? cmd.from);
+  if (!site) return 'unknown-site';
+  if (site.owner !== by) return 'not-your-site';
+  const n = typeof cmd.keep === 'number' ? cmd.keep : NaN;
+  if (!Number.isInteger(n)) return 'bad-keep';
+  site.rallyKeep = clampRallyKeep(n);
   return null;
 }
 
@@ -282,6 +301,7 @@ const HANDLERS = {
   TRAIN: cmdTrain,
   UPGRADE: cmdUpgrade,
   RALLY: cmdRally,
+  RALLY_KEEP: cmdRallyKeep,
   BOOSTER: cmdBooster,
   RETREAT: cmdRetreat,
   RETREAT_SQUAD: cmdRetreatSquad,

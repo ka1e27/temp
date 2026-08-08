@@ -5,7 +5,7 @@
 // which is what gives us instant retry, mid-battle resume, and byte-comparable
 // determinism tests.
 // PURE.
-import { SITES, SITE_LEVELS, BOOSTERS, UNIT_IDS } from '../content/balance.js';
+import { SITES, SITE_LEVELS, BOOSTERS, UNIT_IDS, RALLY_KEEP } from '../content/balance.js';
 import { emptyComp, addComp } from './combat.js';
 import { TICK_HZ } from '../core/loop.js';
 
@@ -25,6 +25,7 @@ import { TICK_HZ } from '../core/loop.js';
  * @property {?{owner:string, comp:Object}} siege  hostile force grinding hp down
  * @property {number} shieldTicks          Emergency Fortify
  * @property {?string} rallyTarget         auto-send destination
+ * @property {number} rallyKeep            troops the rally leaves at home
  * @property {string[]} adj                adjacent site ids
  */
 
@@ -108,6 +109,9 @@ export function createBattleState(config) {
       siege: null,
       shieldTicks: 0,
       rallyTarget: null,
+      // Per-site, because the right hold-back differs by role. The default is
+      // the old global, so a battle nobody touches behaves exactly as before.
+      rallyKeep: RALLY_KEEP.default,
       adj: [],
     };
   });
@@ -210,3 +214,19 @@ export function sitesOwned(state, faction) {
 export function effectiveLevel(site) {
   return site.upgradeTicksLeft > 0 ? Math.max(1, site.level - 1) : site.level;
 }
+
+/**
+ * Coerce a rally hold-back to a legal value: a whole number inside the
+ * RALLY_KEEP band. A missing value — a site resumed from a save written before
+ * the field existed — falls back to the default, which is the old global, so
+ * an old battle picks up exactly where it left off.
+ */
+export function clampRallyKeep(n) {
+  if (n === null || n === undefined) return RALLY_KEEP.default;
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return RALLY_KEEP.default;
+  return Math.min(RALLY_KEEP.max, Math.max(RALLY_KEEP.min, v));
+}
+
+/** How many troops a rallied site keeps at home before forwarding the rest. */
+export const rallyKeepOf = (site) => clampRallyKeep(site.rallyKeep);

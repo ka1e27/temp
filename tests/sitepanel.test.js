@@ -1,0 +1,257 @@
+// The site panel as DOM: does it actually RENDER the numbers, and do its
+// buttons actually FIRE?
+//
+// siteintel.test.js proves the maths agrees with the simulation and
+// rallykeep.test.js proves the orders land, but both stop short of the element
+// tree — and "a control that looks fine and does nothing" is this project's
+// signature bug. So this file stands up a thin fake document, builds the real
+// createSitePanel(), runs its real update(), reads the text a player would
+// read, and dispatches the click listener the button really registered.
+//
+// It does NOT test hit testing — a fake DOM cannot. That is tools/smoke.mjs's
+// job, and it dispatches real pointer events at real coordinates for exactly
+// this reason. What this file catches is the other half: a panel that throws on
+// construction, a row that is never populated, or a handler that is never wired.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+class FakeNode {}
+globalThis.Node = FakeNode;                    // ui/dom.js tests `c instanceof Node`
+
+class FakeEl extends FakeNode {
+  constructor(tag) {
+    super();
+    this.tagName = String(tag).toUpperCase();
+    this.kids = [];
+    this.parentNode = null;
+    this.attrs = {};
+    this.dataset = {};
+    this.handlers = {};
+    this.style = { setProperty(k, v) { this[k] = v; } };
+    this.own = '';
+    const classes = new Set();
+    this.classList = {
+      add: (...c) => c.forEach((x) => classes.add(x)),
+      remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+      toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
+    };
+  }
+
+  get textContent() {
+    return this.own + this.kids.map((k) => k.textContent).join('');
+  }
+
+  set textContent(v) { this.kids.length = 0; this.own = String(v); }
+
+  setAttribute(k, v) { this.attrs[k] = v; }
+  addEventListener(type, fn) { (this.handlers[type] ??= []).push(fn); }
+  /** The listener the element really registered — not a synthetic .click(). */
+  fire(type) { for (const fn of this.handlers[type] ?? []) fn({ type }); }
+  append(...nodes) { for (const n of nodes) { n.parentNode = this; this.kids.push(n); } }
+  removeChild(n) { n.remove(); }
+  get firstChild() { return this.kids[0] ?? null; }
+
+  remove() {
+    const p = this.parentNode;
+    if (p) p.kids.splice(p.kids.indexOf(this), 1);
+    this.parentNode = null;
+  }
+
+  /** First descendant carrying `cls`. */
+  find(cls) {
+    if (this.classList.contains(cls)) return this;
+    for (const k of this.kids) {
+      const hit = k instanceof FakeEl ? k.find(cls) : null;
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  /** Every descendant carrying `cls`, in document order. */
+  findAll(cls, out = []) {
+    if (this.classList.contains(cls)) out.push(this);
+    for (const k of this.kids) if (k instanceof FakeEl) k.findAll(cls, out);
+    return out;
+  }
+}
+
+class FakeText extends FakeNode {
+  constructor(text) { super(); this.own = String(text); this.parentNode = null; }
+  get textContent() { return this.own; }
+  remove() {
+    const p = this.parentNode;
+    if (p) p.kids.splice(p.kids.indexOf(this), 1);
+  }
+}
+
+globalThis.document = {
+  createElement: (tag) => new FakeEl(tag),
+  createTextNode: (t) => new FakeText(t),
+};
+
+// Imported AFTER the shims: ui/dom.js reads `document` at call time, but
+// keeping the order explicit is what stops a future refactor breaking it.
+const { createBattleState } = await import('../src/battle/state.js');
+const { drainCommands } = await import('../src/battle/commands.js');
+const { step } = await import('../src/battle/sim.js');
+const { makeMods, CONTRACT_VERSION } = await import('../src/battle/contract.js');
+const { emptyComp, total } = await import('../src/battle/combat.js');
+const { RALLY_KEEP } = await import('../src/content/balance.js');
+const { createSitePanel } = await import('../src/screens/battle-panel.js');
+const { createOrders } = await import('../src/screens/battle-orders.js');
+const { createView } = await import('../src/screens/battle-input.js');
+
+const at = (state, id) => state.sites.find((s) => s.id === id);
+
+function fixture() {
+  return createBattleState({
+    contractVersion: CONTRACT_VERSION,
+    battleId: 'panel',
+    seed: 1,
+    grid: { cols: 11, rows: 9, blocked: [] },
+    sites: [
+      { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 4 }, hp: 600, hpMax: 600 },
+      { id: 'f1', kind: 'farm', hex: [1, 0], owner: 'player', garrison: {}, hp: 100, hpMax: 100 },
+      { id: 'hold', kind: 'stronghold', hex: [2, 0], owner: 'player', garrison: {}, hp: 250, hpMax: 250 },
+      { id: 'cas', kind: 'castle', hex: [5, 0], owner: 'enemy', garrison: { militia: 6 }, hp: 600, hpMax: 600 },
+    ],
+    adjacency: [['camp', 'f1'], ['f1', 'hold']],
+    player: makeMods({ expedition: emptyComp(), startGold: 5000 }),
+    enemy: makeMods({ expedition: emptyComp() }),
+    boosters: [],
+    rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 1 },
+  });
+}
+
+/** The panel wired to the REAL orders module, so a click ends in state.commands. */
+function mountPanel(state) {
+  const view = createView();
+  const board = {
+    hexSize: 34,
+    sitePos: (s, out) => { out.x = s.hex[0] * 51; out.y = s.hex[1] * 59; return out; },
+    siteAt: () => null,
+  };
+  const ord = createOrders({
+    canvas: { classList: { toggle() {} } }, board, view, getState: () => state, bus: null,
+  });
+  const input = {
+    upgrade: (id) => ord.push({ t: 'UPGRADE', site: id }),
+    setRallyKeep: (id, keep) => ord.issueRallyKeep(id, keep),
+  };
+  const panel = createSitePanel({ getState: () => state, view, input });
+  return { panel, view, ord };
+}
+
+const select = (view, id) => { view.selection.length = 0; view.selection.push(id); };
+
+// ---------------------------------------------------------------------------
+
+test('the panel renders the economics of the selected site', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+
+  select(view, 'camp');
+  panel.update(s);
+  assert.equal(panel.el.find('hud-selection-title').textContent, 'CAMP · L1');
+  assert.equal(panel.el.find('hud-site-money').textContent,
+    '+4.0/s gold · -3.8/s training · net +0.3/s');
+  assert.equal(panel.el.find('hud-site-train').textContent,
+    'militia x2 every 6.4s · 0.31/s');
+
+  select(view, 'f1');
+  panel.update(s);
+  assert.equal(panel.el.find('hud-site-money').textContent, '+2.0/s gold');
+  assert.equal(panel.el.find('hud-site-train').textContent, '', 'a farm trains nothing');
+
+  select(view, 'hold');
+  panel.update(s);
+  assert.equal(panel.el.find('hud-site-money').textContent, '-3.0/s training');
+  assert.equal(panel.el.find('hud-site-train').textContent, 'militia x2 every 8s · 0.25/s');
+});
+
+test('a site that costs more than it earns is marked as draining', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  select(view, 'hold');
+  panel.update(s);
+  const money = panel.el.find('hud-site-money');
+  assert.equal(money.classList.contains('is-drain'), true);
+
+  select(view, 'f1');                       // a farm only earns
+  panel.update(s);
+  assert.equal(panel.el.find('hud-site-money').classList.contains('is-drain'), false);
+});
+
+test('the rally row appears only on a site that HAS a rally', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const camp = at(s, 'camp');
+
+  select(view, 'camp');
+  panel.update(s);
+  assert.equal(panel.el.find('hud-keep').classList.contains('is-open'), false);
+
+  camp.rallyTarget = 'f1';
+  panel.update(s);
+  const row = panel.el.find('hud-keep');
+  assert.equal(row.classList.contains('is-open'), true);
+  assert.equal(row.find('keep-value').textContent, `keeps ${RALLY_KEEP.default}`);
+});
+
+test('pressing + on the rally row moves the SIMULATION, not just the label', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const camp = at(s, 'camp');
+  camp.garrison = { ...emptyComp(), militia: 30 };
+  camp.rallyTarget = 'f1';
+  select(view, 'camp');
+  panel.update(s);
+
+  const [minus, plus] = panel.el.find('hud-keep').findAll('keep-step');
+  plus.fire('click');
+  assert.equal(s.commands.length, 1, 'the click queued exactly one order');
+  assert.equal(camp.rallyKeep, RALLY_KEEP.default, 'and did NOT touch the site itself');
+
+  step(s);
+  assert.equal(camp.rallyKeep, RALLY_KEEP.default + RALLY_KEEP.step);
+  assert.equal(total(camp.garrison), RALLY_KEEP.default + RALLY_KEEP.step,
+    'the rally really held that many back');
+  panel.update(s);
+  assert.equal(panel.el.find('keep-value').textContent,
+    `keeps ${RALLY_KEEP.default + RALLY_KEEP.step}`);
+
+  minus.fire('click');
+  step(s);
+  assert.equal(camp.rallyKeep, RALLY_KEEP.default);
+});
+
+test('the stepper disables itself at the ends of the band', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const camp = at(s, 'camp');
+  camp.rallyTarget = 'f1';
+  select(view, 'camp');
+
+  camp.rallyKeep = RALLY_KEEP.max;
+  panel.update(s);
+  const [minus, plus] = panel.el.find('hud-keep').findAll('keep-step');
+  assert.equal(plus.disabled, true);
+  assert.equal(minus.disabled, false);
+
+  camp.rallyKeep = RALLY_KEEP.min;
+  panel.update(s);
+  assert.equal(minus.disabled, true);
+  assert.equal(plus.disabled, false);
+});
+
+test('the Upgrade button still reaches the simulation', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  select(view, 'f1');
+  panel.update(s);
+  const before = at(s, 'f1').level;
+  panel.el.find('hud-upgrade').fire('click');
+  drainCommands(s);
+  assert.equal(at(s, 'f1').level, before + 1);
+});

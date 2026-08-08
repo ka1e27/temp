@@ -54,6 +54,60 @@ function blockedFor(state, site, unit) {
   return total(site.garrison) >= garrisonCap(state, site);
 }
 
+/**
+ * The training job a site would run THIS tick: which unit, how much cycle
+ * progress, and what that progress costs in CENTIGOLD. `blocked` means the
+ * garrison (or the one-marshal rule) is full, so the site produces and spends
+ * nothing. Returns null for a site that cannot train at all.
+ *
+ * This is the ONE place the cost formula lives: runTraining() builds its job
+ * list from it and the site panel reads it, so a readout that disagrees with
+ * what the treasury actually pays is not expressible.
+ * READ-ONLY — it mutates nothing, which is why the panel may call it.
+ */
+export function trainJob(state, site) {
+  if (site.owner !== 'player' && site.owner !== 'enemy') return null;
+  if (!SITES[site.kind].train) return null;
+  const mods = state.mods[site.owner];
+  const unit = trainableUnit(site, mods);
+  if (!unit) return null;
+  if (blockedFor(state, site, unit)) return { unit, progress: 0, cost: 0, blocked: true };
+
+  const progress = trainMultiplier(state, site) / (UNITS[unit].trainSec * TICK_HZ);
+  const cost = UNITS[unit].gold * UNITS[unit].batch * CENTIGOLD * progress
+    * (mods.trainCostMult ?? 1) * attritionMods(state).trainCostMult;
+  return { unit, progress, cost, blocked: false };
+}
+
+/** How hard a site is really running: 1 normally, less mid-brownout. It is
+ *  last tick's figure, which is precisely what that site last spent. */
+const brownoutOf = (site) => (typeof site.brownout === 'number' ? site.brownout : 1);
+
+/** Units per second a site is producing right now — batch size and brownout
+ *  included. 0 when it is full, unowned, or cannot train. */
+export function siteTrainRate(state, site) {
+  const job = trainJob(state, site);
+  if (!job || job.blocked) return 0;
+  return job.progress * TICK_HZ * UNITS[job.unit].batch * brownoutOf(site);
+}
+
+/** Gold per second a site is SPENDING on training right now: the same number
+ *  runTraining() takes out of the treasury, in gold rather than centigold. */
+export function siteTrainCostPerSec(state, site) {
+  const job = trainJob(state, site);
+  if (!job || job.blocked) return 0;
+  return (job.cost * TICK_HZ * brownoutOf(site)) / CENTIGOLD;
+}
+
+/** What a faction is spending on training across every site it holds. */
+export function factionTrainCostPerSec(state, faction) {
+  let g = 0;
+  for (const site of state.sites) {
+    if (site.owner === faction) g += siteTrainCostPerSec(state, site);
+  }
+  return g;
+}
+
 function completeCycles(state, site, unit) {
   let guard = 0;
   while (site.trainProgress >= 1 && guard++ < 16) {
@@ -71,27 +125,20 @@ function completeCycles(state, site, unit) {
 
 /** Phase 4. One tick of training for every producing site. */
 export function runTraining(state) {
-  const att = attritionMods(state);
   const jobs = [];
   const demand = { player: 0, enemy: 0 };
 
   for (const site of state.sites) {
     site.brownout = 1;
     site.trainBlocked = false;
-    if (site.owner !== 'player' && site.owner !== 'enemy') continue;
-    if (!SITES[site.kind].train) continue;
-
-    const mods = state.mods[site.owner];
-    const unit = trainableUnit(site, mods);
-    if (!unit) continue;
-    site.trainType = unit;
-    if (blockedFor(state, site, unit)) { site.trainBlocked = true; continue; }
-
-    const progress = trainMultiplier(state, site) / (UNITS[unit].trainSec * TICK_HZ);
-    const cost = UNITS[unit].gold * UNITS[unit].batch * CENTIGOLD * progress
-      * (mods.trainCostMult ?? 1) * att.trainCostMult;
-    jobs.push({ site, unit, progress, cost });
-    demand[site.owner] += cost;
+    const job = trainJob(state, site);
+    if (!job) continue;
+    // Recorded even when blocked: a captured site inherits an alien trainType
+    // and has to be normalised whether or not it has room to build today.
+    site.trainType = job.unit;
+    if (job.blocked) { site.trainBlocked = true; continue; }
+    jobs.push({ site, unit: job.unit, progress: job.progress, cost: job.cost });
+    demand[site.owner] += job.cost;
   }
 
   const scale = { player: 1, enemy: 1 };

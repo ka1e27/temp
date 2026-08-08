@@ -359,6 +359,8 @@ export function createBattleInput(o) {
     /** Fire the armed booster at a site — the click path, exposed for tests. */
     fireBooster: ord.fireBooster,
     setTrain(siteId, unit) { ord.push(cmd.train(siteId, unit)); },
+    /** Per-site rally hold-back, from the site panel's stepper. */
+    setRallyKeep(siteId, keep) { return ord.issueRallyKeep(siteId, keep); },
     upgrade(siteId) { ord.push(cmd.upgrade(siteId)); },
     retreat: ord.retreatSelection,
     retreatSquad(id) {

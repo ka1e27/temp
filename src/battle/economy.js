@@ -50,6 +50,19 @@ export function siteGoldPerSec(state, site) {
   return base * lvl.gold * (mods.goldRateMult ?? 1) * farm * economyMultFor(state, site.owner);
 }
 
+/**
+ * Gold per second a faction earns from everything it holds. Summed from the
+ * same per-site function runEconomy() credits with, so the HUD's income line
+ * and the treasury cannot drift apart the way a re-derived rate does.
+ */
+export function factionGoldPerSec(state, faction) {
+  let g = 0;
+  for (const site of state.sites) {
+    if (site.owner === faction) g += siteGoldPerSec(state, site);
+  }
+  return g;
+}
+
 /** Phase 3. Credit one tick of income to both factions. */
 export function runEconomy(state) {
   const perTick = { player: 0, enemy: 0 };

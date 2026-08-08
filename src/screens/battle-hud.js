@@ -14,7 +14,8 @@ import { TICK_HZ } from '../core/loop.js';
 import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
 import { compact, clock, percent, rate } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
-import { siteOf, computePreview, income } from './battle-preview.js';
+import { siteOf, computePreview } from './battle-preview.js';
+import { goldFlow, flowLine } from './battle-econ.js';
 import { createSitePanel, createWithdraw, createAlert, rejectionText } from './battle-panel.js';
 import { createSpeedControl } from './battle-speed.js';
 
@@ -76,7 +77,14 @@ export function createBattleHud(o) {
   const alert = createAlert();
 
   el.gold = h('span.hud-value.num', { text: '0' });
-  el.rate = h('span.hud-rate.num', { text: '+0.0/s' });
+  // NET, not income: the number the player decides on is what the treasury does
+  // per second once the strongholds have taken their cut, so switching a
+  // stronghold to rams has to move THIS figure. The breakdown underneath shows
+  // both halves, because a net alone hides which half moved.
+  el.rate = h('span.hud-rate.num', {
+    text: '+0.0/s', title: 'Net gold per second — income minus training',
+  });
+  el.flow = h('span.hud-flow.num', { text: '' });
   el.clock = h('span.hud-value.num', { text: '0:00' });
   el.clockBox = h('div.hud-clock.panel', {}, h('span.label', { text: 'Elapsed' }), el.clock);
   el.verdict = h('span.pv-verdict', { text: '' });
@@ -94,7 +102,7 @@ export function createBattleHud(o) {
 
   mount(root,
     h('div.hud-corner.hud-tl', {},
-      h('div.hud-gold.panel', {}, el.gold, el.rate),
+      h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow),
       h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
       alert.el),
     h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el),
@@ -108,6 +116,8 @@ export function createBattleHud(o) {
   // Cached writers: an unchanged value costs one comparison and no DOM work.
   set.gold = bindText(el.gold, '0');
   set.rate = bindText(el.rate, '');
+  set.flow = bindText(el.flow, '');
+  set.drain = bindClass(el.rate, 'is-drain');
   set.clock = bindText(el.clock, '');
   set.urgent = bindClass(el.clockBox, 'is-urgent');
   set.pvOpen = bindClass(el.preview, 'is-open');
@@ -155,8 +165,11 @@ export function createBattleHud(o) {
     const state = getState();
     if (!state) return;
 
+    const flow = goldFlow(state, 'player');
     set.gold(compact(state.factions.player.goldCg / 100));
-    set.rate(rate(income(state, 'player')));
+    set.rate(rate(flow.net));
+    set.drain(flow.net < 0);
+    set.flow(flowLine(flow));
     const sec = state.tick / TICK_HZ;
     set.clock(clock(sec));
     set.urgent(state.rules.hardCapTicks - state.tick < TICK_HZ * 60);
