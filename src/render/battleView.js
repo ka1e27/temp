@@ -159,8 +159,13 @@ export function createBattleView(opts) {
     board.rows = state.grid.rows;
     board.zoom = camera.zoom;
     board.lineWidth = 1 / camera.zoom;
-    if (state.grid.blocked.length !== blockedSig) {
-      blockedSig = state.grid.blocked.length;
+    // Compared by IDENTITY, not by length: two different maps with the same
+    // number of mountains are not the same mountains, and a length check would
+    // paint the previous battle's peaks over the new one. `grid.blocked` is
+    // built once in state.js and never mutated, so the reference changes exactly
+    // when the map does.
+    if (state.grid.blocked !== blockedSig) {
+      blockedSig = state.grid.blocked;
       board.blocked = new Set(state.grid.blocked);
     }
     owners = computeOwners(state.influence, board.cols, board.rows, owners);

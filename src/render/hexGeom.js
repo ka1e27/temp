@@ -21,6 +21,8 @@ for (let i = 0; i < 6; i++) {
 export const EDGE_CORNERS = [[0, 1], [5, 0], [4, 5], [3, 4], [2, 3], [1, 2]];
 export const DIR_Q = [1, 1, 0, -1, -1, 0];
 export const DIR_R = [0, -1, -1, 0, 1, 1];
+/** The direction facing back the way you came. */
+export const OPPOSITE = [3, 4, 5, 0, 1, 2];
 
 /** Owner codes. Kept numeric so a whole map fits in one Uint8Array. */
 export const NONE = 0, PLAYER = 1, ENEMY = 2, NEUTRAL = 3, CONTESTED = 4;
@@ -47,6 +49,28 @@ export function hexIndex(q, r, cols, rows) {
 
 export const hexCx = (q, r, size) => size * SQRT3 * (q + r * 0.5);
 export const hexCy = (q, r, size) => size * 1.5 * r;
+
+/**
+ * Midpoint of the edge a hex SHARES with its neighbour in direction `d`.
+ *
+ * Derived as the mean of the two CENTRES rather than from the corner table,
+ * and that choice is load-bearing: it makes the answer bit-identical from
+ * either side of the edge, because IEEE addition is commutative and hex B
+ * asking about OPPOSITE[d] adds the very same two numbers in the other order.
+ * The corner-offset form is algebraically equal but lands ~1e-13 apart on most
+ * edges — enough for two hexes' water to meet with a hairline seam.
+ *
+ * It is exactly on the shared edge: for every d the result matches the mean of
+ * the two EDGE_CORNERS[d] corners to within rounding. riverdraw.test.js pins
+ * both halves of that claim.
+ */
+export const edgeMidX = (q, r, d, size) =>
+  (hexCx(q, r, size) + hexCx(q + DIR_Q[d], r + DIR_R[d], size)) * 0.5;
+export const edgeMidY = (q, r, d, size) =>
+  (hexCy(q, r, size) + hexCy(q + DIR_Q[d], r + DIR_R[d], size)) * 0.5;
+
+/** Distance from a hex centre to an edge midpoint — the inradius. */
+export const inradius = (size) => size * SQRT3 * 0.5;
 
 /** World-space AABB of the whole grid, for camera.fit(). */
 export function gridBounds(cols, rows, size, out) {

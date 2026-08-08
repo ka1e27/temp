@@ -31,6 +31,11 @@
   /* Water. Its own token rather than a tint of --c-accent: a river is terrain
      and must never read as the selection/training highlight. */
   --c-water: #2b7a9e;
+  /* The lit core running down the middle of a channel. A river is drawn as a
+     dark bed with a bright centre — that cross-section is what makes water read
+     as something the ground CONTAINS rather than as a stroke laid over it, and
+     it needs a second value to do it. */
+  --c-water-lit: #6fc9e8;
   --c-warn: #ffc857;
   --c-danger: #ff5c5c;
 
@@ -51,6 +56,11 @@
   --a-flood-strong: 0.42;
   --a-grid: 0.5;
   --a-blocked: 0.9;
+  /* How loud the water is. One dial for the whole four-layer channel, because
+     the layers only work as a set — brightening the core alone turns a river
+     into a highlight. Water is terrain: it must stay quieter than the front
+     line, which is the one thing on the board that always wins the eye. */
+  --a-river: 0.68;
 
   /* --- Spacing: 4px scale ------------------------------------------------ */
   --s-1: 4px;
