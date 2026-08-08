@@ -93,7 +93,15 @@ export const BOOSTERS = {
 /** Expedition = base + perRegion * regionsConquered + StandingArmy upgrade. */
 export const EXPEDITION = { base: 14, perRegion: 4 };
 
+/**
+ * A rallied site forwards its garrison once it can do so and still keep this
+ * many troops at home. The default is the old global; it is now a PER-SITE
+ * setting, because the right answer differs by role — a back-line farm should
+ * keep almost nothing, a front stronghold feeding a siege has to hold enough
+ * to survive the counter-attack that follows.
+ */
 export const RALLY_MIN_GARRISON = 8;
+export const RALLY_KEEP = { min: 0, max: 40, step: 2, default: RALLY_MIN_GARRISON };
 export const SEND_FRACTIONS = [0.25, 0.5, 0.75, 1.0];
 export const CENTIGOLD = 100;
 
