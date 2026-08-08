@@ -98,21 +98,25 @@ function connect(wsUrl) {
 
         /** Real mouse gestures, so drag orders go through the same pointer path
          *  a player uses rather than a synthetic shortcut. */
-        async mouse(type, x, y, button = 'left') {
+        /** `buttons` is the held-button BITMASK (left 1, right 2), which is
+         *  separate from `button` and is what makes a move count as a drag
+         *  rather than a hover. */
+        async mouse(type, x, y, button = 'left', buttons = 0) {
           await send('Input.dispatchMouseEvent', {
-            type, x, y, button, clickCount: type === 'mousePressed' ? 1 : 0,
+            type, x, y, button, buttons, clickCount: type === 'mousePressed' ? 1 : 0,
           });
         },
-        async drag(from, to, steps = 12) {
-          await api.mouse('mouseMoved', from.x, from.y);
-          await api.mouse('mousePressed', from.x, from.y);
+        async drag(from, to, steps = 12, button = 'left') {
+          const mask = button === 'right' ? 2 : 1;
+          await api.mouse('mouseMoved', from.x, from.y, 'none', 0);
+          await api.mouse('mousePressed', from.x, from.y, button, mask);
           for (let i = 1; i <= steps; i++) {
             await api.mouse('mouseMoved',
               from.x + ((to.x - from.x) * i) / steps,
-              from.y + ((to.y - from.y) * i) / steps);
+              from.y + ((to.y - from.y) * i) / steps, button, mask);
             await sleep(12);
           }
-          await api.mouse('mouseReleased', to.x, to.y);
+          await api.mouse('mouseReleased', to.x, to.y, button, 0);
         },
 
         close: () => ws.close(),

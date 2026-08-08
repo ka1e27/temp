@@ -24,7 +24,7 @@ import {
   drawGarrisonPlaque, drawSelection, drawHover, garrisonLabelY,
 } from './siteGlyphs.js';
 import {
-  drawSquads, drawSquadLabels, drawRallies, drawDragArc, drawBox,
+  drawSquads, drawSquadLabels, drawRallies, drawDragArc, drawRallyDrag, drawBox,
 } from './routes.js';
 import { drawStaticFormation } from './formation.js';
 import { numStr } from '../ui/format.js';
@@ -217,6 +217,17 @@ export function createBattleView(opts) {
       if (from) {
         drawDragArc(ctx, from, to, view.pointer, px, geo);
         if (to) {
+          sitePos(to, _a);
+          drawSelection(ctx, to, _a.x, _a.y, siteRadius(to.kind, hexSize), p, px, 1);
+        }
+      }
+    }
+    if (view?.rallyFrom) {
+      const from = byId(view.rallyFrom);
+      const to = view.rallyTo ? byId(view.rallyTo) : null;
+      if (from) {
+        drawRallyDrag(ctx, from, to, view.pointer, px, geo);
+        if (to && to.id !== from.id) {
           sitePos(to, _a);
           drawSelection(ctx, to, _a.x, _a.y, siteRadius(to.kind, hexSize), p, px, 1);
         }

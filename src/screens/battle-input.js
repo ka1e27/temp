@@ -35,6 +35,11 @@ export function createView(init = {}) {
     hoverId: null,
     dragFrom: null,
     dragTo: null,
+    /** In-progress RIGHT-button rally drag. Same from→to shape as dragFrom/To,
+     *  kept separate so the renderer can draw it dashed — a rally is a standing
+     *  order, and it should not look like a squad leaving now. */
+    rallyFrom: null,
+    rallyTo: null,
     pointer: { x: 0, y: 0 },
     box: null,
     trainPickerFor: null,
@@ -57,6 +62,7 @@ export function createBattleInput(o) {
   const s = { x: 0, y: 0 };
   const pointers = new Map();
   let press = null;
+  let rally = null;
   let panning = false;
   let pinchDist = 0;
   let lastTapAt = 0;
@@ -65,6 +71,8 @@ export function createBattleInput(o) {
   function clearDrag() {
     view.dragFrom = null;
     view.dragTo = null;
+    view.rallyFrom = null;
+    view.rallyTo = null;
     view.box = null;
     canvas.classList.remove('is-dragging');
   }
@@ -83,11 +91,27 @@ export function createBattleInput(o) {
       pinchDist = spread();
       return;
     }
-    // Right button or middle button: rally and pan respectively.
-    if (ev.button === 2) { ord.setRally(w.x, w.y); return; }
+    const hit = board.siteAt(getState(), w.x, w.y);
+
+    // Right button: rally. Pressing on one of your own sites begins a rally
+    // DRAG — the same from→to gesture as a send, because a rally IS a standing
+    // send and should not need a different vocabulary to express.
+    //
+    // It has to be deferred to the release: firing on press meant that pressing
+    // the source and dragging to the target set target === source, i.e. it
+    // CLEARED the rally you were trying to set. A right-click that never moves
+    // still runs the old select-then-click path on release.
+    if (ev.button === 2) {
+      rally = { fromId: hit?.owner === 'player' ? hit.id : null, sx: s.x, sy: s.y, moved: false };
+      if (rally.fromId) {
+        view.rallyFrom = rally.fromId;
+        view.rallyTo = null;
+        canvas.classList.add('is-dragging');
+      }
+      return;
+    }
     if (ev.button === 1 || ev.shiftKey) { panning = true; return; }
 
-    const hit = board.siteAt(getState(), w.x, w.y);
     press = { id: hit?.id ?? null, sx: s.x, sy: s.y, moved: false, at: performance.now() };
     view.pointer.x = w.x;
     view.pointer.y = w.y;
@@ -130,6 +154,19 @@ export function createBattleInput(o) {
       return;
     }
 
+    if (rally) {
+      if (!rally.moved && Math.hypot(s.x - rally.sx, s.y - rally.sy) > TAP_SLOP) rally.moved = true;
+      view.hoverId = board.siteAt(getState(), w.x, w.y)?.id ?? null;
+      if (view.rallyFrom) {
+        const from = ord.site(view.rallyFrom);
+        // Snapped target may BE the source — that is how you clear a rally, so
+        // it is kept rather than nulled, and the renderer says so.
+        const t = from ? ord.snapTarget(from, w.x, w.y) : null;
+        view.rallyTo = t ? t.id : null;
+      }
+      return;
+    }
+
     if (press && !press.moved && Math.hypot(s.x - press.sx, s.y - press.sy) > TAP_SLOP) {
       press.moved = true;
     }
@@ -150,6 +187,24 @@ export function createBattleInput(o) {
     const rec = pointers.get(ev.pointerId);
     pointers.delete(ev.pointerId);
     canvas.releasePointerCapture?.(ev.pointerId);
+
+    if (rally) {
+      board.pointer(ev, s);
+      cam.screenToWorld(s.x, s.y, w);
+      if (rally.fromId && rally.moved) {
+        // Drag form. Releasing on nothing legal abandons the gesture rather
+        // than wiping the rally you already had — only a release back on the
+        // SOURCE clears, and that reads as deliberate.
+        const from = ord.site(rally.fromId);
+        const to = view.rallyTo ? ord.site(view.rallyTo) : null;
+        if (from && to) ord.issueRally(from, to);
+      } else {
+        ord.setRally(w.x, w.y);   // click form: whatever is selected
+      }
+      clearDrag();
+      rally = null;
+      return;
+    }
 
     if (panning) {
       // A quick two-finger tap that never moved is the touch equivalent of a
@@ -246,6 +301,7 @@ export function createBattleInput(o) {
       view.armed = null;
       ord.selectOnly(null);
       clearDrag();
+      rally = null;
       return;
     }
 
@@ -285,7 +341,7 @@ export function createBattleInput(o) {
   off.listen(canvas, 'pointerdown', onDown);
   off.listen(canvas, 'pointermove', onMove);
   off.listen(canvas, 'pointerup', onUp);
-  off.listen(canvas, 'pointercancel', (ev) => { pointers.delete(ev.pointerId); clearDrag(); press = null; panning = pointers.size > 0; });
+  off.listen(canvas, 'pointercancel', (ev) => { pointers.delete(ev.pointerId); clearDrag(); press = null; rally = null; panning = pointers.size > 0; });
   off.listen(canvas, 'contextmenu', (ev) => ev.preventDefault());
   off.listen(canvas, 'wheel', onWheel, { passive: false });
   off.listen(window, 'keydown', onKey);

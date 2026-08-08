@@ -86,6 +86,24 @@ export function createOrders(o) {
     return true;
   }
 
+  /**
+   * Set — or clear — ONE site's rally. Targeting `to === from` clears it, which
+   * is what releasing a rally drag back on its source means, mirroring the send
+   * drag's "release on the source is an explicit cancel".
+   *
+   * Both rally input paths (the right-button drag and the older
+   * select-then-right-click) funnel through here, so they cannot disagree about
+   * what is legal any more than the drag and click-then-click sends can.
+   * @returns {boolean} true when a command was issued.
+   */
+  function issueRally(from, to) {
+    if (!from || from.owner !== 'player') return false;
+    if (!to || to.id === from.id) { push(cmd.rally(from.id, null)); return true; }
+    if (!from.adj.includes(to.id)) return false;
+    push(cmd.rally(from.id, to.id));
+    return true;
+  }
+
   function selectOnly(id) {
     view.selection.length = 0;
     if (id) view.selection.push(id);
@@ -135,19 +153,18 @@ export function createOrders(o) {
   }
 
   /** Rally makes a site auto-send once its garrison passes the threshold — the
-   *  idle affordance inside the battle, and the cure for back-line micro. */
+   *  idle affordance inside the battle, and the cure for back-line micro.
+   *
+   *  The click form: whatever is selected rallies to the site under the pointer.
+   *  Kept because it is the only way to point a whole flank at one target in a
+   *  single action; the drag form (battle-input.js) handles one site at a time. */
   function setRally(wx, wy) {
     const target = board.siteAt(getState(), wx, wy);
     // Copied: a `ui:command` listener is allowed to change the selection.
     const sources = view.selection.length ? view.selection.slice()
       : (view.armed ? [view.armed] : []);
     if (!sources.length) return;
-    for (const id of sources) {
-      const src = site(id);
-      if (!src || src.owner !== 'player') continue;
-      if (!target || target.id === id) push(cmd.rally(id, null));
-      else if (src.adj.includes(target.id)) push(cmd.rally(id, target.id));
-    }
+    for (const id of sources) issueRally(site(id), target);
   }
 
   function retreatSelection() {
@@ -245,7 +262,7 @@ export function createOrders(o) {
   }
 
   return {
-    push, site, canSend, snapTarget, issueSend,
+    push, site, canSend, snapTarget, issueSend, issueRally,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
   };

@@ -151,7 +151,7 @@ export function createSitePanel(o) {
     const n = view.selection.length;
     if (n > 1) {
       set.title(`${n} sites selected`);
-      set.sub('R retreats · right-click sets rally');
+      set.sub('R retreats · right-drag sets rally');
       set.stat('');
       setShown(false);
       return;

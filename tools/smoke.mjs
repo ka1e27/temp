@@ -208,6 +208,40 @@ try {
   step(`drag ${drag.fromId} -> ${drag.toId}: ${sent} squad(s) in flight`);
   await page.screenshot(`${OUT}/02-squads.png`);
 
+  // ---- 5b. a real RIGHT drag sets a rally ---------------------------------
+  // This is the gesture a player reaches for first, and it used to fire on
+  // pointerdown at the press point — so pressing the source and dragging to the
+  // target resolved to target===source, which CLEARS a rally. It has to be
+  // driven with real right-button events or the regression comes straight back.
+  const rally = await page.eval(() => {
+    const g = window.__game;
+    const b = g.state.battle;
+    // The target need not be yours — a rally into enemy ground is a legal
+    // standing attack order — it only has to be adjacent.
+    const from = b.sites.find((s) => s.owner === 'player' && s.adj.length > 0);
+    const to = from && b.sites.find((s) => from.adj.includes(s.id));
+    if (!from || !to) return null;
+    from.rallyTarget = null;
+    const a = g.__view.siteScreen(from, {});
+    const z = g.__view.siteScreen(to, {});
+    return {
+      from: { x: Math.round(a.x), y: Math.round(a.y) },
+      to: { x: Math.round(z.x), y: Math.round(z.y) },
+      fromId: from.id, toId: to.id,
+    };
+  });
+  if (!rally) note('no adjacent friendly pair to rally between');
+  else {
+    await page.drag(rally.from, rally.to, 12, 'right');
+    await page.sleep(600);
+    const got = await page.eval((id) => window.__game.state.battle.sites
+      .find((s) => s.id === id)?.rallyTarget ?? null, rally.fromId);
+    if (got !== rally.toId) {
+      throw new Error(`right-drag ${rally.fromId} -> ${rally.toId} set rallyTarget=${got}`);
+    }
+    step(`right-drag rally: ${rally.fromId} -> ${rally.toId}`);
+  }
+
   // ---- 6. effects actually render ----------------------------------------
   let sawFx = false;
   for (let i = 0; i < 12 && !sawFx; i++) {

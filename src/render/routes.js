@@ -271,6 +271,41 @@ export function drawDragArc(ctx, from, to, pointer, px, g) {
   return to;
 }
 
+/**
+ * The live RALLY drag — the right-button twin of drawDragArc.
+ *
+ * Dashed at the same rhythm drawRallies uses, so the gesture already looks like
+ * the standing order it is about to become and never reads as a squad leaving
+ * now. Three states, because a rally drag has one the send drag does not:
+ * snapped to a target (accent), back on its own source (warning — release here
+ * CLEARS), and reaching at nothing (grey).
+ */
+export function drawRallyDrag(ctx, from, to, pointer, px, g) {
+  const p = g.palette;
+  const clearing = !!to && to.id === from.id;
+  g.pos(from, _a);
+  if (to && !clearing) g.pos(to, _b);
+  else { _b.x = pointer.x; _b.y = pointer.y; }
+
+  const tint = clearing ? p.border.enemy : (to ? p.selection : p.border.neutral);
+  DASH[0] = px * 4;
+  DASH[1] = px * 6;
+  ctx.setLineDash(DASH);
+  arcPath(ctx, _a.x, _a.y, _b.x, _b.y, 1);
+  ctx.strokeStyle = tint;
+  ctx.lineWidth = px * 2.5;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.setLineDash(NO_DASH);
+
+  // No arrowhead while clearing: there is nowhere for it to point.
+  if (clearing) return to;
+  arcPoint(_a.x, _a.y, _b.x, _b.y, 1, 1, _c);
+  arcPoint(_a.x, _a.y, _b.x, _b.y, 1, 0.94, _d);
+  chevron(ctx, _c.x, _c.y, Math.atan2(_c.y - _d.y, _c.x - _d.x), g.hexSize * 0.26, tint);
+  return to;
+}
+
 export function drawBox(ctx, box, px, g) {
   const x = Math.min(box.x0, box.x1);
   const y = Math.min(box.y0, box.y1);
