@@ -10,8 +10,8 @@ import { EXPEDITION, UNIT_IDS, AI_TIERS } from '../src/content/balance.js';
 import { REGIONS, REGION_BY_ID, ENEMY_SCALING } from '../src/content/regions.data.js';
 import { createState } from '../src/core/store.js';
 import {
-  STACKING_ORDER, stack, buildBattleConfig, expeditionSize, distributeExpedition,
-  fitComposition, playerMods, enemyMods, fallbackMapGen,
+  STACKING_ORDER, stack, buildBattleConfig, expeditionSlots, distributeExpedition,
+  fitComposition, compositionSlots, playerMods, enemyMods, fallbackMapGen,
 } from '../src/meta/modifiers.js';
 import { refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome } from '../src/meta/idle.js';
@@ -91,26 +91,28 @@ test('the enemy difficulty dial rides the TIER bucket, AI knobs ride multiplicat
 // Expedition
 // ===========================================================================
 
-test('expedition = base + perRegion x regionsConquered + Standing Army levels', () => {
+test('the expedition budget = base + perRegion x conquered + Standing Army levels', () => {
+  // The unit of all of these is SLOTS, not bodies — see content/balance.js
+  // UNIT_SLOTS. A militia costs one, a marshal costs eight.
   const { base, perRegion } = EXPEDITION;
-  assert.equal(expeditionSize(world([])), base);
-  assert.equal(expeditionSize(world(['riverfen'])), base + perRegion);
-  assert.equal(expeditionSize(world(['riverfen', 'ashford'])), base + perRegion * 2);
-  assert.equal(expeditionSize(world(['riverfen', 'ashford', 'ironwood'])), base + perRegion * 3);
+  assert.equal(expeditionSlots(world([])), base);
+  assert.equal(expeditionSlots(world(['riverfen'])), base + perRegion);
+  assert.equal(expeditionSlots(world(['riverfen', 'ashford'])), base + perRegion * 2);
+  assert.equal(expeditionSlots(world(['riverfen', 'ashford', 'ironwood'])), base + perRegion * 3);
   assert.equal(
-    expeditionSize(world(['riverfen', 'ashford', 'ironwood', 'saltmere'])), base + perRegion * 4,
+    expeditionSlots(world(['riverfen', 'ashford', 'ironwood', 'saltmere'])), base + perRegion * 4,
   );
   // Standing Army adds 4 per level on top, making it the most directly felt
   // purchase in the shop.
-  assert.equal(expeditionSize(world([], { standingArmy: 1 })), base + 4);
-  assert.equal(expeditionSize(world([], { standingArmy: 6 })), base + 24);
+  assert.equal(expeditionSlots(world([], { standingArmy: 1 })), base + 4);
+  assert.equal(expeditionSlots(world([], { standingArmy: 6 })), base + 24);
   assert.equal(
-    expeditionSize(world(['riverfen', 'ashford'], { standingArmy: 3 })),
+    expeditionSlots(world(['riverfen', 'ashford'], { standingArmy: 3 })),
     base + perRegion * 2 + 12,
   );
 });
 
-test('distribution is exact for every size and unlock set', () => {
+test('distribution spends the budget exactly, for every size and unlock set', () => {
   const sets = [
     ['militia', 'spearmen'],
     ['militia', 'spearmen', 'raiders'],
@@ -120,7 +122,9 @@ test('distribution is exact for every size and unlock set', () => {
   for (const unlocked of sets) {
     for (let n = 0; n <= 60; n++) {
       const comp = distributeExpedition(n, unlocked);
-      assert.equal(total(comp), n, `size ${n} for ${unlocked.join('+')}`);
+      // Militia cost one slot, so a budget is always spendable to the last one.
+      // An off-by-one here is a free or stolen soldier, and players notice.
+      assert.equal(compositionSlots(comp), n, `budget ${n} for ${unlocked.join('+')}`);
       for (const u of UNIT_IDS) {
         assert.ok(Number.isInteger(comp[u]) && comp[u] >= 0, `${u} must be a non-negative integer`);
         if (!unlocked.includes(u)) assert.equal(comp[u], 0, `${u} is locked but was deployed`);
@@ -130,19 +134,21 @@ test('distribution is exact for every size and unlock set', () => {
   }
 });
 
-test('a player composition is treated as ratios and re-fitted to the granted size', () => {
+test('a player composition is treated as ratios and re-fitted to the granted budget', () => {
   const unlocked = ['militia', 'spearmen', 'raiders'];
+  // 1:1 by HEAD, but a raider costs three slots, so 20 slots buys five of each.
   const fitted = fitComposition(20, unlocked, { militia: 1, raiders: 1 });
-  assert.equal(total(fitted), 20);
+  assert.equal(compositionSlots(fitted), 20);
   assert.equal(fitted.spearmen, 0);
-  assert.equal(fitted.militia, 10);
-  assert.equal(fitted.raiders, 10);
+  assert.equal(fitted.militia, 5);
+  assert.equal(fitted.raiders, 5);
   // You cannot mint troops by asking for 500.
+  assert.equal(compositionSlots(fitComposition(12, unlocked, { militia: 500 })), 12);
   assert.equal(total(fitComposition(12, unlocked, { militia: 500 })), 12);
   // You cannot deploy what you have not unlocked.
   assert.equal(fitComposition(12, unlocked, { rams: 9 }).rams, 0);
   // An empty ask falls back to the default spread rather than an empty army.
-  assert.equal(total(fitComposition(12, unlocked, {})), 12);
+  assert.equal(compositionSlots(fitComposition(12, unlocked, {})), 12);
 });
 
 // ===========================================================================
@@ -201,11 +207,13 @@ test('configHash is NOT stored inside the config (it could never match itself)',
 
 test('the expedition really lands in the player mods and grows with the empire', () => {
   const early = buildBattleConfig(world([]), 'riverfen', [], null);
-  assert.equal(total(early.player.expedition), EXPEDITION.base);
+  assert.equal(compositionSlots(early.player.expedition), EXPEDITION.base);
   const late = buildBattleConfig(
     world(['riverfen', 'ashford', 'ironwood', 'saltmere'], { standingArmy: 2 }), 'kaldan', [], null,
   );
-  assert.equal(total(late.player.expedition), EXPEDITION.base + EXPEDITION.perRegion * 4 + 8);
+  assert.equal(
+    compositionSlots(late.player.expedition), EXPEDITION.base + EXPEDITION.perRegion * 4 + 8,
+  );
   assert.equal(total(late.enemy.expedition), 0, 'the enemy head start is land, not a free army');
 });
 

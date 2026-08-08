@@ -181,13 +181,23 @@
 }
 .pb-stats dd:last-of-type { color: var(--c-gold); font-weight: var(--w-bold); }
 
-/* The troop total is what the whole panel is about. */
+/* Slots spent against slots granted is what the whole panel is about: it is
+   what makes a marshal a decision instead of a free pick. */
 .pb-budget {
-  display: flex; align-items: baseline; gap: var(--s-2); margin: 0 0 var(--s-3);
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s-2);
+  margin: 0 0 var(--s-3);
 }
 .pb-budget-n {
   font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
   letter-spacing: -0.02em; color: var(--c-player);
+}
+.pb-budget.is-over .pb-budget-n { color: var(--c-danger, var(--c-enemy)); }
+.pb-budget-troops { font-family: var(--font-num); font-size: var(--t-sm); }
+.pb-budget-troops::before { content: '· '; }
+.pb-budget-free { font-size: var(--t-sm); margin-left: auto; }
+.pb-budget-warn {
+  margin-left: auto; font-size: var(--t-sm); font-weight: var(--w-bold);
+  color: var(--c-danger, var(--c-enemy));
 }
 .pb-units, .pb-booster-list { list-style: none; margin: 0; padding: 0; }
 .pb-unit {
@@ -196,7 +206,16 @@
 }
 .pb-unit:first-child { border-top: 0; }
 .pb-unit-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-.pb-unit-name { font-weight: var(--w-bold); }
+.pb-unit-name { display: flex; align-items: center; gap: var(--s-2); font-weight: var(--w-bold); }
+/* The price tag. A player has to be able to read "this one costs 8" without
+   doing arithmetic on the stat line. */
+.pb-unit-cost {
+  flex: none; min-width: 1.6em; padding: 0 0.35em;
+  border: 1px solid color-mix(in srgb, currentcolor 45%, transparent);
+  border-radius: var(--r-1, 3px);
+  font: var(--w-bold) var(--t-xs) / 1.5 var(--font-num); text-align: center;
+  color: var(--c-text-dim);
+}
 .pb-unit-stat { font-size: var(--t-xs); font-family: var(--font-num); }
 .pb-unit-adjust { display: flex; align-items: center; gap: var(--s-2); }
 .pb-step {

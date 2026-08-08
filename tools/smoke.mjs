@@ -11,6 +11,7 @@
 //   node tools/smoke.mjs
 import { mkdir } from 'node:fs/promises';
 import { launch } from './cdp.js';
+import { compositionSlots } from '../src/meta/composition.js';
 
 const URL = process.env.URL || 'http://localhost:8080/';
 const OUT = 'screenshots';
@@ -78,7 +79,7 @@ async function reach(want, maxHops = 6) {
     if (at === want) return true;
     // Known one-click transitions between screens.
     const routes = [
-      ['.mm-continue, .mm-new', 'main menu'],
+      ['.menu-continue, .menu-new', 'main menu'],
       ['.pb-go, .pb-launch, .prebattle-go', 'loadout launch'],
       ['.results-map', 'results → map'],
       ['button.wm-go', 'invade'],
@@ -108,17 +109,21 @@ try {
       sites: b.sites.length,
       mine: b.sites.filter((s) => s.owner === 'player').length,
       theirs: b.sites.filter((s) => s.owner === 'enemy').length,
-      expedition: Object.values(b.sites.find((s) => s.kind === 'camp')?.garrison || {})
-        .reduce((a, n) => a + n, 0),
+      comp: b.sites.find((s) => s.kind === 'camp')?.garrison || {},
     };
   });
   if (!battle) throw new Error('no battle state');
   if (battle.theirs <= battle.mine) {
     throw new Error(`enemy should start ahead: ${battle.mine} v ${battle.theirs}`);
   }
-  if (battle.expedition < 8) throw new Error(`expedition too small: ${battle.expedition}`);
+  // Measured in SLOTS, not bodies. Since units cost 1-8 slots each, a player who
+  // spends a 19-slot budget on 3 rams and 4 militia fields 7 soldiers — a
+  // headcount floor would call that legitimate army "too small".
+  const bodies = Object.values(battle.comp).reduce((a, n) => a + n, 0);
+  const slots = compositionSlots(battle.comp);
+  if (slots < 12) throw new Error(`expedition too small: ${slots} slots (${bodies} bodies)`);
   step(`battle: ${battle.sites} sites (${battle.mine} mine, ${battle.theirs} enemy), `
-    + `expedition ${battle.expedition}`);
+    + `expedition ${slots} slots / ${bodies} bodies`);
 
   // ---- 2. the canvas is painted ------------------------------------------
   const painted = await page.eval(() => {

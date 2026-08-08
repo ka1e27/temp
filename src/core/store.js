@@ -14,6 +14,7 @@
 // PURE: no Date.now, no localStorage, no DOM. `now` is injected everywhere.
 
 import { REGIONS } from '../content/regions.data.js';
+import { UNIT_IDS } from '../content/balance.js';
 
 /**
  * Version of the PERSISTED SHAPE. It lives here rather than in meta/save.js
@@ -66,6 +67,13 @@ export function createMeta() {
     upgrades: {},
     /** boosterId -> charges owned. */
     boosters: {},
+    /**
+     * The expedition the player last launched with, carried into the next
+     * pre-battle screen. `null` until they have chosen once, which is what makes
+     * a first-time player get the default spread instead of an empty army.
+     * A standing preference, so it belongs to meta and NOT to battle state.
+     */
+    loadout: null,
     stats: createStats(),
     /** Coach marks run once, in region 1 only, and never replay after this. */
     tutorialSeen: false,
@@ -136,6 +144,7 @@ export function fromPersisted(data, { now = 0 } = {}) {
   meta.incomePerSec = Math.max(0, num(m.incomePerSec, 0));
   meta.upgrades = sanitizeLevels(m.upgrades);
   meta.boosters = sanitizeLevels(m.boosters);
+  meta.loadout = sanitizeComposition(m.loadout);
   meta.stats = { ...createStats(), ...(m.stats ?? {}) };
   // Absent on saves written before onboarding existed: those players have
   // already learned the game, so defaulting to "seen" would be wrong only for
@@ -156,6 +165,24 @@ export function fromPersisted(data, { now = 0 } = {}) {
 }
 
 const num = (v, fallback) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+/**
+ * A saved expedition, healed rather than trusted: unknown unit ids are dropped,
+ * counts are floored to non-negative integers, and an all-zero army becomes
+ * `null` so the screen falls back to the default spread. Whether it still FITS
+ * the budget is not decided here — meta/composition.js carryComposition() owns
+ * that, because the budget can legitimately move between sessions.
+ */
+function sanitizeComposition(comp) {
+  if (!comp || typeof comp !== 'object') return null;
+  const out = {};
+  let any = 0;
+  for (const u of UNIT_IDS) {
+    out[u] = Math.max(0, Math.floor(num(comp[u], 0)));
+    any += out[u];
+  }
+  return any > 0 ? out : null;
+}
 
 function sanitizeLevels(obj) {
   const out = {};

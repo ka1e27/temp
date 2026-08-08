@@ -1,5 +1,5 @@
-// The pure half of the screens: boot routing, the loadout's composition
-// arithmetic, the briefing, and the four results branches.
+// The pure half of the screens: boot routing, the briefing, and the four
+// results branches. The expedition loadout has its own file, tests/loadout.js.
 //
 // None of these touch the DOM, which is the point — the decisions a screen
 // makes are separable from the elements it builds, and they are exactly the
@@ -13,12 +13,8 @@ import { UNIT_IDS } from '../src/content/balance.js';
 import { REGION_IDS } from '../src/content/regions.data.js';
 import { refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome } from '../src/meta/idle.js';
-import { buildBattleConfig, expeditionSize, fallbackMapGen } from '../src/meta/modifiers.js';
 import { isFreshCampaign, bootRoute, firstRegionId } from '../src/screens/mainmenu.js';
-import {
-  initialComposition, nudgeComposition, canNudge, compositionTotal, regionBrief,
-  UNIT_LABEL, BOOSTER_LABEL,
-} from '../src/screens/prebattle.js';
+import { regionBrief, UNIT_LABEL, BOOSTER_LABEL } from '../src/screens/prebattle.js';
 import { resultCopy, statRows } from '../src/screens/results.js';
 
 const world = (conquered = [], upgrades = {}, crowns = 0) => {
@@ -61,97 +57,11 @@ test('the skipped-to region is the one region an empty empire can reach', () => 
   assert.notEqual(firstRegionId(world(['riverfen'])), 'riverfen');
 });
 
-// ===========================================================================
-// The loadout. fitComposition() was dead code; this is what now feeds it.
-// ===========================================================================
-
-test('the loadout opens pre-filled and never blank', () => {
-  const s = world();
-  const comp = initialComposition(s.meta);
-  assert.equal(compositionTotal(comp), expeditionSize(s.meta));
-  assert.ok(comp.militia > 0 && comp.spearmen > 0, 'the default spread uses both free units');
-  for (const u of ['raiders', 'rams', 'marshal']) {
-    assert.equal(comp[u], 0, `${u} is locked and must not be deployed`);
-  }
-});
-
-test('re-opening on a previous army re-fits it to today’s budget', () => {
-  const small = world();
-  const chosen = initialComposition(small.meta);
-  // Two more regions and a Standing Army level: a bigger budget, same shape.
-  const big = world(['riverfen', 'ashford'], { standingArmy: 2 });
-  const refit = initialComposition(big.meta, chosen);
-  assert.equal(compositionTotal(refit), expeditionSize(big.meta));
-  assert.ok(compositionTotal(refit) > compositionTotal(chosen));
-  assert.ok(refit.militia > refit.spearmen, 'the militia-heavy ratio survived the refit');
-});
-
-test('a step moves exactly one troop and NEVER changes the total', () => {
-  const unlocked = ['militia', 'spearmen', 'raiders'];
-  let comp = { militia: 8, spearmen: 5, raiders: 3, rams: 0, marshal: 0 };
-  const before = compositionTotal(comp);
-
-  comp = nudgeComposition(comp, 'raiders', +1, unlocked);
-  assert.equal(compositionTotal(comp), before);
-  assert.equal(comp.raiders, 4);
-  assert.equal(comp.militia, 7, 'taken from the largest other unit');
-
-  comp = nudgeComposition(comp, 'raiders', -1, unlocked);
-  assert.equal(compositionTotal(comp), before);
-  assert.equal(comp.raiders, 3);
-});
-
-test('a step can never mint, steal or leak a soldier', () => {
-  const unlocked = ['militia', 'spearmen'];
-  // Everything on one unit: + is impossible, - is not.
-  const all = { militia: 0, spearmen: 12, raiders: 0, rams: 0, marshal: 0 };
-  assert.equal(canNudge(all, 'spearmen', +1, unlocked), false);
-  assert.deepEqual(nudgeComposition(all, 'spearmen', +1, unlocked), all);
-  assert.equal(canNudge(all, 'spearmen', -1, unlocked), true);
-  assert.equal(compositionTotal(nudgeComposition(all, 'spearmen', -1, unlocked)), 12);
-
-  // A locked unit is not adjustable at all.
-  assert.equal(canNudge(all, 'rams', +1, unlocked), false);
-  // Nor is the Marshal, which is granted as exactly one.
-  assert.equal(canNudge({ ...all, marshal: 1 }, 'marshal', +1, [...unlocked, 'marshal']), false);
-
-  // A single unlocked unit has nobody to trade with.
-  assert.equal(canNudge({ militia: 9 }, 'militia', +1, ['militia']), false);
-  assert.equal(canNudge({ militia: 9 }, 'militia', -1, ['militia']), false);
-});
-
 test('every unit and booster the game can offer has a label', () => {
   for (const u of UNIT_IDS) assert.ok(UNIT_LABEL[u], `no label for unit ${u}`);
   for (const b of ['rally', 'march', 'bombard', 'fortify', 'tithe']) {
     assert.ok(BOOSTER_LABEL[b], `no label for booster ${b}`);
   }
-});
-
-// ===========================================================================
-// What the screen chooses is what actually lands.
-// ===========================================================================
-
-test('a chosen composition survives buildBattleConfig unchanged', () => {
-  const s = world(['riverfen'], { unlockRaiders: 1 });
-  const total = expeditionSize(s.meta);
-  let comp = initialComposition(s.meta);
-  const unlocked = ['militia', 'spearmen', 'raiders'];
-  for (let i = 0; i < 4; i++) comp = nudgeComposition(comp, 'raiders', +1, unlocked);
-
-  const config = buildBattleConfig(s, 'ashford', [], fallbackMapGen, { composition: comp });
-  // The seam re-fits, so this is the assertion that matters: what the player
-  // built is what the camp is handed, to the soldier.
-  for (const u of UNIT_IDS) assert.equal(config.player.expedition[u], comp[u], u);
-  assert.equal(compositionTotal(config.player.expedition), total);
-});
-
-test('omitting the composition still yields the default weighting', () => {
-  const s = world();
-  const a = buildBattleConfig(s, 'riverfen', [], fallbackMapGen);
-  const b = buildBattleConfig(s, 'riverfen', [], fallbackMapGen, {
-    composition: initialComposition(s.meta),
-  });
-  assert.deepEqual(b.player.expedition, a.player.expedition);
 });
 
 // ===========================================================================

@@ -26,6 +26,34 @@ export const UNITS = {
               counters: {}, banner: 0.20, trainBuff: 0.30, maxPerSite: 1 },
 };
 
+/**
+ * What one of each unit costs against the EXPEDITION budget.
+ *
+ * Without this every unit costs one seat and the optimal loadout is trivially
+ * "as many marshals/raiders as the roster allows" — there is no decision.
+ *
+ * The anchor is the gold price above, because gold is already this game's own
+ * statement of what a unit is worth (every unit runs at 3.0-4.5 gold/sec, so a
+ * gold ratio IS a value ratio). Raw gold ratios are 1 / 2 / 3.75 / 6.67 / 15,
+ * which prices a marshal above an entire starting expedition — unbuyable, not a
+ * choice. So the curve is compressed by roughly gold^0.83:
+ *
+ *     militia 1   spearmen 2   raiders 3   rams 5   marshal 8
+ *
+ * Read as gold-per-slot that is 12 / 12 / 15 / 16 / 22.5: militia and spearmen
+ * are priced exactly at their gold value, and the three unlockables carry a
+ * deliberate discount so a specialist is affordable rather than theoretical.
+ * The marshal's +20% banner pays for its 8 slots at roughly 18 slots of army
+ * and up, which is where a player who has bought a 4000-crown unlock already is.
+ *
+ * The scale is anchored on militia = 1 on purpose: a leftover slot always buys
+ * exactly one militia, so a budget is always spendable to the last slot and a
+ * budget INCREASE always has somewhere to go.
+ */
+export const UNIT_SLOTS = {
+  militia: 1, spearmen: 2, raiders: 3, rams: 5, marshal: 8,
+};
+
 /** Structure HP + regen is the master pacing knob: it sets BOTH battle length
  *  and the minimum-force threshold. A force whose siege DPS is below `hpRegen`
  *  can never breach, which is what stops a handful of troops taking a
@@ -90,8 +118,22 @@ export const BOOSTERS = {
   tithe:    { charges: 2, cooldownSec: 90,  gold: 250, trainMult: 1.5, sec: 15 },
 };
 
-/** Expedition = base + perRegion * regionsConquered + StandingArmy upgrade. */
-export const EXPEDITION = { base: 14, perRegion: 4 };
+/**
+ * Expedition budget, in SLOTS (see UNIT_SLOTS), not bodies:
+ *     base + perRegion * regionsConquered + 4 per Standing Army level.
+ *
+ * Re-based when slot costs landed. The old headcount numbers (14 + 4/region)
+ * bought a default 9 militia + 5 spearmen at region 1, which is 19 slots — so
+ * base moved 14 -> 19 and hands region 1 back the identical opening army.
+ *
+ * perRegion is 10 rather than the naive x1.36 (~5.5) for two reasons that only
+ * a run of tools/simrunner.js shows: Standing Army's flat +4 is now +4 SLOTS
+ * rather than +4 bodies, and the late slice unlocks raiders, which cost three
+ * slots each. At 9/region Kaldan sits at 56% win / 22.0m (n=240) against a
+ * 22.4m ceiling; at 10 it is 63% / 20.1m, which is also better than the 59% /
+ * 23.5m TOO SLOW this file shipped with. Tuned on the harness, not on paper.
+ */
+export const EXPEDITION = { base: 19, perRegion: 10 };
 
 /**
  * A rallied site forwards its garrison once it can do so and still keep this

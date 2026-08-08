@@ -27,12 +27,15 @@
 import {
   CONTRACT_VERSION, makeMods, assertBattleConfig, hashBattleConfig,
 } from '../battle/contract.js';
-import { EXPEDITION, UNIT_IDS, SITES, SITE_LEVELS, AI_TIERS } from '../content/balance.js';
+import { EXPEDITION, SITES, SITE_LEVELS, AI_TIERS } from '../content/balance.js';
 import {
   REGION_BY_ID, ENEMY_SCALING, BASE_GARRISON, NEUTRAL_GARRISON,
   PLAYER_SITE_GARRISON, BATTLE_START, ENEMY_UNITS_BY_TIER, FALLBACK_MAP,
 } from '../content/regions.data.js';
-import { DEFAULT_COMPOSITION_WEIGHTS } from '../content/upgrades.data.js';
+import {
+  zeroComposition, distributeExpedition, fitComposition, carryComposition,
+  compositionSlots, compositionTotal, overBudget, slotCost,
+} from './composition.js';
 import { metaOf } from '../core/store.js';
 import { createRng, deriveSeed } from '../core/rng.js';
 import {
@@ -43,6 +46,12 @@ import { regionsConquered, effectiveEnemyMult, record, isConquered } from './wor
 import { toConfigBoosters } from './boosters.js';
 
 export { hashBattleConfig };
+// The composition math lives in ./composition.js; re-exported so the seam has
+// one front door and callers never have to know which file split from which.
+export {
+  distributeExpedition, fitComposition, carryComposition,
+  compositionSlots, compositionTotal, overBudget, slotCost,
+};
 
 /** The one true order. Asserted in tests; never reorder without a test change. */
 export const STACKING_ORDER = Object.freeze([
@@ -61,61 +70,25 @@ export function stack(base, s = {}) {
   return base * (1 + additive) * multiplicative * boosters * tier;
 }
 
-const zeroComp = () => Object.fromEntries(UNIT_IDS.map((u) => [u, 0]));
+const zeroComp = zeroComposition;
 
 // --- The expeditionary force: the direct answer to the enemy always starting
 // --- with more land. You arrive with an army sized by what you already hold.
 
-/** 8 + 4 x regionsConquered + 4 x Standing Army level. */
-export function expeditionSize(metaState) {
+/**
+ * The expedition budget in SLOTS, not bodies:
+ *   19 + 9 x regionsConquered + 4 x Standing Army level.
+ *
+ * Every unit spends a different number of them (content/balance.js UNIT_SLOTS),
+ * which is what stops "all marshals" from being the only sane loadout.
+ */
+export function expeditionSlots(metaState) {
   const meta = metaOf(metaState);
   const fx = upgradeEffects(meta);
   const base = EXPEDITION.base
     + EXPEDITION.perRegion * regionsConquered(meta)
     + flatBonus(fx, 'expedition');
   return Math.max(0, Math.round(stack(base)));
-}
-
-/**
- * Split `total` troops across the unlocked units by weight, exactly.
- * Largest-remainder so the counts always sum to `total` — an off-by-one here is
- * a free or stolen soldier, and players notice.
- * A Marshal is granted as exactly one (max 1 per site) before the split.
- */
-export function distributeExpedition(total, unlocked, weights = DEFAULT_COMPOSITION_WEIGHTS) {
-  const out = zeroComp();
-  let left = Math.max(0, Math.floor(total));
-  if (left === 0) return out;
-
-  if (unlocked.includes('marshal') && left > 0) { out.marshal = 1; left -= 1; }
-
-  const pool = UNIT_IDS.filter(
-    (u) => u !== 'marshal' && unlocked.includes(u) && (weights[u] ?? 0) > 0,
-  );
-  if (pool.length === 0) { out.militia += left; return out; }
-
-  const sum = pool.reduce((a, u) => a + weights[u], 0);
-  const exact = pool.map((u) => ({ u, want: (left * weights[u]) / sum }));
-  for (const e of exact) { e.floor = Math.floor(e.want); out[e.u] += e.floor; }
-
-  let remainder = left - exact.reduce((a, e) => a + e.floor, 0);
-  exact.sort((a, b) =>
-    (b.want - b.floor) - (a.want - a.floor)
-    || (weights[b.u] - weights[a.u])
-    || UNIT_IDS.indexOf(a.u) - UNIT_IDS.indexOf(b.u));
-  for (let i = 0; remainder > 0; i = (i + 1) % exact.length, remainder--) out[exact[i].u] += 1;
-  return out;
-}
-
-/** Treat a player-chosen composition as RATIOS and re-fit it to the size the
- *  empire actually grants, so the pre-battle screen can never mint troops. */
-export function fitComposition(total, unlocked, chosen) {
-  const weights = {};
-  for (const u of UNIT_IDS) {
-    weights[u] = unlocked.includes(u) ? Math.max(0, Number(chosen?.[u]) || 0) : 0;
-  }
-  const any = UNIT_IDS.reduce((a, u) => a + weights[u], 0);
-  return distributeExpedition(total, unlocked, any > 0 ? weights : undefined);
 }
 
 // --- FactionMods -----------------------------------------------------------
@@ -193,10 +166,13 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   const mult = effectiveEnemyMult(meta, regionId);
 
   const fx = upgradeEffects(meta);
-  const total = expeditionSize(meta);
+  // The screen hands over a composition that already fits; re-fitting it is an
+  // identity in that case and a hard clamp in every other, so a hand-edited
+  // params object still cannot buy itself a bigger army.
+  const slots = expeditionSlots(meta);
   const expedition = options.composition
-    ? fitComposition(total, fx.units, options.composition)
-    : distributeExpedition(total, fx.units);
+    ? fitComposition(slots, fx.units, options.composition)
+    : distributeExpedition(slots, fx.units);
 
   const gen = callMapGen(mapGen, { region, seed, mult, isRaid });
   const sites = normalizeSites(gen.sites, mult);
