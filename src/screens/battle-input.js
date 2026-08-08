@@ -9,9 +9,8 @@
 //
 // The commit-size decision is GLOBAL (strength selector + unit filters), never
 // a modal between intent and action — a dialog in a real-time game is a bug.
-import { SEND_FRACTIONS } from '../content/balance.js';
 import { createDisposer } from '../ui/dom.js';
-import { BOOSTER_BY_KEY, FILTER_BY_KEY, SPEED_KEYS } from './battle-keys.js';
+import { createHotkeys } from './battle-hotkeys.js';
 import { createOrders, cmd } from './battle-orders.js';
 
 export { cmd, filterList } from './battle-orders.js';
@@ -40,6 +39,9 @@ export function createView(init = {}) {
      *  order, and it should not look like a squad leaving now. */
     rallyFrom: null,
     rallyTo: null,
+    /** Sites the current drag is routing THROUGH, in order, excluding both the
+     *  source and the destination. Empty for an ordinary one-hop order. */
+    chain: [],
     pointer: { x: 0, y: 0 },
     box: null,
     trainPickerFor: null,
@@ -73,6 +75,7 @@ export function createBattleInput(o) {
     view.dragTo = null;
     view.rallyFrom = null;
     view.rallyTo = null;
+    view.chain.length = 0;
     view.box = null;
     canvas.classList.remove('is-dragging');
   }
@@ -159,10 +162,15 @@ export function createBattleInput(o) {
       view.hoverId = board.siteAt(getState(), w.x, w.y)?.id ?? null;
       if (view.rallyFrom) {
         const from = ord.site(view.rallyFrom);
-        // Snapped target may BE the source — that is how you clear a rally, so
-        // it is kept rather than nulled, and the renderer says so.
-        const t = from ? ord.snapTarget(from, w.x, w.y) : null;
-        view.rallyTo = t ? t.id : null;
+        if (from) {
+          growChain(from, board.siteAt(getState(), w.x, w.y));
+          const head = view.chain.length
+            ? ord.site(view.chain[view.chain.length - 1]) || from : from;
+          // Snapped target may BE the source — that is how you clear a rally, so
+          // it is kept rather than nulled, and the renderer says so.
+          const t = ord.snapTarget(head, w.x, w.y);
+          view.rallyTo = t ? t.id : null;
+        }
       }
       return;
     }
@@ -175,12 +183,51 @@ export function createBattleInput(o) {
 
     if (view.dragFrom) {
       const from = ord.site(view.dragFrom);
-      const t = from ? ord.snapTarget(from, w.x, w.y) : null;
-      view.dragTo = t && t.id !== from.id ? t.id : null;
+      if (from) {
+        growChain(from, hover);
+        // Legs are measured from the HEAD of the chain, not the source, so the
+        // preview leans toward what is reachable from where the column has got
+        // to rather than from where it set out.
+        const head = view.chain.length
+          ? ord.site(view.chain[view.chain.length - 1]) || from : from;
+        const t = ord.snapTarget(head, w.x, w.y);
+        view.dragTo = t && t.id !== from.id ? t.id : null;
+      }
     } else if (view.box) {
       view.box.x1 = w.x;
       view.box.y1 = w.y;
     }
+  }
+
+  /**
+   * Grow (or retrace) the chain of sites a drag is routing THROUGH.
+   *
+   * A waypoint needs a DIRECT HIT — `hover`, not `snapTarget`. snapTarget leans
+   * generously toward the nearest adjacent site so a rough drag still lands an
+   * order, and that is exactly wrong here: dragging in a straight line past a
+   * site would silently turn an ordinary two-site send into a chain. You have
+   * to actually drag over a site to route through it.
+   *
+   * Dragging back over a stop you already passed TRUNCATES there, so a wrong
+   * turn is undone by retracing it rather than by starting the drag again.
+   */
+  function growChain(from, hover) {
+    if (!hover || hover.id === from.id) return;
+    const i = view.chain.indexOf(hover.id);
+    if (i >= 0) { view.chain.length = i + 1; return; }
+    const head = view.chain.length
+      ? ord.site(view.chain[view.chain.length - 1]) || from : from;
+    // Only ground we hold can be marched through; the objective is chosen by
+    // where the drag is RELEASED, so a hostile site is never a waypoint.
+    if (hover.owner !== 'player' || !head.adj.includes(hover.id)) return;
+    view.chain.push(hover.id);
+  }
+
+  /** The waypoints for a send that ends at `toId` — the chain up to it, so a
+   *  release ON a waypoint makes that waypoint the destination instead. */
+  function chainFor(toId) {
+    const i = view.chain.indexOf(toId);
+    return i >= 0 ? view.chain.slice(0, i) : view.chain.slice();
   }
 
   function onUp(ev) {
@@ -197,7 +244,14 @@ export function createBattleInput(o) {
         // SOURCE clears, and that reads as deliberate.
         const from = ord.site(rally.fromId);
         const to = view.rallyTo ? ord.site(view.rallyTo) : null;
-        if (from && to) ord.issueRally(from, to);
+        // A chained rally sets a rally on EVERY site along the road, because
+        // rallies already cascade — so the chain is expressed with the orders
+        // the sim already has rather than a new multi-hop concept.
+        if (from && to) {
+          const chain = chainFor(to.id);
+          if (chain.length) ord.issueRallyChain(from, chain, to);
+          else ord.issueRally(from, to);
+        }
       } else {
         ord.setRally(w.x, w.y);   // click form: whatever is selected
       }
@@ -226,7 +280,7 @@ export function createBattleInput(o) {
     if (from && press.moved) {
       // Drag order. Releasing back on the source is an explicit cancel.
       const to = view.dragTo ? ord.site(view.dragTo) : null;
-      if (to && to.id !== from.id) ord.issueSend(from, to);
+      if (to && to.id !== from.id) ord.issueSend(from, to, chainFor(to.id));
       ord.selectOnly(from.id);
       view.armed = from.id;
     } else if (view.box && press.moved) {
@@ -283,53 +337,6 @@ export function createBattleInput(o) {
     return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
   }
 
-  // ---- keyboard -----------------------------------------------------------
-
-  function onKey(ev) {
-    if (ev.target !== document.body && ev.target?.tagName === 'INPUT') return;
-    const k = ev.key.toLowerCase();
-
-    const n = Number(k);
-    if (Number.isInteger(n) && n >= 1 && n <= SEND_FRACTIONS.length) {
-      view.fraction = SEND_FRACTIONS[n - 1];
-      bus?.emit('ui:fraction', view.fraction);
-      return;
-    }
-    // Esc unwinds one step at a time: the aiming reticle first, then selection.
-    if (k === 'escape') {
-      if (ord.cancelBooster()) return;
-      view.armed = null;
-      ord.selectOnly(null);
-      clearDrag();
-      rally = null;
-      return;
-    }
-
-    // `R` is documented twice in the design — as retreat and as the rams
-    // filter. Resolved by context, which is unambiguous in practice: retreat
-    // needs something selected, and you set filters when nothing is.
-    // Shift+R always means the filter.
-    if (k === 'r' && !ev.shiftKey) {
-      if (ord.retreatSelectedSquad()) return;
-      if (view.selection.length) { ord.retreatSelection(); return; }
-    }
-    if (FILTER_BY_KEY[k]) {
-      const u = FILTER_BY_KEY[k];
-      view.filter[u] = !view.filter[u];
-      bus?.emit('ui:filter', view.filter);
-      return;
-    }
-    if (BOOSTER_BY_KEY[k]) { ord.armBooster(BOOSTER_BY_KEY[k]); return; }
-    if (SPEED_KEYS[k] !== undefined) { bus?.emit('ui:speed-step', SPEED_KEYS[k]); return; }
-    // Slow-mo is HELD, not toggled, so keyup has to be heard for it to end.
-    if (k === ' ') { ev.preventDefault(); if (!ev.repeat) bus?.emit('ui:slowmo'); return; }
-    if (k === 'p') { bus?.emit('ui:pause'); }
-  }
-
-  function onKeyUp(ev) {
-    if (ev.key === ' ') bus?.emit('ui:slowmo-end');
-  }
-
   function onWheel(ev) {
     ev.preventDefault();
     board.pointer(ev, s);
@@ -337,6 +344,10 @@ export function createBattleInput(o) {
     board.releaseAutoFit();
     board.markBgDirty();
   }
+
+  const { onKey, onKeyUp } = createHotkeys({
+    view, ord, bus, clearDrag, cancelGestures: () => { rally = null; press = null; },
+  });
 
   off.listen(canvas, 'pointerdown', onDown);
   off.listen(canvas, 'pointermove', onMove);

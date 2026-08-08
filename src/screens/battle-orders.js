@@ -11,7 +11,8 @@
 // buffering, a replayable command log, and a UI that structurally cannot
 // corrupt the sim.
 import { UNIT_IDS } from '../content/balance.js';
-import { arcPoint, squadProgress, squadBow } from '../render/routes.js';
+import { squadProgress, squadBow } from '../render/routes.js';
+import { loadStops, routeAt } from '../render/routePath.js';
 import { needsTarget } from './battle-keys.js';
 
 /** Click slop for picking an in-flight squad off its arc, as a fraction of a
@@ -20,7 +21,6 @@ const SQUAD_PICK = 0.5;
 
 // Module-scope scratch: nothing on the click path allocates.
 const _a = { x: 0, y: 0 };
-const _b = { x: 0, y: 0 };
 const _p = { x: 0, y: 0 };
 
 /** Enabled unit ids in canonical order — stable, so the command log hashes
@@ -34,7 +34,9 @@ export const filterList = (filter) => UNIT_IDS.filter((u) => filter[u] !== false
  * that tolerance, because the log is also the determinism test's input.
  */
 export const cmd = {
-  send: (from, to, fraction, filter) => ({ t: 'SEND', from, to, fraction, filter }),
+  send: (from, to, fraction, filter, via) => (via && via.length
+    ? { t: 'SEND', from, to, fraction, filter, via }
+    : { t: 'SEND', from, to, fraction, filter }),
   rally: (site, target) => ({ t: 'RALLY', site, target: target ?? null }),
   rallyKeep: (site, keep) => ({ t: 'RALLY_KEEP', site, keep }),
   retreat: (site) => ({ t: 'RETREAT', site }),
@@ -51,6 +53,10 @@ export const cmd = {
  */
 export function createOrders(o) {
   const { canvas, board, view, getState, bus } = o;
+
+  // The geometry bundle routePath.js wants, built ONCE so squad hit-testing can
+  // reuse the renderer's own route walk instead of keeping a second copy of it.
+  const geo = { byId: (id) => site(id), pos: (s, out) => board.sitePos(s, out) };
 
   const push = (c) => {
     getState().commands.push(c);
@@ -81,9 +87,58 @@ export function createOrders(o) {
     return best;
   }
 
-  function issueSend(from, to) {
-    if (!canSend(from, to)) return false;
-    push(cmd.send(from.id, to.id, view.fraction, filterList(view.filter)));
+  /**
+   * `chain` is the ordered list of sites the drag passed through between the
+   * source and the target, excluding both. Empty for an ordinary send, so the
+   * one-hop and chained paths are literally the same call.
+   */
+  function issueSend(from, to, chain) {
+    const via = chain && chain.length ? chain : null;
+    if (via ? !canChain(from, via, to) : !canSend(from, to)) return false;
+    push(cmd.send(from.id, to.id, view.fraction, filterList(view.filter), via));
+    return true;
+  }
+
+  /**
+   * Mirror of battle/commands.js `checkVia`, so the UI refuses exactly what the
+   * simulation would refuse and a drag can never build an order that silently
+   * dies on arrival. Every leg adjacent; every stop PASSED THROUGH is ours; the
+   * final stop is the objective and may be hostile; no stop twice.
+   */
+  function canChain(from, via, to) {
+    if (!from || !to || from.owner !== 'player') return false;
+    const stops = [from.id, ...via, to.id];
+    const seen = new Set();
+    for (let i = 0; i < stops.length; i++) {
+      if (seen.has(stops[i])) return false;
+      seen.add(stops[i]);
+      if (i === 0) continue;
+      const prev = site(stops[i - 1]);
+      const cur = site(stops[i]);
+      if (!prev || !cur || !prev.adj.includes(cur.id)) return false;
+      if (i < stops.length - 1 && cur.owner !== 'player') return false;
+    }
+    return true;
+  }
+
+  /**
+   * A chained RALLY is not one long standing order — it is a rally on EVERY
+   * site along the road. Rallies already cascade (A→B and B→C flows troops
+   * through B), so setting the chain is all it takes, and the sim needs no
+   * concept of a multi-hop rally at all. It also degrades honestly: break the
+   * middle site and the front half of the chain simply stops.
+   * @returns {boolean} true when every link was legal and issued.
+   */
+  function issueRallyChain(from, chain, to) {
+    const stops = [from, ...chain.map((id) => site(id)), to].filter(Boolean);
+    if (stops.length < 2) return false;
+    for (let i = 0; i < stops.length - 1; i++) {
+      // The last hop may target ground we do not hold — a standing attack order
+      // — but every site DOING the rallying has to be ours.
+      if (stops[i].owner !== 'player') return false;
+      if (!stops[i].adj.includes(stops[i + 1].id)) return false;
+    }
+    for (let i = 0; i < stops.length - 1; i++) issueRally(stops[i], stops[i + 1]);
     return true;
   }
 
@@ -243,12 +298,11 @@ export function createOrders(o) {
     let bestD = r * r;
     for (let i = 0; i < st.squads.length; i++) {
       const sq = st.squads[i];
-      const from = site(sq.from);
-      const to = site(sq.to);
-      if (!from || !to) continue;
-      board.sitePos(from, _a);
-      board.sitePos(to, _b);
-      arcPoint(_a.x, _a.y, _b.x, _b.y, squadBow(sq), squadProgress(sq, st.tick), _p);
+      // Through the SAME polyline the renderer walks: a chained squad drawn on
+      // leg three must not be clickable back on leg one.
+      const stops = loadStops(sq, geo);
+      if (!stops) continue;
+      routeAt(sq, stops, squadProgress(sq, st.tick), squadBow(sq), _p, null);
       const dx = wx - _p.x;
       const dy = wy - _p.y;
       const d = dx * dx + dy * dy;
@@ -279,7 +333,7 @@ export function createOrders(o) {
   }
 
   return {
-    push, site, canSend, snapTarget, issueSend, issueRally, issueRallyKeep,
+    push, site, canSend, canChain, snapTarget, issueSend, issueRally, issueRallyChain, issueRallyKeep,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
   };

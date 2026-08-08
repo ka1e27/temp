@@ -247,6 +247,63 @@ try {
     step(`right-drag rally: ${rally.fromId} -> ${rally.toId}`);
   }
 
+  // ---- 5c. a chained drag routes THROUGH a waypoint -----------------------
+  // Waypoints require a DIRECT HIT rather than snapTarget's forgiving lean, so
+  // this has to be a real drag that actually passes over the middle site. A
+  // unit test cannot show that: it is the gesture that is under test here.
+  const chain = await page.eval(() => {
+    const g = window.__game;
+    const b = g.state.battle;
+    const byId = (id) => b.sites.find((s) => s.id === id);
+    // camp -> some site we own -> anything beyond it.
+    const src = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
+    let mid = null; let dst = null;
+    for (const m of src.adj.map(byId)) {
+      if (!m) continue;
+      const d = m.adj.map(byId).find((x) => x && x.id !== src.id && !src.adj.includes(x.id));
+      if (d) { mid = m; dst = d; break; }
+    }
+    if (!mid || !dst) return null;
+    // A waypoint must be ground we hold, and a fresh map does not reliably hand
+    // us a camp -> owned -> beyond path. The GESTURE is what is under test, so
+    // the precondition is set up rather than waited for.
+    mid.owner = 'player';
+    const pt = (s) => { const p = g.__view.siteScreen(s, {}); return { x: Math.round(p.x), y: Math.round(p.y) }; };
+    return { from: pt(src), mid: pt(mid), to: pt(dst), fromId: src.id, midId: mid.id, toId: dst.id };
+  });
+  if (!chain) note('no camp -> owned -> beyond path on this map to chain along');
+  else {
+    // Identify the new squad by ID, never by index: squads are REMOVED from the
+    // array when they arrive, so an index taken before the drag can point past
+    // the end by the time it lands.
+    const before = await page.eval(() => window.__game.state.battle.nextSquadId);
+    // Drag in two straight runs so the pointer genuinely crosses the middle site.
+    await page.mouse('mouseMoved', chain.from.x, chain.from.y, 'none', 0);
+    await page.mouse('mousePressed', chain.from.x, chain.from.y, 'left', 1);
+    for (const leg of [[chain.from, chain.mid], [chain.mid, chain.to]]) {
+      for (let i = 1; i <= 10; i++) {
+        await page.mouse('mouseMoved',
+          leg[0].x + ((leg[1].x - leg[0].x) * i) / 10,
+          leg[0].y + ((leg[1].y - leg[0].y) * i) / 10, 'left', 1);
+        await page.sleep(16);
+      }
+    }
+    await page.mouse('mouseReleased', chain.to.x, chain.to.y, 'left', 0);
+    await page.sleep(700);
+
+    const got = await page.eval((minId) => {
+      const sq = window.__game.state.battle.squads.filter((s) => s.id >= minId).at(-1);
+      return sq ? { route: sq.route ?? null, to: sq.to, legs: sq.legEnds?.length ?? 0 } : null;
+    }, before);
+    if (!got) throw new Error('a chained drag produced no squad');
+    if (!got.route || got.route.length < 3) {
+      throw new Error(`drag ${chain.fromId}->${chain.midId}->${chain.toId} did not chain: `
+        + `route=${JSON.stringify(got.route)} to=${got.to}`);
+    }
+    step(`chained drag: ${got.route.join(' -> ')} (${got.legs} legs)`);
+    await page.screenshot(`${OUT}/05-chain.png`);
+  }
+
   // ---- 6. effects actually render ----------------------------------------
   let sawFx = false;
   for (let i = 0; i < 12 && !sawFx; i++) {

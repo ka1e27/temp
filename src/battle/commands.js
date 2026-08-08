@@ -37,12 +37,51 @@ export function filterComp(comp, filter) {
 
 // --- individual orders -----------------------------------------------------
 
+/**
+ * Validate an optional chain of intermediate stops for a SEND.
+ *
+ * Sends are adjacency-only, which is the rule that makes the site graph mean
+ * something. A chain does not break it — it just lets one order express several
+ * legal hops instead of making the player issue them one at a time and babysit
+ * each arrival. So EVERY leg must still be adjacent, and every stop in between
+ * must be ground the sender already holds: you may march THROUGH your own
+ * territory, never through someone else's.
+ *
+ * @returns {string[]|string|null} the via list, a rejection reason, or null.
+ */
+function checkVia(state, cmd, from, to, by) {
+  const via = cmd.via;
+  if (via === undefined || via === null) return null;
+  if (!Array.isArray(via) || !via.length) return 'malformed';
+
+  const stops = [from.id, ...via, to.id];
+  const seen = new Set();
+  for (let i = 0; i < stops.length; i++) {
+    // A repeated stop is a route that doubles back on itself — always a misdrag.
+    // It is also what bounds the chain: no repeats means no route can be longer
+    // than the site count, so no arbitrary MAX_CHAIN constant is needed.
+    if (seen.has(stops[i])) return 'chain-repeats';
+    seen.add(stops[i]);
+    if (i === 0) continue;
+    const prev = siteById(state, stops[i - 1]);
+    const cur = siteById(state, stops[i]);
+    if (!cur) return 'unknown-site';
+    if (!prev.adj.includes(cur.id)) return 'not-adjacent';
+    // The final stop is the objective and may be hostile; everything the
+    // column merely passes through has to be ours.
+    if (i < stops.length - 1 && cur.owner !== by) return 'chain-not-yours';
+  }
+  return via;
+}
+
 function cmdSend(state, cmd, by) {
   const from = siteById(state, cmd.from);
   const to = siteById(state, cmd.to);
   if (!from || !to) return 'unknown-site';
   if (from.owner !== by) return 'not-your-site';
-  if (!from.adj.includes(to.id)) return 'not-adjacent';
+  const via = checkVia(state, cmd, from, to, by);
+  if (typeof via === 'string') return via;
+  if (!via && !from.adj.includes(to.id)) return 'not-adjacent';
   const frac = Math.min(1, Math.max(0, Number(cmd.fraction ?? 1)));
   if (!(frac > 0)) return 'bad-fraction';
 
@@ -51,7 +90,7 @@ function cmdSend(state, cmd, by) {
 
   from.garrison = subComp(from.garrison, send);
   const squad = spawnSquad(state, {
-    owner: by, from: from.id, to: to.id, comp: send, arriveTick: cmd.arriveTick | 0,
+    owner: by, from: from.id, to: to.id, comp: send, arriveTick: cmd.arriveTick | 0, via,
   });
   pushEvent(state, EVENTS.SQUAD_SENT, {
     squadId: squad.id, owner: by, from: from.id, to: to.id, arriveTick: squad.arriveTick,

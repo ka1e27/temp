@@ -20,6 +20,7 @@ import {
   pieceCount, formationFiles, formationRanks, planUnits, wobble,
   beginPieces, addPiece, flushPieces, ownerIndex,
 } from './formation.js';
+import { loadStops, legIndex, legSpan, routeAt, tracePolyline } from './routePath.js';
 
 const _a = { x: 0, y: 0 };
 const _b = { x: 0, y: 0 };
@@ -145,8 +146,10 @@ export function drawSquads(ctx, state, t, px, g) {
 
     const f = squadProgress(sq, t);
     const bow = squadBow(sq);
-    g.pos(from, _a);
-    g.pos(to, _b);
+    // A chained send has more than two stops, so position comes from the
+    // polyline rather than one arc. loadStops() fills the shared scratch.
+    const stops = loadStops(sq, g);
+    if (!stops) continue;
 
     const pieces = pieceCount(troops);
     const files = formationFiles(pieces);
@@ -160,18 +163,24 @@ export function drawSquads(ctx, state, t, px, g) {
     const rg = ret ? rankGap * 1.25 : rankGap;
 
     // Rank spacing in route-parameter terms, capped so a very short link is
-    // never wholly swallowed by a very deep column.
-    const ex = _b.x - _a.x;
-    const ey = _b.y - _a.y;
-    const span = Math.sqrt(ex * ex + ey * ey) || 1;
+    // never wholly swallowed by a very deep column. On a chain the head's own
+    // leg sets the scale, so a column crossing a short hop mid-route keeps its
+    // depth instead of concertinaing.
+    const headLeg = legIndex(sq, stops, f > 0 ? (f < 1 ? f : 1) : 0);
+    // `f` is GLOBAL across the whole chain, so a pixel gap converts through the
+    // head leg's pixels-per-global-parameter — not through its raw length, which
+    // on a four-stop route would be a quarter of the scale it needs to be.
+    const paramSpan = stops > 2 && sq.legEnds
+      ? Math.max(1e-6, sq.legEnds[headLeg] - (headLeg > 0 ? sq.legEnds[headLeg - 1] : 0))
+      : 1;
+    const span = legSpan(headLeg) / paramSpan;
     const dt = Math.min(rg / span, 0.44 / (ranks > 1 ? ranks - 1 : 1));
 
     let slot = 0;
     for (let r = 0; r < ranks; r++) {
       const at = f - r * dt;
       const tr = at > 0 ? at : 0;
-      arcPoint(_a.x, _a.y, _b.x, _b.y, bow, tr, _c);
-      arcHeading(_a.x, _a.y, _b.x, _b.y, bow, tr, _d);
+      routeAt(sq, stops, tr, bow, _c, _d);
       // Ranks that have not cleared the gate yet queue up in a straight line
       // BEHIND it instead of piling onto t=0. Without this a large army looks
       // small for the first quarter of its journey, which is precisely the
@@ -207,14 +216,35 @@ export function drawSquadLabels(ctx, state, t, px, g, owner) {
     let n = 0;
     for (let k = 0; k < UNIT_IDS.length; k++) n += sq.comp[UNIT_IDS[k]] || 0;
     if (n < 5) continue;
-    const from = g.byId(sq.from);
-    const to = g.byId(sq.to);
-    if (!from || !to) continue;
-    g.pos(from, _a);
-    g.pos(to, _b);
-    arcPoint(_a.x, _a.y, _b.x, _b.y, squadBow(sq), squadProgress(sq, t), _c);
+    const stops = loadStops(sq, g);
+    if (!stops) continue;
+    routeAt(sq, stops, squadProgress(sq, t), squadBow(sq), _c, null);
     ctx.fillText(numStr(n), _c.x, _c.y - g.hexSize * 0.44);
   }
+}
+
+/**
+ * The road a chained squad is walking, drawn faintly behind it. Without this a
+ * column crossing a site it is only passing THROUGH looks like it is arriving
+ * there, which is the one thing chaining must never be ambiguous about.
+ */
+export function drawSquadRoutes(ctx, state, px, g) {
+  DASH[0] = px * 2;
+  DASH[1] = px * 7;
+  ctx.setLineDash(DASH);
+  ctx.lineWidth = px * 1.5;
+  for (let i = 0; i < state.squads.length; i++) {
+    const sq = state.squads[i];
+    if (!sq.route) continue;
+    const stops = loadStops(sq, g);
+    if (!stops) continue;
+    tracePolyline(ctx, stops, squadBow(sq));
+    ctx.strokeStyle = g.palette.owner[sq.owner] || g.palette.link;
+    ctx.globalAlpha = 0.4;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.setLineDash(NO_DASH);
 }
 
 /** Rally lines: a site that auto-sends once its garrison passes the threshold.
@@ -250,6 +280,31 @@ const OWNERS2 = ['player', 'enemy'];
  * learned by feel rather than read in a tooltip.
  * @returns {object|null} the snapped target site
  */
+/**
+ * The confirmed legs of a chained drag, behind the live head arc.
+ *
+ * Solid and accent-coloured because these hops are already committed — the only
+ * undecided leg is the one still following the pointer. `chain` is the ordered
+ * list of ids the drag has routed through, excluding the source.
+ */
+export function drawChainLegs(ctx, from, chain, px, g) {
+  if (!chain || !chain.length) return null;
+  let prev = from;
+  ctx.strokeStyle = g.palette.selection;
+  ctx.lineWidth = px * 3;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < chain.length; i++) {
+    const next = g.byId(chain[i]);
+    if (!next) break;
+    g.pos(prev, _a);
+    g.pos(next, _b);
+    arcPath(ctx, _a.x, _a.y, _b.x, _b.y, 1);
+    ctx.stroke();
+    prev = next;
+  }
+  return prev;   // the head the live leg should start from
+}
+
 export function drawDragArc(ctx, from, to, pointer, px, g) {
   const p = g.palette;
   g.pos(from, _a);
