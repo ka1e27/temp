@@ -257,6 +257,10 @@ export function derive(c) {
   // it is on nearly every non-farm site at once and must never out-shout a
   // thing the player actually picked.
   p.train = withAlpha(c.accent, 0.72);
+  // A site being upgraded pegs out its next storey as dashed scaffolding. Same
+  // accent as training, one notch brighter: both mean "paid for, not finished",
+  // and the dashes are what keep the ghost from reading as built stone.
+  p.building = withAlpha(c.accent, 0.85);
   p.selection = withAlpha(c.accent, 0.9);
   p.selectionFill = withAlpha(c.accent, 0.12);
   // Hover gets its own value rather than borrowing the box-select fill: it is

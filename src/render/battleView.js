@@ -21,8 +21,9 @@ import {
 } from './hexRenderer.js';
 import {
   siteRadius, drawSiteBase, drawHpRing, drawSiegeRing, drawSiteState,
-  drawGarrisonPlaque, drawSelection, drawHover, garrisonLabelY,
+  drawGarrisonPlaque, drawSelection, drawHover, garrisonLabelY, builtLevel,
 } from './siteGlyphs.js';
+import { siteHeadYAt } from './siteShapes.js';
 import {
   drawSquads, drawSquadLabels, drawRallies, drawDragArc, drawRallyDrag, drawBox,
 } from './routes.js';
@@ -280,7 +281,11 @@ export function createBattleView(opts) {
    *  the opposite of the chevron this replaces: it puts the militia screen
    *  against the structure and sweeps the crescent's wings the right way. */
   function drawSiegeStack(ctx, site, cx, cy, r, px) {
-    drawStaticFormation(ctx, site.siege.comp, cx, cy - r * 1.25 - px * 20,
+    // Hung off the built roofline rather than a fixed 1.25r, because a level-3
+    // tower now grows up into where the besiegers used to sit. At L1 this is
+    // 1.22r, so an un-upgraded site is unchanged.
+    const head = siteHeadYAt(site.kind, builtLevel(site)) + 0.3;
+    drawStaticFormation(ctx, site.siege.comp, cx, cy - r * head - px * 20,
       Math.PI / 2, Math.max(hexSize * 0.1, px * 2.2), site.siege.owner, px, p);
   }
 
@@ -320,18 +325,29 @@ export function createBattleView(opts) {
 
 // --- helpers ----------------------------------------------------------------
 
+/** `builtLevel`, not `s.level`: the level increments when the upgrade is paid
+ *  for, but the sim keeps producing — and capping — at the OLD level until the
+ *  work finishes. Using s.level here over-reported cap for the whole build. */
 function capOf(s) {
-  return SITES[s.kind].cap + SITE_LEVELS[Math.min(SITE_LEVELS.length - 1, s.level - 1)].cap;
+  return SITES[s.kind].cap + SITE_LEVELS[Math.min(SITE_LEVELS.length - 1, builtLevel(s) - 1)].cap;
 }
 
-/** Cheap change detector for the background. Ownership, level and the
- *  influence field are the only things painted there that move, and the sim
- *  recomputes influence only on an ownership change — so this is exact. */
+/** Cheap change detector for the background. Ownership, level, whether a site
+ *  is mid-build, and the influence field are the only things painted there that
+ *  move, and the sim recomputes influence only on an ownership change — so this
+ *  is exact.
+ *
+ *  `upgradeTicksLeft` has to be in here, not just `level`: level increments the
+ *  moment the upgrade is PAID FOR, so hashing it alone repaints when the work
+ *  starts and never again — the scaffolding then stays pegged out on a finished
+ *  building forever. Only the 0/non-0 transition matters, so the countdown does
+ *  not repaint the background every tick. */
 function signature(state) {
   let hsh = (state.sites.length * 2654435761) | 0;
   for (let i = 0; i < state.sites.length; i++) {
     const s = state.sites[i];
-    hsh = (hsh * 31 + (OWNER_N[s.owner] || 0) * 7 + s.level * 3) | 0;
+    hsh = (hsh * 31 + (OWNER_N[s.owner] || 0) * 7 + s.level * 3
+      + (s.upgradeTicksLeft > 0 ? 1 : 0)) | 0;
   }
   return (hsh + (state.influenceVersion || 0) * 977) | 0;
 }

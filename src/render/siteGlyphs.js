@@ -1,24 +1,32 @@
 // Site state: what a piece looks like, and what it is doing right now.
 //
 // The silhouettes live in siteShapes.js; this file is the readout painted onto
-// them. Three ideas carry it:
+// them. Four ideas carry it:
 //
 //   BODY = KIND.       Shape and size say farm / stronghold / camp / castle.
+//   STOREYS = LEVEL.   An upgraded site is built bigger and built UP: one more
+//                      storey of its own outline per level, so 400 gold spent
+//                      is 400 gold visible. Never a number, never a badge —
+//                      the same growth on all four kinds, so the reading
+//                      transfers. While the work is in progress the new storey
+//                      is dashed scaffolding and the site still produces, and
+//                      reads, at its OLD level.
 //   CORE = STRENGTH.   The body fills with the owner's colour in proportion to
 //                      how full its garrison is, so troop mass reads as AREA
 //                      before a single digit is read. A stripped site is a
 //                      hollow outline; a massed one is a solid block.
 //   RINGS = TROUBLE.   Wall damage and siege are the ONLY things that draw a
-//                      ring, and they always sit outside the silhouette's
-//                      circumradius. When every site carried a permanent ring
-//                      the board was a field of identical dots and nothing
-//                      could be found; now a ring means "look here".
+//                      ring, and they always sit outside the whole structure.
+//                      When every site carried a permanent ring the board was a
+//                      field of identical dots and nothing could be found; now
+//                      a ring means "look here".
 //
 // Everything draws in WORLD space and allocates nothing.
 import { UNIT_IDS, SITES, SITE_LEVELS } from '../content/balance.js';
 import {
-  siteRadius, siteTier, traceSiteShape, traceSiteCore, siteFootY, siteHeadY,
-  siteOuter, hexSizeFor,
+  siteRadius, siteTier, traceSiteShape, traceSiteCore, hexSizeFor,
+  levelScale, storeyCount, storeyScale, storeyRise, traceStructure,
+  siteRingR, siteRingDy, siteFootYAt,
 } from './siteShapes.js';
 
 export { SITE_R, siteRadius, traceSiteShape, siteTier } from './siteShapes.js';
@@ -35,12 +43,29 @@ const CORE_MAX = 0.82;
 /** Floor under the core so that ONE surviving defender is still visible. */
 const CORE_MIN = 0.3;
 
-/** Garrison cap for a site at its current level. Mirrors battleView's capOf;
- *  duplicated rather than passed so the core can be drawn from the site alone. */
+/**
+ * The level a site is actually BUILT to.
+ *
+ * An upgrade banks its new level the instant it is bought and then spends
+ * `upgradeTicksLeft` raising it, producing at the old rate the whole time — so
+ * the board must keep showing the old structure until the work lands, or the
+ * player is told they got something they are not yet getting.
+ *
+ * Mirrors battle/state.js `effectiveLevel()` on purpose rather than importing
+ * it: render reads the sim's DATA, never its code. tests/sitelevels.test.js
+ * pins the two together so they cannot drift.
+ */
+export const builtLevel = (site) => (site.upgradeTicksLeft > 0
+  ? Math.max(1, (site.level || 1) - 1)
+  : (site.level || 1));
+
+/** Garrison cap for a site at the level it is built to. Mirrors battleView's
+ *  capOf; duplicated rather than passed so the core can be drawn from the site
+ *  alone. */
 function capOf(site) {
   const base = SITES[site.kind];
   if (!base) return 0;
-  const lv = SITE_LEVELS[Math.min(SITE_LEVELS.length - 1, (site.level || 1) - 1)];
+  const lv = SITE_LEVELS[Math.min(SITE_LEVELS.length - 1, builtLevel(site) - 1)];
   return base.cap + (lv ? lv.cap : 0);
 }
 
@@ -68,54 +93,91 @@ export const plaqueTopY = (cy, r, px, hexSize) =>
   cy + labelDrop(r, px, hexSize) - px * 4.5;
 
 /**
- * Static part of a site: moat, body, owner outline, level pips. Lives on the
+ * Static part of a site: moat, storeys, body, owner outline. Lives on the
  * background canvas and only redraws when ownership or level changes.
+ *
+ * Drawn TOP DOWN — highest storey first, ground floor last — so every block
+ * knocks out the one behind it and the stack resolves as a stepped roofline
+ * instead of a pile of overlapping outlines.
  */
 export function drawSiteBase(ctx, site, cx, cy, r, p, px) {
   const tier = siteTier(site.kind);
+  const lv = builtLevel(site);
+  const R = r * levelScale(lv);
+  const moat = px * (3 + tier * 2);
 
-  // A dark moat under the body. The cheapest way to make a piece sit ON the
-  // board rather than be a patch OF it — and it gives every adjacency line a
-  // visible place to stop instead of dissolving into the site.
+  // Scaffolding goes UNDER the built stone, so only the part of the new storey
+  // that clears the current roofline is visible. Drawn over the body it read as
+  // a dashed line ruled across the site.
+  if (site.upgradeTicksLeft > 0) drawScaffold(ctx, site, cx, cy, r, p, px);
+
+  ctx.lineJoin = 'round';
+  const wash = p.siteWash[site.owner] || p.siteWash.neutral;
+  const edge = p.owner[site.owner] || p.neutral;
+  // Upper storeys are outlined a touch thinner than the ground floor, which is
+  // what makes the stack read as receding rather than as one flat cluster.
+  for (let i = storeyCount(lv) - 1; i >= 0; i--) {
+    block(ctx, site.kind, true, cx, cy - R * storeyRise(i), R * storeyScale(i),
+      p, wash, edge, px * (1.3 + tier * 0.75), moat);
+  }
+  // Outline weight IS the hierarchy: a farm is hairline, a home base is bold.
+  block(ctx, site.kind, false, cx, cy, R, p, wash, edge, px * (1.7 + tier * 1.15), moat);
+}
+
+/**
+ * One block of a structure: its own moat, the territory flood knocked out
+ * beneath it, an owner wash, an outline.
+ *
+ * The moat is per block rather than one pass under the whole silhouette, and
+ * that is what makes a stack read as stepped: the ground floor's moat lands ON
+ * the storey behind it, so every step is separated by a dark band instead of
+ * two outlines meeting and fusing into one blob.
+ */
+function block(ctx, kind, upper, cx, cy, r, p, wash, edge, lw, moat) {
+  const trace = upper ? traceSiteCore : traceSiteShape;
+  // The cheapest way to make a piece sit ON the board rather than be a patch OF
+  // it — and it gives every adjacency line a visible place to stop instead of
+  // dissolving into the site.
   ctx.beginPath();
-  traceSiteShape(ctx, site.kind, cx, cy, r + px * (3 + tier * 2));
+  trace(ctx, kind, cx, cy, r + moat);
   ctx.fillStyle = p.siteShadow;
   ctx.fill();
 
-  // Knock the territory flood out beneath the body: a site is an object ON the
-  // terrain, not a tinted patch of it, and that separation is what lets the
-  // core and the plaque stay readable over any colour of ground.
   ctx.beginPath();
-  traceSiteShape(ctx, site.kind, cx, cy, r);
+  trace(ctx, kind, cx, cy, r);
   ctx.fillStyle = p.siteFill;
   ctx.fill();
   // An owner wash inside the body so ownership survives at low zoom, where a
   // 2px outline stops being legible.
-  ctx.fillStyle = p.siteWash[site.owner] || p.siteWash.neutral;
+  ctx.fillStyle = wash;
   ctx.fill();
-
-  // Outline weight IS the hierarchy: a farm is hairline, a home base is bold.
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = p.owner[site.owner] || p.neutral;
-  ctx.lineWidth = px * (1.7 + tier * 1.15);
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = lw;
   ctx.stroke();
-
-  drawLevelPips(ctx, site, cx, cy, r, p, px);
 }
 
-/** In-battle upgrades, as gold rank bars above the body. */
-function drawLevelPips(ctx, site, cx, cy, r, p, px) {
-  const n = (site.level || 1) - 1;
-  if (n <= 0) return;
-  const w = px * 6;
-  const gap = px * 3;
-  let x = cx - (n * w + (n - 1) * gap) * 0.5;
-  const y = cy - r * siteHeadY(site.kind) - px * 15;
-  ctx.fillStyle = p.gold;
-  for (let i = 0; i < n; i++) {
-    ctx.fillRect(x, y, w, px * 2.5);
-    x += w + gap;
-  }
+/**
+ * Work in progress: the storey being raised, as a dashed ghost of itself.
+ *
+ * `site.level` is already the level being PAID for; `builtLevel()` is what the
+ * site actually is. Drawing the gap between them as scaffolding is what makes
+ * "I bought it and nothing happened" impossible — the new floor is visibly
+ * pegged out before it is built, in the accent hue this renderer already uses
+ * everywhere else for work in progress.
+ */
+function drawScaffold(ctx, site, cx, cy, r, p, px) {
+  const i = storeyCount(site.level) - 1;
+  if (i < 0) return;
+  const R = r * levelScale(site.level);
+  DASH[0] = px * 4;
+  DASH[1] = px * 3.5;
+  ctx.setLineDash(DASH);
+  ctx.beginPath();
+  traceSiteCore(ctx, site.kind, cx, cy - R * storeyRise(i), R * storeyScale(i));
+  ctx.strokeStyle = p.building;
+  ctx.lineWidth = px * 2;
+  ctx.stroke();
+  ctx.setLineDash(EMPTY_DASH);
 }
 
 /**
@@ -133,7 +195,9 @@ export function drawSiteState(ctx, site, cx, cy, r, p, px) {
     const f = cap > 0 ? Math.min(1, n / cap) : 1;
     const k = CORE_MAX * (CORE_MIN + (1 - CORE_MIN) * Math.sqrt(f));
     ctx.beginPath();
-    traceSiteCore(ctx, site.kind, cx, cy, r * k);
+    // Against the SCALED body, so a full garrison in an upgraded site fills the
+    // bigger silhouette rather than rattling around inside it.
+    traceSiteCore(ctx, site.kind, cx, cy, r * levelScale(builtLevel(site)) * k);
     ctx.fillStyle = p.core[site.owner] || p.core.neutral;
     ctx.fill();
     ctx.strokeStyle = p.coreEdge[site.owner] || p.coreEdge.neutral;
@@ -155,8 +219,11 @@ export const drawTrainRing = drawSiteState;
  * job with colour identity instead of mass.
  */
 function drawTether(ctx, site, cx, cy, r, p, px) {
+  // The plaque is pinned to the BASE radius, never the level-scaled one: the
+  // structure grows upward and the number under it must not walk down the board
+  // every time a site is upgraded. The tether simply gets shorter.
   const top = plaqueTopY(cy, r, px, hexSizeFor(site.kind, r));
-  const y0 = cy + r * siteFootY(site.kind);
+  const y0 = cy + r * siteFootYAt(site.kind, builtLevel(site));
   if (top <= y0) return;
   ctx.fillStyle = p.core[site.owner] || p.core.neutral;
   ctx.fillRect(cx - px, y0, px * 2, top - y0 + px * 2);
@@ -177,7 +244,7 @@ function drawTrainBar(ctx, site, cx, cy, r, p, px) {
   if (prog <= 0 && brownout >= 1) return;
   const w = r * 0.85;
   const h = px * 2.5;
-  const y = cy + r * siteFootY(site.kind) + px * 2;
+  const y = cy + r * siteFootYAt(site.kind, builtLevel(site)) + px * 2;
   ctx.fillStyle = p.track;
   ctx.fillRect(cx - w * 0.5, y, w, h);
   if (prog <= 0) return;
@@ -193,18 +260,22 @@ function drawTrainBar(ctx, site, cx, cy, r, p, px) {
 export function drawHpRing(ctx, site, cx, cy, r, p, px) {
   const frac = Math.max(0, Math.min(1, site.hp / site.hpMax));
   if (frac >= 0.999 && !site.siege) return;
-  const rad = r * siteOuter(site.kind) + px * 3;
+  const lv = builtLevel(site);
+  // Centred on the STRUCTURE, not the site: a tall level-3 keep is not centred
+  // on its own hex, and a ring that ignored that would hang off it.
+  const my = cy - r * siteRingDy(site.kind, lv);
+  const rad = r * siteRingR(site.kind, lv) + px * 3;
   ctx.lineWidth = px * 3.5;
   ctx.lineCap = 'butt';
 
   ctx.beginPath();
-  ctx.arc(cx, cy, rad, 0, TAU);
+  ctx.arc(cx, my, rad, 0, TAU);
   ctx.strokeStyle = p.wall;
   ctx.stroke();
 
   if (frac <= 0) return;
   ctx.beginPath();
-  ctx.arc(cx, cy, rad, TOP, TOP + TAU * frac);
+  ctx.arc(cx, my, rad, TOP, TOP + TAU * frac);
   // Under siege the ring turns hostile, so a draining wall is unmistakable
   // even in peripheral vision.
   ctx.strokeStyle = site.siege
@@ -219,14 +290,15 @@ export function drawHpRing(ctx, site, cx, cy, r, p, px) {
  */
 export function drawSiegeRing(ctx, site, cx, cy, r, p, px, spin) {
   if (!site.siege) return;
-  const rad = r * siteOuter(site.kind) + px * 9;
+  const lv = builtLevel(site);
+  const rad = r * siteRingR(site.kind, lv) + px * 9;
   DASH[0] = px * 3;
   DASH[1] = px * 4;
   ctx.setLineDash(DASH);
   ctx.lineDashOffset = -spin * px * 14;
   ctx.lineWidth = px * 2;
   ctx.beginPath();
-  ctx.arc(cx, cy, rad, 0, TAU);
+  ctx.arc(cx, cy - r * siteRingDy(site.kind, lv), rad, 0, TAU);
   ctx.strokeStyle = p.owner[site.siege.owner] || p.enemy;
   ctx.stroke();
   ctx.setLineDash(EMPTY_DASH);
@@ -302,7 +374,7 @@ function drawCompRibbon(ctx, comp, x0, y, w, h, p, px) {
 /** Selection halo. Deliberately the accent hue, never a faction hue. */
 export function drawSelection(ctx, site, cx, cy, r, p, px, pulse) {
   ctx.beginPath();
-  traceSiteShape(ctx, site.kind, cx, cy, r + px * (7 + pulse * 2.5));
+  traceStructure(ctx, site.kind, builtLevel(site), cx, cy, r, px * (7 + pulse * 2.5));
   ctx.strokeStyle = p.selection;
   ctx.lineWidth = px * 2;
   ctx.stroke();
@@ -311,7 +383,7 @@ export function drawSelection(ctx, site, cx, cy, r, p, px, pulse) {
 /** Hover affordance — subtler than selection, same shape language. */
 export function drawHover(ctx, site, cx, cy, r, p, px) {
   ctx.beginPath();
-  traceSiteShape(ctx, site.kind, cx, cy, r + px * 4);
+  traceStructure(ctx, site.kind, builtLevel(site), cx, cy, r, px * 4);
   ctx.strokeStyle = p.hover || p.selectionFill;
   ctx.lineWidth = px * 6;
   ctx.stroke();
