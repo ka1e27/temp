@@ -16,7 +16,7 @@ import { createBattleState } from '../src/battle/state.js';
 import { drainCommands } from '../src/battle/commands.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { emptyComp } from '../src/battle/combat.js';
-import { BOOSTERS, UNIT_IDS, SITE_UPGRADE, CENTIGOLD } from '../src/content/balance.js';
+import { BOOSTERS, UNIT_IDS, SITE_UPGRADE, SITE_LEVELS, CENTIGOLD } from '../src/content/balance.js';
 import { EVENTS } from '../src/battle/events.js';
 import {
   BOOSTER_KEYS, FILTER_KEYS, BOOSTER_BY_KEY, FILTER_BY_KEY, SPEED_KEYS,
@@ -222,11 +222,15 @@ test('upgrade: the action is refused when unaffordable, foreign, busy or maxed',
   assert.equal(upgradeOffer(state, state.sites[0]).why, 'already-upgrading');
 
   state.sites[0].upgradeTicksLeft = 0;
-  state.sites[0].level = 3;
+  // The TOP of the ladder, not the literal 3: how many levels there are is
+  // content (SITE_LEVELS), and this assertion is about what happens when there
+  // is no step left to buy.
+  const top = SITE_LEVELS.length;
+  state.sites[0].level = top;
   const maxed = upgradeOffer(state, state.sites[0]);
   assert.equal(maxed.why, 'max-level');
   assert.equal(maxed.can, false);
-  assert.equal(upgradeLabel(maxed), 'Level 3 · max');
+  assert.equal(upgradeLabel(maxed), `Level ${top} · max`);
 });
 
 test('upgrade: the panel button raises the level and spends the gold, for real', () => {

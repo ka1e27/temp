@@ -93,34 +93,90 @@ export const SITES = {
   castle:     { gold: 4.0, train: 1.25, cap: 80, hp: 480, hpRegen: 5.0, defMult: 1.60 },
 };
 
-/** Per-level multipliers for in-battle site upgrades (index 0 = level 1). */
+/**
+ * Per-level multipliers for in-battle site upgrades (index 0 = level 1).
+ *
+ * THESE TWO ARRAYS ARE THE ONLY STATEMENT OF HOW LONG THE LADDER IS. Nothing
+ * anywhere may write 3, 5, or any other count: `SITE_LEVELS.length` is the
+ * number of levels and `SITE_UPGRADE.length` is always exactly one less, because
+ * every drawable step has to be a purchasable one. The renderer derives its
+ * whole size ramp from the first (render/siteShapes.js `MAX_LEVEL`), the sim
+ * derives HP, regen, gold, training and garrison cap from it, and
+ * meta/fallbackMap.js clamps against it.
+ *
+ * Extended 3 -> 5. Three levels ran out: a stronghold you had held for eight
+ * minutes was finished being interesting after 550 gold, and there was nothing
+ * left to spend a captured farm belt's income on. HP and regen keep compounding
+ * at x1.4 a level, which is what makes a fully built site a genuine fortress —
+ * a level-5 stronghold repairs 15.4 HP/s, so it takes a real siege train and
+ * not a squad of militia to crack.
+ */
 export const SITE_LEVELS = [
-  { gold: 1.00, train: 1.00, cap: 0,  hp: 1.0,  regen: 1.0 },
-  { gold: 1.75, train: 1.35, cap: 20, hp: 1.4,  regen: 1.4 },
-  { gold: 2.75, train: 1.75, cap: 40, hp: 1.96, regen: 1.96 },
+  { gold: 1.00, train: 1.00, cap: 0,  hp: 1.0,   regen: 1.0 },
+  { gold: 1.75, train: 1.35, cap: 20, hp: 1.4,   regen: 1.4 },
+  { gold: 2.75, train: 1.75, cap: 40, hp: 1.96,  regen: 1.96 },
+  { gold: 3.99, train: 2.19, cap: 60, hp: 2.744, regen: 2.744 },
+  { gold: 5.39, train: 2.63, cap: 80, hp: 3.842, regen: 3.842 },
 ];
+/** Gold and build time per step. One entry per step, so exactly
+ *  SITE_LEVELS.length - 1 of them. The curve stays steep on purpose: an upgrade
+ *  competes with training, and it should never be the automatic answer. */
 export const SITE_UPGRADE = [
-  { gold: 150, sec: 20 }, // L1 -> L2
-  { gold: 400, sec: 35 }, // L2 -> L3
+  { gold: 150,  sec: 20 }, // L1 -> L2
+  { gold: 400,  sec: 35 }, // L2 -> L3
+  { gold: 950,  sec: 50 }, // L3 -> L4
+  { gold: 2200, sec: 65 }, // L4 -> L5
 ];
 
 /** Territory influence radius by site kind, and the movement effect. */
 export const INFLUENCE_RADIUS = { farm: 1, stronghold: 2, camp: 3, castle: 3 };
 export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.75 };
 
+/**
+ * `staging: boolean` became two numbers, `stagingRatio` and `stagingKeep`.
+ *
+ * The old boolean was the single biggest exploit in the game. Tiers 1 and 2 had
+ * it OFF, and sends are adjacency-only, so everything an interior stronghold
+ * trained was stranded where it stood forever: measured on kaldan, a mean of 67
+ * enemy troops — more than HALF of everything the AI owned — sat two or more
+ * hops behind its own front line, and the player only ever met the skin of it.
+ * "I only win when I fully make use of the dumb NPC" is that number.
+ *
+ * Turning it on is not the fix on its own: at n=240 kaldan went 60% -> 8%,
+ * because a region's `enemyMult` had been implicitly tuned against an AI that
+ * wasted half its production. So tier 2 releases the rear army AND has its
+ * `economyMult` cut to pay for it. The force you fight is about the same size;
+ * the difference is that all of it now turns up. Measured at n=240:
+ *
+ *      staging off, economy 0.85   60% / 20.3m   (~40% of runs hit the cap)
+ *      staging on,  economy 0.85    8% / 12.4m
+ *      staging on,  economy 0.84   44% / 20.4m
+ *      staging on,  economy 0.82   57% / 18.0m
+ *      staging on,  economy 0.80   66% / 16.6m   <- shipped
+ *
+ * 0.80 over 0.82 for the MEDIAN, not the win rate: kaldan's length sits on a
+ * cliff (about 40% of runs used to grind all the way to the hard cap) and 16.6m
+ * against a 14m advertised length is the first time this region has finished
+ * anywhere near what it promises.
+ *
+ * `stagingKeep` is the share of its CAP a rear site holds back. Tiers 3-4 keep
+ * almost nothing, which is exactly the drain-to-the-floor behaviour they always
+ * had; tier 2 keeps a third, so what moves forward is the overflow a site was
+ * wasting rather than its whole garrison.
+ */
 export const AI_TIERS = [
   { reactionTicks: 45, aggression: 0.60, commitRatio: 0.45, safetyMargin: 1.60,
     economyMult: 0.65, concurrent: 1, retreatDiscipline: 0.10, adaptComposition: false,
-    ramAppetite: 0.1, staging: false },
+    ramAppetite: 0.1, stagingRatio: 0, stagingKeep: 1.0 },
   { reactionTicks: 32, aggression: 0.75, commitRatio: 0.50, safetyMargin: 1.50,
-    economyMult: 0.85, concurrent: 1, retreatDiscipline: 0.35, adaptComposition: false,
-    ramAppetite: 0.4, staging: false },
+    economyMult: 0.80, concurrent: 1, retreatDiscipline: 0.35, adaptComposition: false,
+    ramAppetite: 0.4, stagingRatio: 0.70, stagingKeep: 0.35 },
   { reactionTicks: 22, aggression: 1.00, commitRatio: 0.70, safetyMargin: 1.25,
     economyMult: 1.05, concurrent: 2, retreatDiscipline: 0.65, adaptComposition: true,
-    ramAppetite: 0.8, staging: true },
+    ramAppetite: 0.8, stagingRatio: 0.70, stagingKeep: 0.05 },
   { reactionTicks: 15, aggression: 1.20, commitRatio: 0.80, safetyMargin: 1.15,
     economyMult: 1.35, concurrent: 3, retreatDiscipline: 0.90, adaptComposition: true,
-    ramAppetite: 1.0, staging: true },
+    ramAppetite: 1.0, stagingRatio: 0.80, stagingKeep: 0.05 },
 ];
 
 /** Anti-stalemate ladder, keyed off seconds since the last OWNERSHIP CHANGE —
@@ -169,6 +225,11 @@ export const BOOSTERS = {
  * of terrain has accumulated, gets +8. Measured at n=480: 63%/20.4m before the
  * terrain layer, 57%/22.4m after it at 11, 60%/20.7m at 12.
  * Tuned on the harness, not on paper.
+ *
+ * The AI pass did NOT need paying for here, which is worth recording because it
+ * was the obvious place to reach for. Releasing the enemy's stranded rear army
+ * and cutting its `economyMult` to match is a wash on the harness, so the
+ * expedition budget is unchanged and the loadout screen still says what it said.
  */
 export const EXPEDITION = { base: 19, perRegion: 12 };
 
@@ -299,6 +360,30 @@ export const AI = {
   ramTrainShare: 0.5,       // share of strongholds that take rams when hungry
   stagingCapMult: 2,        // how far over a garrison cap the AI will mass to strike
   thinkJitter: 0.2,
+
+  // --- surplus: press when there is army going spare ----------------------
+  // "More troops than it needs to hold what it has" is measurable: reserve is
+  // the garrison floor plus whatever is actually being thrown at each site, and
+  // anything past that is spare. At full surplus the tier's commit and staging
+  // ratios open `surplusPress` of the way to total commitment.
+  surplusFullAt: 1.0,       // spare == this x the reserve is a FULL surplus
+  surplusPress: 0.80,       // how far toward all-in a full surplus opens a ratio
+  surplusConcurrentAt: 0.5, // ...and above this it opens a second front
+  surplusConcurrent: 1,
+
+  // --- home: the castle is the win condition ------------------------------
+  // defend() only sees squads already in the air inside threatHorizonTicks —
+  // six seconds. For the castle that is too late, so homeGuard reads the army
+  // STANDING within homeRadius hops as well, reinforces down chained sends from
+  // anywhere in its own territory, and abandons a siege of its own when the gap
+  // is still this far from closed.
+  // Radius 1 = "standing on the doorstep". 2 was measured and is too jumpy: on
+  // a tier-1 map half the board is within two hops of the castle, so the AI
+  // spent the whole battle recalling an army nobody was threatening, and the
+  // COUNTRYSIDE got easier by exactly as much as the castle got harder.
+  homeRadius: 1,            // hops from the castle that count as encroachment
+  homeGuardMargin: 1.30,    // hold the castle against this multiple of what is near
+  homeRecallRatio: 0.75,    // below this share of `need`, call the siege army home
   /** Rock-paper-scissors answer to whatever the player fields most. */
   counterPick: {
     militia: 'raiders', spearmen: 'militia', raiders: 'spearmen',

@@ -41,7 +41,7 @@ import { createRng, deriveSeed } from '../core/rng.js';
 import {
   offsetToAxial, fallbackMapGen, callMapGen, normalizeSites,
 } from './fallbackMap.js';
-import { upgradeEffects, addBonus, flatBonus } from './upgrades.js';
+import { upgradeEffects, addBonus, multBonus, flatBonus } from './upgrades.js';
 import { regionsConquered, effectiveEnemyMult, record, isConquered } from './world.js';
 import { toConfigBoosters } from './boosters.js';
 
@@ -99,9 +99,15 @@ export function playerMods(metaState, expedition) {
   return makeMods({
     startGold: stack(BATTLE_START.playerGold + flatBonus(fx, 'startGold')),
     expedition,
-    goldRateMult: stack(1),
+    // Quartermaster and Levy Reform. Both of these FactionMods fields were
+    // declared in the contract, validated at the seam, and read every tick by
+    // battle/economy.js and battle/training.js — and no upgrade produced them,
+    // so both were permanently 1.0. They are channels, not new fields: nothing
+    // downstream changes, which is why the endgame shop could be extended
+    // without touching CONTRACT_VERSION.
+    goldRateMult: stack(1, { additive: addBonus(fx, 'goldRate') }),
     trainSpeedMult: stack(1, { additive: addBonus(fx, 'trainSpeed') }),
-    trainCostMult: stack(1),
+    trainCostMult: stack(1, { multiplicative: multBonus(fx, 'trainCost') }),
     unitAtkMult: stack(1, { additive: addBonus(fx, 'atk') }),
     unitDefMult: stack(1, { additive: addBonus(fx, 'def') }),
     marchSpeedMult: stack(1, { additive: addBonus(fx, 'march') }),

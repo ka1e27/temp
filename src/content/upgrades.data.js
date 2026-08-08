@@ -35,6 +35,7 @@ const U = (id, group, name, maxLevel, base, rate, effects, desc) =>
   ({ id, group, name, maxLevel, cost: { base, rate }, effects, desc });
 
 const add = (key, value) => ({ bucket: 'add', key, value });
+const mult = (key, value) => ({ bucket: 'mult', key, value });
 const flat = (key, value) => ({ bucket: 'flat', key, value });
 const unlock = (key, value) => ({ bucket: 'unlock', key, value });
 
@@ -59,17 +60,17 @@ export const UPGRADES = Object.freeze([
     '+8% attack per level. Pairs with raiders for a farm-burning opening.'),
   U('bulwark', 'military', 'Bulwark', 5, 200, 2.05, [add('def', 0.08)],
     '+8% defence per level. Pairs with spearmen for an economy-first grind.'),
-  U('forcedMarch', 'military', 'Forced March', 3, 220, 2.0, [add('march', 0.12)],
+  U('forcedMarch', 'military', 'Forced March', 6, 220, 2.0, [add('march', 0.12)],
     '+12% squad speed per level. Relief arrives before the walls fall.'),
-  U('biggerCamp', 'military', 'Bigger Camp', 4, 160, 1.9, [flat('garrisonCap', 25)],
+  U('biggerCamp', 'military', 'Bigger Camp', 6, 160, 1.9, [flat('garrisonCap', 25)],
     '+25 garrison capacity on every site you hold, per level.'),
 
   // --- Siege ---------------------------------------------------------------
   U('sappers', 'siege', "Sappers' Guild", 4, 260, 2.1, [add('siegeDmg', 0.15)],
     '+15% siege damage per level. Turns "walls repair faster" into a breach timer.'),
-  U('wreckingCrew', 'siege', 'Wrecking Crew', 3, 500, 2.2, [flat('ramImpactHp', 20)],
+  U('wreckingCrew', 'siege', 'Wrecking Crew', 6, 500, 2.2, [flat('ramImpactHp', 20)],
     'Rams strip an extra 20 structure HP the moment they arrive, per level.'),
-  U('entrenchment', 'siege', 'Entrenchment', 3, 400, 2.2, [add('structureRegen', 0.25)],
+  U('entrenchment', 'siege', 'Entrenchment', 5, 400, 2.2, [add('structureRegen', 0.25)],
     '+25% structure regeneration on sites YOU hold, per level. Defence, not offence.'),
 
   // --- Unlocks -------------------------------------------------------------
@@ -97,6 +98,35 @@ export const UPGRADES = Object.freeze([
     'Instant battle gold plus 15s of +50% training throughput.'),
   U('boosterBombard', 'boosters', 'Bombardment', 1, 900, 1, [unlock('booster', 'bombard')],
     'Kills a quarter of a garrison and 60 structure HP. Never captures.'),
+
+  // --- The long lines ------------------------------------------------------
+  // Everything above is the OPENING ladder and it is balance-frozen: regions 1
+  // to 5 are tuned against those exact costs, so a level was never added to one
+  // of them. The problem was that the ladder ENDED — every upgrade in the game
+  // maxed for 59,589 crowns, which a player at region 14 earns in about six
+  // minutes of idling, and the last four regions had nothing left to buy at all.
+  //
+  // So the endgame is a second tier of lines rather than a taller first one.
+  // Each one starts above 1,200 crowns, which is more than the entire budget a
+  // player has when they reach Kaldan, and each has enough levels that the cost
+  // curve — not the level cap — is what stops you. Maxing everything now costs
+  // ~19.3M crowns against ~59.6k before: about eleven hours of full-conquest
+  // income instead of two minutes of it.
+  U('armoury', 'military', 'Armoury', 12, 1200, 1.8,
+    [add('atk', 0.05), add('def', 0.05)],
+    '+5% attack AND +5% defence per level, on every unit you field. '
+    + 'The base-statistics line: it is still worth buying when nothing else is.'),
+  U('musterField', 'military', 'Muster Field', 10, 2000, 1.9, [flat('expedition', 6)],
+    '+6 expedition slots per level, on top of Standing Army. '
+    + 'The endgame answer to a region that opens with nineteen sites.'),
+  U('quartermaster', 'economy', 'Quartermaster', 10, 1500, 1.85, [add('goldRate', 0.10)],
+    '+10% battle gold from every site you hold, per level. Trains a bigger army out of the same ground.'),
+  U('levyReform', 'economy', 'Levy Reform', 10, 1800, 1.85, [mult('trainCost', 0.93)],
+    '-7% training cost per level, compounding. Same treasury, more soldiers.'),
+  U('mintage', 'economy', 'Royal Mint', 12, 2500, 1.9, [add('income', 0.12)],
+    '+12% treasury income per level. Where a conquered empire’s crowns go.'),
+  U('ordnance', 'siege', 'Ordnance Yard', 8, 2500, 1.9, [add('siegeDmg', 0.12)],
+    '+12% siege damage per level, on top of the Sappers’ Guild. Late walls are thicker.'),
 ]);
 
 export const UPGRADE_BY_ID = Object.freeze(

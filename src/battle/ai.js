@@ -7,113 +7,25 @@
 //
 // The single thing that makes it feel like an opponent rather than a spawner:
 // every squad in a wave shares ONE arriveTick. It always strikes synchronized.
+//
+// Measurements and order-emitters live in ./aicore.js; the home-defence planner
+// and the surplus maths live in ./aihome.js. This file is the phase list.
 // PURE.
-import { AI_TIERS, AI, UNIT_IDS, SITES, RALLY_MIN_GARRISON } from '../content/balance.js';
+import { AI, UNIT_IDS, SITES } from '../content/balance.js';
 import { createRng } from '../core/rng.js';
 import { TICK_HZ } from '../core/loop.js';
 import {
-  power, total, emptyComp, addComp, scaleComp, breachSeconds, siegeDps, siteRegen,
+  power, total, emptyComp, addComp, breachSeconds,
 } from './combat.js';
 import { siteById, effectiveLevel } from './state.js';
-import { groundOf, siteDefMultOf } from './terrain.js';
-import { travelTicks } from './movement.js';
+import { groundOf } from './terrain.js';
 import { attritionMods } from './economy.js';
 import { garrisonCap } from './training.js';
-
-const ME = 'enemy';
-const FOE = 'player';
-const STEPS = 20; // fraction search resolution: 5% increments
-
-const knobsFor = (state) => AI_TIERS[
-  Math.max(0, Math.min(AI_TIERS.length - 1, (state.rules?.aiTier ?? 1) - 1))
-];
-
-const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-
-/** Never strip the castle down to nothing — losing it loses the battle. */
-const floorFor = (site) => (site.kind === 'castle'
-  ? Math.max(AI.garrisonFloor, RALLY_MIN_GARRISON) : AI.garrisonFloor);
-
-// Reads the SAME terrain the player does: an AI blind to the ground marches
-// its rams up a mountain and never learns why the wall holds.
-function defenceOf(state, site, attComp) {
-  return power(site.garrison, attComp, {
-    defending: true,
-    onOwnSite: true,
-    siteDefMult: siteDefMultOf(state, site),
-    statMult: state.mods[site.owner]?.unitDefMult ?? 1, ground: groundOf(state, site),
-  });
-}
-
-const attackPower = (state, comp, foe, ground = null) =>
-  power(comp, foe, { statMult: state.mods[ME]?.unitAtkMult ?? 1, ground });
-
-/** What a site can spare: capped by the tier's commit ratio and the floor. */
-function sourceFrom(state, site, cap) {
-  const n = total(site.garrison);
-  const floor = floorFor(site);
-  if (n <= floor) return null;
-  const availFrac = Math.min(cap, (n - floor) / n);
-  const avail = scaleComp(site.garrison, availFrac);
-  if (total(avail) === 0) return null;
-  return { site, availFrac, avail };
-}
-
-const poolOf = (sources, frac = 1) => sources
-  .reduce((c, s) => addComp(c, scaleComp(s.avail, frac)), emptyComp());
-
-/** Can this force actually out-pace the walls, or would it just sit there? A
- *  stack that wins the field but cannot breach is an army thrown away. */
-function breachable(state, comp, site) {
-  const regenMult = (state.mods[site.owner]?.structureRegenMult ?? 1)
-    * attritionMods(state).regenMult;
-  return siegeDps(comp, state.mods[ME]?.siegeDmgMult ?? 1, groundOf(state, site))
-    > siteRegen(site.kind, effectiveLevel(site), regenMult);
-}
-
-/** Smallest uniform fraction of the pooled force that beats the garrison AND
- *  breaks the walls. Null when even everything available is not enough. */
-function minFraction(state, sources, need, target) {
-  const g = groundOf(state, target);
-  for (let i = 1; i <= STEPS; i++) {
-    const f = i / STEPS;
-    const comp = poolOf(sources, f);
-    if (total(comp) === 0) continue;
-    if (attackPower(state, comp, target.garrison, g) >= need
-      && breachable(state, comp, target)) return f;
-  }
-  return null;
-}
-
-/** Issue one synchronized wave: every squad gets the SAME arriveTick, held
- *  back to the slowest contributor. Orders execute next tick, hence the +1. */
-function launch(state, out, sources, target, frac, busy) {
-  const parts = [];
-  let common = 0;
-  for (const s of sources) {
-    const comp = scaleComp(s.avail, frac);
-    if (total(comp) === 0) continue;
-    const eta = state.tick + 1 + travelTicks(state, s.site, target, comp, ME);
-    if (eta > common) common = eta;
-    parts.push({ from: s.site.id, fraction: Math.min(1, s.availFrac * frac) });
-  }
-  for (const p of parts) {
-    out.push({
-      t: 'SEND', by: ME, from: p.from, to: target.id, fraction: p.fraction, arriveTick: common,
-    });
-    busy.add(p.from);
-  }
-  return parts.length > 0;
-}
-
-function adjacentSources(state, site, cap, busy) {
-  return site.adj
-    .map((id) => siteById(state, id))
-    .filter((s) => s && s.owner === ME && !busy.has(s.id))
-    .sort(byId)
-    .map((s) => sourceFrom(state, s, cap))
-    .filter(Boolean);
-}
+import {
+  ME, FOE, STEPS, knobsFor, byId, defenceOf, attackPower, sourceFrom, poolOf,
+  minFraction, launch, adjacentSources, threatOn, frontDistance,
+} from './aicore.js';
+import { homeGuard, pressure, commitFor, stagingFor, concurrentFor } from './aihome.js';
 
 // --- 1. free lunch ---------------------------------------------------------
 // Runs first, at EVERY tier. Leave a farm on 3 militia and it will be taken.
@@ -144,29 +56,22 @@ function freeLunch(state, knobs, out, busy, taken) {
 
 // --- 2. defend -------------------------------------------------------------
 
-function threatOn(state, site) {
-  let comp = emptyComp();
-  if (site.siege && site.siege.owner === FOE) comp = addComp(comp, site.siege.comp);
-  for (const sq of state.squads) {
-    if (sq.owner !== FOE || sq.to !== site.id || sq.retreating) continue;
-    if (sq.arriveTick - state.tick > AI.threatHorizonTicks) continue;
-    comp = addComp(comp, sq.comp);
-  }
-  return comp;
-}
-
-function defend(state, knobs, out, busy) {
+function defend(state, knobs, out, busy, guarded) {
   const mine = state.sites.filter((s) => s.owner === ME)
     .sort((a, b) => (b.kind === 'castle' ? 1 : 0) - (a.kind === 'castle' ? 1 : 0) || byId(a, b));
 
   for (const site of mine) {
+    // The castle was assessed by homeGuard(), which reads a wider radius and can
+    // reinforce from further away. Re-running the narrow check here would pull a
+    // second wave for a gap that is already closed and in the air.
+    if (guarded && site.kind === 'castle') continue;
     const threat = threatOn(state, site);
     if (total(threat) === 0) continue;
     const need = power(threat, site.garrison, { statMult: state.mods[FOE]?.unitAtkMult ?? 1 })
       * AI.defendMargin;
     if (defenceOf(state, site, threat) >= need) continue;
 
-    const cap = site.kind === 'castle' ? 1 : knobs.commitRatio;
+    const cap = site.kind === 'castle' ? 1 : knobs.commit;
     const sources = adjacentSources(state, site, cap, busy);
     if (!sources.length) continue;
     for (let i = 1; i <= STEPS; i++) {
@@ -196,13 +101,13 @@ function activeAttacks(state) {
 }
 
 function attack(state, knobs, out, busy, taken, rng) {
-  let slots = knobs.concurrent - activeAttacks(state).length;
+  let slots = knobs.concurrentNow - activeAttacks(state).length;
   if (slots <= 0) return;
 
   const cands = [];
   for (const site of state.sites) {
     if (site.owner === ME || taken[site.id]) continue;
-    const sources = adjacentSources(state, site, knobs.commitRatio, busy);
+    const sources = adjacentSources(state, site, knobs.commit, busy);
     if (!sources.length) continue;
     const pooled = poolOf(sources);
     if (total(pooled) === 0) continue;
@@ -234,35 +139,27 @@ function attack(state, knobs, out, busy, taken, rng) {
 // join an attack on its own. Without this the AI banks a huge rear army and
 // feels like a punching bag; with it, the army streams to the front.
 
-/** Hops from every site the AI holds to the nearest site it does not. */
-function frontDistance(state) {
-  const dist = {};
-  const queue = [];
-  for (const s of state.sites) if (s.owner !== ME) { dist[s.id] = 0; queue.push(s); }
-  for (let i = 0; i < queue.length; i++) {
-    const cur = queue[i];
-    for (const id of cur.adj) {
-      if (dist[id] !== undefined) continue;
-      const next = siteById(state, id);
-      if (!next) continue;
-      dist[id] = dist[cur.id] + 1;
-      queue.push(next);
-    }
-  }
-  return dist;
-}
-
 function consolidate(state, knobs, out, busy) {
-  // Tier 1 does not mass its rear army forward. Staging is what turns a
-  // scattered garrison into a rolling offensive, and a first-time player needs
-  // room to make the opening mistakes the region is meant to teach.
-  if (!knobs.staging) return;
+  // stagingRatio 0 keeps a tier out of this entirely. Tier 1 does not mass its
+  // rear army forward: staging is what turns a scattered garrison into a rolling
+  // offensive, and a first-time player needs room to make the opening mistakes
+  // the region is meant to teach.
+  if (!(knobs.staging > 0)) return;
   const dist = frontDistance(state);
   for (const site of state.sites.filter((s) => s.owner === ME).sort(byId)) {
     const d = dist[site.id];
     if (d === undefined || d < 2 || busy.has(site.id)) continue; // already on the line
     if (total(threatOn(state, site)) > 0) continue;              // needed where it stands
-    const src = sourceFrom(state, site, knobs.commitRatio);
+    // Forward the BANKED army, not the garrison. A rear site holds its keep
+    // share of capacity and moves the overflow — which is precisely the
+    // production that was being wasted, because a site at cap trains nothing.
+    // Draining rear sites to the floor instead is what turned tier 2 from a
+    // 60% region into a 9% one: it is not "spend the surplus", it is "commit
+    // everything, forever".
+    const n = total(site.garrison);
+    const keep = knobs.stagingKeep * garrisonCap(state, site);
+    if (n <= keep) continue;
+    const src = sourceFrom(state, site, Math.min(knobs.staging, (n - keep) / n));
     if (!src) continue;
     // Mass, but not without limit: a front site takes up to stagingCapMult of
     // its garrison cap, which is enough to strike with and still legible.
@@ -290,9 +187,10 @@ function reliefSeconds(state, site) {
   return best;
 }
 
-function retreat(state, knobs, out, rng) {
+function retreat(state, knobs, out, rng, busy) {
   const att = attritionMods(state);
   for (const site of state.sites) {
+    if (busy.has(site.id)) continue;  // homeGuard already gave this force orders
     const disciplined = () => rng.next() < knobs.retreatDiscipline;
 
     if (site.siege?.owner === ME && total(site.siege.comp) > 0) {
@@ -378,22 +276,34 @@ export function think(state) {
   if (state.status !== 'running') return;
   if (state.tick < (state.ai.nextThinkTick ?? 0)) return;
 
-  const knobs = knobsFor(state);
+  const tier = knobsFor(state);
   const rng = createRng(state.rngState >>> 0);
   const out = [];
   const busy = new Set();   // sources committed this think — local, never stored
   const taken = {};         // targets committed this think
 
+  // Everything downstream spends army, so measure the surplus before any of it
+  // has been promised, then hand the phases the ratios it buys.
+  const p = pressure(state);
+  const knobs = {
+    ...tier,
+    commit: commitFor(tier, p),
+    staging: stagingFor(tier, p),
+    concurrentNow: concurrentFor(tier, p),
+  };
+  state.ai.pressure = p;
+
+  const guarded = homeGuard(state, out, busy);
   freeLunch(state, knobs, out, busy, taken);
-  defend(state, knobs, out, busy);
+  defend(state, knobs, out, busy, guarded);
   attack(state, knobs, out, busy, taken, rng);
   consolidate(state, knobs, out, busy);
-  retreat(state, knobs, out, rng);
+  retreat(state, knobs, out, rng, busy);
   adapt(state, knobs, out, rng);
 
   for (const cmd of out) state.commands.push(cmd);
   state.ai.activeAttacks = activeAttacks(state);
   state.ai.nextThinkTick = state.tick
-    + Math.max(1, Math.round(knobs.reactionTicks * rng.jitter(AI.thinkJitter)));
+    + Math.max(1, Math.round(tier.reactionTicks * rng.jitter(AI.thinkJitter)));
   state.rngState = rng.state;
 }
