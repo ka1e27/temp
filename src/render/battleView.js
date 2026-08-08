@@ -20,16 +20,17 @@ import {
   makeHatch, hexCx, hexCy, gridBounds,
 } from './hexRenderer.js';
 import {
-  siteRadius, drawSiteBase, drawHpRing, drawSiegeRing, drawTrainRing,
-  drawGarrisonBar, drawSelection, drawHover,
+  siteRadius, drawSiteBase, drawHpRing, drawSiegeRing, drawSiteState,
+  drawGarrisonPlaque, drawSelection, drawHover, garrisonLabelY,
 } from './siteGlyphs.js';
 import {
-  drawSquads, drawSquadLabels, drawRallies, drawDragArc, drawBox, chevron,
+  drawSquads, drawSquadLabels, drawRallies, drawDragArc, drawBox,
 } from './routes.js';
+import { drawStaticFormation } from './formation.js';
 import { numStr } from '../ui/format.js';
 
 const HEX_SIZE = 34;   // world units; the camera does all the zooming
-const LABEL_PX = 11;   // constant on-screen size at any zoom
+const LABEL_PX = 14;   // constant on-screen size at any zoom
 const OWNER_N = { player: 1, enemy: 2, neutral: 3 };
 const OWNERS3 = ['player', 'enemy', 'neutral'];
 const OWNERS2 = ['player', 'enemy'];
@@ -194,7 +195,7 @@ export function createBattleView(opts) {
       }
     }
     ctx.strokeStyle = p.link;
-    ctx.lineWidth = px * 2;
+    ctx.lineWidth = px * 2.5;
     ctx.stroke();
   }
 
@@ -227,10 +228,10 @@ export function createBattleView(opts) {
       const s = state.sites[i];
       sitePos(s, _a);
       const r = siteRadius(s.kind, hexSize);
-      drawTrainRing(ctx, s, _a.x, _a.y, r, p, px);
+      drawSiteState(ctx, s, _a.x, _a.y, r, p, px);
       drawHpRing(ctx, s, _a.x, _a.y, r, p, px);
       drawSiegeRing(ctx, s, _a.x, _a.y, r, p, px, spin);
-      drawGarrisonBar(ctx, s.garrison, capOf(s), _a.x, _a.y, r, p, px, hexSize);
+      drawGarrisonPlaque(ctx, s.garrison, capOf(s), _a.x, _a.y, r, p, px, hexSize);
       if (s.siege) drawSiegeStack(ctx, s, _a.x, _a.y, r, px);
     }
 
@@ -257,13 +258,19 @@ export function createBattleView(opts) {
   }
 
   /** A besieging stack sits ON the site it is grinding down, offset upward so
-   *  it never hides the garrison bar beneath. */
+   *  it never hides the garrison plaque beneath.
+   *
+   *  Drawn as troops, at the SAME piece size drawSquads uses, because a siege is
+   *  exactly when the player is asking "is this enough to hold?" against the
+   *  relieving columns walking toward it — and that comparison only works if a
+   *  besieging soldier is the same size as a marching one.
+   *
+   *  `angle` faces the wall (+PI/2, down the screen toward the site), which is
+   *  the opposite of the chevron this replaces: it puts the militia screen
+   *  against the structure and sweeps the crescent's wings the right way. */
   function drawSiegeStack(ctx, site, cx, cy, r, px) {
-    let n = 0;
-    for (let i = 0; i < UNIT_IDS.length; i++) n += site.siege.comp[UNIT_IDS[i]] || 0;
-    if (n <= 0) return;
-    chevron(ctx, cx, cy - r - px * 17, -Math.PI / 2,
-      hexSize * 0.16 * Math.sqrt(n), p.owner[site.siege.owner]);
+    drawStaticFormation(ctx, site.siege.comp, cx, cy - r * 1.25 - px * 20,
+      Math.PI / 2, Math.max(hexSize * 0.1, px * 2.2), site.siege.owner, px, p);
   }
 
   /** ONE text pass, ONE `ctx.font` assignment, batched by colour. The font
@@ -285,8 +292,7 @@ export function createBattleView(opts) {
         let n = 0;
         for (let k = 0; k < UNIT_IDS.length; k++) n += s.garrison[UNIT_IDS[k]] || 0;
         sitePos(s, _a);
-        ctx.fillText(numStr(n), _a.x,
-          _a.y + siteRadius(s.kind, hexSize) + px * 15 + Math.max(hexSize * 0.19, px * 8));
+        ctx.fillText(numStr(n), _a.x, _a.y + garrisonLabelY(s.kind, hexSize, px));
       }
     }
     ctx.textBaseline = 'middle';

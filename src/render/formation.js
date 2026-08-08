@@ -46,6 +46,30 @@ export function formationFiles(pieces) {
 
 export const formationRanks = (pieces, files) => Math.ceil(pieces / files);
 
+/**
+ * Width of a CAMPED block — a besieging stack, which is standing still.
+ *
+ * Deliberately the inverse silhouette of a marching column: roughly two files
+ * to every rank, so a dug-in stack is wide and shallow where a column is deep
+ * and narrow. That difference survives all the way down to a four-pixel piece,
+ * which a subtler cue would not.
+ *
+ * WIDTH is the quantity that is solved for, not depth. Picking the rows first
+ * and dividing looks equivalent and is not: every time the row count steps up,
+ * `ceil(pieces / rows)` steps DOWN, so a five-man camp came out narrower than a
+ * four-man one. Width is the loud cue at a glance and it must never shrink as
+ * an army grows; depth is quiet and is allowed to wobble by a row. PURE.
+ */
+export const MAX_CAMP_FILES = 8;
+export const campFiles = (pieces) => Math.min(
+  MAX_CAMP_FILES, Math.max(1, Math.min(pieces, Math.ceil(Math.sqrt(pieces * 2.2)))),
+);
+
+/** Rows in a camped block, derived from its width. Never more than
+ *  ceil(MAX_PIECES / MAX_CAMP_FILES). PURE. */
+export const CAMP_RANKS = Math.ceil(MAX_PIECES / MAX_CAMP_FILES);
+export const campRanks = (pieces) => Math.ceil(pieces / campFiles(pieces));
+
 /** Deterministic per-piece wobble in [-0.5, 0.5). Hashed from ids rather than
  *  drawn from Math.random, because a random offset would be resampled every
  *  frame and the whole formation would boil. PURE. */
@@ -219,8 +243,11 @@ export function flushPieces(ctx, px, p) {
     }
     if (any) { ctx.fillStyle = p.units[UNIT_IDS[u]]; ctx.fill(); }
   }
-  ctx.lineWidth = px * 1.25;
-  ctx.lineJoin = 'round';
+  // Stroke state is touched ONLY if something is actually hollow. This flush
+  // now also runs inside battleView's per-site loop (a camped siege stack), and
+  // silently leaving a changed lineWidth behind there would bleed into whatever
+  // the next site draws.
+  let stroked = false;
   for (let o = 0; o < OWNERS.length; o++) {
     let any = false;
     ctx.beginPath();
@@ -229,7 +256,125 @@ export function flushPieces(ctx, px, p) {
       any = true;
       dart(ctx, i, BLEN[i] + rimOf(i, rimPx));
     }
-    if (any) { ctx.strokeStyle = p.owner[OWNERS[o]]; ctx.stroke(); }
+    if (!any) continue;
+    ctx.lineWidth = px * 1.25;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = p.owner[OWNERS[o]];
+    ctx.stroke();
+    stroked = true;
   }
-  ctx.lineJoin = 'miter';
+  if (stroked) ctx.lineJoin = 'miter';
+}
+
+// --- a stack that is standing still -----------------------------------------
+
+/** How far the wings of a camp trail behind its centre, in rank spacings. */
+const CAMP_BOW = 0.55;
+/** How far the outermost piece turns to face outward along the line, radians. */
+const CAMP_FAN = 0.34;
+/** Piece spacing derived from piece size, so a camped soldier keeps exactly the
+ *  proportions of a marching one. Matches drawSquads' gaps at hexSize scale. */
+const GAP_ACROSS = 1.65;
+const GAP_DEEP = 2.0;
+
+/**
+ * A stationary body of troops: a besieging stack camped on the site it is
+ * grinding down.
+ *
+ * Drawn from the same pieces, at the same scale, under the same count mapping
+ * as a marching column, so the two are DIRECTLY COMPARABLE. That is the whole
+ * reason this exists: a siege is exactly the moment a player weighs "is this
+ * enough to hold?" against the relieving columns on their way, and until now
+ * the besiegers were the last thing on the board still drawn as one chevron.
+ *
+ * The arrangement is the inverse of a column — wide and shallow, bowed into a
+ * crescent facing `angle`, with the pieces fanned outward along the line. It
+ * reads as dug in rather than as a column walking on the spot.
+ *
+ * SELF-CONTAINED: it resets and flushes the shared piece buffer itself, so it
+ * may be called anywhere in a frame EXCEPT between beginPieces() and
+ * flushPieces() — i.e. never from inside drawSquads().
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {object} comp  per-unit-type counts keyed by UNIT_IDS
+ * @param {number} x     CENTRE of the block in world units (not its head)
+ * @param {number} y
+ * @param {number} angle radians, pointing FROM the camp TOWARD the thing it is
+ *                       besieging. With the block hung above a site that is
+ *                       `Math.PI / 2` — note this is the OPPOSITE of the angle
+ *                       the old chevron took, and it matters: facing the wall
+ *                       puts the militia screen against it and the marshal in
+ *                       the rear, and sweeps the crescent's wings the right way
+ * @param {number} len   nose length of ONE piece in world units — pass the same
+ *                       value drawSquads uses, or a besieging soldier will not
+ *                       be the size of a marching one and the comparison the
+ *                       whole feature rests on breaks
+ * @param {string} owner 'player' | 'enemy' | 'neutral'
+ * @param {number} px    1 / zoom
+ * @param {object} p     palette
+ */
+export function drawStaticFormation(ctx, comp, x, y, angle, len, owner, px, p) {
+  let troops = 0;
+  for (let u = 0; u < NU; u++) troops += comp[UNIT_IDS[u]] || 0;
+  if (troops <= 0) return;
+
+  const pieces = pieceCount(troops);
+  const files = campFiles(pieces);
+  const ranks = campRanks(pieces);
+  planUnits(comp, troops, pieces);
+  const own = ownerIndex(owner);
+
+  const across = len * GAP_ACROSS;
+  const deep = len * GAP_DEEP;
+  const hx = Math.cos(angle);
+  const hy = Math.sin(angle);
+  // A camp has no head, and the caller is placing a glyph rather than a
+  // vanguard, so the block is centred on (x,y).
+  const mid = (ranks - 1) * deep * 0.5;
+  const halfW = (files - 1) * 0.5 * across;
+  // World-space seed: a camp must look the same every frame, and two sieges on
+  // the same board must not look like copies of each other.
+  const seed = (x * 7 + y * 13) | 0;
+
+  beginPieces();
+  let slot = 0;
+  for (let r = 0; r < ranks; r++) {
+    const w = r === ranks - 1 ? pieces - slot : files;
+    const base = (r & 1 ? 0.25 : -0.25) * across - (w - 1) * 0.5 * across;
+    for (let k = 0; k < w; k++) {
+      const sx = base + k * across + wobble(seed, slot, 3) * across * 0.24;
+      // Position across the line as a fraction of the half-width, CLAMPED.
+      // Unclamped, the stagger and the wobble push the outermost piece past 1
+      // and it gets bowed and fanned out of the block; and a one-file camp —
+      // a siege ground down to its last man, which is exactly when the player
+      // is staring at it — divides by a zero half-width and flies off the map.
+      const u = halfW > 0 ? (sx > halfW ? 1 : (sx < -halfW ? -1 : sx / halfW)) : 0;
+      const sy = mid - r * deep - CAMP_BOW * deep * u * u
+        + wobble(seed, slot, 4) * deep * 0.22;
+      // Each piece looks outward along the line, so the block reads as deployed
+      // rather than dressed for parade. Trig per piece is at most thirty calls
+      // per besieged site, which is nothing next to the fills it saves.
+      const a = angle + CAMP_FAN * u;
+      addPiece(x - hy * sx + hx * sy, y + hx * sx + hy * sy,
+        Math.cos(a), Math.sin(a), len, slot, own, 0);
+      slot++;
+    }
+  }
+  flushPieces(ctx, px, p);
+}
+
+/**
+ * Half-extents of the block drawStaticFormation() would draw, so a caller can
+ * offset it clear of whatever it is sitting on instead of guessing. `out.w` is
+ * measured across the line, `out.h` along `angle`. PURE.
+ */
+export function staticFormationExtent(troops, len, out) {
+  const pieces = pieceCount(troops);
+  const files = campFiles(pieces);
+  const ranks = campRanks(pieces);
+  // A single file has no width to bow across, so it has no bow depth either.
+  const bow = files > 1 ? CAMP_BOW * 0.5 : 0;
+  out.w = (files - 1) * 0.5 * len * GAP_ACROSS + len;
+  out.h = ((ranks - 1) * 0.5 + bow) * len * GAP_DEEP + len;
+  return out;
 }

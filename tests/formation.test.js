@@ -7,8 +7,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  pieceCount, formationFiles, formationRanks, planUnits, unitOfPiece, wobble,
-  SOLO, MAX_PIECES, MAX_FILES,
+  pieceCount, formationFiles, formationRanks, campFiles, campRanks,
+  staticFormationExtent, planUnits, unitOfPiece, wobble,
+  SOLO, MAX_PIECES, MAX_FILES, CAMP_RANKS,
 } from '../src/render/formation.js';
 import { arcHeading, arcPoint } from '../src/render/routes.js';
 import { UNIT_IDS } from '../src/content/balance.js';
@@ -75,6 +76,54 @@ test('formation: the block is always a column, never wider than the cap', () => 
     assert.ok(rear >= 1 && rear <= files, `rear rank of ${rear} at ${p} pieces`);
     if (p > 2) assert.ok(ranks >= files, `${files}x${ranks} is not a column`);
   }
+});
+
+test('formation: a camped stack is the inverse silhouette of a marching one', () => {
+  // The whole cue for "dug in, not walking on the spot" is the aspect ratio, so
+  // a camp must be WIDER than deep exactly where a column is DEEPER than wide.
+  for (let p = 4; p <= MAX_PIECES; p++) {
+    const cFiles = campFiles(p);
+    const cRanks = campRanks(p);
+    assert.ok(cRanks >= 1 && cRanks <= CAMP_RANKS, `camp ranks ${cRanks} at ${p}`);
+    assert.ok(cFiles * cRanks >= p, `camp ${cFiles}x${cRanks} cannot hold ${p}`);
+    assert.ok(cFiles > cRanks, `camp ${cFiles}x${cRanks} is not wide and shallow`);
+    const mFiles = formationFiles(p);
+    const mRanks = formationRanks(p, mFiles);
+    assert.ok(cFiles > mFiles, `camp is no wider than the column at ${p} pieces`);
+    assert.ok(cRanks <= mRanks, `camp is deeper than the column at ${p} pieces`);
+    // The cue is the aspect ratio, and it must be strictly inverted.
+    assert.ok(cFiles / cRanks > mFiles / mRanks, `aspect not inverted at ${p}`);
+  }
+});
+
+test('formation: a camp never gets narrower as the army grows', () => {
+  // Width is the cue you read at a glance. Depth may wobble by a row when the
+  // width step lets a row be dropped; width may never go backwards.
+  let files = 0;
+  for (let n = 1; n <= 300; n++) {
+    const f = campFiles(pieceCount(n));
+    assert.ok(f >= files, `camp width fell from ${files} to ${f} at ${n} troops`);
+    files = f;
+  }
+  assert.equal(campFiles(pieceCount(4)), 3);
+  assert.equal(campFiles(pieceCount(5)), 4);
+});
+
+test('formation: the reported extent covers the block it would draw', () => {
+  const E = { w: 0, h: 0 };
+  let prevW = 0;
+  for (const n of [1, 5, 12, 30, 70, 200]) {
+    staticFormationExtent(n, 3.4, E);
+    assert.ok(E.w >= 3.4 && E.h >= 3.4, `extent smaller than one piece at ${n}`);
+    assert.ok(E.w >= E.h, `extent is not wide and shallow at ${n}`);
+    assert.ok(E.w >= prevW, `extent shrank at ${n}`);
+    prevW = E.w;
+  }
+  // Linear in piece size, so a caller can scale it with the camera.
+  const a = staticFormationExtent(70, 2, { w: 0, h: 0 });
+  const b = staticFormationExtent(70, 4, { w: 0, h: 0 });
+  assert.ok(Math.abs(b.w - a.w * 2) < 1e-6);
+  assert.ok(Math.abs(b.h - a.h * 2) < 1e-6);
 });
 
 test('formation: the wobble is stable and bounded', () => {
