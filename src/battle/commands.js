@@ -133,6 +133,12 @@ function cmdRally(state, cmd, by) {
   const target = siteById(state, targetId);
   if (!target) return 'unknown-target';
   if (!site.adj.includes(target.id)) return 'not-adjacent';
+  // A pair of sites rallying INTO each other pumps troops back and forth
+  // forever, burning march time and leaving both permanently under-garrisoned.
+  // The newer order wins and the reciprocal one is dropped, so the loop cannot
+  // exist no matter which path the orders arrived by — a drag, a rally chain,
+  // or a resumed save.
+  if (target.rallyTarget === site.id) target.rallyTarget = null;
   site.rallyTarget = target.id;
   return null;
 }

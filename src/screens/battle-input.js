@@ -249,8 +249,11 @@ export function createBattleInput(o) {
         // the sim already has rather than a new multi-hop concept.
         if (from && to) {
           const chain = chainFor(to.id);
+          // Toggle, not set: one link has three states (off, this way, that
+          // way) and the drag cycles them, so undoing never needs a second
+          // gesture. See battle-orders.js toggleRally.
           if (chain.length) ord.issueRallyChain(from, chain, to);
-          else ord.issueRally(from, to);
+          else ord.toggleRally(from, to);
         }
       } else {
         ord.setRally(w.x, w.y);   // click form: whatever is selected

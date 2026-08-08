@@ -138,7 +138,9 @@ export function createOrders(o) {
       if (stops[i].owner !== 'player') return false;
       if (!stops[i].adj.includes(stops[i + 1].id)) return false;
     }
-    for (let i = 0; i < stops.length - 1; i++) issueRally(stops[i], stops[i + 1]);
+    // Toggle per link, so re-dragging a route you already set cancels it — the
+    // same "drag it again to undo" the single-link gesture has.
+    for (let i = 0; i < stops.length - 1; i++) toggleRally(stops[i], stops[i + 1]);
     return true;
   }
 
@@ -156,6 +158,33 @@ export function createOrders(o) {
     if (!from || from.owner !== 'player') return false;
     if (!to || to.id === from.id) { push(cmd.rally(from.id, null)); return true; }
     if (!from.adj.includes(to.id)) return false;
+    push(cmd.rally(from.id, to.id));
+    return true;
+  }
+
+  /**
+   * What a rally DRAG along a link means, which is not simply "set it".
+   *
+   * One link between two sites can be in exactly three states — off, pointing
+   * one way, pointing the other — so dragging it should cycle them rather than
+   * needing a separate gesture to undo. Dragging the SAME direction twice is the
+   * player saying "no, not that", so it clears.
+   *
+   *   A -> B when it is already A -> B   ...clears the link
+   *   A -> B when it is currently B -> A ...flips it to A -> B
+   *   A -> B when the link is idle       ...sets A -> B
+   *
+   * The flip is expressed as one order: commands.js drops a reciprocal rally
+   * whenever it sets one, because two sites pointing at each other pump troops
+   * back and forth forever. That invariant lives in the SIM, not here, so it
+   * holds for the rally chain and for a resumed save too.
+   * @returns {boolean} true when an order was issued.
+   */
+  function toggleRally(from, to) {
+    if (!from || from.owner !== 'player') return false;
+    if (!to || to.id === from.id) { push(cmd.rally(from.id, null)); return true; }
+    if (!from.adj.includes(to.id)) return false;
+    if (from.rallyTarget === to.id) { push(cmd.rally(from.id, null)); return true; }
     push(cmd.rally(from.id, to.id));
     return true;
   }
@@ -333,7 +362,8 @@ export function createOrders(o) {
   }
 
   return {
-    push, site, canSend, canChain, snapTarget, issueSend, issueRally, issueRallyChain, issueRallyKeep,
+    push, site, canSend, canChain, snapTarget, issueSend,
+    issueRally, toggleRally, issueRallyChain, issueRallyKeep,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
   };

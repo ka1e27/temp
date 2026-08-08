@@ -25,9 +25,9 @@ import {
 } from './siteGlyphs.js';
 import { siteHeadYAt } from './siteShapes.js';
 import {
-  drawSquads, drawSquadLabels, drawRallies, drawDragArc, drawRallyDrag, drawBox,
-  drawChainLegs, drawSquadRoutes,
+  drawSquads, drawSquadLabels, drawDragArc, drawBox, drawChainLegs, drawSquadRoutes,
 } from './routes.js';
+import { drawRallies, drawRallyDrag } from './rallyLines.js';
 import { drawStaticFormation } from './formation.js';
 import { numStr } from '../ui/format.js';
 
