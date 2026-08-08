@@ -1,4 +1,4 @@
-// Everything that travels between sites: squad chevrons, the live drag arc,
+// Everything that travels between sites: marching squads, the live drag arc,
 // rally lines and the box-select rectangle.
 //
 // Split out of battleView.js to keep both files under the 400-line cap; the
@@ -8,10 +8,18 @@
 // entire class of drift bug. The renderer interpolates against the current
 // tick plus the loop's `alpha`, and that lives here.
 //
+// This file answers WHERE a squad is; formation.js answers WHAT AN ARMY OF
+// THAT SIZE LOOKS LIKE. The split is what keeps both under the line cap and it
+// is a real seam: nothing in formation.js knows an arc exists.
+//
 // Allocation-free: scratch vectors are module-scope, dash arrays are mutated
-// in place.
+// in place, and the per-piece buffer is preallocated over in formation.js.
 import { UNIT_IDS } from '../content/balance.js';
 import { numStr } from '../ui/format.js';
+import {
+  pieceCount, formationFiles, formationRanks, planUnits, wobble,
+  beginPieces, addPiece, flushPieces, ownerIndex,
+} from './formation.js';
 
 const _a = { x: 0, y: 0 };
 const _b = { x: 0, y: 0 };
@@ -33,6 +41,27 @@ export function arcPoint(ax, ay, bx, by, bow, t, out) {
   const u = 1 - t;
   out.x = u * u * ax + 2 * u * t * cx + t * t * bx;
   out.y = u * u * ay + 2 * u * t * cy + t * t * by;
+  return out;
+}
+
+/**
+ * Unit tangent of that same bowed quadratic: which way a piece standing at `t`
+ * is facing. Analytic (the Bézier derivative) rather than a finite difference,
+ * so the front rank still faces forward at t=0, where a backward sample would
+ * fall off the end of the curve. PURE — unit tested.
+ */
+export function arcHeading(ax, ay, bx, by, bow, t, out) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const cx = (ax + bx) * 0.5 - dy * 0.13 * bow;
+  const cy = (ay + by) * 0.5 + dx * 0.13 * bow;
+  const u = 1 - t;
+  const hx = u * (cx - ax) + t * (bx - cx);
+  const hy = u * (cy - ay) + t * (by - cy);
+  const m = Math.sqrt(hx * hx + hy * hy);
+  if (m < 1e-9) { out.x = 1; out.y = 0; return out; }
+  out.x = hx / m;
+  out.y = hy / m;
   return out;
 }
 
@@ -78,54 +107,106 @@ export function chevron(ctx, x, y, ang, size, color, hollow = 0) {
 }
 
 /**
- * All in-flight squads.
+ * Every in-flight squad, drawn as the army it is.
+ *
+ * A squad is a BODY OF TROOPS, not an arrow: formation.js turns its head-count
+ * into N pieces, and this lays those pieces out in staggered ranks trailing
+ * back along the route. Size is therefore legible without reading a number,
+ * which is the whole point — a five-man raid and a fifty-man assault used to be
+ * the same chevron at 3x the scale.
+ *
+ * Ranks are spaced along the ROUTE PARAMETER rather than in a straight line
+ * behind the head, so a column BENDS through the bow and holds together through
+ * the curve instead of shearing off it. That costs two arc evaluations per
+ * RANK, never one per piece — a formation is at most six ranks deep, so the
+ * curve costs twelve evaluations for a 30-piece army.
+ *
  * @param {object} g geometry bundle {pos(site,out), byId(id), hexSize, palette}
  */
 export function drawSquads(ctx, state, t, px, g) {
-  const p = g.palette;
+  const hs = g.hexSize;
+  // One piece is one soldier, so a piece is the SAME size at every stack size
+  // and mass is the only thing that changes. The floors are in screen pixels,
+  // so a column still resolves with the camera pulled all the way out; the
+  // ceilings stop a formation swelling past a hex when it is pulled further.
+  const len = Math.max(hs * 0.1, px * 2.2);
+  const fileGap = Math.min(hs * 0.28, Math.max(hs * 0.165, px * 4.6));
+  const rankGap = Math.min(hs * 0.32, Math.max(hs * 0.2, px * 5.4));
+
+  beginPieces();
   for (let i = 0; i < state.squads.length; i++) {
     const sq = state.squads[i];
     const from = g.byId(sq.from);
     const to = g.byId(sq.to);
     if (!from || !to) continue;
+    let troops = 0;
+    for (let k = 0; k < UNIT_IDS.length; k++) troops += sq.comp[UNIT_IDS[k]] || 0;
+    if (troops <= 0) continue;
+
     const f = squadProgress(sq, t);
     const bow = squadBow(sq);
     g.pos(from, _a);
     g.pos(to, _b);
-    arcPoint(_a.x, _a.y, _b.x, _b.y, bow, f, _c);
-    arcPoint(_a.x, _a.y, _b.x, _b.y, bow, f > 0.02 ? f - 0.02 : f + 0.02, _d);
-    const ang = f > 0.02
-      ? Math.atan2(_c.y - _d.y, _c.x - _d.x)
-      : Math.atan2(_d.y - _c.y, _d.x - _c.x);
 
-    let n = 0;
-    for (let k = 0; k < UNIT_IDS.length; k++) n += sq.comp[UNIT_IDS[k]] || 0;
-    const size = g.hexSize * 0.17 * Math.sqrt(Math.max(1, n));
-    // A retreating force cannot be intercepted and does not fight; drawing it
-    // hollow says "not a threat" with no legend to read.
-    chevron(ctx, _c.x, _c.y, ang, size, p.owner[sq.owner], sq.retreating ? px * 1.6 : 0);
+    const pieces = pieceCount(troops);
+    const files = formationFiles(pieces);
+    const ranks = formationRanks(pieces, files);
+    planUnits(sq.comp, troops, pieces);
+    const owner = ownerIndex(sq.owner);
+    const ret = sq.retreating ? 1 : 0;
+    // A retreat marches loose and wide. Combined with the hollow pieces that
+    // reads as a rout rather than a push, before any colour is decoded.
+    const fg = ret ? fileGap * 1.4 : fileGap;
+    const rg = ret ? rankGap * 1.25 : rankGap;
 
-    let x = _c.x - size * 0.55;
-    const step = (size * 1.1) / Math.max(1, n);
-    const y = _c.y + size * 0.78;
-    for (let k = 0; k < UNIT_IDS.length; k++) {
-      const c = sq.comp[UNIT_IDS[k]] || 0;
-      if (!c) continue;
-      ctx.fillStyle = p.units[UNIT_IDS[k]];
-      ctx.fillRect(x, y, Math.max(step * c, px), px * 3);
-      x += step * c;
+    // Rank spacing in route-parameter terms, capped so a very short link is
+    // never wholly swallowed by a very deep column.
+    const ex = _b.x - _a.x;
+    const ey = _b.y - _a.y;
+    const span = Math.sqrt(ex * ex + ey * ey) || 1;
+    const dt = Math.min(rg / span, 0.44 / (ranks > 1 ? ranks - 1 : 1));
+
+    let slot = 0;
+    for (let r = 0; r < ranks; r++) {
+      const at = f - r * dt;
+      const tr = at > 0 ? at : 0;
+      arcPoint(_a.x, _a.y, _b.x, _b.y, bow, tr, _c);
+      arcHeading(_a.x, _a.y, _b.x, _b.y, bow, tr, _d);
+      // Ranks that have not cleared the gate yet queue up in a straight line
+      // BEHIND it instead of piling onto t=0. Without this a large army looks
+      // small for the first quarter of its journey, which is precisely the
+      // thing this whole change exists to stop.
+      const lag = at < 0 ? at * span : 0;
+      // The rear rank carries the remainder, so a column is always square at
+      // the front and ragged at the back — the shape a marching body has.
+      const w = r === ranks - 1 ? pieces - slot : files;
+      // Half-file stagger: ranks interlock into a block instead of stacking
+      // into a grid of dots.
+      const base = (r & 1 ? 0.25 : -0.25) * fg - (w - 1) * 0.5 * fg;
+      for (let k = 0; k < w; k++) {
+        const across = base + k * fg + wobble(sq.id, slot, 1) * fg * 0.26;
+        const along = lag + wobble(sq.id, slot, 2) * rg * 0.3;
+        addPiece(_c.x - _d.y * across + _d.x * along,
+          _c.y + _d.x * across + _d.y * along,
+          _d.x, _d.y, len, slot, owner, ret);
+        slot++;
+      }
     }
   }
+  flushPieces(ctx, px, g.palette);
 }
 
-/** Squad head-counts, drawn inside the renderer's single text pass. */
+/** Squad head-counts, drawn inside the renderer's single text pass. Below the
+ *  subitizing limit the pieces ARE the number, so the label would only repeat
+ *  what the formation already said; above it, it is the exact figure the
+ *  compressed piece count deliberately stops carrying. */
 export function drawSquadLabels(ctx, state, t, px, g, owner) {
   for (let i = 0; i < state.squads.length; i++) {
     const sq = state.squads[i];
     if (sq.owner !== owner) continue;
     let n = 0;
     for (let k = 0; k < UNIT_IDS.length; k++) n += sq.comp[UNIT_IDS[k]] || 0;
-    if (n < 3) continue;
+    if (n < 5) continue;
     const from = g.byId(sq.from);
     const to = g.byId(sq.to);
     if (!from || !to) continue;
