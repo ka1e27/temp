@@ -11,7 +11,7 @@
 // Measurements and order-emitters live in ./aicore.js; the home-defence planner
 // and the surplus maths live in ./aihome.js. This file is the phase list.
 // PURE.
-import { AI, UNIT_IDS, SITES } from '../content/balance.js';
+import { AI, UNIT_IDS, SITES, MAPGEN } from '../content/balance.js';
 import { createRng } from '../core/rng.js';
 import { TICK_HZ } from '../core/loop.js';
 import {
@@ -229,7 +229,44 @@ function playerArmy(state) {
   return comp;
 }
 
-function adapt(state, knobs, out, rng) {
+/**
+ * Move `want` of `pool` onto `unit`, counting what is already there. Sites past
+ * the share go back to the kind's default, so the mix CONVERGES on the share
+ * instead of drifting toward whatever was picked last.
+ */
+function retrain(out, pool, unit, want) {
+  const n = Math.max(0, Math.min(pool.length, Math.round(want)));
+  const on = pool.filter((s) => s.trainType === unit);
+  const off = pool.filter((s) => s.trainType !== unit);
+  for (let i = on.length; i < n && off.length; i++) {
+    const site = off.shift();
+    out.push({ t: 'TRAIN', by: ME, site: site.id, unit });
+  }
+  for (let i = n; i < on.length; i++) {
+    const site = on[i];
+    const back = MAPGEN.trainType[site.kind];
+    if (back && back !== unit) out.push({ t: 'TRAIN', by: ME, site: site.id, unit: back });
+  }
+}
+
+/**
+ * What the enemy builds. TWO SHARES OF PRODUCTION, NOT TWO COIN FLIPS.
+ *
+ * `ramTrainShare` and `counterTrainShare` both used to be rolled per think
+ * against every eligible site, which RATCHETS — a stronghold that flipped never
+ * flipped back — so a few minutes in, every wall in the region was held by
+ * def-2 rams or def-4 raiders instead of def-8 spearmen behind a 1.75 bulwark.
+ * Only tiers 3 and 4 set `adaptComposition`, so the effect landed exactly on the
+ * regions that are supposed to be the hardest: measured at n=48 with the tail
+ * dial already re-curved, obsidian won 83% in 5.0m against a 23-minute target
+ * while tier-2 highmarch — which cannot adapt and therefore kept its spearwall —
+ * won 8%. The enemy was disarming itself, and it looked like a difficulty curve.
+ *
+ * Now the AI answers what you field with a PORTION of its production and keeps a
+ * spear backbone behind it, which is what makes "the enemy counter-trains here"
+ * (duskfell) a threat rather than a gift.
+ */
+function adapt(state, knobs, out) {
   const seen = state.ai.seenPlayerComp ?? emptyComp();
   const now = playerArmy(state);
   const sample = emptyComp();
@@ -242,14 +279,17 @@ function adapt(state, knobs, out, rng) {
     .filter((s) => s.owner === ME && SITES[s.kind].train > 0).sort(byId);
 
   // Rams are a tier knob, not an adaptation: even T1 brings one occasionally.
+  // They are also worthless on defence, so the appetite only applies while there
+  // is a wall to knock down — when the siege ends, the yards go back to spears.
   const sieging = state.sites.some((s) => s.siege?.owner === ME);
-  if (sieging && unlocked.includes('rams')) {
-    for (const site of trainers) {
-      if (site.kind !== 'stronghold' || site.trainType === 'rams') continue;
-      if (rng.next() < knobs.ramAppetite * AI.ramTrainShare) {
-        out.push({ t: 'TRAIN', by: ME, site: site.id, unit: 'rams' });
-      }
-    }
+  const strongholds = trainers.filter((s) => s.kind === 'stronghold');
+  if (unlocked.includes('rams')) {
+    // A share, but never a share that rounds to nothing: on a small map two
+    // strongholds times 0.4 is zero engines, and "the enemy brings its own
+    // rams" would silently be false for exactly the maps you can see it on.
+    const want = sieging
+      ? Math.max(1, strongholds.length * AI.ramTrainShare * knobs.ramAppetite) : 0;
+    retrain(out, strongholds, 'rams', want);
   }
 
   if (!knobs.adaptComposition) return;
@@ -259,10 +299,12 @@ function adapt(state, knobs, out, rng) {
   if (!dominant) return;
   const pick = AI.counterPick[dominant];
   if (!pick || !unlocked.includes(pick)) return;
-  for (const site of trainers) {
-    if (site.trainType === pick || site.trainType === 'rams') continue;
-    out.push({ t: 'TRAIN', by: ME, site: site.id, unit: pick });
-  }
+  // STRONGHOLDS adapt; the castle does not. The throne is the win condition, so
+  // it builds the kind's default and keeps building it — chasing the player's
+  // composition with the one garrison that cannot be allowed to lose is how an
+  // AI talks itself into holding its capital with siege engines.
+  const pool = strongholds.filter((s) => !out.some((c) => c.t === 'TRAIN' && c.site === s.id));
+  retrain(out, pool, pick, Math.max(1, pool.length * AI.counterTrainShare));
 }
 
 // --- entry point -----------------------------------------------------------
@@ -299,7 +341,7 @@ export function think(state) {
   attack(state, knobs, out, busy, taken, rng);
   consolidate(state, knobs, out, busy);
   retreat(state, knobs, out, rng, busy);
-  adapt(state, knobs, out, rng);
+  adapt(state, knobs, out);
 
   for (const cmd of out) state.commands.push(cmd);
   state.ai.activeAttacks = activeAttacks(state);

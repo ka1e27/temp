@@ -27,7 +27,7 @@
 import {
   CONTRACT_VERSION, makeMods, assertBattleConfig, hashBattleConfig,
 } from '../battle/contract.js';
-import { EXPEDITION, SITES, SITE_LEVELS, AI_TIERS } from '../content/balance.js';
+import { EXPEDITION, SITES, SITE_LEVELS } from '../content/balance.js';
 import {
   REGION_BY_ID, ENEMY_SCALING, BASE_GARRISON, NEUTRAL_GARRISON,
   PLAYER_SITE_GARRISON, BATTLE_START, ENEMY_UNITS_BY_TIER, FALLBACK_MAP,
@@ -77,16 +77,26 @@ const zeroComp = zeroComposition;
 
 /**
  * The expedition budget in SLOTS, not bodies:
- *   19 + 9 x regionsConquered + 4 x Standing Army level.
+ *   19 + 12 x (first 4 conquests) + 6 x (every one after that)
+ *      + 4 x Standing Army level + 6 x Muster Field level.
  *
  * Every unit spends a different number of them (content/balance.js UNIT_SLOTS),
  * which is what stops "all marshals" from being the only sane loadout.
+ *
+ * The two rates are a PACING knob and the reasoning is in content/balance.js
+ * EXPEDITION. The taper starts after the fourth conquest, so every region the
+ * frozen opening covers (0-4 conquests) is spent at exactly the old rate.
  */
 export function expeditionSlots(metaState) {
   const meta = metaOf(metaState);
   const fx = upgradeEffects(meta);
+  const conquered = regionsConquered(meta);
+  const taperAfter = EXPEDITION.taperAfter ?? Infinity;
+  const early = Math.min(conquered, taperAfter);
+  const late = Math.max(0, conquered - taperAfter);
   const base = EXPEDITION.base
-    + EXPEDITION.perRegion * regionsConquered(meta)
+    + EXPEDITION.perRegion * early
+    + (EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * late
     + flatBonus(fx, 'expedition');
   return Math.max(0, Math.round(stack(base)));
 }
@@ -130,18 +140,27 @@ export function playerMods(metaState, expedition) {
  * bucket; the region's dial rides `tier`, which is applied last.
  */
 export function enemyMods(region, mult) {
-  const ai = AI_TIERS[Math.min(AI_TIERS.length, Math.max(1, region.tier)) - 1];
   const t = (exp) => mult ** exp;
   return makeMods({
     startGold: stack(BATTLE_START.enemyGold, { tier: t(ENEMY_SCALING.gold) }),
     expedition: zeroComp(), // the enemy's head start is LAND, not a free army
-    goldRateMult: stack(1, { multiplicative: ai.economyMult, tier: t(ENEMY_SCALING.gold) }),
+    // `AI_TIERS[].economyMult` is DELIBERATELY ABSENT from these two.
+    //
+    // battle/economy.js `siteGoldPerSec` already multiplies every enemy site by
+    // `economyMultFor(state, faction)`, which is the same AI_TIERS number. It
+    // used to ride here as well — on goldRateMult AND on farmYieldMult — so an
+    // enemy farm, which is multiplied by both, felt the handicap THREE times and
+    // an enemy castle twice. At tier 4 that turned an advertised x1.35 into
+    // x2.46 and the endgame enemy earned eighteen times what the player did
+    // (obsidian, measured: 537 gold/s against 30). Two files each thought they
+    // owned the knob. economy.js applies it; this file does not.
+    goldRateMult: stack(1, { tier: t(ENEMY_SCALING.gold) }),
     trainSpeedMult: stack(1, { tier: t(ENEMY_SCALING.train) }),
     trainCostMult: stack(1),
     unitAtkMult: stack(1, { tier: t(ENEMY_SCALING.atk) }),
     unitDefMult: stack(1, { tier: t(ENEMY_SCALING.def) }),
     marchSpeedMult: stack(1),
-    farmYieldMult: stack(1, { multiplicative: ai.economyMult, tier: t(ENEMY_SCALING.gold) }),
+    farmYieldMult: stack(1, { tier: t(ENEMY_SCALING.gold) }),
     garrisonCapBonus: stack(0),
     siegeDmgMult: stack(1, { tier: t(ENEMY_SCALING.atk) }),
     structureRegenMult: stack(1, { tier: t(ENEMY_SCALING.def) }),

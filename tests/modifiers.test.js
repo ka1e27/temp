@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   CONTRACT_VERSION, assertBattleConfig, assertBattleOutcome, hashBattleConfig,
 } from '../src/battle/contract.js';
-import { EXPEDITION, UNIT_IDS, AI_TIERS } from '../src/content/balance.js';
+import { EXPEDITION, UNIT_IDS, AI_TIERS, SITES, SITE_LEVELS } from '../src/content/balance.js';
 import { REGIONS, REGION_BY_ID, ENEMY_SCALING } from '../src/content/regions.data.js';
 import { createState } from '../src/core/store.js';
 import {
@@ -15,6 +15,10 @@ import {
 } from '../src/meta/modifiers.js';
 import { refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome } from '../src/meta/idle.js';
+import { generateBattleMap } from '../src/battle/mapgen.js';
+import { startBattle } from '../src/battle/sim.js';
+import { siteGoldPerSec } from '../src/battle/economy.js';
+import { terrainGoldMult } from '../src/battle/terrain.js';
 
 const world = (conquered = [], upgrades = {}, crowns = 0) => {
   const s = createState({ seed: 4242, now: 0 });
@@ -76,15 +80,49 @@ test('flat upgrade bonuses join the BASE, they are never applied after a multipl
 test('the enemy difficulty dial rides the TIER bucket, AI knobs ride multiplicative', () => {
   const region = REGION_BY_ID.kaldan;
   const e = enemyMods(region, region.enemyMult);
-  const ai = AI_TIERS[region.tier - 1];
   assert.ok(Math.abs(e.unitAtkMult - region.enemyMult ** ENEMY_SCALING.atk) < 1e-12);
   assert.ok(Math.abs(e.unitDefMult - region.enemyMult ** ENEMY_SCALING.def) < 1e-12);
-  assert.ok(Math.abs(e.goldRateMult - ai.economyMult * region.enemyMult ** ENEMY_SCALING.gold) < 1e-12);
+  // goldRateMult carries the DIAL AND NOTHING ELSE.
+  //
+  // This line used to read `ai.economyMult * enemyMult ** gold`, and that is
+  // the bug it was guarding, not the rule. battle/economy.js `siteGoldPerSec`
+  // multiplies every enemy site by `economyMultFor()` — the same AI_TIERS
+  // number — and modifiers.js put it on goldRateMult AND on farmYieldMult, so
+  // an enemy farm, which is multiplied by both, felt the handicap THREE times
+  // and a castle twice. Measured on the harness at obsidian, that turned an
+  // advertised x1.35 into x2.46 and the endgame enemy earned 537 gold/sec
+  // against the player's 30. The assertion below is the stronger one: the
+  // handicap must appear exactly once on the whole path, which the old form
+  // could not have caught in either direction.
+  assert.ok(Math.abs(e.goldRateMult - region.enemyMult ** ENEMY_SCALING.gold) < 1e-12);
+  assert.ok(Math.abs(e.farmYieldMult - region.enemyMult ** ENEMY_SCALING.gold) < 1e-12);
   // x1.00 at Riverfen must leave the enemy at literal baseline.
   const r1 = enemyMods(REGION_BY_ID.riverfen, 1);
   for (const k of ['unitAtkMult', 'unitDefMult', 'trainSpeedMult', 'siegeDmgMult']) {
     assert.equal(r1[k], 1, `${k} must be baseline at enemyMult 1.0`);
   }
+  assert.equal(r1.goldRateMult, 1, 'goldRateMult must be baseline at enemyMult 1.0');
+  assert.equal(r1.farmYieldMult, 1, 'farmYieldMult must be baseline at enemyMult 1.0');
+});
+
+test('the enemy tier economy handicap is applied EXACTLY ONCE, end to end', () => {
+  // Asserted against what a live battle actually pays out, so neither this file
+  // nor battle/economy.js can drift into applying it twice again.
+  const region = REGION_BY_ID.kaldan;
+  const ai = AI_TIERS[region.tier - 1];
+  const config = buildBattleConfig(world([]).meta, region.id, [], generateBattleMap, { seed: 9 });
+  const battle = startBattle(config);
+  const farm = battle.sites.find((s) => s.owner === 'enemy' && s.kind === 'farm');
+  // Rebuilt from the CONTENT TABLES, not from config.enemy.*: reading the mods
+  // back out of the config it is checking makes the assertion circular, and a
+  // second application hidden inside goldRateMult would cancel itself out on
+  // both sides. (It did — this test passed against a deliberately re-broken
+  // enemyMods until it was rewritten this way.)
+  const dial = region.enemyMult ** ENEMY_SCALING.gold;
+  const expected = SITES.farm.gold * SITE_LEVELS[farm.level - 1].gold
+    * dial * dial * terrainGoldMult(battle, farm) * ai.economyMult;
+  assert.ok(Math.abs(siteGoldPerSec(battle, farm) - expected) < 1e-9,
+    `enemy farm pays ${siteGoldPerSec(battle, farm)}, single application says ${expected}`);
 });
 
 // ===========================================================================

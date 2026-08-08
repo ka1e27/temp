@@ -127,6 +127,20 @@ export const UPGRADES = Object.freeze([
     '+12% treasury income per level. Where a conquered empire’s crowns go.'),
   U('ordnance', 'siege', 'Ordnance Yard', 8, 2500, 1.9, [add('siegeDmg', 0.12)],
     '+12% siege damage per level, on top of the Sappers’ Guild. Late walls are thicker.'),
+  // The endgame block had a line for every FactionMod channel EXCEPT the one
+  // that decides a long battle. Drill Yards caps at 4 levels (+40%) and then
+  // training throughput stops growing forever, while a tier-4 enemy holds
+  // `develop`-3 strongholds running on SITE_LEVELS x1.75. Gold was never the
+  // player's constraint late — measured on the harness, they banked 4,700
+  // unspent gold while their strongholds ran flat out — SITES ARE. Quartermaster
+  // and Levy Reform both buy gold you already have; this buys the thing you
+  // cannot: soldiers per second out of the ground you already took.
+  U('drillmasters', 'military', 'Drillmasters', 10, 1600, 1.85, [add('trainSpeed', 0.09)],
+    '+9% training speed per level, on top of the Drill Yards. '
+    + 'The endgame answer to a region whose walls out-produce you.'),
+  U('warHost', 'military', 'War Host', 8, 2200, 1.85, [flat('garrisonCap', 30)],
+    '+30 garrison capacity everywhere, per level. A front-line stronghold that '
+    + 'stops training because it is full has stopped being a front line.'),
 ]);
 
 export const UPGRADE_BY_ID = Object.freeze(

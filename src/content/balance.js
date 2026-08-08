@@ -132,52 +132,10 @@ export const SITE_UPGRADE = [
 export const INFLUENCE_RADIUS = { farm: 1, stronghold: 2, camp: 3, castle: 3 };
 export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.75 };
 
-/**
- * `staging: boolean` became two numbers, `stagingRatio` and `stagingKeep`.
- *
- * The old boolean was the single biggest exploit in the game. Tiers 1 and 2 had
- * it OFF, and sends are adjacency-only, so everything an interior stronghold
- * trained was stranded where it stood forever: measured on kaldan, a mean of 67
- * enemy troops — more than HALF of everything the AI owned — sat two or more
- * hops behind its own front line, and the player only ever met the skin of it.
- * "I only win when I fully make use of the dumb NPC" is that number.
- *
- * Turning it on is not the fix on its own: at n=240 kaldan went 60% -> 8%,
- * because a region's `enemyMult` had been implicitly tuned against an AI that
- * wasted half its production. So tier 2 releases the rear army AND has its
- * `economyMult` cut to pay for it. The force you fight is about the same size;
- * the difference is that all of it now turns up. Measured at n=240:
- *
- *      staging off, economy 0.85   60% / 20.3m   (~40% of runs hit the cap)
- *      staging on,  economy 0.85    8% / 12.4m
- *      staging on,  economy 0.84   44% / 20.4m
- *      staging on,  economy 0.82   57% / 18.0m
- *      staging on,  economy 0.80   66% / 16.6m   <- shipped
- *
- * 0.80 over 0.82 for the MEDIAN, not the win rate: kaldan's length sits on a
- * cliff (about 40% of runs used to grind all the way to the hard cap) and 16.6m
- * against a 14m advertised length is the first time this region has finished
- * anywhere near what it promises.
- *
- * `stagingKeep` is the share of its CAP a rear site holds back. Tiers 3-4 keep
- * almost nothing, which is exactly the drain-to-the-floor behaviour they always
- * had; tier 2 keeps a third, so what moves forward is the overflow a site was
- * wasting rather than its whole garrison.
- */
-export const AI_TIERS = [
-  { reactionTicks: 45, aggression: 0.60, commitRatio: 0.45, safetyMargin: 1.60,
-    economyMult: 0.65, concurrent: 1, retreatDiscipline: 0.10, adaptComposition: false,
-    ramAppetite: 0.1, stagingRatio: 0, stagingKeep: 1.0 },
-  { reactionTicks: 32, aggression: 0.75, commitRatio: 0.50, safetyMargin: 1.50,
-    economyMult: 0.80, concurrent: 1, retreatDiscipline: 0.35, adaptComposition: false,
-    ramAppetite: 0.4, stagingRatio: 0.70, stagingKeep: 0.35 },
-  { reactionTicks: 22, aggression: 1.00, commitRatio: 0.70, safetyMargin: 1.25,
-    economyMult: 1.05, concurrent: 2, retreatDiscipline: 0.65, adaptComposition: true,
-    ramAppetite: 0.8, stagingRatio: 0.70, stagingKeep: 0.05 },
-  { reactionTicks: 15, aggression: 1.20, commitRatio: 0.80, safetyMargin: 1.15,
-    economyMult: 1.35, concurrent: 3, retreatDiscipline: 0.90, adaptComposition: true,
-    ramAppetite: 1.0, stagingRatio: 0.80, stagingKeep: 0.05 },
-];
+/** The enemy commander's numbers live in ./ai.data.js and are re-exported here,
+ *  so `import { AI, AI_TIERS } from '../content/balance.js'` keeps working and
+ *  balance.js keeps its promise of being the one front door for tuning. */
+export { AI_TIERS, AI } from './ai.data.js';
 
 /** Anti-stalemate ladder, keyed off seconds since the last OWNERSHIP CHANGE —
  *  besieging a wall you cannot breach does not reset the clock. */
@@ -230,8 +188,27 @@ export const BOOSTERS = {
  * was the obvious place to reach for. Releasing the enemy's stranded rear army
  * and cutting its `economyMult` to match is a wash on the harness, so the
  * expedition budget is unchanged and the loadout screen still says what it said.
+ *
+ * THE GROWTH TAPERS AFTER `taperAfter` CONQUESTS, and that is a pacing knob, not
+ * a nerf. Regions 1-5 are attacked with 0-4 conquests, so they are untouched by
+ * definition and the frozen opening is frozen by construction.
+ *
+ * What the taper fixes is a shape problem the harness only shows once regions
+ * 6-18 are actually playable: victory is CAPTURE-CASTLE, and a landing force
+ * that grows +12 slots a region while the map grows +1 site a region eventually
+ * lands with enough army to one-shot every site on the path to the throne. Late
+ * battles got SHORTER and flatter the further you got — measured at n=48, a
+ * clean win in tier 2 took 12-16 minutes and a clean win in tier 4 took under
+ * five, against a 23-minute advertised length. Adding sites did not fix it,
+ * because sites off the path to the castle are never fought over: obsidian at
+ * 26 enemy sites on a 21x15 grid still resolved in 6.6m.
+ *
+ * So the endgame's power growth moves off the landing stack and onto the lines
+ * that make a LONG fight winnable — Armoury, Ordnance Yard, the new Drillmasters
+ * and Muster Field, all of which compound with the ground you take rather than
+ * replacing the need to take it.
  */
-export const EXPEDITION = { base: 19, perRegion: 12 };
+export const EXPEDITION = { base: 19, perRegion: 12, taperAfter: 4, perRegionLate: 6 };
 
 /**
  * A rallied site forwards its garrison once it can do so and still keep this
@@ -277,6 +254,22 @@ export const MAPGEN = {
   neutralStrongholdShare: 0.25,
   playerStrongholdEvery: 2,
   neutralScaleShare: 0.5, // neutrals feel enemyMult at half strength
+  /**
+   * THE THRONE IS THE WIN CONDITION, so it is the one site that has to be a
+   * wall and not a speed bump. Its garrison scales with the region's `develop`
+   * on top of the dial, so a late castle is a capital with an army in it rather
+   * than the same seven-man outpost every other region ships.
+   *
+   * This is a LENGTH knob and it was measured as one. `victory: capture-castle`
+   * means a battle ends the moment the throne falls, and a level-1 castle held
+   * by 15 troops falls to the first stack that reaches it — which is why tier-3
+   * and tier-4 battles resolved in five to seven minutes against advertised
+   * lengths of seventeen to twenty-three, however the rest of the region was
+   * tuned. Making the last fight the longest one is the only place the time can
+   * honestly come from. develop is exactly 1 through regions 1-5, so this term
+   * is exactly 1.0 there and the frozen opening does not move.
+   */
+  throneGarrisonPerDevelop: 1.80,
   trainType: { camp: 'militia', castle: 'militia', stronghold: 'spearmen', farm: 'militia' },
   /** Starting garrisons before enemyMult. The player's camp is deliberately
    *  empty: the expedition deploys into it at tick 0. */
@@ -345,48 +338,4 @@ export const TERRAIN = {
   riverRadius: 1,       // "on the river": the site hex or one of its neighbours
   riverDefMult: 0.85,   // soft ground: walls on a watercourse hold less well
   riverFarmGold: 1.35,  // ...and the farm behind them is worth this much more
-};
-
-/** AI knobs that are the SAME at every tier. Per-tier knobs live in AI_TIERS. */
-export const AI = {
-  freeLunchDefence: 25,     // "leave a farm on 3 militia and it will be taken"
-  defendMargin: 1.10,       // reinforce to close the gap x1.1
-  threatHorizonTicks: 60,
-  garrisonFloor: 3,         // never strip a front site below this
-  reliefMarginSec: 10,      // breach must beat relief by this much or pull out
-  siteValue: { farm: 100, stronghold: 150, camp: 400, castle: 400 },
-  consolidationBonus: 0.15, // per adjacent site already held
-  sampleDecay: 0.7,         // exponential decay on the observed player army
-  ramTrainShare: 0.5,       // share of strongholds that take rams when hungry
-  stagingCapMult: 2,        // how far over a garrison cap the AI will mass to strike
-  thinkJitter: 0.2,
-
-  // --- surplus: press when there is army going spare ----------------------
-  // "More troops than it needs to hold what it has" is measurable: reserve is
-  // the garrison floor plus whatever is actually being thrown at each site, and
-  // anything past that is spare. At full surplus the tier's commit and staging
-  // ratios open `surplusPress` of the way to total commitment.
-  surplusFullAt: 1.0,       // spare == this x the reserve is a FULL surplus
-  surplusPress: 0.80,       // how far toward all-in a full surplus opens a ratio
-  surplusConcurrentAt: 0.5, // ...and above this it opens a second front
-  surplusConcurrent: 1,
-
-  // --- home: the castle is the win condition ------------------------------
-  // defend() only sees squads already in the air inside threatHorizonTicks —
-  // six seconds. For the castle that is too late, so homeGuard reads the army
-  // STANDING within homeRadius hops as well, reinforces down chained sends from
-  // anywhere in its own territory, and abandons a siege of its own when the gap
-  // is still this far from closed.
-  // Radius 1 = "standing on the doorstep". 2 was measured and is too jumpy: on
-  // a tier-1 map half the board is within two hops of the castle, so the AI
-  // spent the whole battle recalling an army nobody was threatening, and the
-  // COUNTRYSIDE got easier by exactly as much as the castle got harder.
-  homeRadius: 1,            // hops from the castle that count as encroachment
-  homeGuardMargin: 1.30,    // hold the castle against this multiple of what is near
-  homeRecallRatio: 0.75,    // below this share of `need`, call the siege army home
-  /** Rock-paper-scissors answer to whatever the player fields most. */
-  counterPick: {
-    militia: 'raiders', spearmen: 'militia', raiders: 'spearmen',
-    rams: 'raiders', marshal: 'spearmen',
-  },
 };

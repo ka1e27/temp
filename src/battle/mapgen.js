@@ -101,6 +101,44 @@ function pickHex(rng, cands, placed, wide) {
 
 const KIND_TAG = { farm: 'f', stronghold: 's', camp: 'c', castle: 'k' };
 
+/**
+ * How built the enemy's country is. The region's `develop` is a position on the
+ * SITE_LEVELS ladder, not a multiplier: forts start on it and farms one step
+ * below, so late regions are fought over worked ground rather than over the same
+ * raw outposts with bigger numbers stacked on them.
+ *
+ * IT IS FRACTIONAL ON PURPOSE, and that is the whole reason this works. A whole
+ * level is a huge step — measured at n=48, moving one region from develop 2 to
+ * develop 3 cost about fifty points of win rate, which is more than three
+ * regions' worth of the player's own growth. Stepping in whole levels therefore
+ * forces `enemyMult` to fall at every step to compensate, and a difficulty dial
+ * that goes DOWN as the campaign goes on is a lie on the world map. So a
+ * fraction promotes that share of the enemy's forts (and of its farms) one level
+ * higher, best sites first, which lets the ladder rise about a sixth of a level
+ * per region and keeps the dial monotone the whole way.
+ *
+ * Everything a level means is already in content/balance.js SITE_LEVELS and is
+ * read straight from it by economy, training, siege and the renderer — this
+ * invents nothing, it only decides who starts where on the ladder. The player
+ * and the neutrals stay at 1: taking developed ground and having to build it
+ * back up yourself is the asymmetry the expedition budget pays for.
+ */
+function developLevels(plan, develop) {
+  const out = new Map();
+  const base = Math.max(1, Math.floor(develop));
+  const share = Math.max(0, Math.min(1, develop - base));
+  const clamp = (n) => Math.max(1, Math.min(SITE_LEVELS.length, n));
+  // Forts and farms are promoted as separate pools so a region is never all
+  // castle and no countryside, or the other way round.
+  for (const group of [['castle', 'stronghold'], ['farm']]) {
+    const pool = plan.filter((e) => e.owner === 'enemy' && group.includes(e.kind));
+    const floor = group[0] === 'farm' ? base - 1 : base;
+    const up = Math.round(share * pool.length);
+    pool.forEach((entry, i) => out.set(entry, clamp(i < up ? floor + 1 : floor)));
+  }
+  return out;
+}
+
 function scaleGarrison(base, mult) {
   const out = {};
   for (const u of UNIT_IDS) {
@@ -278,10 +316,12 @@ export function generateBattleMap(regionSpec, seed) {
   const cols = Math.max(5, spec.cols ?? 11);
   const rows = Math.max(5, spec.rows ?? 9);
   const enemyMult = spec.enemyMult ?? 1;
+  const develop = spec.develop ?? spec.region?.develop ?? 1;
   const rng = createRng(deriveSeed(seed >>> 0, 'mapgen'));
   const grid = { cols, rows, blocked: [] };
 
   const plan = planSites(spec);
+  const levels = developLevels(plan, develop);
   const wide = bandCandidates(grid, [0, 1]);
   const placed = [];
   const sites = [];
@@ -295,21 +335,30 @@ export function generateBattleMap(regionSpec, seed) {
       : entry.kind === 'castle' ? 'castle'
         : `${entry.owner[0]}${KIND_TAG[entry.kind]}${String(n).padStart(2, '0')}`;
 
-    const mult = entry.owner === 'enemy' ? enemyMult
+    const throne = entry.owner === 'enemy' && entry.kind === 'castle'
+      ? 1 + Math.max(0, develop - 1) * MAPGEN.throneGarrisonPerDevelop : 1;
+    const mult = entry.owner === 'enemy' ? enemyMult * throne
       : entry.owner === 'neutral' ? 1 + (enemyMult - 1) * MAPGEN.neutralScaleShare : 1;
     const base = MAPGEN.garrison[entry.owner][entry.kind] ?? {};
-    const hpMax = SITES[entry.kind].hp * SITE_LEVELS[0].hp;
+    const level = levels.get(entry) ?? 1;
+    const lv = SITE_LEVELS[level - 1];
+    const hpMax = SITES[entry.kind].hp * lv.hp;
 
     sites.push({
       id,
       kind: entry.kind,
       hex: [hex.q, hex.r],
       owner: entry.owner,
-      level: 1,
+      level,
+      // Deliberately NOT scaled by the level. `develop` buys walls, income and
+      // training throughput; `enemyMult` buys bodies. Keeping them orthogonal is
+      // what makes a developed region reward hitting it EARLY — the garrison
+      // that fills those bigger caps has to be produced during the battle, so
+      // "starve it and the castle falls itself" is a real plan and not flavour.
       garrison: scaleGarrison(base, mult),
       hp: hpMax,
       hpMax,
-      hpRegen: SITES[entry.kind].hpRegen,
+      hpRegen: SITES[entry.kind].hpRegen * lv.regen,
       trainType: MAPGEN.trainType[entry.kind],
     });
   }
