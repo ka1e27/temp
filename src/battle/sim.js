@@ -11,8 +11,7 @@
 // PURE.
 import { TICK_HZ } from '../core/loop.js';
 import {
-  SITES, UNITS, BOOSTERS, ATTRITION, ATTRITION_BLEED_SEC, ATTRITION_CHECK_TICKS,
-  RALLY_KEEP,
+  UNITS, BOOSTERS, ATTRITION, ATTRITION_BLEED_SEC, ATTRITION_CHECK_TICKS, RALLY_KEEP,
 } from '../content/balance.js';
 import {
   resolveField, siegeDps, siteRegen, siteMaxHp, emptyComp, addComp, scaleComp, total,
@@ -21,6 +20,7 @@ import {
   createBattleState, siteById, effectiveLevel, armySize, sitesOwned, rallyKeepOf,
 } from './state.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
+import { groundOf, siteDefMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget, clearPathCache } from './movement.js';
 import { drainCommands, subComp } from './commands.js';
 import { runEconomy, attritionMods } from './economy.js';
@@ -30,10 +30,17 @@ import { think } from './ai.js';
 
 const FACTIONS = ['player', 'enemy'];
 
-/** Build a live battle from a validated config and paint the opening front. */
+/**
+ * Build a live battle from a validated config and paint the opening front.
+ *
+ * The river layer is attached HERE, in the same `"q,r"` string form as blocked,
+ * so it serialises into a resume blob with everything else. A config without
+ * rivers (a hand-built test fixture) simply has none.
+ */
 export function startBattle(config) {
   clearPathCache();
   const state = createBattleState(config);
+  state.grid.rivers = (config.grid?.rivers ?? []).map(([q, r]) => `${q},${r}`);
   recomputeInfluence(state);
   return state;
 }
@@ -81,7 +88,10 @@ function siegePhase(state) {
     const regen = siteRegen(site.kind, effectiveLevel(site), regenMult) / TICK_HZ;
 
     if (site.siege && site.siege.owner !== site.owner) {
-      const dps = siegeDps(site.siege.comp, modOf(state, site.siege.owner, 'siegeDmgMult')) / TICK_HZ;
+      // Terrain is part of the siege, not just the field battle: rams work at a
+      // fraction of their rate against a fort up in the rocks.
+      const dps = siegeDps(site.siege.comp, modOf(state, site.siege.owner, 'siegeDmgMult'),
+        groundOf(state, site)) / TICK_HZ;
       // Ceiling is hpMax, or the current HP when Emergency Fortify has pushed a
       // site above it: an overheal may drain away, but repair never restores it.
       const ceiling = Math.max(site.hpMax, site.hp);
@@ -145,10 +155,13 @@ function skirmishHome(state, site, group) {
 
 /** Field battle against whoever is holding the ground, not against the walls. */
 function fightStack(state, group, site, holders, holderFaction) {
+  // No walls and no bulwark — but the ground is still the ground, so terrain
+  // applies here too. Only the FORTIFICATION bonus is absent.
   const r = resolveField(group.comp, holders, {
     siteDefMult: 1, defenderOwnsSite: false,
     attMult: modOf(state, group.owner, 'unitAtkMult'),
     defMult: modOf(state, holderFaction, 'unitDefMult'),
+    ground: groundOf(state, site),
   });
   recordCasualties(state, group.owner, holderFaction, group.comp, r.attSurvivors);
   recordCasualties(state, holderFaction, group.owner, holders, r.defSurvivors);
@@ -201,11 +214,15 @@ function resolveArrival(state, group) {
   }
 
   const r = resolveField(group.comp, site.garrison, {
-    siteDefMult: SITES[site.kind].defMult,
+    // siteDefMultOf, not SITES[kind].defMult: the mountains around a fort are
+    // part of how hard it is to take, and sim/preview/AI/harness all read the
+    // same function rather than each drifting their own way.
+    siteDefMult: siteDefMultOf(state, site),
     defenderOwnsSite: true,
     attMult: modOf(state, owner, 'unitAtkMult'),
     defMult: modOf(state, site.owner, 'unitDefMult'),
     shielded: site.shieldTicks > 0,
+    ground: groundOf(state, site),
   });
   recordCasualties(state, owner, site.owner, group.comp, r.attSurvivors);
   recordCasualties(state, site.owner, owner, site.garrison, r.defSurvivors);

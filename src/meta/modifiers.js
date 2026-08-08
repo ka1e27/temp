@@ -192,6 +192,9 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
       rows: region.grid.rows,
       layout: 'odd-r',
       blocked: (gen.blocked ?? []).filter(([q, r]) => !blockedOnSites.has(`${q},${r}`)),
+      // Rivers are PASSABLE, so unlike mountains they are NOT filtered off site
+      // hexes: a farm standing on a watercourse is the whole point of them.
+      rivers: gen.rivers ?? [],
     },
     sites,
     adjacency: (gen.adjacency ?? []).filter(([a, b]) => a !== b && ids.has(a) && ids.has(b)),

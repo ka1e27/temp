@@ -49,6 +49,29 @@ export function scaleComp(comp, frac) {
 const shareOf = (comp, n, u) => (n ? (comp[u] || 0) / n : 0);
 
 /**
+ * What the GROUND does to one unit type. Zero RNG, like everything else here.
+ *
+ * Highland is graded — `ground.highland` is 0..1, how ringed by peaks the site
+ * is — so the multiplier is interpolated toward 1.0 on merely hilly ground
+ * rather than snapping on. A river is binary: you are in the shallows or you
+ * are not.
+ *
+ * A unit with no `ground` block (militia, marshal) is exactly 1.0 everywhere,
+ * which is the point: there is always one answer that does not care what the
+ * map looks like.
+ * @param {object} spec  a UNITS entry
+ * @param {?{highland:number, river:boolean}} ground
+ */
+export function groundMult(spec, ground) {
+  const g = spec.ground;
+  if (!ground || !g) return 1;
+  let m = 1;
+  if (ground.highland > 0) m *= 1 + (g.highland - 1) * ground.highland;
+  if (ground.river) m *= g.river;
+  return m;
+}
+
+/**
  * Total combat power of a force.
  * @param {Composition} comp
  * @param {Composition} foe   opposing composition, for counter multipliers
@@ -57,9 +80,12 @@ const shareOf = (comp, n, u) => (n ? (comp[u] || 0) / n : 0);
  * @param {boolean} opts.onOwnSite      enables spearmen bulwark
  * @param {number}  opts.siteDefMult    static per-site-kind defence bonus
  * @param {number}  opts.statMult       upgrade multiplier (unitAtkMult/unitDefMult)
+ * @param {?object} opts.ground         terrain of the hex being fought over
  */
 export function power(comp, foe, opts = {}) {
-  const { defending = false, onOwnSite = false, siteDefMult = 1, statMult = 1 } = opts;
+  const {
+    defending = false, onOwnSite = false, siteDefMult = 1, statMult = 1, ground = null,
+  } = opts;
   const foeN = total(foe);
   let p = 0;
   for (const u of UNIT_IDS) {
@@ -75,7 +101,11 @@ export function power(comp, foe, opts = {}) {
     }
     const stat = defending ? spec.def : spec.atk;
     const bulwark = defending && onOwnSite ? (spec.bulwark ?? 1) : 1;
-    p += n * stat * m * bulwark;
+    // Terrain applies to BOTH sides — it is the ground, not a bonus somebody
+    // owns. What changes the fight is that the two forces are made of different
+    // things: raiders storming a mountain fort are at 0.70 while the spearmen
+    // holding it are at 1.30.
+    p += n * stat * m * bulwark * groundMult(spec, ground);
   }
   if ((comp.marshal || 0) > 0) p *= 1 + UNITS.marshal.banner;
   if (defending) p *= siteDefMult;
@@ -91,13 +121,13 @@ export function power(comp, foe, opts = {}) {
 export function resolveField(attackers, defenders, opts = {}) {
   const {
     siteDefMult = 1, defenderOwnsSite = true,
-    attMult = 1, defMult = 1, shielded = false,
+    attMult = 1, defMult = 1, shielded = false, ground = null,
   } = opts;
 
-  let attPower = power(attackers, defenders, { statMult: attMult });
+  let attPower = power(attackers, defenders, { statMult: attMult, ground });
   if (shielded) attPower *= 0.5; // Emergency Fortify
   const defPower = power(defenders, attackers, {
-    defending: true, onOwnSite: defenderOwnsSite, siteDefMult, statMult: defMult,
+    defending: true, onOwnSite: defenderOwnsSite, siteDefMult, statMult: defMult, ground,
   });
 
   if (attPower > defPower) {
@@ -124,10 +154,20 @@ function keepCheapestOne(comp) {
   return out;
 }
 
-/** Siege damage per second from a besieging force. Rams are 20x a militia. */
-export function siegeDps(comp, mult = 1) {
+/**
+ * Siege damage per second from a besieging force. Rams are 20x a militia.
+ *
+ * Terrain lands here too, and this is where "a fort in the mountains" is really
+ * felt: a ram works at 0.55 in full highland, so the answer to a mountain
+ * fastness is not more engines, it is more bodies — militia are unaffected.
+ * @param {?object} ground terrain of the site under siege
+ */
+export function siegeDps(comp, mult = 1, ground = null) {
   let d = 0;
-  for (const u of UNIT_IDS) d += (comp[u] || 0) * UNITS[u].siege;
+  for (const u of UNIT_IDS) {
+    const n = comp[u] || 0;
+    if (n) d += n * UNITS[u].siege * groundMult(UNITS[u], ground);
+  }
   return d * mult;
 }
 
@@ -145,8 +185,9 @@ export function siteMaxHp(kind, level = 1) {
  * "INSUFFICIENT — walls repair faster than you break them", and it is the whole
  * reason a handful of troops cannot take a stronghold.
  */
-export function breachSeconds(comp, hp, kind, level = 1, siegeMult = 1, regenMult = 1) {
-  const net = siegeDps(comp, siegeMult) - siteRegen(kind, level, regenMult);
+export function breachSeconds(comp, hp, kind, level = 1, siegeMult = 1, regenMult = 1,
+  ground = null) {
+  const net = siegeDps(comp, siegeMult, ground) - siteRegen(kind, level, regenMult);
   if (net <= 0) return Infinity;
   return hp / net;
 }

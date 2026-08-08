@@ -19,6 +19,7 @@ const VARS = {
   neutral: '--c-neutral',
   gold: '--c-gold',
   accent: '--c-accent',
+  water: '--c-water',
   warn: '--c-warn',
   danger: '--c-danger',
 };
@@ -43,7 +44,7 @@ export const FALLBACK = Object.freeze({
   bg: '#0b0d12', surface: '#12151d', surface2: '#1a1f2b', line: '#263041',
   text: '#e7ebf3', textDim: '#93a0b8',
   player: '#3ddc97', enemy: '#ff5c5c', neutral: '#6b7688',
-  gold: '#ffc857', accent: '#5aa9ff', warn: '#ffc857', danger: '#ff5c5c',
+  gold: '#ffc857', accent: '#5aa9ff', water: '#2b7a9e', warn: '#ffc857', danger: '#ff5c5c',
   militia: '#e8e8ec', spearmen: '#5bd6a6', raiders: '#ffc857',
   rams: '#b07cff', marshal: '#ff8a3d',
   floodAlpha: 0.2, floodStrongAlpha: 0.42, gridAlpha: 0.5, blockedAlpha: 0.9,
@@ -251,6 +252,12 @@ export function derive(c) {
   // being INSIDE someone's ground.
   p.blocked = withAlpha(mix(c.bg, c.line, 0.8), c.blockedAlpha);
   p.blockedEdge = withAlpha(c.textDim, 0.55);
+  // Rivers, as two strokes over one path: a dark bed that separates the water
+  // from the ground either side, then the water itself. Both are opaque-ish,
+  // because the territory flood is painted OVER them — a river inside your
+  // ground should still read as your ground, and as a river.
+  p.riverBed = withAlpha(mix(c.water, '#000000', 0.68), 0.85);
+  p.river = withAlpha(mix(c.water, c.bg, 0.3), 0.72);
   p.track = withAlpha(c.line, 0.95);
   p.shade = withAlpha(c.bg, 0.55);
   // Training progress. Dimmer than the selection accent it shares a hue with:

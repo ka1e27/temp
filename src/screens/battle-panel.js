@@ -16,7 +16,9 @@ import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
-import { siteIntel, goldLine, trainLine, stepRallyKeep, keepLabel } from './battle-econ.js';
+import {
+  siteIntel, goldLine, trainLine, terrainLine, stepRallyKeep, keepLabel,
+} from './battle-econ.js';
 
 /**
  * Player-facing text for every reason battle/commands.js can reject an order
@@ -109,13 +111,17 @@ export function createSitePanel(o) {
   // training functions — see battle-econ.js for why it may not be re-derived.
   const money = h('div.hud-selection-sub.hud-site-money', { text: '' });
   const trains = h('div.hud-selection-sub.hud-site-train', { text: '' });
+  // WHY a site is tough. Terrain the player cannot read is an invisible
+  // difficulty dial, and this is the line that makes it visible.
+  const terrain = h('div.hud-selection-sub.hud-site-terrain', { text: '' });
   const stat = h('div.hud-selection-sub.hud-site-stat', { text: '' });
   const upgrade = h('button.btn.hud-upgrade', {
     'data-interactive': true, type: 'button',
     on: { click: () => { const id = targetId(); if (id) input.upgrade(id); } },
   }, 'Upgrade');
   const keep = createKeepRow(getState, input, targetId);
-  const el = h('div.hud-selection.panel', {}, title, sub, money, trains, stat, keep.el, upgrade);
+  const el = h('div.hud-selection.panel', {},
+    title, sub, money, trains, terrain, stat, keep.el, upgrade);
 
   const set = {
     open: bindClass(el, 'is-open'),
@@ -123,6 +129,7 @@ export function createSitePanel(o) {
     sub: bindText(sub, ''),
     money: bindText(money, ''),
     trains: bindText(trains, ''),
+    terrain: bindText(terrain, ''),
     stat: bindText(stat, ''),
     drain: bindClass(money, 'is-drain'),
     upLabel: bindText(upgrade, 'Upgrade'),
@@ -164,6 +171,7 @@ export function createSitePanel(o) {
       set.sub('R retreats · right-drag sets rally');
       set.money('');
       set.trains('');
+      set.terrain('');
       set.stat('');
       setShown(false);
       keep.show(null);
@@ -176,6 +184,7 @@ export function createSitePanel(o) {
     set.money(goldLine(intel));
     set.drain(intel.net < 0);
     set.trains(trainLine(intel));
+    set.terrain(terrainLine(intel));
     set.stat(statusLine(site));
     // A hold-back only means anything where there is a rally to hold back from.
     keep.show(site.owner === 'player' && site.rallyTarget ? site : null);
@@ -195,6 +204,7 @@ export function createSitePanel(o) {
     set.sub(`${squad.from} → ${squad.to}`);
     set.money('');
     set.trains('');
+    set.terrain('');
     set.stat(squad.retreating
       ? 'retreating'
       : `arrives in ${duration(Math.max(0, squad.arriveTick - state.tick) / TICK_HZ)} · R retreats`);

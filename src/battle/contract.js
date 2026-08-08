@@ -14,7 +14,13 @@ import { fnv1a, stableStringify } from '../core/hash.js';
 // v2: FactionMods gained `features` (shop unlocks that change battle or HUD
 // behaviour), and `boosters` is now validated. Before v2, five purchasable
 // upgrades crossed no seam at all and therefore did nothing.
-export const CONTRACT_VERSION = 2;
+//
+// v3: `grid.rivers` — the second half of the terrain layer. `grid.blocked` was
+// always mountains and only ever obstructed pathing; rivers are PASSABLE and
+// exist purely to modify what happens on a hex (see battle/terrain.js). They
+// have to cross the seam because a battle must be reproducible from its config
+// alone, and terrain now changes combat, siege and income.
+export const CONTRACT_VERSION = 3;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
@@ -137,6 +143,41 @@ function checkMods(m, path, errs) {
   }
 }
 
+/**
+ * v3 terrain. OPTIONAL — a config without it is a map with no watercourses, not
+ * an invalid one, which is what lets the golden fixture and every hand-built
+ * test config stay exactly as they are.
+ *
+ * The one rule that is NOT optional: a river hex may never also be a blocked
+ * hex. Rivers are passable and mountains are not, so an overlap is a hex whose
+ * own terrain contradicts itself — pathing would refuse it while the renderer
+ * painted water over it and the sim handed out a river bonus for standing in a
+ * mountain. Catch it at the seam, where the message can still name the producer.
+ */
+function checkRivers(c, errs) {
+  const rivers = c.grid?.rivers;
+  if (rivers === undefined) return;
+  if (!Array.isArray(rivers)) {
+    errs.push('grid.rivers: must be an array of [q,r] pairs');
+    return;
+  }
+  const blocked = new Set((c.grid?.blocked ?? []).map((p) => `${p?.[0]},${p?.[1]}`));
+  const seen = new Set();
+  for (const h of rivers) {
+    if (!Array.isArray(h) || h.length !== 2
+      || !Number.isInteger(h[0]) || !Number.isInteger(h[1])) {
+      errs.push(`grid.rivers: expected [q,r] integer pairs, got ${JSON.stringify(h)}`);
+      continue;
+    }
+    const key = `${h[0]},${h[1]}`;
+    if (seen.has(key)) errs.push(`grid.rivers: duplicate hex ${key}`);
+    seen.add(key);
+    if (blocked.has(key)) {
+      errs.push(`grid.rivers: ${key} is also blocked — a river must stay passable`);
+    }
+  }
+}
+
 /** @returns {BattleConfig} @throws {TypeError} */
 export function assertBattleConfig(c) {
   if (!c || typeof c !== 'object') throw new TypeError('BattleConfig: not an object');
@@ -161,6 +202,8 @@ export function assertBattleConfig(c) {
     }
     if (!(s.hp > 0) || !(s.hpMax > 0)) e.push(`sites[${s.id}]: hp and hpMax must be > 0`);
   }
+
+  checkRivers(c, e);
 
   for (const pair of c.adjacency ?? []) {
     const [a, b] = pair;

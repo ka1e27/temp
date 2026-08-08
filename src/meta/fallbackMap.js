@@ -153,7 +153,10 @@ export function normalizeSites(raw, mult) {
  * passed with `seed` as a second argument, so battle/mapgen.js's
  * `generateBattleMap(regionSpec, seed)` is a drop-in with no adapter, and so is
  * anything preferring a single ctx. The return normalises the same way:
- * `blocked` may sit at the top level or inside `grid`.
+ * `blocked` and `rivers` may sit at the top level or inside `grid`.
+ *
+ * `rivers` (contract v3) is optional: this fallback layout has no watercourses,
+ * and a map without any is a valid map, not a broken one.
  */
 export function callMapGen(mapGen, { region, seed, mult, isRaid }) {
   const { grid, siteCounts } = region;
@@ -171,6 +174,7 @@ export function callMapGen(mapGen, { region, seed, mult, isRaid }) {
     sites: gen.sites,
     adjacency: gen.adjacency ?? [],
     blocked: gen.blocked ?? gen.grid?.blocked ?? [],
+    rivers: gen.rivers ?? gen.grid?.rivers ?? [],
   };
 }
 

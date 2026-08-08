@@ -15,6 +15,7 @@ import {
   power, total, emptyComp, addComp, scaleComp, breachSeconds, siegeDps, siteRegen,
 } from './combat.js';
 import { siteById, effectiveLevel } from './state.js';
+import { groundOf, siteDefMultOf } from './terrain.js';
 import { travelTicks } from './movement.js';
 import { attritionMods } from './economy.js';
 import { garrisonCap } from './training.js';
@@ -33,17 +34,19 @@ const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const floorFor = (site) => (site.kind === 'castle'
   ? Math.max(AI.garrisonFloor, RALLY_MIN_GARRISON) : AI.garrisonFloor);
 
+// Reads the SAME terrain the player does: an AI blind to the ground marches
+// its rams up a mountain and never learns why the wall holds.
 function defenceOf(state, site, attComp) {
   return power(site.garrison, attComp, {
     defending: true,
     onOwnSite: true,
-    siteDefMult: SITES[site.kind].defMult,
-    statMult: state.mods[site.owner]?.unitDefMult ?? 1,
+    siteDefMult: siteDefMultOf(state, site),
+    statMult: state.mods[site.owner]?.unitDefMult ?? 1, ground: groundOf(state, site),
   });
 }
 
-const attackPower = (state, comp, foe) =>
-  power(comp, foe, { statMult: state.mods[ME]?.unitAtkMult ?? 1 });
+const attackPower = (state, comp, foe, ground = null) =>
+  power(comp, foe, { statMult: state.mods[ME]?.unitAtkMult ?? 1, ground });
 
 /** What a site can spare: capped by the tier's commit ratio and the floor. */
 function sourceFrom(state, site, cap) {
@@ -64,20 +67,20 @@ const poolOf = (sources, frac = 1) => sources
 function breachable(state, comp, site) {
   const regenMult = (state.mods[site.owner]?.structureRegenMult ?? 1)
     * attritionMods(state).regenMult;
-  return siegeDps(comp, state.mods[ME]?.siegeDmgMult ?? 1)
+  return siegeDps(comp, state.mods[ME]?.siegeDmgMult ?? 1, groundOf(state, site))
     > siteRegen(site.kind, effectiveLevel(site), regenMult);
 }
 
 /** Smallest uniform fraction of the pooled force that beats the garrison AND
  *  breaks the walls. Null when even everything available is not enough. */
 function minFraction(state, sources, need, target) {
+  const g = groundOf(state, target);
   for (let i = 1; i <= STEPS; i++) {
     const f = i / STEPS;
     const comp = poolOf(sources, f);
     if (total(comp) === 0) continue;
-    if (attackPower(state, comp, target.garrison) >= need && breachable(state, comp, target)) {
-      return f;
-    }
+    if (attackPower(state, comp, target.garrison, g) >= need
+      && breachable(state, comp, target)) return f;
   }
   return null;
 }
@@ -204,7 +207,7 @@ function attack(state, knobs, out, busy, taken, rng) {
     const pooled = poolOf(sources);
     if (total(pooled) === 0) continue;
     const need = Math.max(defenceOf(state, site, pooled) * knobs.safetyMargin, 1);
-    if (attackPower(state, pooled, site.garrison) < need) continue;
+    if (attackPower(state, pooled, site.garrison, groundOf(state, site)) < need) continue;
 
     const held = site.adj.filter((id) => siteById(state, id)?.owner === ME).length;
     const value = (AI.siteValue[site.kind] ?? 100) * (1 + 0.25 * (site.level - 1))
@@ -296,7 +299,7 @@ function retreat(state, knobs, out, rng) {
       const regenMult = (state.mods[site.owner]?.structureRegenMult ?? 1) * att.regenMult;
       const secs = breachSeconds(
         site.siege.comp, site.hp, site.kind, effectiveLevel(site),
-        state.mods[ME]?.siegeDmgMult ?? 1, regenMult,
+        state.mods[ME]?.siegeDmgMult ?? 1, regenMult, groundOf(state, site),
       );
       const relief = reliefSeconds(state, site);
       const doomed = !Number.isFinite(secs)
@@ -308,7 +311,8 @@ function retreat(state, knobs, out, rng) {
     if (site.owner !== ME || site.kind === 'castle' || total(site.garrison) === 0) continue;
     const threat = threatOn(state, site);
     if (total(threat) === 0) continue;
-    const tp = power(threat, site.garrison, { statMult: state.mods[FOE]?.unitAtkMult ?? 1 });
+    const atk = state.mods[FOE]?.unitAtkMult ?? 1;
+    const tp = power(threat, site.garrison, { statMult: atk, ground: groundOf(state, site) });
     if (tp > defenceOf(state, site, threat) * 2 && disciplined()) {
       out.push({ t: 'RETREAT', by: ME, site: site.id });
     }

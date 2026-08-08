@@ -15,13 +15,14 @@
 //
 // Split out of battle-panel.js so it can be read and tested without a DOM.
 // PURE: no DOM, no clock.
-import { SITES, UNITS, RALLY_KEEP } from '../content/balance.js';
+import { SITES, UNITS, RALLY_KEEP, TERRAIN } from '../content/balance.js';
 import { siteGoldPerSec, factionGoldPerSec } from '../battle/economy.js';
+import { groundOf, siteDefMultOf, terrainName, isOpen } from '../battle/terrain.js';
 import {
   trainJob, siteTrainRate, siteTrainCostPerSec, factionTrainCostPerSec, garrisonCap,
 } from '../battle/training.js';
 import { clampRallyKeep, rallyKeepOf } from '../battle/state.js';
-import { total } from '../battle/combat.js';
+import { total, groundMult } from '../battle/combat.js';
 import { TICK_HZ } from '../core/loop.js';
 import { fixed, duration, rate } from '../ui/format.js';
 
@@ -34,10 +35,12 @@ import { fixed, duration, rate } from '../ui/format.js';
  *
  * @returns {{gold:number, spend:number, net:number, trains:boolean,
  *            unit:?string, trainRate:number, cycleSec:number, batch:number,
- *            blocked:boolean, held:number, cap:number}}
+ *            blocked:boolean, held:number, cap:number,
+ *            ground:object, defMult:number, riverFarm:boolean}}
  */
 export function siteIntel(state, site) {
   const gold = siteGoldPerSec(state, site);
+  const ground = groundOf(state, site);
   const spend = siteTrainCostPerSec(state, site);
   const job = trainJob(state, site);
   const trainRate = siteTrainRate(state, site);
@@ -53,6 +56,12 @@ export function siteIntel(state, site) {
     blocked: !!job && job.blocked,
     held: total(site.garrison),
     cap: 0,
+    // Terrain, straight from battle/terrain.js — the same two functions the
+    // simulation resolves the fight with, so the panel cannot claim a defence
+    // bonus the attacker will not actually meet.
+    ground,
+    defMult: siteDefMultOf(state, site),
+    riverFarm: site.kind === 'farm' && ground.river,
   };
   if (out.trains && (site.owner === 'player' || site.owner === 'enemy')) {
     out.cap = garrisonCap(state, site);
@@ -77,6 +86,46 @@ export function trainLine(intel) {
   if (!(intel.trainRate > 0)) return `${intel.unit} · halted`;
   const batch = intel.batch > 1 ? ` x${intel.batch}` : '';
   return `${intel.unit}${batch} every ${duration(intel.cycleSec)} · ${fixed(intel.trainRate, 2)}/s`;
+}
+
+/**
+ * `HIGHLAND · defence 1.20x · rams 0.65x` — WHY this site is hard.
+ *
+ * Terrain that cannot be read off the board is just an invisible difficulty
+ * dial, and the one question this line exists to answer is "why did that
+ * assault fail?". So it names the ground, states the defence multiplier the
+ * fight will actually use, and calls out the unit whose day the ground most
+ * changes. Empty on open ground, the same way goldLine() is empty for a site
+ * that neither earns nor spends.
+ */
+export function terrainLine(intel) {
+  const g = intel.ground;
+  if (isOpen(g)) return '';
+  const parts = [terrainName(g).toUpperCase(), `defence ${fixed(intel.defMult, 2)}x`];
+  if (intel.riverFarm) parts.push(`gold +${Math.round((TERRAIN.riverFarmGold - 1) * 100)}%`);
+  const worst = tellingUnit(g);
+  if (worst) parts.push(worst);
+  return parts.join(' · ');
+}
+
+/**
+ * The one unit whose multiplier this ground changes most — the actionable half
+ * of the terrain line. "Bring militia" is the lesson; naming all four would
+ * bury it.
+ *
+ * The number comes from combat.js `groundMult`, the SAME function that resolves
+ * the fight. Re-deriving `1 + (spec.ground.highland - 1) * g.highland` here is
+ * three lines and would be wrong the first time anyone changes how highland is
+ * graded — which is the whole reason this file exists.
+ */
+function tellingUnit(g) {
+  let best = null;
+  for (const [id, spec] of Object.entries(UNITS)) {
+    if (!spec.ground) continue;
+    const m = groundMult(spec, g);
+    if (!best || Math.abs(m - 1) > Math.abs(best.m - 1)) best = { id, m };
+  }
+  return best && Math.abs(best.m - 1) >= 0.05 ? `${best.id} ${fixed(best.m, 2)}x` : '';
 }
 
 /**

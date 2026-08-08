@@ -8,6 +8,7 @@
 import { SITES, SITE_LEVELS, CENTIGOLD, ATTRITION, AI_TIERS } from '../content/balance.js';
 import { TICK_HZ } from '../core/loop.js';
 import { effectiveLevel } from './state.js';
+import { terrainGoldMult } from './terrain.js';
 
 const NO_ATTRITION = Object.freeze({
   afterSec: 0, farmMult: 1, regenMult: 1, garrisonBleed: 0, trainMult: 1, trainCostMult: 1,
@@ -40,6 +41,11 @@ export const goldOf = (faction) => faction.goldCg + (faction.goldFracCg ?? 0);
  * Gold per second a single site pays its owner right now. Exported because the
  * HUD needs the same number the sim uses, and because the AI reads it to value
  * a target. An upgrade in progress still produces at the OLD level.
+ *
+ * THE ONLY PLACE farm income is computed — terrain included. A farm on a
+ * watercourse is worth TERRAIN.riverFarmGold, and it is worth that here and
+ * nowhere else, so the site panel, the HUD income line, the AI's valuation of a
+ * target and the treasury cannot disagree about which farms are the rich ones.
  */
 export function siteGoldPerSec(state, site) {
   const base = SITES[site.kind].gold;
@@ -47,7 +53,8 @@ export function siteGoldPerSec(state, site) {
   const mods = state.mods[site.owner];
   const lvl = SITE_LEVELS[effectiveLevel(site) - 1];
   const farm = site.kind === 'farm' ? (mods.farmYieldMult ?? 1) * attritionMods(state).farmMult : 1;
-  return base * lvl.gold * (mods.goldRateMult ?? 1) * farm * economyMultFor(state, site.owner);
+  return base * lvl.gold * (mods.goldRateMult ?? 1) * farm
+    * terrainGoldMult(state, site) * economyMultFor(state, site.owner);
 }
 
 /**

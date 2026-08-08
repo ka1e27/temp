@@ -22,6 +22,9 @@
   --c-neutral: #6b7688;
   --c-gold: #ffc857;
   --c-accent: #5aa9ff;
+  /* Water. Its own token rather than a tint of --c-accent: a river is terrain
+     and must never read as the selection/training highlight. */
+  --c-water: #2b7a9e;
   --c-warn: #ffc857;
   --c-danger: #ff5c5c;
 

@@ -13,6 +13,7 @@ import { UNIT_IDS, UNITS, SITES, SITE_LEVELS } from '../content/balance.js';
 import { resolveField, breachSeconds, projectHp, scaleComp, total, emptyComp }
   from '../battle/combat.js';
 import { travelTicks } from '../battle/movement.js';
+import { groundOf, siteDefMultOf } from '../battle/terrain.js';
 import { TICK_HZ } from '../core/loop.js';
 import { fixed, duration, plural } from '../ui/format.js';
 
@@ -86,13 +87,18 @@ export function computePreview(state, fromId, toId, o = {}) {
   // Relieving your own besieged site means fighting the besiegers in the open:
   // no walls, no bulwark. Sieges being interruptible is what makes reinforcing
   // dramatic, so the preview has to model it.
+  // Terrain is read through the SAME two functions the simulation uses. A
+  // preview that ignored the ground would be a lie in exactly the places the
+  // player most needs the truth — the mountain fort and the river farm.
+  const ground = groundOf(state, to);
   const defenders = relieving ? to.siege.comp : projectGarrison(state, to, eta);
   const res = resolveField(send, defenders, {
-    siteDefMult: relieving ? 1 : SITES[to.kind].defMult,
+    siteDefMult: relieving ? 1 : siteDefMultOf(state, to),
     defenderOwnsSite: !relieving,
     attMult: mods.player?.unitAtkMult ?? 1,
     defMult: mods[relieving ? to.siege.owner : to.owner]?.unitDefMult ?? 1,
     shielded: !relieving && (to.shieldTicks || 0) > 0,
+    ground,
   });
 
   pv.kind = relieving ? 'relieve' : 'assault';
@@ -108,7 +114,9 @@ export function computePreview(state, fromId, toId, o = {}) {
   if (res.win && !relieving) {
     const hp = projectHp(to.hp, eta, to.kind, to.level, regenMult);
     pv.hp = hp;
-    pv.breachSec = breachSeconds(res.attSurvivors, hp, to.kind, to.level, siegeMult, regenMult);
+    pv.breachSec = breachSeconds(
+      res.attSurvivors, hp, to.kind, to.level, siegeMult, regenMult, ground,
+    );
     pv.insufficient = !Number.isFinite(pv.breachSec);
   }
   pv.line = previewLine(pv);

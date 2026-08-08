@@ -220,6 +220,9 @@
 .hud-site-money { color: var(--c-gold); }
 .hud-site-money.is-drain { color: var(--c-danger); }
 .hud-site-train { color: var(--c-text); }
+/* Terrain reads in the water hue, so the line and the river on the board are
+   visibly the same subject. Empty on open ground, and :empty hides it. */
+.hud-site-terrain { color: color-mix(in srgb, var(--c-water) 70%, var(--c-text)); }
 .hud-selection-sub:empty { display: none; }
 
 /* Per-site rally hold-back. Only shown on a site that HAS a rally target —

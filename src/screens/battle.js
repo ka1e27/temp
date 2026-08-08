@@ -11,6 +11,7 @@ import { drainEvents } from '../battle/events.js';
 import { buildBattleConfig } from '../meta/modifiers.js';
 import { generateBattleMap } from '../battle/mapgen.js';
 import { createBattleView } from '../render/battleView.js';
+import { setRiverLayer } from '../render/hexRenderer.js';
 import { createFx, fxFromEvent } from '../render/fx.js';
 import { createBattleInput, createView } from '../screens/battle-input.js';
 import { createBattleHud, travelSecondsFor } from '../screens/battle-hud.js';
@@ -96,6 +97,10 @@ export function createBattleScene(ctx) {
       }
       ctx.state.session.pendingConfig = config;
       lastResumeAt = 0;
+      // Hand the board its river layer. It comes off the SIMULATION, not off
+      // the config, so a resumed battle draws the map it is actually being
+      // fought on — and the two can never disagree.
+      setRiverLayer(ctx.state.battle.grid.rivers);
 
       fx = createFx();
       board = createBattleView({ bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx });

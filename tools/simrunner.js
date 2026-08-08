@@ -13,6 +13,7 @@ import { recalcIncome, incomePerSec } from '../src/meta/idle.js';
 import { shopListing, buy } from '../src/meta/upgrades.js';
 import { REGIONS, REGION_BY_ID } from '../src/content/regions.data.js';
 import { breachSeconds, siegeDps, total, resolveField } from '../src/battle/combat.js';
+import { groundOf, siteDefMultOf } from '../src/battle/terrain.js';
 import { UNIT_IDS } from '../src/content/balance.js';
 import { TICK_HZ } from '../src/core/loop.js';
 
@@ -23,7 +24,6 @@ const N = Number(args.n ?? 12);
 const SLICE = ['riverfen', 'ashford', 'ironwood', 'saltmere', 'kaldan'];
 const regionIds = args.region ? [args.region] : (args.all ? REGIONS.map((r) => r.id) : SLICE);
 
-const DEF_MULT = { castle: 1.6, camp: 1.4, stronghold: 1.25, farm: 1.0 };
 /** Farms first (economy wins fights), then the war machine, then the prize. */
 const PRIORITY = { farm: 0, stronghold: 1, castle: 2, camp: 3 };
 // Keep a real home guard, but not so large that the opening push never fires —
@@ -62,12 +62,19 @@ function playerTurn(state) {
       const t = state.sites.find((x) => x.id === id);
       if (!t || t.owner === 'player' || t.siege?.owner === 'player') continue;
 
-      const field = resolveField(send, t.garrison, { siteDefMult: DEF_MULT[t.kind] ?? 1 });
+      // Terrain through the sim's own functions, not a hardcoded table: the
+      // game shows the player an EXACT preview, so a competent player reads the
+      // mountains around a fort. A harness that could not would systematically
+      // throw armies at walls and report the region as too hard.
+      const ground = groundOf(state, t);
+      const field = resolveField(send, t.garrison, {
+        siteDefMult: siteDefMultOf(state, t), ground,
+      });
       // Demand a real margin, not a bare win. The defender reinforces while our
       // squad is in transit, so a coin-flip on paper is a loss on arrival —
       // this is the "if unreinforced" caveat the HUD warns about.
       if (!field.win || field.attPower < field.defPower * ATTACK_MARGIN) continue;
-      const secs = breachSeconds(field.attSurvivors, t.hp, t.kind, t.level);
+      const secs = breachSeconds(field.attSurvivors, t.hp, t.kind, t.level, 1, 1, ground);
       if (!Number.isFinite(secs) || secs > 90) continue; // a siege we cannot finish
 
       const score = secs + PRIORITY[t.kind] * 25 - (t.kind === 'castle' ? 120 : 0);

@@ -10,8 +10,30 @@
 // passes here are effectively free. Nothing in this file runs per frame.
 import {
   hexRow, hexQ, hexCol, hexIndex, hexCx, hexCy, traceHex, terrainTier,
-  hashUnit, hashPick,
+  hashUnit, hashPick, DIR_Q, DIR_R,
 } from './hexGeom.js';
+
+/**
+ * THE RIVER LAYER, as presentation state.
+ *
+ * The background painter is handed a fixed `board` bundle built by
+ * battleView.js — cols, rows, size, owners, blocked, palette — and rivers
+ * arrived after that bundle was frozen. So the scene that owns the battle
+ * pushes the layer in here once, the same way it pushes the fx layer into the
+ * view, and drawPlates() picks it up.
+ *
+ * It is a CACHE, not a source of truth: `state.grid.rivers` is. Set it from
+ * whatever the simulation is holding and it can never drift.
+ * @type {Set<string>}
+ */
+let riverSet = new Set();
+
+/** @param {Array<string|[number,number]>} rivers hex keys or [q,r] pairs */
+export function setRiverLayer(rivers) {
+  const next = new Set();
+  for (const e of rivers ?? []) next.add(typeof e === 'string' ? e : `${e[0]},${e[1]}`);
+  riverSet = next;
+}
 
 /**
  * Diagonal two-tone hatch for contested ground. Built once and counter-scaled
@@ -108,6 +130,69 @@ export function drawPlates(ctx, o) {
 }
 
 /**
+ * Rivers, as a stroked network rather than as filled hexes.
+ *
+ * Filling the hexes would produce a chain of blue lozenges — blue confetti,
+ * which is exactly what a watercourse must not look like. Instead every pair of
+ * ADJACENT river hexes contributes one centre-to-centre segment, so the chain
+ * comes out as a continuous line that bends where the river bends, with no
+ * ordering information needed and branches handled for free. Round caps make
+ * the segments meet cleanly at each bend.
+ *
+ * Two strokes over ONE path — a dark bed, then the water — so the river has an
+ * edge against any colour of ground without a shadowBlur. Each direction is
+ * emitted once (0/4/5 of the three opposing pairs), so no segment is drawn
+ * twice and no allocation happens inside the loop.
+ *
+ * Pitched deliberately QUIET. Water is the brightest hue on a near-black board
+ * and the first pass had it out-shouting the front line, which is the one thing
+ * on this map that must always win the eye. It reads as terrain now, in the
+ * same register as the mountains.
+ */
+export function drawRivers(ctx, o) {
+  const { cols, rows, size, palette: p } = o;
+  if (riverSet.size === 0 || !p.river) return;
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.beginPath();
+    for (const key of riverSet) {
+      const c = key.indexOf(',');
+      const q = +key.slice(0, c);
+      const r = +key.slice(c + 1);
+      if (hexIndex(q, r, cols, rows) < 0) continue;
+      const cx = hexCx(q, r, size);
+      const cy = hexCy(q, r, size);
+      let joined = false;
+      for (let d = 0; d < 6; d++) {
+        if (d !== 0 && d !== 4 && d !== 5) continue;
+        const nq = q + DIR_Q[d];
+        const nr = r + DIR_R[d];
+        if (!riverSet.has(`${nq},${nr}`) || hexIndex(nq, nr, cols, rows) < 0) continue;
+        joined = true;
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(hexCx(nq, nr, size), hexCy(nq, nr, size));
+      }
+      // A hex whose only neighbours are behind it still has to appear: a
+      // zero-length segment under a round cap is a pool, and a river that
+      // silently ended one hex early would be a lie about where the ford is.
+      if (!joined && !hasRiverNeighbour(q, r)) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy); }
+    }
+    ctx.lineWidth = size * (pass ? 0.26 : 0.46);
+    ctx.strokeStyle = pass ? p.river : p.riverBed;
+    ctx.stroke();
+  }
+}
+
+function hasRiverNeighbour(q, r) {
+  for (let d = 0; d < 6; d++) {
+    if (riverSet.has(`${q + DIR_Q[d]},${r + DIR_R[d]}`)) return true;
+  }
+  return false;
+}
+
+/**
  * Sparse grit. The board has large empty stretches and they need something to
  * look at that is not a site — pitched low enough that it reads as ground
  * cover rather than as content.
@@ -141,11 +226,22 @@ function drawScrub(ctx, o) {
 
 // --- Terrain features -------------------------------------------------------
 
-/** Mountains and water: impassable, and the reason chokepoints exist. Drawn as
- *  a lit range rather than an outline, so blocked ground reads as MASS and the
- *  player never mistakes it for empty board. */
+/**
+ * The terrain features pass: rivers, then the mountains.
+ *
+ * Both go ON TOP of the territory flood, for the same reason: ground the
+ * player must plan around has to be legible whoever currently owns it, and a
+ * saturated faction wash underneath turns blue water purple. They keep a little
+ * transparency so held ground still tints them — a river inside your heartland
+ * should read as water AND as yours. Mountains last, because where the two
+ * could ever meet, rock wins.
+ *
+ * Mountains are drawn as a lit range rather than an outline, so blocked ground
+ * reads as MASS and is never mistaken for empty board.
+ */
 export function drawBlocked(ctx, o) {
   const { cols, rows, size, blocked, palette: p } = o;
+  drawRivers(ctx, o);
   if (!blocked || blocked.size === 0) return;
   ctx.beginPath();
   for (const k of blocked) {

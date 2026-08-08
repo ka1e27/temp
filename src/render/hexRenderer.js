@@ -12,7 +12,7 @@
 // so every caller and test still imports one "hex layer":
 //   hexGeom.js   pure arithmetic — corners, index <-> axial, the terrain hash
 //   hexRenderer  ownership — flood, front line, grid            (this file)
-//   terrain.js   the ground — shading bands, scrub, mountains, the hatch
+//   terrain.js   the ground — shading, scrub, mountains, rivers, the hatch
 import {
   CORNER_X, CORNER_Y, EDGE_CORNERS, DIR_Q, DIR_R, NONE, PLAYER, NEUTRAL,
   CONTESTED, OWNER_CODE, CODE_KEY, hexRow, hexQ, hexIndex, hexCx, hexCy,
@@ -24,7 +24,9 @@ export {
   CONTESTED, hexRow, hexQ, hexIndex, hexCx, hexCy, gridBounds, traceHex,
   terrainTier,
 } from './hexGeom.js';
-export { makeHatch, plateBand, drawPlates, drawBlocked } from './terrain.js';
+export {
+  makeHatch, plateBand, drawPlates, drawBlocked, drawRivers, setRiverLayer,
+} from './terrain.js';
 
 /**
  * Resolve state.influence into a dense owner buffer. Called only when the
