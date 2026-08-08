@@ -79,7 +79,7 @@ async function reach(want, maxHops = 6) {
     // Known one-click transitions between screens.
     const routes = [
       ['.mm-continue, .mm-new', 'main menu'],
-      ['.pb-launch, .prebattle-go', 'loadout launch'],
+      ['.pb-go, .pb-launch, .prebattle-go', 'loadout launch'],
       ['.results-map', 'results → map'],
       ['button.wm-go', 'invade'],
     ];
