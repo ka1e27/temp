@@ -1,4 +1,8 @@
-/* World map, shop and results — the campaign screens.
+/* Shop and results — the campaign screens either side of a battle, plus the
+   `.screen` shell and the texture both of them share with the world map.
+   The world map itself moved to worldmap.css when it stopped being a diagram
+   that fits on screen and became a map you pan; this file was at its line cap
+   and the rule here is to split rather than accommodate.
    Shared primitives (.panel, .btn, focus, keyframes, the locked/available/owned
    grammar) live in base.css and are NOT redeclared here: this file used to
    define its own opaque .panel and .btn, which silently beat base.css and meant
@@ -13,15 +17,6 @@
   animation: hd-enter var(--d-slow) var(--ease-out) both;
 }
 
-/* ---------- world map ----------
-   The campaign is one honeycomb. Locked ground is hatched and unnamed,
-   attackable ground carries the enemy hue and breathes, everything you hold
-   floods green and glows — so the empire visibly grows. */
-
-.worldmap {
-  display: flex; flex-direction: column;
-  background: radial-gradient(1200px 700px at 50% 18%, #141a26 0%, var(--c-bg) 70%);
-}
 /* The faint hex weave: the DOM screens quoting the board's geometry. */
 .worldmap::before,
 .results::before {
@@ -30,206 +25,6 @@
   mask-image: radial-gradient(120% 90% at 50% 26%, #000 0%, transparent 76%);
 }
 
-.wm-header {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--s-5); margin: var(--s-4) var(--s-4) 0; padding: var(--s-3) var(--s-5);
-}
-
-/* Treasury and income are glanced at constantly, so they lead — label above
-   value, the crown count at display size. Placement is explicit because the
-   scene emits label/value/label/value as one flat row of four. */
-.wm-treasury {
-  display: grid; grid-template-columns: max-content max-content;
-  column-gap: var(--s-7); row-gap: var(--s-1); align-items: baseline;
-}
-.wm-treasury > :nth-child(1) { grid-area: 1 / 1; }
-.wm-treasury > :nth-child(2) { grid-area: 2 / 1; }
-.wm-treasury > :nth-child(3) { grid-area: 1 / 2; }
-.wm-treasury > :nth-child(4) { grid-area: 2 / 2; }
-.wm-treasury .label,
-.shop-treasury .label {
-  font-size: var(--t-xs); letter-spacing: var(--track-label);
-  text-transform: uppercase; color: var(--c-text-dim);
-}
-.wm-treasury .crowns {
-  font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
-  letter-spacing: -0.02em; color: var(--c-gold);
-}
-.wm-treasury .income { font: var(--w-bold) var(--t-lg) / 1 var(--font-num); color: var(--c-player); }
-
-.wm-body {
-  flex: 1; display: grid; min-height: 0;
-  grid-template-columns: minmax(0, 1fr) var(--sidebar);
-  gap: var(--s-4); padding: var(--s-4);
-}
-.wm-board { position: relative; margin: auto; transform: translate(var(--wm-ox, 0), var(--wm-oy, 0)); }
-
-/* A region is one hex on one grid. The map deals itself in outward from the
-   homeland: tier 1 first, tier 5 last.
-   Three stacked layers, all clipped to the SAME hexagon, because an inset
-   box-shadow follows the border box and gets sliced by the clip-path into two
-   vertical bars — which is what the ring used to look like:
-     element background  the ring          ::before  the fill
-     ::after             the animated state layer (flood / beacon / hatch) */
-.wm-hex {
-  position: absolute; width: var(--hex-w); height: var(--hex-h);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px; padding: 0 var(--s-2); border: 0; cursor: pointer;
-  color: var(--c-text); background: var(--c-line); clip-path: var(--hex-clip);
-  transition: transform var(--d-fast) var(--ease), filter var(--d-fast) var(--ease);
-  animation: hd-deal var(--d-slower) var(--ease-out) both;
-  animation-delay: calc(var(--tier, 1) * var(--stagger));
-}
-.wm-hex[data-tier='2'] { --tier: 2; }
-.wm-hex[data-tier='3'] { --tier: 3; }
-.wm-hex[data-tier='4'] { --tier: 4; }
-.wm-hex[data-tier='5'] { --tier: 5; }
-.wm-hex:hover { transform: scale(1.05); filter: brightness(1.15); }
-
-.wm-hex::before,
-.wm-hex::after {
-  content: ''; position: absolute; inset: 2px; z-index: 0; pointer-events: none;
-  clip-path: var(--hex-clip);
-}
-.wm-hex::before { background: var(--c-surface-2); }
-.wm-name, .wm-tier { position: relative; z-index: 1; }
-.wm-name { font-size: var(--t-sm); font-weight: var(--w-bold); text-align: center; line-height: 1.15; }
-.wm-tier {
-  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  color: var(--c-text-dim); letter-spacing: 0.06em; text-align: center;
-}
-/* The non-colour channel: every state also reads as a word. */
-.wm-tier::after {
-  display: block; margin-top: 3px; color: var(--state);
-  font: var(--w-bold) 9px / 1 var(--font-num); letter-spacing: var(--track-tag);
-}
-
-/* locked: terra incognita */
-.wm-hex[data-status='locked'] {
-  --state: var(--c-locked); cursor: default; color: var(--c-locked);
-  background: color-mix(in srgb, var(--c-line) 62%, var(--c-bg));
-}
-.wm-hex[data-status='locked']::before { background: color-mix(in srgb, var(--c-surface) 58%, var(--c-bg)); }
-.wm-hex[data-status='locked']::after {
-  background: repeating-linear-gradient(-45deg,
-    color-mix(in srgb, var(--c-text) 7%, transparent) 0 1px, transparent 1px 7px);
-}
-.wm-hex[data-status='locked'] .wm-tier { color: inherit; opacity: 0.75; }
-.wm-hex[data-status='locked']:hover { transform: none; filter: none; }
-
-/* available: an enemy holding, and your move */
-.wm-hex[data-status='available'] {
-  --state: var(--c-enemy);
-  background: color-mix(in srgb, var(--c-enemy) 62%, var(--c-surface-2));
-}
-.wm-hex[data-status='available']::before { background: color-mix(in srgb, var(--c-enemy) 22%, var(--c-surface-2)); }
-.wm-hex[data-status='available']::after {
-  background: radial-gradient(70% 70% at 50% 50%,
-    color-mix(in srgb, var(--c-enemy) 34%, transparent) 0%, transparent 72%);
-  animation: hd-beacon var(--d-beacon) var(--ease) infinite;
-}
-
-/* conquered: it floods, and contiguous holdings bloom together as one mass */
-.wm-hex[data-status='conquered'] {
-  --state: var(--c-player);
-  background: color-mix(in srgb, var(--c-player) 62%, var(--c-surface-2));
-  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--c-player) 26%, transparent));
-}
-.wm-hex[data-status='conquered']::before {
-  background: color-mix(in srgb, var(--c-player) 26%, var(--c-surface-2));
-  animation: hd-fill var(--d-flood) var(--ease-out) both;
-  animation-delay: calc(var(--tier, 1) * var(--stagger) + var(--d-slower));
-}
-.wm-hex[data-status='conquered']::after {
-  background: radial-gradient(60% 60% at 50% 50%,
-    color-mix(in srgb, var(--c-player) 40%, transparent) 0%,
-    color-mix(in srgb, var(--c-player) 12%, transparent) 70%, transparent 100%);
-  animation: hd-flood var(--d-flood) var(--ease-out) both;
-  animation-delay: calc(var(--tier, 1) * var(--stagger) + var(--d-slower));
-}
-.wm-hex[data-status='conquered']:hover {
-  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--c-player) 40%, transparent)) brightness(1.12);
-}
-
-/* `data-mode` is the truth about what you can DO here, and it is what the tag
-   reports. An 'available' region you cannot yet reach stops calling for
-   attention; a raid that is ready calls for it in gold. */
-.wm-hex[data-mode='locked'] .wm-tier::after { content: 'LOCKED'; opacity: 0.7; }
-.wm-hex[data-mode='attack'] .wm-tier::after { content: 'OPEN'; }
-.wm-hex[data-mode='cooldown'] .wm-tier::after { content: 'HELD'; }
-.wm-hex[data-mode='raid'] .wm-tier::after { content: 'RAID'; }
-.wm-hex[data-status='available'][data-mode='locked'] { filter: saturate(0.5) brightness(0.86); }
-.wm-hex[data-mode='locked']::after { animation: none; }
-.wm-hex[data-mode='raid'] {
-  --state: var(--c-gold);
-  background: color-mix(in srgb, var(--c-gold) 62%, var(--c-surface-2));
-}
-.wm-hex[data-mode='raid']::after {
-  background: radial-gradient(70% 70% at 50% 50%,
-    color-mix(in srgb, var(--c-gold) 28%, transparent) 0%, transparent 72%);
-  animation: hd-beacon var(--d-beacon) var(--ease) infinite;
-}
-
-.wm-hex.is-selected { background: var(--c-accent); z-index: 1; }
-.wm-hex.is-selected::before,
-.wm-hex.is-selected::after { inset: 3px; }
-
-/* --- the decision panel -------------------------------------------------- */
-
-.wm-detail { display: flex; flex-direction: column; padding: var(--s-5); overflow-y: auto; }
-.wm-detail h2 { margin: 0 0 var(--s-1); font: var(--w-bold) var(--t-xl) / 1.15 var(--font); }
-.wm-flavour { margin: 0 0 var(--s-5); color: var(--c-text-dim); font-size: var(--t-sm); }
-
-/* The reward and the difficulty are what the player is actually deciding on,
-   so they lead the list at display weight and the rest is reference. Ordered
-   by position today; the `data-stat` hooks are honoured the moment they land. */
-.wm-stats, .results-stats {
-  display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0 0 var(--s-5);
-}
-/* Each cell stretches to the row and centres its own text. Baseline alignment
-   would offset a 10px label against a 32px number by a few pixels, and the row
-   rule would arrive as two mismatched dashes instead of one line. */
-.wm-stats dt, .wm-stats dd,
-.results-stats dt, .results-stats dd {
-  display: flex; align-items: center; align-self: stretch; padding: var(--s-2) 0;
-  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.wm-stats dt, .results-stats dt {
-  color: var(--c-text-dim); font-size: var(--t-xs); padding-right: var(--s-4);
-  letter-spacing: var(--track-label); text-transform: uppercase;
-}
-.wm-stats dd, .results-stats dd {
-  margin: 0; justify-content: flex-end;
-  font-family: var(--font-num); font-variant-numeric: tabular-nums;
-}
-.wm-stats dt:nth-of-type(6), .wm-stats dd:nth-of-type(6),
-.wm-stats [data-stat='reward'] { order: -2; border-top: 0; }
-.wm-stats dt:nth-of-type(2), .wm-stats dd:nth-of-type(2),
-.wm-stats [data-stat='difficulty'] { order: -1; }
-.wm-stats dd:nth-of-type(6), .wm-stats dd[data-stat='reward'] {
-  font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
-  letter-spacing: -0.02em; color: var(--c-gold); padding-top: 0;
-}
-.wm-stats dd:nth-of-type(2), .wm-stats dd[data-stat='difficulty'] {
-  font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-enemy);
-}
-
-.wm-hint {
-  margin: 0 0 var(--s-3); padding-left: var(--s-3); border-left: 2px solid var(--c-line);
-  color: var(--c-text-dim); font-size: var(--t-sm);
-}
-/* The commitment: pinned to the foot of the panel and taller than any other
-   control on the screen, because it is the only one that starts a battle. */
-.wm-go { width: 100%; margin-top: auto; min-height: calc(var(--hit) + var(--s-2)); font-size: var(--t-lg); }
-
-.wm-offline {
-  display: flex; align-items: center; gap: var(--s-3);
-  margin: var(--s-4) var(--s-4) 0; padding: var(--s-3) var(--s-4);
-  border-left-width: var(--plate-edge); border-left-color: var(--c-gold);
-}
-.wm-offline strong { color: var(--c-gold); font-family: var(--font-num); }
-.wm-offline span { color: var(--c-text-dim); font-size: var(--t-sm); }
-.wm-offline .btn { margin-left: auto; }
 
 /* ---------- shop ---------- */
 
@@ -238,6 +33,10 @@
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
 }
 .shop-treasury { display: flex; align-items: baseline; gap: var(--s-2); margin-left: auto; }
+.shop-treasury .label {
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--c-text-dim);
+}
 .shop-panel {
   width: min(860px, 92vw); max-height: 86vh; overflow: hidden;
   display: flex; flex-direction: column;
@@ -359,7 +158,26 @@
   font: var(--w-bold) var(--t-2xl) / 1.1 var(--font); letter-spacing: -0.02em;
 }
 .results-sub { position: relative; margin: 0 0 var(--s-6); color: var(--c-text-dim); font-size: var(--t-sm); }
-.results-stats { text-align: left; }
+/* A definition list read as a table: each cell stretches to the row and centres
+   its own text, so a 10px label and a 32px number share one rule rather than
+   arriving as two mismatched dashes. (worldmap.css states the same shape for
+   .wm-stats; they are separate screens and neither should move the other.) */
+.results-stats {
+  display: grid; grid-template-columns: 1fr auto; gap: 0;
+  margin: 0 0 var(--s-5); text-align: left;
+}
+.results-stats dt, .results-stats dd {
+  display: flex; align-items: center; align-self: stretch; padding: var(--s-2) 0;
+  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.results-stats dt {
+  color: var(--c-text-dim); font-size: var(--t-xs); padding-right: var(--s-4);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+}
+.results-stats dd {
+  margin: 0; justify-content: flex-end;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+}
 /* The payoff line — crowns, or the income the win just bought — closes the
    list and is the only number on the card at display weight. */
 .results-stats dd:last-of-type,
@@ -375,24 +193,11 @@
 /* ---------- fluid from 1024px up ---------- */
 
 @media (max-width: 1180px) {
-  .wm-header { margin: var(--s-3) var(--s-3) 0; padding: var(--s-3) var(--s-4); }
-  .wm-body { padding: var(--s-3); gap: var(--s-3); }
-  .wm-detail { padding: var(--s-4); }
-  .wm-treasury { column-gap: var(--s-5); }
   .shop-list { padding: var(--s-3) var(--s-4) var(--s-5); }
   .shop-header { padding: var(--s-3) var(--s-4); }
-}
-
-/* Below the target range the sidebar stops being a sidebar rather than
-   crushing the board. Desktop-first: a safety net, not a phone layout. */
-@media (max-width: 860px) {
-  .wm-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto; }
-  .wm-detail { max-height: 44vh; }
-  .wm-go { min-height: var(--hit); }
 }
 
 /* Touch: compact desktop metrics grow to a real thumb target. */
 @media (pointer: coarse) {
   .shop-row { padding: var(--s-3); }
-  .wm-hex { padding-bottom: var(--s-5); }
 }

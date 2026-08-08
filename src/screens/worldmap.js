@@ -5,6 +5,10 @@
 // what the browser is already good at, and it gets focus, keyboard nav and
 // accessibility for free. Canvas would mean reimplementing all of it.
 //
+// The map is BIGGER than the window on purpose and you press-and-drag to look
+// around it, the same verb the battle board uses. Geometry, the clamp and the
+// gesture all live in worldmap-pan.js; this file only says what to centre on.
+//
 // This is also the campaign's HUB: it owns the boot decision (menu, or straight
 // into region 1 on a clean save) for as long as main.js still replaces into it,
 // and it is the only route to the loadout, the shop and the menu.
@@ -17,9 +21,7 @@ import {
 import { incomePerSec } from '../meta/idle.js';
 import { previewReward } from '../meta/rewards.js';
 import { bootRoute, launchFirstRegion } from './mainmenu.js';
-
-const HEX_W = 92;
-const HEX_H = 80;
+import { HEX, layoutHexes, createMapPanner } from './worldmap-pan.js';
 
 export function createWorldMapScene(ctx) {
   let root = null;
@@ -30,6 +32,8 @@ export function createWorldMapScene(ctx) {
   let detailMode = null;
   let tickDetail = null;
   let pending = null;
+  let panner = null;
+  let centred = false;
 
   const meta = () => ctx.state.meta;
 
@@ -73,7 +77,16 @@ export function createWorldMapScene(ctx) {
             on: { click: () => ctx.scenes.push(ctx.screens.mainmenu) },
           })));
 
+      // The window and the world. `map` clips and hears the gesture; `board` is
+      // the one layer that moves, so panning costs a single composited
+      // transform no matter how many plates are on it.
       const board = h('div.wm-board', { role: 'group', 'aria-label': 'Regions' });
+      const map = h('div.wm-map', {}, board,
+        h('button.btn.ghost.wm-recentre', {
+          text: 'Centre', type: 'button',
+          'aria-label': 'Centre the map on the selected region',
+          on: { click: () => centreOnSelected() },
+        }));
       const detail = h('aside.wm-detail.panel', {
         role: 'region', 'aria-labelledby': 'wm-detail-h', 'aria-live': 'polite',
       });
@@ -98,8 +111,16 @@ export function createWorldMapScene(ctx) {
         mount(root, banner);
       }
 
-      mount(root, header, h('div.wm-body', {}, board, detail));
+      mount(root, header, h('div.wm-body', {}, map, detail));
       mount(ctx.root, root);
+
+      panner = createMapPanner({ viewport: map, board });
+      // Tabbing to a region that is off-screen has to bring it on-screen, or
+      // keyboard navigation walks into a map it cannot see.
+      const onFocus = (ev) => {
+        if (ev.target?.classList?.contains('wm-hex')) panner?.reveal(ev.target);
+      };
+      map.addEventListener('focusin', onFocus);
 
       buildBoard(board, detail);
       refresh(setCrowns, setIncome);
@@ -107,13 +128,20 @@ export function createWorldMapScene(ctx) {
       const timer = setInterval(() => refresh(setCrowns, setIncome), 250);
       const off = ctx.bus.on('meta:region-unlocked', () => buildBoard(board, detail));
 
-      return [() => clearInterval(timer), off, () => root?.remove()];
+      return [
+        () => clearInterval(timer), off,
+        () => map.removeEventListener('focusin', onFocus),
+        () => panner?.dispose(), () => root?.remove(),
+      ];
     },
 
     exit() {
+      // The manager runs the unsubscribers from enter() before this, so the
+      // panner is already torn down; exit() only drops references.
       cells.clear();
-      selected = detailMode = tickDetail = pending = detailEl = null;
+      selected = detailMode = tickDetail = pending = detailEl = panner = null;
       root = banner = null;
+      centred = false;
       delete document.body.dataset.scene;
     },
 
@@ -131,18 +159,22 @@ export function createWorldMapScene(ctx) {
     const regions = worldView(meta(), Date.now());
 
     // Axial -> pixel, pointy-top, so the world map reads with the same
-    // geometry as the battle map.
-    for (const r of regions) {
-      const [q, rr] = r.hex;
-      const x = HEX_W * (q + rr / 2);
-      const y = HEX_H * rr * 0.86;
+    // geometry as the battle map. The plate size is written from the same
+    // constants that space them, so layout and CSS cannot drift apart.
+    const { cells: at, width, height } = layoutHexes(regions.map((r) => r.hex));
+    board.style.setProperty('--hex-w', `${HEX.w}px`);
+    board.style.setProperty('--hex-h', `${HEX.h}px`);
+    board.style.width = `${width}px`;
+    board.style.height = `${height}px`;
+
+    regions.forEach((r, i) => {
       const locked = r.status === 'locked';
       const cell = h('button.wm-hex', {
         type: 'button',
         'data-status': r.status,
         'data-tier': r.tier,
         'data-mode': r.mode,
-        style: { left: `${x}px`, top: `${y}px` },
+        style: { left: `${at[i].x}px`, top: `${at[i].y}px` },
         title: locked ? UI.locked : r.name,
         // Ownership is otherwise conveyed by colour alone.
         'aria-label': hexLabel(r),
@@ -153,21 +185,27 @@ export function createWorldMapScene(ctx) {
       h('span.wm-tier', { text: `T${r.tier}` }));
       cells.set(r.id, cell);
       mount(board, cell);
-    }
+    });
 
-    // Centre the cluster.
-    const xs = regions.map((r) => HEX_W * (r.hex[0] + r.hex[1] / 2));
-    const ys = regions.map((r) => HEX_H * r.hex[1] * 0.86);
-    board.style.setProperty('--wm-ox', `${-Math.min(...xs) + 24}px`);
-    board.style.setProperty('--wm-oy', `${-Math.min(...ys) + 24}px`);
-    board.style.width = `${Math.max(...xs) - Math.min(...xs) + HEX_W + 48}px`;
-    board.style.height = `${Math.max(...ys) - Math.min(...ys) + HEX_H + 48}px`;
+    // setContent re-clamps whatever pan the player already had, so a rebuild
+    // (a region unlocking) never yanks the view out from under them. Only the
+    // first build of a visit chooses where to look.
+    panner?.setContent(width, height);
 
     const keep = selected && cells.has(selected) ? selected : null;
     const first = regions.find((r) => isAttackable(meta(), r.id))
       ?? regions.find((r) => r.status !== 'locked');
     if (keep) select(keep, detail);
     else if (first) select(first.id, detail);
+    if (!centred) { centred = true; centreOnSelected(); }
+  }
+
+  /** The one anti-lost-ness guarantee: whatever you can act on is one press
+   *  away from the middle of the screen. */
+  function centreOnSelected() {
+    const el = cells.get(selected);
+    if (!el || !panner) return;
+    panner.centre(el.offsetLeft + el.offsetWidth / 2, el.offsetTop + el.offsetHeight / 2);
   }
 
   function hexLabel(r) {
@@ -187,6 +225,9 @@ export function createWorldMapScene(ctx) {
       el.classList.toggle('is-selected', on);
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
+    // A click target is already visible, so this is a no-op then. It earns its
+    // keep for selections that arrive from elsewhere — a rebuild, or the coach.
+    panner?.reveal(cells.get(id));
     renderDetail(detail, region);
   }
 

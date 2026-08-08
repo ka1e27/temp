@@ -339,7 +339,25 @@ try {
       crowns: document.querySelector('.crowns')?.textContent,
     }));
     if (wm.hexes !== 18) throw new Error(`expected 18 region hexes, got ${wm.hexes}`);
-    await hitPoint('.wm-hex', 'a region hex');
+    // The map is bigger than its window and you pan around it, so some of the
+    // 18 are legitimately off screen. Tag the one nearest the middle and hit
+    // test THAT — still a real region and a real hit test, just not whichever
+    // one happens to come first in the DOM.
+    const onScreen = await page.eval(() => {
+      const m = document.querySelector('.wm-map').getBoundingClientRect();
+      let best = null;
+      for (const el of document.querySelectorAll('.wm-hex')) {
+        const b = el.getBoundingClientRect();
+        if (b.left < m.left || b.right > m.right || b.top < m.top || b.bottom > m.bottom) continue;
+        const d = Math.hypot(b.left + b.width / 2 - m.left - m.width / 2,
+          b.top + b.height / 2 - m.top - m.height / 2);
+        if (!best || d < best.d) best = { d, el };
+      }
+      if (best) best.el.dataset.smoke = '1';
+      return best?.el.getAttribute('aria-label') ?? null;
+    });
+    if (!onScreen) throw new Error('not one of the 18 region hexes is fully on screen');
+    await hitPoint('.wm-hex[data-smoke="1"]', `the region hex "${onScreen}"`);
     step(`world map: ${wm.hexes} regions, treasury ${wm.crowns}`);
     await page.screenshot(`${OUT}/03-worldmap.png`);
 
