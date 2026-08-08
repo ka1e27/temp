@@ -46,13 +46,15 @@ export function createBattleHud(o) {
   const strength = SEND_FRACTIONS.map((f, i) =>
     h('button.seg', {
       text: percent(f), 'data-interactive': true, type: 'button',
-      title: `Send ${percent(f)} of a garrison — key ${i + 1}`,
+      title: `Each order sends ${percent(f)} of the garrison — key ${i + 1}`,
+      'aria-label': `Send ${percent(f)} of a garrison per order`,
       on: { click: () => input.setFraction(f) },
     }));
   const chips = UNIT_IDS.map((u) =>
     h('button.chip', {
       'data-interactive': true, type: 'button', vars: { '--chip': `var(--c-${u})` },
-      title: `Include ${u} in every send — key ${FILTER_KEYS[u]}`,
+      title: `Include ${u} in every order — key ${FILTER_KEYS[u]}`,
+      'aria-label': `Include ${u} when sending troops`,
       on: { click: () => input.toggleFilter(u) },
     }, u.slice(0, 3), h('span.chip-key', { text: FILTER_KEYS[u] })));
   const boosters = boosterIds.map((id) =>
@@ -97,8 +99,8 @@ export function createBattleHud(o) {
       alert.el),
     h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el),
     h('div.hud-dock', {},
-      h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Strength' }), ...strength),
-      h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Send' }), ...chips),
+      h('div.hud-group.panel', {}, h('span.hud-group-label', { text: '% of garrison' }), ...strength),
+      h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }), ...chips),
       h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }), ...boosters),
       speed.el),
     site.el, el.preview, el.train);
