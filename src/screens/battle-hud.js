@@ -10,6 +10,7 @@
 // unchanged value costs one comparison and no DOM work, and nothing in this
 // file allocates per refresh.
 import { UNIT_IDS, SITES, SEND_FRACTIONS, BOOSTERS } from '../content/balance.js';
+import { UNITS_UI } from '../content/strings.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
 import { compact, clock, percent, rate } from '../ui/format.js';
@@ -17,6 +18,9 @@ import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
 import { siteOf, computePreview } from './battle-preview.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import { createSitePanel, createWithdraw, createAlert, rejectionText } from './battle-panel.js';
+import { createUnitTip } from './battle-tip.js';
+import { createHudInsets } from './battle-insets.js';
+import { TRAIN_FAN_R } from './battle-anchor.js';
 import { createSpeedControl } from './battle-speed.js';
 
 export {
@@ -51,13 +55,21 @@ export function createBattleHud(o) {
       'aria-label': `Send ${percent(f)} of a garrison per order`,
       on: { click: () => input.setFraction(f) },
     }));
+  // FULL NAMES, never `MIL`/`SPE`/`RAI`. The three-letter stubs were unreadable
+  // to anyone who had not already learned the roster, and the hover card is
+  // where that roster is now taught — see battle-tip.js.
+  const tip = createUnitTip({ root });
   const chips = UNIT_IDS.map((u) =>
     h('button.chip', {
       'data-interactive': true, type: 'button', vars: { '--chip': `var(--c-${u})` },
-      title: `Include ${u} in every order — key ${FILTER_KEYS[u]}`,
-      'aria-label': `Include ${u} when sending troops`,
+      'aria-label': `${UNITS_UI[u].name} — ${UNITS_UI[u].role}. `
+        + `Include them when sending troops. Key ${FILTER_KEYS[u]}`,
       on: { click: () => input.toggleFilter(u) },
-    }, u.slice(0, 3), h('span.chip-key', { text: FILTER_KEYS[u] })));
+    }, h('span.chip-name', { text: UNITS_UI[u].name }),
+    h('span.chip-key', { text: FILTER_KEYS[u] })));
+  for (let i = 0; i < chips.length; i++) {
+    tip.attach(chips[i], UNIT_IDS[i], `Key ${FILTER_KEYS[UNIT_IDS[i]]} · include in every order`);
+  }
   const boosters = boosterIds.map((id) =>
     h('button.booster', {
       'data-interactive': true, type: 'button', 'aria-pressed': 'false',
@@ -72,7 +84,8 @@ export function createBattleHud(o) {
     h('span.booster-cd')));
 
   const speed = createSpeedControl({ bus, onSetSpeed: o.onSetSpeed });
-  const site = createSitePanel({ getState, view, input });
+  // `board` is what lets the panel sit on the site it describes. Read-only.
+  const site = createSitePanel({ getState, view, input, board });
   const withdraw = createWithdraw({ input });
   const alert = createAlert();
 
@@ -100,18 +113,21 @@ export function createBattleHud(o) {
   el.selection = site.el;
   el.withdraw = withdraw.el;
 
-  mount(root,
-    h('div.hud-corner.hud-tl', {},
-      h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow),
-      h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
-      alert.el),
-    h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el),
-    h('div.hud-dock', {},
-      h('div.hud-group.panel', {}, h('span.hud-group-label', { text: '% of garrison' }), ...strength),
-      h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }), ...chips),
-      h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }), ...boosters),
-      speed.el),
-    site.el, el.preview, el.train);
+  el.tl = h('div.hud-corner.hud-tl', {},
+    h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow),
+    h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
+    alert.el);
+  el.tr = h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el);
+  el.dock = h('div.hud-dock', {},
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: '% of garrison' }), ...strength),
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }), ...chips),
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }), ...boosters),
+    speed.el);
+  mount(root, el.tl, el.tr, el.dock, site.el, el.preview, el.train);
+
+  // Where the HUD's own furniture is, so the anchored site panel can stay off
+  // it. Measured rarely — see battle-insets.js.
+  const insets = createHudInsets({ dock: el.dock, plates: [el.tl, el.tr] });
 
   // Cached writers: an unchanged value costs one comparison and no DOM work.
   set.gold = bindText(el.gold, '0');
@@ -141,7 +157,7 @@ export function createBattleHud(o) {
   const boostArmed = boosters.map((b) => bindClass(b, 'is-armed'));
   const boostShake = boosters.map((b) => bindClass(b, 'is-rejected'));
   const boostLabel = boosters.map((b, i) => bindText(b.children[2], boosterIds[i]));
-  const trainChips = buildTrainPicker(el.train, input, view);
+  const trainChips = buildTrainPicker(el.train, input, view, tip);
 
   // The simulation never touches the bus; screens/battle.js re-emits every sim
   // event as `battle:<type>`. A rejected order used to end here, unheard.
@@ -155,14 +171,29 @@ export function createBattleHud(o) {
     off(bus.on('ui:armed-booster', (id) => alert.hold(id ? AIMING(id) : '')));
   }
 
+  /**
+   * The frame entry point. Text is refreshed at 10Hz — it is text, and text
+   * that rewrites at 60Hz is pure cost — but the two overlays that are PINNED
+   * TO POINTS ON THE BOARD are placed every frame, because a position that
+   * only catches up ten times a second visibly lags the map while you pan.
+   * Both are cached style writes, so a still camera costs a few comparisons.
+   *
+   * Placement runs last, after any refresh, so it always reads the panel the
+   * player is actually looking at rather than the one from a frame ago.
+   */
   function update(force) {
     const t = now();
-    if (!force && t - last < 100) return;   // 10Hz, never per frame
-    last = t;
+    const state = getState();
+    if (force || t - last >= 100) { last = t; refresh(state, t); }
+    if (!state) return;
+    site.follow(state, t, insets.get(t));
+    placeTrain(state);
+  }
+
+  function refresh(state, t) {
     alert.update(t);
     withdraw.update(Date.now());
     if (shaken >= 0 && t >= shakeUntil) { boostShake[shaken](false); shaken = -1; }
-    const state = getState();
     if (!state) return;
 
     const flow = goldFlow(state, 'player');
@@ -228,15 +259,23 @@ export function createBattleHud(o) {
     renderCaveats(el.pvCaveats, pv);
   }
 
+  /** The fan's POSITION only — the cheap half of updateTrain, run per frame so
+   *  the chips stay on their site through a pan. */
+  function placeTrain(state) {
+    const id = view.trainPickerFor;
+    const s = id ? siteOf(state, id) : null;
+    if (!s) return;
+    board.siteScreen(s, _p);
+    set.trainX(`${Math.round(_p.x)}px`);
+    set.trainY(`${Math.round(_p.y)}px`);
+  }
+
   function updateTrain(state) {
     const id = view.trainPickerFor;
     const s = id ? siteOf(state, id) : null;
     const open = !!s && s.owner === 'player' && !!SITES[s.kind].train && !view.armedBooster;
     set.trainOpen(open);
     if (!open) return;
-    board.siteScreen(s, _p);
-    set.trainX(`${Math.round(_p.x)}px`);
-    set.trainY(`${Math.round(_p.y)}px`);
     const unlocked = state.mods?.player?.unlockedUnits ?? UNIT_IDS;
     for (let i = 0; i < trainChips.length; i++) {
       trainChips[i].on(s.trainType === UNIT_IDS[i]);
@@ -247,7 +286,7 @@ export function createBattleHud(o) {
   return {
     el,
     update,
-    dispose() { off.dispose(); speed.dispose(); clear(root); },
+    dispose() { off.dispose(); tip.dispose(); speed.dispose(); clear(root); },
   };
 }
 
@@ -255,23 +294,27 @@ const _p = { x: 0, y: 0 };
 
 /** Five 44px chips fanned in an arc around the selected site: the highest
  *  frequency decision in the game, sitting at the point of attention instead
- *  of in a sidebar. */
-function buildTrainPicker(host, input, view) {
+ *  of in a sidebar. A 44px circle cannot hold "Spearmen", so the glyph stays
+ *  short and the hover card carries the name and the job. */
+function buildTrainPicker(host, input, view, tip) {
   // Radius chosen so five 44px chips across a 170-degree fan do not touch:
-  // 170/360 * 2*pi*94 ~= 279px of arc for 220px of chip.
-  const R = 94;
+  // 170/360 * 2*pi*94 ~= 279px of arc for 220px of chip. TRAIN_FAN_R in
+  // battle-anchor.js mirrors it, so the site panel keeps clear of the fan.
+  const a0 = -175;
   return UNIT_IDS.map((u, i) => {
-    const a = (-175 + (170 / (UNIT_IDS.length - 1)) * i) * (Math.PI / 180);
+    const a = (a0 + (170 / (UNIT_IDS.length - 1)) * i) * (Math.PI / 180);
     const chip = h('button.train-chip', {
-      'data-interactive': true, type: 'button', title: `Train ${u}`,
+      'data-interactive': true, type: 'button',
+      'aria-label': `Train ${UNITS_UI[u].name} here — ${UNITS_UI[u].role}`,
       vars: {
         '--chip': `var(--c-${u})`,
-        '--dx': `${Math.round(Math.cos(a) * R)}px`,
-        '--dy': `${Math.round(Math.sin(a) * R)}px`,
+        '--dx': `${Math.round(Math.cos(a) * TRAIN_FAN_R)}px`,
+        '--dy': `${Math.round(Math.sin(a) * TRAIN_FAN_R)}px`,
       },
       on: { click: () => input.setTrain(view.trainPickerFor, u) },
     }, h('span.train-chip-icon'), h('span.train-chip-key', { text: u.slice(0, 3).toUpperCase() }));
     mount(host, chip);
+    tip.attach(chip, u, 'Click to train this here');
     return { el: chip, on: bindClass(chip, 'is-on'), locked: bindClass(chip, 'is-locked') };
   });
 }

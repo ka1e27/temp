@@ -1,13 +1,19 @@
-// Site panel, withdraw control, and command-rejection feedback.
+// The site panel: what the site you clicked is, and what you can do to it.
 //
-// Three pieces of HUD that had no home before: every site (farms included) now
-// opens a panel with garrison, HP, level and a working Upgrade action; the
-// player can leave a region they are losing; and an order the simulation throws
-// away finally says so out loud instead of failing silently.
+// IT LIVES ON THE BOARD, not in a corner. It used to be pinned to the bottom
+// left, so clicking a fort on the right-hand edge of the map meant reading
+// about it a whole battle away and then travelling back to press Upgrade. It
+// now hangs off the site itself and follows the camera; battle-anchor.js owns
+// the geometry that keeps it on screen, off the site it describes, and off the
+// adjacent sites (which are drag targets — a covered neighbour is an order you
+// cannot issue).
+//
+// Withdraw and the alert strip moved to battle-alert.js and are re-exported
+// below, so nothing downstream has to care that they moved.
 //
 // HARD RULE, same as everywhere: nothing here mutates simulation state. The
-// Upgrade and Withdraw buttons append commands through `input`, exactly like a
-// click on the board does.
+// Upgrade button and the rally stepper append commands through `input`, exactly
+// like a click on the board does.
 import { SITE_UPGRADE, CENTIGOLD, RALLY_KEEP } from '../content/balance.js';
 import { total } from '../battle/combat.js';
 import { goldOf } from '../battle/economy.js';
@@ -16,9 +22,12 @@ import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
+import { createFollower } from './battle-follow.js';
 import {
   siteIntel, goldLine, trainLine, terrainLine, stepRallyKeep, keepLabel,
 } from './battle-econ.js';
+
+export { createWithdraw, createAlert } from './battle-alert.js';
 
 /**
  * Player-facing text for every reason battle/commands.js can reject an order
@@ -87,9 +96,12 @@ export function upgradeOffer(state, site) {
   return out;
 }
 
-/** The button's label for an offer, so the wording is testable too. */
+/** The button's label for an offer, so the wording is testable too. The top
+ *  level is READ OFF the tuning table rather than written into the string: the
+ *  ladder has already been extended once, and a button that says "max" at a
+ *  level you can still buy past is worse than no label. */
 export function upgradeLabel(o) {
-  if (o.why === 'max-level') return 'Level 3 · max';
+  if (o.why === 'max-level') return `Level ${SITE_UPGRADE.length + 1} · max`;
   return `Upgrade → L${o.level + 1} · ${o.cost}g · ${o.sec}s`;
 }
 
@@ -100,10 +112,14 @@ export function upgradeLabel(o) {
 /**
  * The selection panel. Opens for EVERY site — farms included, which previously
  * opened nothing at all — and carries the only route to in-battle levelling.
- * @param {{getState:()=>object, view:object, input:object}} o
+ *
+ * @param {{getState:()=>object, view:object, input:object, board?:object}} o
+ *   `board` is the battleView, used READ-ONLY for `siteScreen` and `camera` so
+ *   the panel can sit on its site. Omit it and the panel still renders and
+ *   still works — it just does not move.
  */
 export function createSitePanel(o) {
-  const { getState, view, input } = o;
+  const { getState, view, input, board } = o;
   const targetId = () => (view.selection.length === 1 ? view.selection[0] : null);
   const title = h('div.hud-selection-title', { text: '' });
   const sub = h('div.hud-selection-sub', { text: '' });
@@ -120,8 +136,14 @@ export function createSitePanel(o) {
     on: { click: () => { const id = targetId(); if (id) input.upgrade(id); } },
   }, 'Upgrade');
   const keep = createKeepRow(getState, input, targetId);
-  const el = h('div.hud-selection.panel', {},
+  // `data-interactive` (see base.css) is what makes the panel a real surface.
+  // #hud is pointer-events:none, and a panel that let clicks through would sit
+  // over the board, take a click on its own text as a click on empty ground,
+  // clear the selection — and vanish under the cursor that was reaching for it.
+  const el = h('div.hud-selection.panel', { 'data-interactive': true },
     title, sub, money, trains, terrain, stat, keep.el, upgrade);
+  const follower = createFollower(el, board, siteOf);
+  let anchor = null;
 
   const set = {
     open: bindClass(el, 'is-open'),
@@ -147,12 +169,23 @@ export function createSitePanel(o) {
   }
 
   /** Detached rather than `hidden`, so no future stylesheet rule on the button
-   *  can accidentally out-specify the UA's `[hidden] { display: none }`. */
+   *  can accidentally out-specify the UA's `[hidden] { display: none }`.
+   *  @returns {boolean} true when the panel's height just changed. */
   function setShown(on) {
-    if (on === shown) return;
+    if (on === shown) return false;
     shown = on;
     if (on) mount(el, upgrade);
     else upgrade.remove();
+    return true;
+  }
+
+  /** Remember what the panel is hanging off, and forget which side it settled
+   *  on whenever that changes — hysteresis from the previous site is worse than
+   *  no hysteresis at all. */
+  function setAnchor(site) {
+    if (anchor?.id === site?.id) { anchor = site; return; }
+    anchor = site;
+    follower.reset();
   }
 
   function update(state) {
@@ -162,56 +195,84 @@ export function createSitePanel(o) {
 
     const id = view.selection[0];
     const site = id ? siteOf(state, id) : null;
+    setAnchor(site);
     set.open(!!site);
     if (!site) { setShown(false); keep.show(null); return; }
 
+    // Every bind* returns whether it really touched the DOM, so `wrote` is a
+    // free answer to "did the panel's box just change?". Bitwise, not `||`:
+    // every writer has to run, and this allocates nothing.
+    let wrote = 0;
     const n = view.selection.length;
     if (n > 1) {
-      set.title(`${n} sites selected`);
-      set.sub('R retreats · right-drag sets rally');
-      set.money('');
-      set.trains('');
-      set.terrain('');
-      set.stat('');
+      wrote |= set.title(`${n} sites selected`);
+      wrote |= set.sub('R retreats · right-drag sets rally');
+      wrote |= set.money('');
+      wrote |= set.trains('');
+      wrote |= set.terrain('');
+      wrote |= set.stat('');
       setShown(false);
       keep.show(null);
+      if (wrote) follower.markDirty();
       return;
     }
 
     const intel = siteIntel(state, site);
-    set.title(`${site.kind.toUpperCase()} · L${site.level}`);
-    set.sub(`${total(site.garrison)} troops · HP ${Math.round(site.hp)}/${Math.round(site.hpMax)}`);
-    set.money(goldLine(intel));
+    wrote |= set.title(`${site.kind.toUpperCase()} · L${site.level}`);
+    wrote |= set.sub(
+      `${total(site.garrison)} troops · HP ${Math.round(site.hp)}/${Math.round(site.hpMax)}`);
+    wrote |= set.money(goldLine(intel));
     set.drain(intel.net < 0);
-    set.trains(trainLine(intel));
-    set.terrain(terrainLine(intel));
-    set.stat(statusLine(site));
+    wrote |= set.trains(trainLine(intel));
+    wrote |= set.terrain(terrainLine(intel));
+    wrote |= set.stat(statusLine(site));
     // A hold-back only means anything where there is a rally to hold back from.
-    keep.show(site.owner === 'player' && site.rallyTarget ? site : null);
+    wrote |= keep.show(site.owner === 'player' && site.rallyTarget ? site : null);
 
     const offer = upgradeOffer(state, site);
-    setShown(site.owner === 'player');
-    set.upLabel(upgradeLabel(offer));
+    wrote |= setShown(site.owner === 'player');
+    wrote |= set.upLabel(upgradeLabel(offer));
     set.upOff(!offer.can);
     setDisabled(!offer.can);
     const why = offerTitle(offer);
     if (upgrade.title !== why) upgrade.title = why;
+    if (wrote) follower.markDirty();
   }
 
   function showSquad(state, squad) {
+    // A squad stores no position — the renderer derives one from `arriveTick`
+    // — so the panel hangs off where the column is HEADED, which is the site
+    // the player is actually watching.
+    setAnchor(siteOf(state, squad.to));
     set.open(true);
-    set.title(`SQUAD · ${total(squad.comp)} troops`);
-    set.sub(`${squad.from} → ${squad.to}`);
-    set.money('');
-    set.trains('');
-    set.terrain('');
-    set.stat(squad.retreating
+    let wrote = 0;
+    wrote |= set.title(`SQUAD · ${total(squad.comp)} troops`);
+    wrote |= set.sub(`${squad.from} → ${squad.to}`);
+    wrote |= set.money('');
+    wrote |= set.trains('');
+    wrote |= set.terrain('');
+    wrote |= set.stat(squad.retreating
       ? 'retreating'
       : `arrives in ${duration(Math.max(0, squad.arriveTick - state.tick) / TICK_HZ)} · R retreats`);
-    keep.show(null);
+    wrote |= keep.show(null);
+    if (wrote) follower.markDirty();
   }
 
-  return { el, update };
+  return {
+    el,
+    update,
+    /**
+     * Re-anchor. Called EVERY FRAME by the HUD rather than on the 10Hz text
+     * refresh: a panel that only catches up ten times a second visibly lags
+     * behind the map while you are panning, which is exactly the "stranded in
+     * the corner" feeling this whole change is about.
+     * @param {object} state @param {number} now ms @param {object} [insets]
+     */
+    follow(state, now, insets) {
+      if (anchor) follower.place(state, anchor, view, now, insets);
+    },
+    get side() { return follower.side; },
+  };
 }
 
 /**
@@ -242,14 +303,16 @@ function createKeepRow(getState, input, targetId) {
 
   return {
     el,
-    /** @param {?object} site the selected site, or null to hide the row. */
+    /** @param {?object} site the selected site, or null to hide the row.
+     *  @returns {boolean} true when the row appeared, vanished or changed. */
     show(site) {
-      set.open(!!site);
-      if (!site) return;
+      let wrote = set.open(!!site) ? 1 : 0;
+      if (!site) return !!wrote;
       const n = rallyKeepOf(site);
-      set.value(keepLabel(site));
+      wrote |= set.value(keepLabel(site));
       if (lo !== (n <= RALLY_KEEP.min)) { lo = n <= RALLY_KEEP.min; down.disabled = lo; }
       if (hi !== (n >= RALLY_KEEP.max)) { hi = n >= RALLY_KEEP.max; up.disabled = hi; }
+      return !!wrote;
     },
   };
 }
@@ -292,74 +355,4 @@ function statusLine(site) {
 function offerTitle(o) {
   if (o.can) return `Spend ${o.cost} gold · ${o.sec}s to build`;
   return REJECTIONS[o.why] || 'Cannot upgrade';
-}
-
-/**
- * Withdraw. Confirm-style rather than a plain button: ending a run on one
- * stray click is the kind of thing you only regret once, which is also why
- * battle-input.js keeps it off every key.
- * @param {{input:object, holdMs?:number}} o
- */
-export function createWithdraw(o) {
-  const { input, holdMs = 4000 } = o;
-  let armedAt = 0;
-  const el = h('button.btn.ghost.hud-withdraw', {
-    'data-interactive': true, type: 'button', title: 'Leave the region unconquered',
-    on: {
-      click: () => {
-        const now = Date.now();
-        if (armedAt && now - armedAt < holdMs) { armedAt = 0; sync(0); input.withdraw(); return; }
-        armedAt = now;
-        sync(now);
-      },
-    },
-  }, 'Withdraw');
-
-  const set = { text: bindText(el, 'Withdraw'), armed: bindClass(el, 'is-confirming') };
-  const sync = (at) => { set.text(at ? 'Confirm withdraw' : 'Withdraw'); set.armed(!!at); };
-
-  return {
-    el,
-    /** Called from the HUD's 10Hz refresh; disarms itself so a forgotten click
-     *  never turns into a withdrawal minutes later. */
-    update(now) {
-      if (armedAt && now - armedAt >= holdMs) { armedAt = 0; sync(0); }
-    },
-    get isArmed() { return armedAt !== 0; },
-  };
-}
-
-/**
- * One-line inline message: rejections, and what an armed booster is waiting
- * for. Empty text renders nothing at all, so it costs no space when silent.
- * @param {{ttlMs?:number}} [o]
- */
-export function createAlert(o = {}) {
-  const ttl = o.ttlMs ?? 2600;
-  const el = h('div.hud-alert', { role: 'status', 'aria-live': 'polite', text: '' });
-  const set = { text: bindText(el, ''), open: bindClass(el, 'is-open') };
-  let until = 0;
-  let sticky = '';
-
-  return {
-    el,
-    /** Transient message; replaces whatever is showing. */
-    show(text, now) {
-      until = now + ttl;
-      set.text(text);
-      set.open(true);
-    },
-    /** Persistent message (armed booster). Restored when a flash expires. */
-    hold(text) {
-      sticky = text || '';
-      if (!until) { set.text(sticky); set.open(!!sticky); }
-    },
-    update(now) {
-      if (until && now >= until) {
-        until = 0;
-        set.text(sticky);
-        set.open(!!sticky);
-      }
-    },
-  };
 }

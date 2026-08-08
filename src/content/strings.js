@@ -33,6 +33,63 @@ export const UI = Object.freeze({
   continue: 'Continue',
 });
 
+/**
+ * The five troop types, in the player's words.
+ *
+ * `name` is the FULL name — nothing in the game may abbreviate a unit to three
+ * letters again, because "RAI E" tells a new player nothing at all. `role` is
+ * the two-word job, and `desc` is the hover copy.
+ *
+ * Every number in `desc` is read straight off UNITS in balance.js and is meant
+ * to STAY read off it: tests/unitcopy.test.js re-derives the counter bonuses,
+ * the terrain multipliers, the spear bulwark and the marshal's banner from the
+ * tuning table and fails if the copy stops matching. Retune a unit and this
+ * text has to move with it — which is the point. A tooltip that lies about the
+ * multiplier is worse than no tooltip.
+ */
+export const UNITS_UI = Object.freeze({
+  militia: Object.freeze({
+    name: 'Militia',
+    role: 'Cheap line infantry',
+    desc: 'The cheapest body you can field, trained two at a time, and the only '
+      + 'troop the ground never touches — x1.00 on every hex. Hits up to 75% '
+      + 'harder the more of the enemy is spearmen. The safe answer when you '
+      + 'cannot read the map.',
+  }),
+  spearmen: Object.freeze({
+    name: 'Spearmen',
+    role: 'Holds what you hold',
+    desc: 'Defends at x1.75 on a site you already own, and up to 75% harder '
+      + 'against raiders. Braced uphill (x1.20 highland), broken up in the '
+      + 'water (x0.85 river). Garrison them — marching them out throws the '
+      + 'bulwark away.',
+  }),
+  raiders: Object.freeze({
+    name: 'Raiders',
+    role: 'Fast attacker',
+    desc: 'Nearly twice the marching speed of militia and the hardest hitter '
+      + 'you can field in numbers, but soft when defending. Up to +60% against '
+      + 'militia and +100% against rams. x1.20 at a river, x0.70 in highland. '
+      + 'Half of them escape a failed assault.',
+  }),
+  rams: Object.freeze({
+    name: 'Rams',
+    role: 'Breaks walls',
+    desc: 'Siege 12 against a wall — twenty times a militia — and the only '
+      + 'reliable way to out-pace a stronghold repairing itself. Worth x0.40 '
+      + 'of a normal unit in the field unless it is spearmen in the way (up to '
+      + '+260%). Slowest thing you own: x0.65 highland, x0.75 river.',
+  }),
+  marshal: Object.freeze({
+    name: 'Marshal',
+    role: 'Commander',
+    desc: 'One per site. Every troop standing with it fights 20% harder and '
+      + 'the stronghold it sits in trains 30% faster. Eight slots — the price '
+      + 'of eight militia — so it pays for itself in a big army, not a small '
+      + 'one.',
+  }),
+});
+
 export const WORLD = Object.freeze({
   gateHint: 'You may only attack a region that touches your empire.',
   lockedHint: 'Take an adjacent region first.',

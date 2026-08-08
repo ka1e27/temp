@@ -129,7 +129,12 @@
 
 /* --- Unit filter chips ----------------------------------------------------
    On and off differ by outline AND opacity AND a filled-vs-hollow swatch, so
-   the state never rests on colour alone. */
+   the state never rests on colour alone.
+
+   The chips carry the unit's REAL NAME. They used to read `MIL Q` / `SPE W`,
+   which is only legible to someone who already knew the roster — so the name is
+   sentence case (uppercase `SPEARMEN` is both wider and harder to read at
+   10px) and the hotkey stays uppercase beside it. */
 
 .chip {
   --chip: var(--c-neutral);
@@ -139,6 +144,10 @@
   font-size: var(--t-xs); letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--c-text); box-shadow: inset 0 0 0 1px transparent;
   transition: opacity var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
+}
+.chip-name {
+  text-transform: none; letter-spacing: 0;
+  font: var(--w-bold) var(--t-sm) / 1 var(--font);
 }
 .chip::before {
   content: ''; width: 8px; height: 8px; border-radius: 2px;
@@ -195,56 +204,6 @@
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-accent) 55%, transparent);
 }
 .hud-speeds.is-slow .label { color: var(--c-accent); }
-
-/* --- Selection / site panel ----------------------------------------------
-   Opens for EVERY site, farms included, and carries the Upgrade action. */
-
-.hud-selection {
-  position: absolute; left: var(--s-3); bottom: calc(var(--dock-h) + var(--s-3));
-  display: flex; flex-direction: column; gap: var(--s-1);
-  padding: var(--s-3); min-width: 200px;
-  border-left-width: var(--plate-edge); border-left-color: var(--c-accent);
-  opacity: 0; visibility: hidden; transform: translateY(6px);
-  transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease-out),
-    visibility 0s linear var(--d-fast);
-}
-.hud-selection.is-open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
-.hud-selection-title {
-  font: var(--w-bold) var(--t-sm) / 1.2 var(--font); letter-spacing: 0.04em;
-}
-.hud-selection-sub { font: var(--w-normal) var(--t-xs) / 1.3 var(--font-num); color: var(--c-text-dim); }
-.hud-site-stat { color: var(--c-text); }
-/* What the site earns and spends. Gold hue for the money line so it belongs to
-   the same family as the HUD treasury; danger when the site costs more to run
-   than it brings in. */
-.hud-site-money { color: var(--c-gold); }
-.hud-site-money.is-drain { color: var(--c-danger); }
-.hud-site-train { color: var(--c-text); }
-/* Terrain reads in the water hue, so the line and the river on the board are
-   visibly the same subject. Empty on open ground, and :empty hides it. */
-.hud-site-terrain { color: color-mix(in srgb, var(--c-water) 70%, var(--c-text)); }
-.hud-selection-sub:empty { display: none; }
-
-/* Per-site rally hold-back. Only shown on a site that HAS a rally target —
-   the number means nothing anywhere else. */
-.hud-keep { display: none; align-items: center; gap: var(--s-1); margin-top: var(--s-1); }
-.hud-keep.is-open { display: flex; }
-.keep-label {
-  font-size: var(--t-xs); letter-spacing: var(--track-label);
-  text-transform: uppercase; color: var(--c-text-dim);
-}
-.keep-value {
-  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  min-width: 9ch; text-align: center; color: var(--c-text);
-}
-.keep-step {
-  min-width: var(--hit-sm); min-height: var(--hit-sm);
-  padding: 0; font: var(--w-bold) var(--t-sm) / 1 var(--font-num);
-}
-.keep-step:disabled { opacity: 0.35; }
-
-.hud-upgrade { min-height: var(--hit-sm); margin-top: var(--s-1); font-size: var(--t-sm); }
-.hud-upgrade.is-disabled { opacity: 0.45; }
 
 /* --- Outcome preview -----------------------------------------------------
    The design's load-bearing promise: this panel calls the same resolveField()
@@ -309,9 +268,18 @@
   .hud-preview { max-width: min(520px, 58vw); }
 }
 
-/* Two dock rows below this, so everything floating above it moves up. */
-@media (max-width: 1080px) {
+/* Two dock rows below this, so everything floating above it moves up.
+   The threshold moved 1080 -> 1180 when the filter chips started carrying the
+   units' real names: `Spearmen` is three times the width of `SPE`, so the dock
+   now runs out of room a full viewport step earlier. Everything that floats
+   measures off --dock-h, and a --dock-h that still claims one row is a preview
+   panel sitting on top of the boosters. (The site panel measures the dock
+   directly — see battle-insets.js — so it is not affected either way.) */
+@media (max-width: 1180px) {
   :root { --dock-h: calc(var(--hit) * 2 + var(--s-8)); }
+}
+
+@media (max-width: 1080px) {
   .hud-preview { min-width: min(320px, 46vw); max-width: 62vw; }
   .hud-corner { max-width: 60vw; }
   .booster-name { display: none; }
@@ -321,6 +289,5 @@
 @media (pointer: coarse) {
   .seg, .chip { min-height: var(--hit); }
   .seg { min-width: var(--hit); }
-  .hud-withdraw, .hud-upgrade { min-height: var(--hit); }
-  .keep-step { min-width: var(--hit); min-height: var(--hit); }
+  .hud-withdraw { min-height: var(--hit); }
 }

@@ -1,7 +1,11 @@
-/* On-board overlays (training picker, coach strip), the shared dialog shell,
-   the main menu and the pre-battle loadout.
-   `.btn` is NOT declared here — it lives once in base.css. The copy that used
-   to sit in this file (plus a `.btn-primary` no call site ever used) is gone. */
+/* On-board overlays (training picker, site panel, unit hover card, coach
+   strip), the shared dialog shell and the main menu.
+
+   The site panel moved here out of hud.css when it stopped being corner
+   furniture: it is anchored to a site on the board now, so it belongs with the
+   training picker it shares that board with. The pre-battle loadout moved the
+   other way, into prebattle.css, when that pushed this file over the cap.
+   `.btn` is NOT declared here — it lives once in base.css. */
 
 /* --- Stronghold training picker -------------------------------------------
    The highest-frequency decision in the game, so it lives ON the site rather
@@ -39,6 +43,140 @@
 .train-chip.is-locked { opacity: 0.25; pointer-events: none; }
 .train-chip-icon { width: 12px; height: 12px; border-radius: 2px; background: var(--chip); }
 .train-chip-key { font: var(--w-bold) 9px / 1 var(--font-num); color: var(--c-text-dim); margin-top: 2px; }
+
+/* --- Selection / site panel ----------------------------------------------
+   Opens for EVERY site, farms included, and carries the Upgrade action.
+
+   IT SITS ON ITS SITE. JS writes --x/--y (screen px from the camera
+   projection, recomputed every frame) exactly the way the training picker
+   does, and --cx/--cy plus [data-caret] aim the caret back at the site so the
+   panel visibly belongs to the thing it describes. battle-anchor.js keeps it
+   inside the viewport and off both the site and its neighbours; there is no
+   fallback corner, because a panel that gave up and went to a corner is the
+   bug this replaced.
+
+   No transition on `transform`: it is the POSITION now, and easing it would
+   drag the panel along a frame behind the map on every pan. */
+
+.hud-selection {
+  position: absolute; left: 0; top: 0;
+  transform: translate3d(var(--x, 12px), var(--y, 12px), 0);
+  display: flex; flex-direction: column; gap: var(--s-1);
+  padding: var(--s-3); width: max-content; min-width: 11.5rem; max-width: 17rem;
+  border-left-width: var(--plate-edge); border-left-color: var(--c-accent);
+  box-shadow: var(--plate-sheen), var(--shadow-2);
+  opacity: 0; visibility: hidden;
+  transition: opacity var(--d-fast) var(--ease), visibility 0s linear var(--d-fast);
+}
+.hud-selection.is-open { opacity: 1; visibility: visible; transition-delay: 0s; }
+/* Its site has been panned off the screen. Hidden rather than clamped to an
+   edge: `visibility` (not just opacity) so it is not hit-testable either. */
+.hud-selection.is-adrift { opacity: 0; visibility: hidden; }
+
+/* The caret: a rotated square wearing two of the plate's own edges, parked on
+   whichever side the panel ended up on. */
+.hud-selection::after {
+  content: ''; position: absolute; width: 9px; height: 9px;
+  background: var(--plate-bg); border: 0 solid var(--c-line);
+  transform: rotate(45deg); pointer-events: none;
+}
+.hud-selection[data-caret='left']::after {
+  left: -5px; top: calc(var(--cy, 20px) - 4px); border-left-width: 1px; border-bottom-width: 1px;
+}
+.hud-selection[data-caret='right']::after {
+  right: -5px; top: calc(var(--cy, 20px) - 4px); border-right-width: 1px; border-top-width: 1px;
+}
+.hud-selection[data-caret='top']::after {
+  top: -5px; left: calc(var(--cx, 20px) - 4px); border-left-width: 1px; border-top-width: 1px;
+}
+.hud-selection[data-caret='bottom']::after {
+  bottom: -5px; left: calc(var(--cx, 20px) - 4px); border-right-width: 1px; border-bottom-width: 1px;
+}
+.hud-selection-title {
+  font: var(--w-bold) var(--t-sm) / 1.2 var(--font); letter-spacing: 0.04em;
+}
+.hud-selection-sub { font: var(--w-normal) var(--t-xs) / 1.3 var(--font-num); color: var(--c-text-dim); }
+.hud-site-stat { color: var(--c-text); }
+/* What the site earns and spends. Gold hue for the money line so it belongs to
+   the same family as the HUD treasury; danger when the site costs more to run
+   than it brings in. */
+.hud-site-money { color: var(--c-gold); }
+.hud-site-money.is-drain { color: var(--c-danger); }
+.hud-site-train { color: var(--c-text); }
+/* Terrain reads in the water hue, so the line and the river on the board are
+   visibly the same subject. Empty on open ground, and :empty hides it. */
+.hud-site-terrain { color: color-mix(in srgb, var(--c-water) 70%, var(--c-text)); }
+.hud-selection-sub:empty { display: none; }
+
+/* Per-site rally hold-back. Only shown on a site that HAS a rally target —
+   the number means nothing anywhere else. */
+.hud-keep { display: none; align-items: center; gap: var(--s-1); margin-top: var(--s-1); }
+.hud-keep.is-open { display: flex; }
+.keep-label {
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--c-text-dim);
+}
+.keep-value {
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
+  min-width: 9ch; text-align: center; color: var(--c-text);
+}
+.keep-step {
+  min-width: var(--hit-sm); min-height: var(--hit-sm);
+  padding: 0; font: var(--w-bold) var(--t-sm) / 1 var(--font-num);
+}
+.keep-step:disabled { opacity: 0.35; }
+
+.hud-upgrade { min-height: var(--hit-sm); margin-top: var(--s-1); font-size: var(--t-sm); }
+.hud-upgrade.is-disabled { opacity: 0.45; }
+
+/* Touch: compact desktop metrics grow to a real thumb target. Moved here with
+   the controls they size — the rule and the control belong in one file. */
+@media (pointer: coarse) {
+  .hud-upgrade { min-height: var(--hit); }
+  .keep-step { min-width: var(--hit); min-height: var(--hit); }
+}
+
+/* --- Unit hover card ------------------------------------------------------
+   What a troop type is FOR, on hover and on focus. It hangs directly over the
+   control it describes (JS writes --x/--y/--cx from the chip's own box) and
+   sits above the dock rather than out over the board, so reading about a unit
+   never hides the fight. pointer-events:none: it may never eat a click meant
+   for the chip underneath it. */
+
+.hud-tip {
+  position: absolute; left: 0; top: 0; z-index: 3;
+  transform: translate3d(var(--x, 0px), var(--y, 0px), 0) translate(-50%, 0);
+  width: max-content; max-width: min(20rem, 82vw);
+  padding: var(--s-2) var(--s-3);
+  display: flex; flex-direction: column; gap: 3px;
+  border-top-width: var(--plate-edge); border-top-color: var(--c-accent);
+  box-shadow: var(--plate-sheen), var(--shadow-2);
+  pointer-events: none;
+  opacity: 0; visibility: hidden;
+  transition: opacity var(--d-fast) var(--ease), visibility 0s linear var(--d-fast);
+}
+.hud-tip.is-above { transform: translate3d(var(--x, 0px), var(--y, 0px), 0) translate(-50%, -100%); }
+.hud-tip.is-open { opacity: 1; visibility: visible; transition-delay: 0s; }
+.hud-tip::after {
+  content: ''; position: absolute; left: calc(var(--cx, 50%) - 4px);
+  width: 9px; height: 9px; background: var(--plate-bg);
+  border: 0 solid var(--c-line); transform: rotate(45deg);
+}
+.hud-tip.is-above::after { bottom: -5px; border-right-width: 1px; border-bottom-width: 1px; }
+.hud-tip:not(.is-above)::after { top: -5px; border-left-width: 1px; border-top-width: 1px; }
+
+.tip-head { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; }
+.tip-name { font: var(--w-bold) var(--t-md) / 1.2 var(--font); color: var(--c-text); }
+.tip-role {
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--c-accent);
+}
+.tip-desc { margin: 0; font-size: var(--t-sm); line-height: 1.45; color: var(--c-text-dim); }
+.tip-note {
+  margin-top: 2px; padding-top: var(--s-1); border-top: var(--hairline);
+  font: var(--w-normal) var(--t-xs) / 1.3 var(--font-num); color: var(--c-text-dim);
+}
+.tip-note:empty { display: none; }
 
 /* --- Coach / hint strip ---------------------------------------------------
    One line, centred over the board, never blocking it. It slides down as well
@@ -123,137 +261,3 @@
 }
 .menu-status { min-height: 1.4em; font-size: var(--t-sm); color: var(--c-warn); }
 .menu-status:empty { display: none; }
-
-/* --- Pre-battle loadout ---------------------------------------------------
-   The last decision before a battle. Brief on the left (what you are walking
-   into), army and boosters on the right (what you are walking in with). */
-
-/* Header and footer are fixed and only the middle scrolls, so the launch
-   button is always reachable and focusing it never scrolls the brief away. */
-.prebattle {
-  background: radial-gradient(1100px 640px at 50% 0%, #141a26 0%, var(--c-bg) 68%);
-}
-.pb-wrap {
-  width: min(1120px, 94vw); height: 100%; margin: 0 auto;
-  display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-3) 0;
-}
-.pb-header {
-  display: flex; align-items: center; gap: var(--s-5);
-  padding: var(--s-3) var(--s-5); flex: none;
-}
-.pb-title { min-width: 0; }
-.pb-title h1 {
-  margin: 0; font: var(--w-bold) var(--t-xl) / 1.15 var(--font); letter-spacing: -0.01em;
-}
-.pb-flavour { margin: var(--s-1) 0 0; color: var(--c-text-dim); font-size: var(--t-sm); }
-.pb-header-actions { display: flex; gap: var(--s-2); margin-left: auto; }
-
-.pb-body {
-  flex: 1; min-height: 0; overflow-y: auto;
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s-3); align-items: start;
-}
-.pb-brief, .pb-army, .pb-boosters { padding: var(--s-4); }
-.pb-body h2 {
-  margin: 0 0 var(--s-1);
-  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
-  text-transform: uppercase; letter-spacing: var(--track-tag); color: var(--c-accent);
-}
-.pb-note { margin: 0 0 var(--s-4); color: var(--c-text-dim); font-size: var(--t-sm); }
-.pb-stats { display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0; }
-.pb-stats dt, .pb-stats dd {
-  display: flex; align-items: center; align-self: stretch; padding: var(--s-2) 0;
-  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.pb-stats dt {
-  color: var(--c-text-dim); font-size: var(--t-xs); padding-right: var(--s-4);
-  letter-spacing: var(--track-label); text-transform: uppercase;
-}
-.pb-stats dd {
-  margin: 0; justify-content: flex-end;
-  font-family: var(--font-num); font-variant-numeric: tabular-nums;
-}
-.pb-stats dt:first-of-type, .pb-stats dd:first-of-type { border-top: 0; }
-/* What you are walking into (difficulty) and what it pays (last row) are the
-   two facts the loadout is weighed against. */
-.pb-stats dd:first-of-type {
-  font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-enemy);
-}
-.pb-stats dd:last-of-type { color: var(--c-gold); font-weight: var(--w-bold); }
-
-/* Slots spent against slots granted is what the whole panel is about: it is
-   what makes a marshal a decision instead of a free pick. */
-.pb-budget {
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s-2);
-  margin: 0 0 var(--s-3);
-}
-.pb-budget-n {
-  font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
-  letter-spacing: -0.02em; color: var(--c-player);
-}
-.pb-budget.is-over .pb-budget-n { color: var(--c-danger, var(--c-enemy)); }
-.pb-budget-troops { font-family: var(--font-num); font-size: var(--t-sm); }
-.pb-budget-troops::before { content: '· '; }
-.pb-budget-free { font-size: var(--t-sm); margin-left: auto; }
-.pb-budget-warn {
-  margin-left: auto; font-size: var(--t-sm); font-weight: var(--w-bold);
-  color: var(--c-danger, var(--c-enemy));
-}
-.pb-units, .pb-booster-list { list-style: none; margin: 0; padding: 0; }
-.pb-unit {
-  display: flex; align-items: center; gap: var(--s-3);
-  padding: var(--s-2) 0; border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.pb-unit:first-child { border-top: 0; }
-.pb-unit-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-.pb-unit-name { display: flex; align-items: center; gap: var(--s-2); font-weight: var(--w-bold); }
-/* The price tag. A player has to be able to read "this one costs 8" without
-   doing arithmetic on the stat line. */
-.pb-unit-cost {
-  flex: none; min-width: 1.6em; padding: 0 0.35em;
-  border: 1px solid color-mix(in srgb, currentcolor 45%, transparent);
-  border-radius: var(--r-1, 3px);
-  font: var(--w-bold) var(--t-xs) / 1.5 var(--font-num); text-align: center;
-  color: var(--c-text-dim);
-}
-.pb-unit-stat { font-size: var(--t-xs); font-family: var(--font-num); }
-.pb-unit-adjust { display: flex; align-items: center; gap: var(--s-2); }
-.pb-step {
-  width: var(--hit-sm); min-height: var(--hit-sm); padding: 0;
-  font: var(--w-bold) var(--t-md) / 1 var(--font-num);
-}
-.pb-unit-count { min-width: 2.5em; text-align: center; font: var(--w-bold) var(--t-md) / 1 var(--font-num); }
-.pb-unit[data-unit='militia'] .pb-unit-name { color: var(--c-militia); }
-.pb-unit[data-unit='spearmen'] .pb-unit-name { color: var(--c-spearmen); }
-.pb-unit[data-unit='raiders'] .pb-unit-name { color: var(--c-raiders); }
-.pb-unit[data-unit='rams'] .pb-unit-name { color: var(--c-rams); }
-.pb-unit[data-unit='marshal'] .pb-unit-name { color: var(--c-marshal); }
-
-.pb-booster-row {
-  display: flex; flex-direction: column; gap: 2px; padding: var(--s-2) 0;
-  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.pb-booster-row:first-child { border-top: 0; }
-.pb-booster { --chip: var(--c-accent); justify-content: space-between; width: 100%; }
-.pb-booster:disabled { opacity: 0.4; cursor: not-allowed; }
-.pb-booster-name { text-transform: none; letter-spacing: 0; font-weight: var(--w-bold); }
-.pb-booster-count { margin-left: auto; }
-.pb-booster-note { font-size: var(--t-xs); padding-left: var(--s-4); }
-
-.pb-actions {
-  display: flex; align-items: center; gap: var(--s-4);
-  padding: var(--s-3) var(--s-4); flex: none;
-}
-.pb-go { min-height: calc(var(--hit) + var(--s-2)); font-size: var(--t-lg); flex: 1; }
-.pb-actions .keys { margin-left: auto; }
-
-@media (max-width: 1180px) {
-  .pb-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pb-brief { grid-column: 1 / -1; }
-  .pb-wrap { width: min(1120px, 97vw); }
-  .pb-go { font-size: var(--t-md); }
-}
-@media (max-width: 860px) {
-  .pb-body { grid-template-columns: minmax(0, 1fr); }
-  .pb-brief { grid-column: auto; }
-}

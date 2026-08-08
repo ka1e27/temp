@@ -23,9 +23,10 @@ import { unlockedUnits } from '../meta/upgrades.js';
 import { inventory, defaultSelection } from '../meta/boosters.js';
 import { markDirty } from '../core/store.js';
 import {
-  regionBrief, initialComposition, defaultComposition, loadoutBudget, overBudget,
+  UNIT_LABEL, regionBrief, initialComposition, defaultComposition, loadoutBudget, overBudget,
 } from './prebattle-brief.js';
 import { renderArmy, renderBoosters } from './prebattle-army.js';
+import { parseCount, setUnitCount, countNote } from './prebattle-count.js';
 
 // One front door. The screen's decisions live in prebattle-brief.js and the
 // slot arithmetic in meta/composition.js; the shop and the tests import them
@@ -35,6 +36,7 @@ export {
   defaultComposition, loadoutBudget, budgetSummary, compositionSlots,
   compositionTotal, overBudget,
 } from './prebattle-brief.js';
+export { parseCount, setUnitCount, maxCount, countNote } from './prebattle-count.js';
 export { nudgeComposition, canNudge } from '../meta/composition.js';
 
 export function createPreBattleScene(ctx) {
@@ -47,6 +49,8 @@ export function createPreBattleScene(ctx) {
   let carried = null;
   let pending = null;
   let focusKey = null;
+  let notice = '';
+  let painting = false;
   let ownable = new Set();
 
   const meta = () => ctx.state.meta;
@@ -122,6 +126,7 @@ export function createPreBattleScene(ctx) {
     exit() {
       root = armyBody = boosterBody = announce = null;
       chosen = carried = regionId = pending = null;
+      notice = '';
       delete document.body.dataset.scene;
     },
 
@@ -180,9 +185,17 @@ export function createPreBattleScene(ctx) {
   // Declarations, not consts: everything here sits after the factory's `return`,
   // so only hoisted function declarations are ever initialised.
   function paint() {
+    // `painting` closes a re-entrancy trap that only exists because the counts
+    // are now typed into: rebuilding the strip destroys the focused field,
+    // which fires `blur`, which commits AGAIN — into a list that is halfway
+    // through being cleared. It threw a DOM exception every single edit and
+    // corrupted the army on the way past. See setCount().
+    painting = true;
     announce.textContent = renderArmy(armyBody, {
-      chosen, unlocked: units(), budget: budget(), focusKey, onStep: step,
+      chosen, unlocked: units(), budget: budget(), focusKey, notice,
+      onStep: step, onSet: setCount,
     });
+    painting = false;
     focusKey = null;
     renderBoosters(boosterBody, {
       items: inventory(meta()),
@@ -209,10 +222,33 @@ export function createPreBattleScene(ctx) {
     if (bad) go.setAttribute('aria-disabled', 'true'); else go.removeAttribute('aria-disabled');
   }
 
-  function step(unitId, delta) {
+  function step(unitId, delta, focus) {
     const next = nudgeComposition(chosen, unitId, delta, units(), budget());
     chosen = next;
-    focusKey = `${unitId}:${delta}`;
+    focusKey = focus ?? `${unitId}:${delta}`;
+    notice = '';
+    paint();
+  }
+
+  /**
+   * A TYPED count. Clamped by prebattle-count.js before it reaches the model,
+   * so an impossible number is answered here and now — the Launch gate never
+   * has to be the first time the player hears about it.
+   *
+   * A field that does not parse (empty, half-deleted, pasted rubbish) simply
+   * repaints from the model, which puts the real number back.
+   */
+  function setCount(unitId, raw, focus) {
+    // The echo of our own repaint blurring the field it just replaced. The
+    // value it carries is the one we committed a microsecond ago, so the only
+    // correct thing to do with it is nothing.
+    if (painting) return;
+    focusKey = focus === undefined ? `count:${unitId}` : focus;
+    const n = parseCount(raw);
+    if (n === null) { notice = ''; paint(); return; }
+    const r = setUnitCount(chosen, unitId, n, units(), budget());
+    chosen = r.comp;
+    notice = countNote(r, UNIT_LABEL[unitId]);
     paint();
   }
 
@@ -226,6 +262,7 @@ export function createPreBattleScene(ctx) {
   function rebuild(reset) {
     if (!root) return;
     chosen = reset ? defaultComposition(meta()) : initialComposition(meta(), chosen);
+    notice = '';
     if (reset) { ownable = new Set(defaultSelection(meta())); carried = new Set(ownable); }
     paint();
   }
