@@ -134,28 +134,3 @@ export function previewLine(pv) {
   parts.push(`ETA ${duration(pv.eta)}`);
   return parts.join(' · ');
 }
-
-/**
- * Gold per second a faction is currently earning.
- *
- * KNOWN WRONG, and no longer on any screen: it re-derives the farm rate instead
- * of calling siteGoldPerSec(), so it disagrees with the treasury in three ways
- * — it ignores the attrition ladder's farmMult, ignores the AI's economy
- * handicap (an enemy on tier 1 really earns 0.65x this), and reads `site.level`
- * where a site mid-upgrade produces at the OLD level. The HUD now reads
- * battle-econ.js `goldFlow()`, which sums the simulation's own per-site
- * function. Delete this and its re-export from battle-hud.js — the only thing
- * holding it up is tests/preview.test.js:191, which asserts the drifted number.
- */
-export function income(state, faction) {
-  const mods = state.mods?.[faction] ?? {};
-  let g = 0;
-  for (const s of state.sites) {
-    if (s.owner !== faction) continue;
-    const spec = SITES[s.kind];
-    if (!spec.gold) continue;
-    g += spec.gold * levelSpec(s).gold * (mods.goldRateMult ?? 1)
-      * (s.kind === 'farm' ? (mods.farmYieldMult ?? 1) : 1);
-  }
-  return g;
-}

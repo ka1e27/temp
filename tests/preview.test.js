@@ -9,12 +9,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computePreview, previewLine, income, projectGarrison, travelSecondsFor }
+import { computePreview, previewLine, projectGarrison, travelSecondsFor }
   from '../src/screens/battle-hud.js';
 import { createView, filterList, cmd } from '../src/screens/battle-input.js';
 import { createBattleState } from '../src/battle/state.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { emptyComp } from '../src/battle/combat.js';
+import { factionGoldPerSec, runEconomy } from '../src/battle/economy.js';
+import { AI_TIERS, CENTIGOLD } from '../src/content/balance.js';
+import { TICK_HZ } from '../src/core/loop.js';
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 
@@ -195,8 +198,28 @@ test('hud: income sums only the sites a faction actually holds', () => {
     { id: 'f2', kind: 'farm', hex: [2, 0], owner: 'enemy', garrison: {}, hp: 100, hpMax: 100 },
     { id: 'cas', kind: 'castle', hex: [4, 0], owner: 'enemy', garrison: {}, hp: 600, hpMax: 600 },
   ], [['camp', 'f1'], ['f1', 'f2'], ['f2', 'cas']]);
-  near(income(st, 'player'), 6);   // camp 4.0 + farm 2.0
-  near(income(st, 'enemy'), 6);
+  near(factionGoldPerSec(st, 'player'), 6);   // camp 4.0 + farm 2.0
+  // NOT 6. This used to assert the enemy earned the same as the player, because
+  // it went through a second, hand-rolled copy of the farm formula that knew
+  // nothing about the AI's economy handicap. A tier-1 enemy really earns 0.65x,
+  // and the treasury has always agreed with THIS number, not that one.
+  near(factionGoldPerSec(st, 'enemy'), 6 * AI_TIERS[0].economyMult);
+});
+
+test('the readout is the simulation\'s own number, not a second copy of it', () => {
+  // The bug this replaces shipped because the HUD re-derived farm income. Tie
+  // the readout to what runEconomy actually credits, so any future divergence
+  // fails here instead of quietly misreporting the treasury for a release.
+  const st = fixture([
+    { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: {}, hp: 600, hpMax: 600 },
+    { id: 'f1', kind: 'farm', hex: [1, 0], owner: 'player', garrison: {}, hp: 100, hpMax: 100 },
+    { id: 'cas', kind: 'castle', hex: [4, 0], owner: 'enemy', garrison: {}, hp: 600, hpMax: 600 },
+  ], [['camp', 'f1'], ['f1', 'cas']]);
+  const rate = factionGoldPerSec(st, 'player');
+  const before = st.factions.player.goldEarnedCg;
+  for (let i = 0; i < TICK_HZ; i++) runEconomy(st);
+  const credited = (st.factions.player.goldEarnedCg - before) / CENTIGOLD;
+  near(credited, rate, 0.05);
 });
 
 test('hud: the ETA comes from movement.js, so one ram slows the whole column', () => {

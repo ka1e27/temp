@@ -20,7 +20,7 @@ import { createSitePanel, createWithdraw, createAlert, rejectionText } from './b
 import { createSpeedControl } from './battle-speed.js';
 
 export {
-  computePreview, previewLine, income, projectGarrison, travelSecondsFor,
+  computePreview, previewLine, projectGarrison, travelSecondsFor,
 } from './battle-preview.js';
 
 const INSUFFICIENT = 'INSUFFICIENT — walls repair faster than you break them';
