@@ -43,8 +43,14 @@ export function renderArmy(body, view) {
   const list = h('ul.pb-units', { role: 'list' });
   for (const id of UNIT_IDS) {
     if (!unlocked.includes(id)) continue;
+    // The Marshal is NOT a budget line any more. Unlocking him grants exactly
+    // one on every landing, outside the budget (meta/modifiers.js
+    // `withFreeMarshal`), so a row with a +/- on it would only ever let a player
+    // pay 8 slots for a body they already have.
+    if (id === 'marshal') continue;
     mount(list, unitRow(id, view));
   }
+  if (unlocked.includes('marshal')) mount(list, freeMarshalRow());
   mount(body, list);
 
   // What a typed number cost, or why it did not fit. Rendered where the number
@@ -74,6 +80,22 @@ function restoreFocus(body, key) {
   }
   const btn = body.querySelector(`[data-step="${key}"]`);
   (btn && !btn.disabled ? btn : body.querySelector('.pb-step:not([disabled])'))?.focus();
+}
+
+/** What the Marshal unlock actually bought, stated where the army is chosen —
+ *  otherwise "free, outside the budget" is invisible and reads as a bug. */
+function freeMarshalRow() {
+  const stat = UNITS.marshal;
+  return h('li.pb-unit.is-free', { 'data-unit': 'marshal' },
+    h('div.pb-unit-main', {},
+      h('span.pb-unit-name', {},
+        h('span', { text: UNIT_LABEL.marshal, title: UNITS_UI.marshal?.desc ?? '' }),
+        h('span.pb-unit-free', { text: 'free' })),
+      h('span.pb-unit-stat.dim', {
+        text: `ATK ${stat.atk} · DEF ${stat.def} · SIEGE ${stat.siege}`,
+      })),
+    h('div.pb-unit-adjust', {},
+      h('span.pb-unit-note.dim', { text: 'one rides with every expedition' })));
 }
 
 function unitRow(id, view) {

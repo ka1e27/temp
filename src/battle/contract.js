@@ -26,7 +26,18 @@ import { fnv1a, stableStringify } from '../core/hash.js';
 // cross the seam because meta owns the per-region dial (content/regions.data.js)
 // and battle owns the siege math that reads it; OPTIONAL, so a config that omits
 // it (every hand-built fixture) is a region with no gate, not an invalid one.
-export const CONTRACT_VERSION = 4;
+//
+// v5: two changes, one shape and one field.
+//   - a site's `rallyTarget` became `rallyTargets[]` plus a sim-owned
+//     `rallyCursor`, so one site can feed several neighbours in turn. That is a
+//     BATTLE STATE shape rather than a config one, and the version is what makes
+//     meta/resume.js discard a mid-battle blob the current engine would step
+//     with the wrong shape.
+//   - `rules.rallyKeepDefault` — the player's standing preference for how many
+//     troops a rallied site holds back. Meta owns the preference and battle owns
+//     the per-site field it seeds, so it has to cross. OPTIONAL, like the two
+//     before it: absent means the RALLY_KEEP default.
+export const CONTRACT_VERSION = 5;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
@@ -252,6 +263,12 @@ export function assertBattleConfig(c) {
       const f = c.rules.castleGateFrac;
       if (typeof f !== 'number' || !Number.isFinite(f) || f < 0 || f > 1) {
         e.push(`rules.castleGateFrac: expected a number in [0, 1], got ${f}`);
+      }
+    }
+    if (c.rules.rallyKeepDefault !== undefined) {
+      const k = c.rules.rallyKeepDefault;
+      if (!Number.isInteger(k) || k < 0) {
+        e.push(`rules.rallyKeepDefault: expected a non-negative integer, got ${k}`);
       }
     }
   }

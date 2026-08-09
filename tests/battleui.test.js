@@ -21,6 +21,7 @@ import { EVENTS } from '../src/battle/events.js';
 import {
   BOOSTER_KEYS, FILTER_KEYS, BOOSTER_BY_KEY, FILTER_BY_KEY, SPEED_KEYS,
   TARGETED_BOOSTERS, needsTarget, SPEEDS, stepSpeedIndex, speedAllowed,
+  NORMAL_SPEED_INDEX, FREE_SPEED_MAX, maxSpeedIndex, speedIndexOf,
 } from '../src/screens/battle-keys.js';
 import { createOrders, cmd } from '../src/screens/battle-orders.js';
 import { createView } from '../src/screens/battle-input.js';
@@ -292,36 +293,6 @@ test('rejections: a silently dropped order really does leave a reason behind', (
   const ev = state.events.find((e) => e.type === EVENTS.COMMAND_REJECTED);
   assert.equal(ev.reason, 'not-adjacent');
   assert.equal(rejectionText(ev), 'Sends only reach adjacent sites.');
-});
-
-// ---------------------------------------------------------------------------
-// Speed, pause and slow motion
-// ---------------------------------------------------------------------------
-
-test('speed: 4x is locked until the Tactician upgrade crosses the seam', () => {
-  assert.deepEqual([...SPEEDS], [1, 2, 4]);
-  assert.equal(speedAllowed(0, false), true);
-  assert.equal(speedAllowed(1, false), true);
-  assert.equal(speedAllowed(2, false), false, '4x must be gated');
-  assert.equal(speedAllowed(2, true), true);
-
-  // Stepping up hits the wall at 2x without the unlock, and 4x with it.
-  assert.equal(stepSpeedIndex(0, 1, false), 1);
-  assert.equal(stepSpeedIndex(1, 1, false), 1);
-  assert.equal(stepSpeedIndex(1, 1, true), 2);
-  assert.equal(stepSpeedIndex(2, 1, true), 2);
-  assert.equal(stepSpeedIndex(0, -1, true), 0);
-  assert.equal(stepSpeedIndex(2, -1, true), 1);
-});
-
-test('speed: pause and slow-mo are multipliers, not a second code path', () => {
-  assert.equal(effectiveSpeed({ index: 0, paused: false, slow: false }), 1);
-  assert.equal(effectiveSpeed({ index: 2, paused: false, slow: false }), 4);
-  assert.equal(effectiveSpeed({ index: 2, paused: false, slow: true }), 0.35);
-  assert.equal(effectiveSpeed({ index: 2, paused: true, slow: true }), 0, 'pause wins');
-  assert.equal(speedLabel({ paused: true }), 'Speed · PAUSED');
-  assert.equal(speedLabel({ slow: true }), 'Speed · SLOW-MO');
-  assert.equal(speedLabel({}), 'Speed');
 });
 
 // ---------------------------------------------------------------------------

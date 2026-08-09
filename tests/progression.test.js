@@ -309,11 +309,11 @@ test('Royal Mint and Ordnance Yard reach the idle economy and the walls', () => 
 });
 
 test('the contract did not have to change: every new line rides a field that already existed', () => {
-  // 4, not the 3 this pinned before the castle gate: that bump was for
-  // rules.castleGateFrac, an unrelated field. The point of THIS test is that
-  // armoury/quartermaster/levyReform/musterField/ordnance did not need one of
-  // their own — they all ride fields the contract already had.
-  assert.equal(CONTRACT_VERSION, 4);
+  // The number tracks bumps this test is NOT about: v4 was rules.castleGateFrac,
+  // v5 the rally target list and rules.rallyKeepDefault. The point of THIS test
+  // is that armoury/quartermaster/levyReform/musterField/ordnance did not need
+  // one of their own — they all ride fields the contract already had.
+  assert.equal(CONTRACT_VERSION, 5);
   const cfg = configWith({
     armoury: 3, quartermaster: 3, levyReform: 3, musterField: 2, ordnance: 3,
   });

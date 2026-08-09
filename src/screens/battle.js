@@ -114,6 +114,9 @@ export function createBattleScene(ctx) {
         // The HUD must not reach the loop directly; presentation never drives
         // the clock. It asks, and the shell decides.
         onSetSpeed: (n) => ctx.loop?.setSpeed(n),
+        // The player's saved pace. A preference, not battle state, so it
+        // rides meta rather than the BattleConfig.
+        initialSpeed: ctx.state?.meta?.settings?.defaultSpeed ?? 1,
         getSpeed: () => ctx.loop?.speed ?? 1,
       });
       view = presentation;

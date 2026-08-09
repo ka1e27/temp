@@ -18,6 +18,7 @@
 import { h, clear, mount, bindText } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, SAVE } from '../content/strings.js';
+import { renderSettings } from './mainmenu-settings.js';
 import { createMeta, markDirty, metaOf } from '../core/store.js';
 import { exportSave, importSave } from '../meta/save.js';
 import { incomePerSec, recalcIncome } from '../meta/idle.js';
@@ -60,11 +61,19 @@ export function launchFirstRegion(ctx) {
  */
 export function adoptCampaign(ctx, next, now) {
   const state = ctx.state;
+  // PREFERENCES OUTLIVE THE CAMPAIGN. `meta` is replaced wholesale here — by a
+  // new campaign or by an imported save — and settings ride inside it, so
+  // without this a player who wanted their rally hold-back at zero would have
+  // to say so again after every reset, and importing a friend's save would
+  // silently adopt their pace and their hold-back too. They are the player's,
+  // not the save's.
+  const keptSettings = state.meta?.settings;
   state.saveVersion = next.saveVersion ?? state.saveVersion;
   state.seed = next.seed ?? state.seed;
   state.createdAt = next.createdAt ?? now;
   state.lastSeenAt = now;
   state.meta = next.meta;
+  if (keptSettings) state.meta.settings = keptSettings;
   state.battle = null;
   refreshUnlocks(state.meta, ctx.bus);
   recalcIncome(state.meta, ctx.bus);
@@ -209,6 +218,9 @@ export function createMainMenuScene(ctx) {
       }),
       h('button.btn.ghost.menu-import', {
         type: 'button', text: 'Import save', on: { click: showImport },
+      }),
+      h('button.btn.ghost.menu-settings-btn', {
+        type: 'button', text: 'Settings', on: { click: showSettings },
       }));
     actions.firstChild?.focus?.();
   }
@@ -261,6 +273,10 @@ export function createMainMenuScene(ctx) {
       style: { userSelect: 'text', WebkitUserSelect: 'text', width: '100%' },
       ...props,
     });
+  }
+
+  function showSettings() {
+    renderSettings(drawer, ctx)?.focus?.();
   }
 
   function showExport() {

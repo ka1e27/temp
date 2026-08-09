@@ -41,9 +41,21 @@ export const compositionTotal = (comp) =>
 /** The single rule that decides whether Launch is allowed. */
 export const overBudget = (comp, budget) => compositionSlots(comp) > Math.max(0, budget);
 
-/** At most one marshal per site — a hard engine rule, not a preference. */
-export const maxOf = (unitId) =>
-  (unitId === 'marshal' ? (UNITS.marshal.maxPerSite ?? 1) : Infinity);
+/**
+ * How many of a unit an EXPEDITION may contain.
+ *
+ * The marshal is 0 — not one — and that is the whole point of the change that
+ * made him worth unlocking. `maxPerSite` is still 1 and still enforced by the
+ * engine; what moved is who pays. Unlocking the marshal now grants exactly one
+ * on every landing, outside the slot budget (meta/modifiers.js
+ * `withFreeMarshal`), so letting the loadout buy one as well would only ever be
+ * a trap: 8 slots — 42% of a region-1 budget — for a body you already have, and
+ * a `banner` that is presence-based and so gains nothing from a second.
+ *
+ * Wanting more than one is a real thing, and it has its own verb: commission
+ * them in battle, at the site that needs one (battle/commands.js `cmdRecruit`).
+ */
+export const maxOf = (unitId) => (unitId === 'marshal' ? 0 : Infinity);
 
 /** The ballast: cheapest unit the player may field, which absorbs every
  *  leftover slot and every budget increase. Militia in every real roster. */
@@ -92,14 +104,8 @@ export function distributeExpedition(slots, unlocked, weights = DEFAULT_COMPOSIT
   const ballast = ballastUnit(unlocked);
   if (!legal.length) return out;
 
-  // A marshal is capped at one, so it is a yes/no rather than a ratio. It is
-  // taken only when the spread ASKS for one (the default spread does not), which
-  // is what stops a fresh unlock force-feeding itself into every loadout.
-  if (legal.includes('marshal') && (weights.marshal ?? 0) > 0 && left >= slotCost('marshal')) {
-    out.marshal = 1;
-    left -= slotCost('marshal');
-  }
-
+  // No marshal branch: `maxOf('marshal')` is 0, because one is granted free
+  // outside the budget and the budget's job is troops.
   const pool = legal.filter((u) => maxOf(u) === Infinity && (weights[u] ?? 0) > 0);
   if (!pool.length) { fill(out, ballast, left); return out; }
 

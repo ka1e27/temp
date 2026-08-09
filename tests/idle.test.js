@@ -10,6 +10,7 @@ import {
   incomePerSec, baseIncomePerSec, recalcIncome, accrue, tick,
   applyOfflineProgress, offlineCapMs, timeToAfford, projectCrowns,
 } from '../src/meta/idle.js';
+import { markConquered } from '../src/meta/world.js';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -172,4 +173,58 @@ test('the region table hits its ~274/s full-conquest target', () => {
   const s = world(all);
   const total = incomePerSec(s);
   assert.ok(total > 250 && total < 300, `full conquest income ${total} should be ~274/s`);
+});
+
+// ---------------------------------------------------------------------------
+// Battle speed must never touch income
+// ---------------------------------------------------------------------------
+
+test('income is the same at 0.25x, 1x and 4x — speed is not a money printer', () => {
+  // CLAUDE.md calls this out as load-bearing and NOTHING pinned it. The rule
+  // lives in main.js: idle accrues on `realMs` (a wall-clock delta) and the sim
+  // gets `dtMs`, so a faster loop takes proportionally smaller bites. Passing
+  // `dtMs` into tickIdle instead — an easy and plausible mistake — multiplies a
+  // player's income by their speed setting, and slow motion is a NEW way to get
+  // this wrong in the other direction.
+  //
+  // Modelled here as the loop really behaves: at speed S over the same ten
+  // seconds of wall clock, `update` runs S times as often with a wall-clock
+  // delta S times smaller.
+  const earnedAt = (speed) => {
+    const s = createState({ seed: 1, now: 0 });
+    markConquered(s.meta, 'riverfen', { now: 0, durationMs: 0 });
+    recalcIncome(s.meta);
+
+    const WALL_MS = 10_000;
+    const framesPerSecond = 10 * speed;          // the loop ticks faster...
+    const frames = Math.round((WALL_MS / 1000) * framesPerSecond);
+    const realMs = WALL_MS / frames;             // ...so each frame is shorter
+    for (let i = 0; i < frames; i++) tick(s, realMs, (i + 1) * realMs);
+    return s.meta.crowns;
+  };
+
+  const base = earnedAt(1);
+  assert.ok(base > 0, 'the fixture must actually earn something');
+  for (const speed of [0.25, 0.5, 2, 4]) {
+    assert.ok(Math.abs(earnedAt(speed) - base) < 1e-6,
+      `${speed}x earned ${earnedAt(speed)} against 1x's ${base}`);
+  }
+});
+
+test('income ignores the simulation clock even when the two disagree', () => {
+  // The direct statement of the bug: crediting the SIM delta instead of the
+  // wall delta. At 4x the sim advances four times as far, so a build that
+  // credited it would pay four times as much.
+  const s = createState({ seed: 1, now: 0 });
+  markConquered(s.meta, 'riverfen', { now: 0, durationMs: 0 });
+  recalcIncome(s.meta);
+
+  const SIM_MS = 100;                            // one fixed tick, always 100ms
+  const WALL_MS = 25;                            // what 4x actually consumed
+  tick(s, WALL_MS, WALL_MS);
+  const paid = s.meta.crowns;
+  assert.ok(Math.abs(paid - (s.meta.incomePerSec * WALL_MS) / 1000) < 1e-9,
+    'accrual must be a function of the wall delta it was handed');
+  assert.ok(paid < (s.meta.incomePerSec * SIM_MS) / 1000,
+    'and must be strictly less than the sim delta would have paid');
 });

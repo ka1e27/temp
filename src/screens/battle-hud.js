@@ -83,7 +83,9 @@ export function createBattleHud(o) {
     h('span.booster-name', { text: id }),
     h('span.booster-cd')));
 
-  const speed = createSpeedControl({ bus, onSetSpeed: o.onSetSpeed });
+  const speed = createSpeedControl({
+    bus, onSetSpeed: o.onSetSpeed, initialSpeed: o.initialSpeed,
+  });
   // `board` is what lets the panel sit on the site it describes. Read-only.
   // `tip` (built above) is the hover card the composition bar's segments
   // attach to.

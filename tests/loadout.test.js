@@ -40,6 +40,20 @@ const world = (conquered = [], upgrades = {}) => {
 };
 const ALL = { unlockRaiders: 1, unlockRams: 1, unlockMarshal: 1 };
 
+/**
+ * What the camp holds for a given CHOICE, once the free Marshal is accounted
+ * for. Unlocking the marshal grants exactly one on every landing, outside the
+ * slot budget (meta/modifiers.js `withFreeMarshal`), so "what you chose is what
+ * lands" is now "what you chose, plus the commander you already paid for".
+ */
+const withFree = (state, comp) => (unlockedUnits(state.meta).includes('marshal')
+  ? { ...comp, marshal: 1 } : comp);
+
+/** Slots actually STANDING in the camp: the budget, plus the free marshal. The
+ *  budget itself never buys one — `maxOf('marshal')` is 0. */
+const landedSlots = (state) => expeditionSlots(state.meta)
+  + (unlockedUnits(state.meta).includes('marshal') ? UNIT_SLOTS.marshal : 0);
+
 /** THE assertion surface: what the player's camp actually holds at tick 0. */
 function deployed(state, regionId, composition) {
   const config = buildBattleConfig(
@@ -131,7 +145,8 @@ test('an absurd ask is clamped to the budget by the time it reaches the camp', (
   const greedy = { militia: 999, spearmen: 999, raiders: 999, rams: 999, marshal: 999 };
 
   const garrison = deployed(s, 'ironwood', greedy);
-  assert.equal(compositionSlots(garrison), budget, 'the camp holds exactly the budget');
+  assert.equal(compositionSlots(garrison), landedSlots(s),
+    'the camp holds exactly the budget, plus the free marshal');
   assert.ok(garrison.marshal <= 1, 'maxPerSite survives the clamp');
   assert.ok(compositionTotal(garrison) > 0, 'and it is not an empty army');
 });
@@ -141,11 +156,11 @@ test('a marshal-only ask cannot smuggle in more than the budget allows', () => {
   const budget = expeditionSlots(s.meta);
   const garrison = deployed(s, 'riverfen', { marshal: 40 });
   assert.equal(garrison.marshal, 1, 'one per site, always');
-  assert.equal(compositionSlots(garrison), budget);
-  assert.equal(
-    garrison.militia, budget - UNIT_SLOTS.marshal,
-    'the slots a second marshal would have cost come back as militia',
-  );
+  // The loadout no longer sells marshals at all, so an ask for forty buys none
+  // of them: the whole budget goes to troops and the free one rides on top.
+  assert.equal(compositionSlots(garrison), landedSlots(s));
+  assert.equal(garrison.militia, budget,
+    'every slot a marshal would have cost comes back as militia');
 });
 
 test('the default spread spends the budget exactly and never overspends it', () => {
@@ -182,7 +197,7 @@ test('no sequence of + and - presses can ever exceed the budget', () => {
     }
   }
   assert.equal(compositionSlots(comp), budget, 'and the budget stays fully spent');
-  assert.equal(compositionSlots(deployed(s, 'ashford', comp)), budget);
+  assert.equal(compositionSlots(deployed(s, 'ashford', comp)), landedSlots(s));
 });
 
 test('one press buys a raider by trading down, and giving it back is exact', () => {
@@ -234,7 +249,7 @@ test('a loadout survives save + load through the real persistence path', () => {
   assert.deepEqual(reopened, chosen);
   assert.notDeepEqual(reopened, defaultComposition(back.state.meta), 'not the default');
   // ...and they are still what reaches the camp.
-  assert.deepEqual(deployed(back.state, 'ashford', reopened), chosen);
+  assert.deepEqual(deployed(back.state, 'ashford', reopened), withFree(back.state, chosen));
 });
 
 test('a save written before loadouts existed loads to the default spread', () => {
@@ -293,8 +308,9 @@ test('extra slots become militia and every other pick is left alone', () => {
   const rescaled = distributeExpedition(expeditionSlots(big.meta), unlockedUnits(big.meta), chosen);
   assert.notEqual(rescaled.raiders, carried.raiders, 'a rescale is the thing we are not doing');
 
-  // And the carried army is what the camp is handed, to the soldier.
-  assert.deepEqual(deployed(big, 'saltmere', carried), carried);
+  // And the carried army is what the camp is handed, to the soldier — plus the
+  // commander the unlock grants free.
+  assert.deepEqual(deployed(big, 'saltmere', carried), withFree(big, carried));
 });
 
 test('a newly unlocked unit is offered, never force-fed into the carried army', () => {
@@ -321,7 +337,7 @@ test('carrying into an unchanged budget changes nothing at all', () => {
   assert.deepEqual(initialComposition(s.meta, chosen), chosen);
   // The seam re-fits everything it is handed; on an exactly-fitting army that
   // re-fit must be an identity, or carry-over would be undone in transit.
-  assert.deepEqual(deployed(s, 'ashford', chosen), chosen);
+  assert.deepEqual(deployed(s, 'ashford', chosen), withFree(s, chosen));
 });
 
 // ===========================================================================
@@ -358,6 +374,6 @@ test('the config the seam validates agrees with the camp it produces', () => {
   const battle = startBattle(config);
   const camp = battle.sites.find((x) => x.kind === 'camp' && x.owner === 'player');
   assert.deepEqual(camp.garrison, config.player.expedition);
-  assert.equal(compositionSlots(config.player.expedition), expeditionSlots(s.meta));
+  assert.equal(compositionSlots(config.player.expedition), landedSlots(s));
   assert.equal(slotCost('marshal'), UNIT_SLOTS.marshal);
 });

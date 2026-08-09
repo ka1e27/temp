@@ -27,7 +27,7 @@
 import {
   CONTRACT_VERSION, makeMods, assertBattleConfig, hashBattleConfig,
 } from '../battle/contract.js';
-import { EXPEDITION, SITES, SITE_LEVELS } from '../content/balance.js';
+import { EXPEDITION, SITES, SITE_LEVELS, RALLY_KEEP } from '../content/balance.js';
 import {
   REGION_BY_ID, ENEMY_SCALING, BASE_GARRISON, NEUTRAL_GARRISON,
   PLAYER_SITE_GARRISON, BATTLE_START, ENEMY_UNITS_BY_TIER, FALLBACK_MAP,
@@ -168,6 +168,33 @@ export function enemyMods(region, mult) {
   });
 }
 
+/**
+ * THE MARSHAL YOU BOUGHT TURNS UP, and it does not cost you eight militia.
+ *
+ * Unlocking the marshal used to buy the RIGHT to spend 8 of your expedition
+ * slots on one body — 42% of a region-1 budget, 11% of a region-6 one — or to
+ * retask a stronghold for forty seconds mid-battle. Both are a bill rather than
+ * a reward, which is how a 4,000-crown purchase ended up being something players
+ * simply never fielded.
+ *
+ * So the unlock grants exactly one, OUTSIDE the slot budget, on every landing.
+ * `maxPerSite` still binds, so this cannot stack: it is one commander, free,
+ * because that is what the price already paid for. More than one is still a
+ * decision — buy it in the loadout, or commission it in battle (RECRUIT).
+ *
+ * Deliberately applied AFTER the budget is fitted, so the free one never
+ * displaces a paid unit and never makes the loadout screen's arithmetic wrong.
+ */
+export function withFreeMarshal(fx, expedition) {
+  if (!fx.units.includes('marshal')) return expedition;
+  // EXACTLY one, not one more. `banner` is presence-based, so a second marshal
+  // in the same camp buys literally nothing, and the loadout screen no longer
+  // sells them at all (screens/prebattle-army.js) — which means the 8 slots stay
+  // available for troops instead of being a trap for the player who paid 4,000
+  // crowns and then paid again.
+  return { ...expedition, marshal: Math.max(expedition.marshal ?? 0, 1) };
+}
+
 // --- The entry point -------------------------------------------------------
 
 /**
@@ -195,9 +222,13 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   // identity in that case and a hard clamp in every other, so a hand-edited
   // params object still cannot buy itself a bigger army.
   const slots = expeditionSlots(meta);
-  const expedition = options.composition
+  // The budget never buys a marshal — `maxOf('marshal')` is 0 in
+  // meta/composition.js — so a loadout carried over from before the change has
+  // its 8 slots handed back as troops rather than spent on a body the player is
+  // about to be given anyway.
+  const expedition = withFreeMarshal(fx, options.composition
     ? fitComposition(slots, fx.units, options.composition)
-    : distributeExpedition(slots, fx.units);
+    : distributeExpedition(slots, fx.units));
 
   const gen = callMapGen(mapGen, { region, seed, mult, isRaid });
   const sites = normalizeSites(gen.sites, mult);
@@ -233,6 +264,10 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
       isRaid,
       targetLengthMs: Math.round(region.targetLengthMin * 60 * 1000),
       castleGateFrac: region.castleGateFrac,
+      // The player's standing hold-back preference. Meta owns the preference,
+      // battle owns the per-site field it seeds — so it crosses here rather
+      // than being read from meta inside the sim, which meta may not touch.
+      rallyKeepDefault: meta.settings?.rallyKeepDefault ?? RALLY_KEEP.default,
     },
   };
 

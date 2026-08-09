@@ -295,8 +295,19 @@ export function createBattleInput(o) {
     press = null;
   }
 
-  /** Click-then-click runs through the SAME issueSend path as the drag, so the
-   *  two input styles can never disagree about what is legal. */
+  /**
+   * A tap SELECTS. It never sends — see tests/tapsend.test.js.
+   *
+   * Tap-then-tap used to issue a send. The panel's controls sit over the board
+   * and every neighbour is a legal target, so it was indistinguishable from
+   * looking at two sites in a row: upgrading two sites in sequence quietly
+   * shipped half of one garrison to the other, and a send has no undo. Dragging
+   * is the only way to send now, and it is the one that shows you what it will
+   * do while you do it.
+   *
+   * `view.armed` survives as "last site touched": battle-orders.js `setRally`
+   * falls back to it and battle-hud.js uses it as the preview's implied origin.
+   */
   function tap(hit) {
     const now = performance.now();
 
@@ -326,11 +337,6 @@ export function createBattleInput(o) {
     lastTapId = hit.id;
     lastTapAt = now;
 
-    const armed = view.armed ? ord.site(view.armed) : null;
-    if (armed && armed.id !== hit.id && ord.issueSend(armed, hit)) {
-      view.armed = null;
-      return;
-    }
     view.armed = hit.owner === 'player' ? hit.id : null;
     ord.selectOnly(hit.id);
   }
