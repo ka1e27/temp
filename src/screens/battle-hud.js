@@ -118,10 +118,20 @@ export function createBattleHud(o) {
     h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
     alert.el);
   el.tr = h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el);
+  // Each card is a header row (the label, full width, ruled off) over a
+  // CONTROLS row. Two real rows, not one flex row with the label faked into
+  // its own line via flex-basis — that trick fooled the browser's own
+  // max-content sizing (used because the dock sizes itself to its content)
+  // into measuring the label as if it could grow arbitrarily wide, which
+  // quietly inflated every card by 30-40% and pushed the dock into wrapping a
+  // full viewport step earlier than intended.
   el.dock = h('div.hud-dock', {},
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: '% of garrison' }), ...strength),
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }), ...chips),
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }), ...boosters),
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: '% of garrison' }),
+      h('div.hud-group-row', {}, ...strength)),
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }),
+      h('div.hud-group-row', {}, ...chips)),
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }),
+      h('div.hud-group-row', {}, ...boosters)),
     speed.el);
   mount(root, el.tl, el.tr, el.dock, site.el, el.preview, el.train);
 

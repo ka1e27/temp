@@ -8,19 +8,23 @@
 
 .hud-corner {
   position: absolute; display: flex; flex-direction: column;
-  gap: var(--s-2); padding: var(--s-3); max-width: 46vw;
+  gap: var(--s-3); padding: var(--s-3); max-width: 46vw;
 }
 .hud-tl { top: 0; left: 0; align-items: flex-start; }
 .hud-tr { top: 0; right: 0; align-items: flex-end; }
 
 /* --- Gold + income --------------------------------------------------------
    The most-glanced number in the battle, so it is the biggest thing in the
-   corner: label above, treasury at display size, rate alongside at baseline. */
+   corner: label above, treasury at display size, rate alongside at baseline,
+   and the income/spend breakdown smaller and dimmer still underneath — three
+   deliberate steps down, not one font doing every job. A dedicated rule
+   between the headline row and the breakdown gives the eye a landing place
+   between "what it's worth" and "why", instead of three lines packed flush. */
 
 .hud-gold {
   display: grid; grid-template-columns: max-content max-content;
-  column-gap: var(--s-2); row-gap: var(--s-1); align-items: baseline;
-  padding: var(--s-2) var(--s-4);
+  column-gap: var(--s-3); row-gap: var(--s-2); align-items: baseline;
+  padding: var(--s-3) var(--s-5);
 }
 .hud-gold::before {
   content: 'GOLD'; grid-column: 1 / -1;
@@ -31,14 +35,22 @@
   letter-spacing: -0.02em; color: var(--c-gold);
 }
 /* Income arriving: JS toggles .is-bump on the value (see base.css). */
-.hud-rate { font: var(--w-bold) var(--t-sm) / 1 var(--font-num); color: var(--c-player); }
+.hud-rate { font: var(--w-bold) var(--t-md) / 1 var(--font-num); color: var(--c-player); }
 /* This is NET — income minus what the strongholds are spending on training —
    so it can go negative, and a treasury being run down has to read as one
    without doing arithmetic on the breakdown line beneath it. */
 .hud-rate.is-drain { color: var(--c-danger); }
 .hud-flow {
-  grid-column: 1 / -1;
+  grid-column: 1 / -1; margin-top: 2px; padding-top: var(--s-2);
+  border-top: var(--hairline);
   font: var(--w-normal) var(--t-xs) / 1 var(--font-num); color: var(--c-text-dim);
+}
+/* The treasury edge itself turns to the danger hue while it drains, so the
+   state reads off the SHAPE of the panel before the numbers are even parsed —
+   the same edged-plate language the site panel and the outcome preview use. */
+.hud-gold:has(.hud-rate.is-drain) {
+  border-left-width: var(--plate-edge);
+  border-left-color: color-mix(in srgb, var(--c-danger) 70%, transparent);
 }
 
 .hud-objective {
@@ -75,27 +87,51 @@
 }
 
 /* --- Bottom dock ----------------------------------------------------------
-   A row of grouped plates that WRAPS: it used to be a non-wrapping flex row of
-   four segments, five chips and five boosters, and it ran off both edges of a
-   1280px viewport. Row gap leaves room for the floating group labels. */
+   Four cards, not one strip: % of garrison, troop types, boosters, speed each
+   get their own plate, their own padding, and real air between them, so the
+   dock reads as four things you could point at rather than one dense band
+   along the bottom edge. It still WRAPS — it used to be a non-wrapping flex
+   row of four segments, five chips and five boosters, and it ran off both
+   edges of a 1280px viewport.
+
+   The group label used to float ABOVE the plate on a transform, which is what
+   made four adjoining plates look like one strip with some captions hovering
+   over it — a label outside the box it names reads as decoration, not
+   structure. It now sits INSIDE its own card as a real header row over a
+   `.hud-group-row` holding the actual controls, ruled off from them like
+   every other section header this pass introduced (see the site panel in
+   screens.css). Two real rows in a column, not one flex row with the label
+   faked onto its own line via `flex-basis: 100%` — that trick fooled the
+   browser's own max-content sizing (used because the dock sizes itself to
+   its content) into measuring the label as if it could grow arbitrarily
+   wide, which quietly inflated every card and wrapped the dock a full
+   viewport step earlier than the padding alone would ever justify.
+
+   Moving the label into the flow made every card genuinely taller than
+   tokens.css's `--dock-h` assumes (that constant predates this pass and
+   tokens.css is owned elsewhere this round), so it is redeclared here at the
+   real one-row height — exactly the override the 1180px breakpoint below
+   already did for two rows, just no longer stale by the label's own height. */
+:root { --dock-row-h: calc(var(--hit) + var(--s-6) + var(--s-6)); --dock-h: var(--dock-row-h); }
 
 .hud-dock {
-  position: absolute; left: 50%; bottom: var(--s-3); transform: translateX(-50%);
-  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center;
-  gap: var(--s-6) var(--s-3); padding: 0 var(--s-3);
+  position: absolute; left: 50%; bottom: var(--s-4); transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center;
+  gap: var(--s-5) var(--s-5); padding: 0 var(--s-3);
   /* `left: 50%` caps a shrink-to-fit box at HALF the viewport, which is what
      made the dock wrap at 1440px. max-content opts out; max-width re-clamps. */
   width: max-content; max-width: calc(100vw - var(--s-5));
 }
 .hud-group {
-  position: relative; display: flex; align-items: center;
-  gap: var(--s-1); padding: var(--s-2);
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: var(--s-2); padding: var(--s-3) var(--s-4);
 }
 .hud-group-label {
-  position: absolute; top: 0; left: var(--s-1); transform: translateY(-1.4em);
+  padding-bottom: var(--s-2); margin-bottom: 2px; border-bottom: var(--hairline);
   font-size: var(--t-xs); letter-spacing: var(--track-label); text-transform: uppercase;
   color: var(--c-text-dim); white-space: nowrap;
 }
+.hud-group-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 
 /* --- Segmented controls: strength, and battle speed ---------------------- */
 
@@ -259,10 +295,10 @@
    for the same corner. */
 
 @media (max-width: 1320px) {
-  .hud-gold { padding: var(--s-2) var(--s-3); }
+  .hud-gold { padding: var(--s-2) var(--s-4); }
   .hud-gold .hud-value { font-size: var(--t-xl); }
-  .hud-dock { gap: var(--s-5) var(--s-2); }
-  .hud-group { padding: var(--s-1) var(--s-2); }
+  .hud-dock { gap: var(--s-4) var(--s-4); }
+  .hud-group { padding: var(--s-2) var(--s-3); }
   .seg { min-width: 38px; }
   .chip { padding: var(--s-1) var(--s-2); }
   .hud-preview { max-width: min(520px, 58vw); }
@@ -276,7 +312,7 @@
    panel sitting on top of the boosters. (The site panel measures the dock
    directly — see battle-insets.js — so it is not affected either way.) */
 @media (max-width: 1180px) {
-  :root { --dock-h: calc(var(--hit) * 2 + var(--s-8)); }
+  :root { --dock-h: calc(var(--dock-row-h) * 2 + var(--s-5)); }
 }
 
 @media (max-width: 1080px) {

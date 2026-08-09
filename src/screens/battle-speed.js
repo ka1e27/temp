@@ -50,8 +50,10 @@ export function createSpeedControl(o) {
     'data-interactive': true, type: 'button', 'aria-pressed': 'false',
     title: `${mult}x battle speed — keys [ and ]`,
   }, `${mult}×`));
+  // Label as its own header row, controls in a row below — see battle-hud.js
+  // for why the other three dock cards use the same `.hud-group-row` shape.
   const el = h('div.hud-group.hud-speeds.panel', { role: 'group', 'aria-label': 'Battle speed' },
-    label, pause, ...segs);
+    label, h('div.hud-group-row', {}, pause, ...segs));
 
   pause.addEventListener('click', () => setPaused(!state.paused));
   segs.forEach((btn, i) => btn.addEventListener('click', () => setIndex(i)));

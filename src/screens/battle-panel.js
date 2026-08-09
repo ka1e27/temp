@@ -136,12 +136,23 @@ export function createSitePanel(o) {
     on: { click: () => { const id = targetId(); if (id) input.upgrade(id); } },
   }, 'Upgrade');
   const keep = createKeepRow(getState, input, targetId);
+  // Four visual groups, so the eye chunks "what this site IS" (head) from
+  // "what it's WORTH" (econ) from "why it's hard / what's happening to it"
+  // (context) from "what you can do about it" (actions) instead of scanning
+  // one flat stack of same-size lines. Each group vanishes on its own — see
+  // the `:has()` rules in screens.css — when it would otherwise have carried
+  // only empty lines, so a farm with nothing to say about terrain shows no
+  // stray divider either.
+  const head = h('div.hud-site-head', {}, title, sub);
+  const econ = h('div.hud-site-econ', {}, money, trains);
+  const context = h('div.hud-site-context', {}, terrain, stat);
+  const actions = h('div.hud-site-actions', {}, keep.el, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, and a panel that let clicks through would sit
   // over the board, take a click on its own text as a click on empty ground,
   // clear the selection — and vanish under the cursor that was reaching for it.
   const el = h('div.hud-selection.panel', { 'data-interactive': true },
-    title, sub, money, trains, terrain, stat, keep.el, upgrade);
+    head, econ, context, actions);
   const follower = createFollower(el, board, siteOf);
   let anchor = null;
 
@@ -154,6 +165,10 @@ export function createSitePanel(o) {
     terrain: bindText(terrain, ''),
     stat: bindText(stat, ''),
     drain: bindClass(money, 'is-drain'),
+    // A site actively under siege is the one status worth interrupting a calm
+    // scan for — same idea as the rejection shake, applied to typography
+    // instead of motion.
+    statWarn: bindClass(stat, 'is-warn'),
     upLabel: bindText(upgrade, 'Upgrade'),
     upOff: bindClass(upgrade, 'is-disabled'),
   };
@@ -170,11 +185,14 @@ export function createSitePanel(o) {
 
   /** Detached rather than `hidden`, so no future stylesheet rule on the button
    *  can accidentally out-specify the UA's `[hidden] { display: none }`.
+   *  Mounted into the actions group, alongside the rally stepper, rather than
+   *  onto the panel directly — one group for every control the player can
+   *  actually press.
    *  @returns {boolean} true when the panel's height just changed. */
   function setShown(on) {
     if (on === shown) return false;
     shown = on;
-    if (on) mount(el, upgrade);
+    if (on) mount(actions, upgrade);
     else upgrade.remove();
     return true;
   }
@@ -211,6 +229,7 @@ export function createSitePanel(o) {
       wrote |= set.trains('');
       wrote |= set.terrain('');
       wrote |= set.stat('');
+      set.statWarn(false);
       setShown(false);
       keep.show(null);
       if (wrote) follower.markDirty();
@@ -226,6 +245,7 @@ export function createSitePanel(o) {
     wrote |= set.trains(trainLine(intel));
     wrote |= set.terrain(terrainLine(intel));
     wrote |= set.stat(statusLine(site, intel));
+    set.statWarn(!!(site.siege || intel?.gate?.sealed));
     // A hold-back only means anything where there is a rally to hold back from.
     wrote |= keep.show(site.owner === 'player' && site.rallyTarget ? site : null);
 
@@ -254,6 +274,7 @@ export function createSitePanel(o) {
     wrote |= set.stat(squad.retreating
       ? 'retreating'
       : `arrives in ${duration(Math.max(0, squad.arriveTick - state.tick) / TICK_HZ)} · R retreats`);
+    set.statWarn(false);
     wrote |= keep.show(null);
     if (wrote) follower.markDirty();
   }
