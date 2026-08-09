@@ -7,21 +7,30 @@
 //
 // This one is built the other way round. Water enters and leaves a hex at the
 // MIDPOINT OF EACH SHARED EDGE, and the only thing a hex decides is how to get
-// from one of its own edge midpoints to another. Two consequences, and they are
-// the whole design:
+// from one of its own edge midpoints to another. One rule covers every case:
+// EVERY OPEN EDGE IS A STRAIGHT SPOKE FROM ITS MIDPOINT TO THE HEX CENTRE.
+// Two consequences, and they are the whole design:
 //
 //   1. NO SEAM. Two neighbours compute the same crossing point — bit-for-bit,
-//      see edgeMidX in hexGeom.js — so their channels butt together exactly.
-//   2. NO KINK. Every curve through a hex is a quadratic with its control
-//      point AT THE HEX CENTRE, so its tangent at an edge midpoint is the edge
-//      NORMAL. The neighbour's tangent there is the same normal. The join is
-//      smooth without either hex knowing anything about the other.
+//      see edgeMidX in hexGeom.js — so their channels butt together exactly,
+//      and a spoke's direction AT that point is simply the line from the edge
+//      midpoint to the centre — the edge normal — which is the same line the
+//      neighbour's own spoke travels, from the other side. The join is exact
+//      without either hex knowing anything about the other.
+//   2. NO LOOP. A confluence of three or more spokes meets at ONE shared
+//      point, the centre, rather than at cubic curves that dive toward the
+//      middle and bow back out to some other point near it. Straight lines
+//      through a common point can only fan into open wedges; there is no
+//      enclosed shape left for a junction to trace, which is what made a
+//      three-arm confluence read as a closed loop with an island in the
+//      middle before — a highway interchange, not a river.
 //
-// That one rule covers all four local cases: a straight run is the degenerate
-// curve through three collinear points, a bend curves around the inside of the
-// turn, a source tapers off just past the centre, and a junction is a main
-// channel with tributaries merging TANGENTIALLY into it — a confluence, not
-// three lines crossing.
+// The trade EITHER a straight run (two opposite spokes, exactly collinear
+// through the centre, reading as one unbroken line) or a bend now meets at a
+// visible angle at the centre instead of sweeping through a smooth curve —
+// intentional, and what "geometric" means here: straighter, more faceted
+// segments, softened only by the round line join already in use, rather than
+// a continuously smooth bend. A spring still tapers off just past the centre.
 //
 // Everything here paints on the CACHED BACKGROUND canvas (#board-bg, repainted
 // only when signature(state) changes), so four stroked passes over the network
@@ -115,34 +124,10 @@ export function outletMask(mask, q, r, cols, rows) {
   return mask | rimOutlet(mask, q, r, cols, rows);
 }
 
-/**
- * The two outlets that form the MAIN channel: the straightest pair, i.e. the
- * one whose turn is closest to no turn at all. Everything else at a junction is
- * a tributary of that stem, which is what makes a confluence read as water
- * joining water rather than as roads meeting.
- *
- * Returned packed as `a | (b << 3)` — indices INTO `dirs`, not directions — so
- * a hot loop can ask without allocating a pair.
- * @param {ArrayLike<number>} dirs @param {number} n how many are in use
- */
-export function mainPair(dirs, n) {
-  let best = 0;
-  let bestScore = -1;
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const sep = (dirs[j] - dirs[i] + 6) % 6;
-      const score = sep > 3 ? 6 - sep : sep;   // 3 = dead straight, 1 = hairpin
-      if (score > bestScore) { bestScore = score; best = i | (j << 3); }
-    }
-  }
-  return best;
-}
-
 // --- One hex's water --------------------------------------------------------
 
 // Scratch for the outlets of the hex being traced. Module scope so tracing a
 // whole network allocates nothing.
-const _dirs = new Int32Array(6);
 const _mx = new Float64Array(6);
 const _my = new Float64Array(6);
 
@@ -153,10 +138,6 @@ const HEAD_OVER = 0.22;
  *  the inlet. Each pass stops half its own width short of it, so the layers
  *  converge to a point and the channel tapers out instead of ending blunt. */
 const HEAD_REACH = 1.2;
-/** Tributary control points: how far toward the centre it leaves the edge, and
- *  how long a run it gets to line up with the stem before merging. */
-const TRIB_IN = 0.82;
-const TRIB_OUT = 0.34;
 
 /**
  * Append one hex's water to the current path.
@@ -176,7 +157,6 @@ export function traceChannel(ctx, q, r, size, mask, headT = 1, rim = 0, back = 0
   let n = 0;
   for (let d = 0; d < 6; d++) {
     if (!(mask & (1 << d))) continue;
-    _dirs[n] = d;
     _mx[n] = edgeMidX(q, r, d, size);
     _my[n] = edgeMidY(q, r, d, size);
     if (rim & (1 << d)) {
@@ -202,40 +182,17 @@ export function traceChannel(ctx, q, r, size, mask, headT = 1, rim = 0, back = 0
     return;
   }
 
-  // The stem. Control point at the CENTRE: collinear for a straight run, and
-  // for a bend it pulls the water around the INSIDE of the turn, where a river
-  // actually runs, instead of cutting the chord.
-  const pair = mainPair(_dirs, n);
-  const a = pair & 7;
-  const b = pair >> 3;
-  ctx.moveTo(_mx[a], _my[a]);
-  ctx.quadraticCurveTo(cx, cy, _mx[b], _my[b]);
-  if (n === 2) return;
-
-  // The confluence. Every tributary ends at the SAME point on the stem, moving
-  // in the SAME direction the stem moves there, so the water merges instead of
-  // crossing. J is the stem's midpoint and T its tangent, both exact for a
-  // quadratic: P(0.5) = (A + 2C + B)/4 and P'(0.5) = B - A.
-  const jx = 0.25 * _mx[a] + 0.5 * cx + 0.25 * _mx[b];
-  const jy = 0.25 * _my[a] + 0.5 * cy + 0.25 * _my[b];
-  let tx = _mx[b] - _mx[a];
-  let ty = _my[b] - _my[a];
-  const tl = Math.sqrt(tx * tx + ty * ty) || 1;
-  tx /= tl;
-  ty /= tl;
+  // Every other case — a straight run, a bend, or a 3-to-6-arm confluence —
+  // is ONE rule: a straight spoke per open edge, from its midpoint to the hex
+  // centre. Two opposite spokes are exactly collinear through the centre and
+  // read as one unbroken line; two that are not meet at a visible angle — the
+  // bend, faceted rather than smoothed. Three or more meet at that SAME
+  // shared point with the SAME treatment, so a confluence reads as arms
+  // joining a hub, not as tributary curves crossing near one — the shape that
+  // used to read as a loop enclosing an island.
   for (let i = 0; i < n; i++) {
-    if (i === a || i === b) continue;
-    const mx = _mx[i];
-    const my = _my[i];
-    // Downstream is whichever way along the stem this branch is already
-    // heading: the merge that needs the least turning is the one water makes.
-    const sgn = (jx - mx) * tx + (jy - my) * ty >= 0 ? 1 : -1;
-    ctx.moveTo(mx, my);
-    ctx.bezierCurveTo(
-      mx + (cx - mx) * TRIB_IN, my + (cy - my) * TRIB_IN,
-      jx - sgn * tx * size * TRIB_OUT, jy - sgn * ty * size * TRIB_OUT,
-      jx, jy,
-    );
+    ctx.moveTo(_mx[i], _my[i]);
+    ctx.lineTo(cx, cy);
   }
 }
 

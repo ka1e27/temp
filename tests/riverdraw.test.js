@@ -1,14 +1,16 @@
 // THE WATER'S GEOMETRY, as pure functions.
 //
 // Rivers are drawn hex by hex: water enters and leaves at the MIDPOINT OF EACH
-// SHARED EDGE and curves through the hex between those points. Every claim that
-// makes that read as terrain rather than as an overlay is geometric, and every
-// one is wrong-by-a-rounding-error invisible: the crossing point two neighbours
-// compute must be the SAME POINT; the tangent there must be the edge normal from
-// both sides, or the join kinks; the curve must stay INSIDE its own hex, or one
-// hex's water spills over a tile it does not occupy; a tributary must arrive at
-// a confluence ALONG the stem, not across it. So they are tested as arithmetic,
-// over all 64 local configurations, rather than by looking at a picture.
+// SHARED EDGE, as a straight spoke to the hex centre. Every claim that makes
+// that read as terrain rather than as an overlay is geometric, and every one
+// is wrong-by-a-rounding-error invisible: the crossing point two neighbours
+// compute must be the SAME POINT; the tangent there must be the edge normal
+// from both sides, or the join kinks; the spoke must stay INSIDE its own hex,
+// or one hex's water spills over a tile it does not occupy; a confluence of
+// three or more spokes must meet at that ONE shared point, or it opens back
+// into the closed-loop-with-an-island bug this file exists to catch. So they
+// are tested as arithmetic, over all 64 local configurations, rather than by
+// looking at a picture.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -18,7 +20,7 @@ import {
 } from '../src/render/hexGeom.js';
 import {
   setRiverLayer, drawRivers, traceChannel, channelMask, outletMask, rimOutlet,
-  mainPair, riverLayer,
+  riverLayer,
 } from '../src/render/river.js';
 import { derive, FALLBACK } from '../src/render/palette.js';
 import { siteRadius } from '../src/render/siteShapes.js';
@@ -152,20 +154,6 @@ test('channelMask sees exactly the neighbours that are water', () => {
   assert.equal(rimOutlet(through, 10, 0, 11, 9), 0);
 });
 
-test('mainPair picks the straightest run and is stable on a tie', () => {
-  const pick = (...dirs) => {
-    const p = mainPair(dirs, dirs.length);
-    return [dirs[p & 7], dirs[p >> 3]];
-  };
-  assert.deepEqual(pick(0, 1, 3), [0, 3], 'the opposite pair is the stem');
-  assert.deepEqual(pick(1, 2, 4), [1, 4]);
-  assert.deepEqual(pick(0, 1, 2), [0, 2], 'no straight run: take the widest turn');
-  // Three arms at 120 degrees are all equally straight; the answer must still
-  // be the same every repaint, or the confluence would flicker.
-  assert.deepEqual(pick(0, 2, 4), [0, 2]);
-  assert.deepEqual(pick(0, 2, 4), [0, 2]);
-});
-
 // --- 3. The curve through one hex, every case, exhaustively -----------------
 
 test('water never leaves the hex it belongs to, in any of the 64 configurations', () => {
@@ -236,49 +224,62 @@ test('two neighbours meet at one point, moving in exactly opposite directions', 
   }
 });
 
-test('a straight run is straight, and a bend actually bends', () => {
+test('a straight run is one unbroken line, and a bend meets at a real angle, '
+  + 'both as straight spokes through the centre', () => {
   const cx = hexCx(2, 3, SIZE);
   const cy = hexCy(2, 3, SIZE);
-  const straight = trace(2, 3, bits(0, 3))[0];
-  assert.equal(straight.kind, 'quad');
-  near(cross(unit([straight.pts[2][0] - straight.pts[0][0],
-    straight.pts[2][1] - straight.pts[0][1]]),
-  unit([cx - straight.pts[0][0], cy - straight.pts[0][1]])), 0, 1e-12,
-  'a run through opposite edges must be a straight line');
+  const straight = trace(2, 3, bits(0, 3));
+  assert.equal(straight.length, 2, 'one spoke per open edge, not one merged curve');
+  for (const seg of straight) {
+    assert.equal(seg.kind, 'line');
+    assert.equal(seg.pts.at(-1)[0], cx, 'every spoke ends at the hex centre');
+    assert.equal(seg.pts.at(-1)[1], cy);
+  }
+  // Two OPPOSITE spokes are exactly collinear through the centre — the union
+  // still reads as one unbroken line, the "geometric" straight run.
+  const [s0, s1] = straight;
+  near(cross(unit([s0.pts[0][0] - cx, s0.pts[0][1] - cy]),
+    unit([s1.pts[0][0] - cx, s1.pts[0][1] - cy])), 0, 1e-9,
+  'opposite edges must line up straight through the centre');
 
   for (const [d1, d2] of [[0, 1], [0, 2], [1, 3], [2, 4], [3, 5]]) {
-    const seg = trace(2, 3, bits(d1, d2))[0];
-    const mid = at(seg, 0.5);
-    const chord = [(seg.pts[0][0] + seg.pts[2][0]) / 2, (seg.pts[0][1] + seg.pts[2][1]) / 2];
-    const dCurve = Math.hypot(mid[0] - cx, mid[1] - cy);
-    const dChord = Math.hypot(chord[0] - cx, chord[1] - cy);
-    // The water hugs the INSIDE of the turn, the way a river does, rather than
-    // cutting the chord across the tile.
-    assert.ok(dCurve < dChord - SIZE * 0.05,
-      `dirs ${d1}/${d2}: curve sits ${dCurve.toFixed(1)} from centre, chord ${dChord.toFixed(1)}`);
-    assert.equal(seg.pts[1][0], cx, 'the control point is the hex centre');
-    assert.equal(seg.pts[1][1], cy);
+    const [a, b] = trace(2, 3, bits(d1, d2));
+    // Not opposite, so the two spokes must NOT be collinear: a bend now
+    // meets at a genuine, faceted angle rather than sweeping through a
+    // continuously smooth curve — the "more geometric" look the water wants.
+    const va = unit([a.pts[0][0] - cx, a.pts[0][1] - cy]);
+    const vb = unit([b.pts[0][0] - cx, b.pts[0][1] - cy]);
+    assert.ok(Math.abs(cross(va, vb)) > 0.4,
+      `dirs ${d1}/${d2}: spokes are nearly collinear, no visible bend`);
   }
 });
 
-test('a junction is a confluence: tributaries arrive ALONG the stem, not across it', () => {
+test('a junction is a confluence: every arm meets at the SAME shared point, '
+  + 'so there is no shape left for it to enclose', () => {
+  const cx = hexCx(2, 3, SIZE);
+  const cy = hexCy(2, 3, SIZE);
   for (const dirs of [[0, 1, 3], [0, 2, 4], [1, 3, 5], [0, 1, 3, 4], [0, 1, 2, 3, 4, 5]]) {
     const segs = trace(2, 3, bits(...dirs));
-    assert.equal(segs.length, dirs.length - 1, `${dirs}: one stem plus its tributaries`);
-    const stem = segs[0];
-    assert.equal(stem.kind, 'quad');
-    const join = at(stem, 0.5);
-    const flow = unit([stem.pts[2][0] - stem.pts[0][0], stem.pts[2][1] - stem.pts[0][1]]);
-    for (let i = 1; i < segs.length; i++) {
-      const t = segs[i];
-      assert.equal(t.kind, 'cubic', 'a tributary needs both ends aimed');
-      const end = t.pts[3];
-      // Every branch ends at the SAME point, and that point is on the stem:
-      // water joining water, not three lines crossing at a shared pixel.
-      near(end[0], join[0], 1e-9, `${dirs}: tributary ${i} x`);
-      near(end[1], join[1], 1e-9, `${dirs}: tributary ${i} y`);
-      near(Math.abs(cross(unit(endDir(t)), flow)), 0, 1e-9,
-        `${dirs}: tributary ${i} crosses the stem instead of merging with it`);
+    // One spoke per arm — no separate stem-plus-tributary split, and so no
+    // cubic curve free to dive toward the middle and bow back out somewhere
+    // ELSE near it, which is what opened the loop with an island in it.
+    assert.equal(segs.length, dirs.length, `${dirs}: one spoke per arm`);
+    for (const seg of segs) {
+      assert.equal(seg.kind, 'line');
+      const end = seg.pts.at(-1);
+      near(end[0], cx, 1e-9, `${dirs}: an arm did not reach the shared centre`);
+      near(end[1], cy, 1e-9, `${dirs}: an arm did not reach the shared centre`);
+    }
+    // Every pair of arms shares its whole length only at that one common
+    // endpoint, so the region between any two is an open wedge — never a
+    // closed shape a loop could trace.
+    for (let i = 0; i < segs.length; i++) {
+      for (let j = i + 1; j < segs.length; j++) {
+        const a = segs[i].pts[0];
+        const b = segs[j].pts[0];
+        assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1]) > 1e-6,
+          `${dirs}: two arms started from the same point — a degenerate wedge`);
+      }
     }
   }
 });
