@@ -13,17 +13,43 @@
 // PURE: `now` is injected. No Date.now, no storage, no DOM.
 
 import { assertBattleOutcome } from '../battle/contract.js';
-import { REGION_BY_ID, FIRST_CLEAR_BONUS_SECONDS } from '../content/regions.data.js';
+import { REGION_BY_ID, FIRST_CLEAR_BONUS_SECONDS, RAID } from '../content/regions.data.js';
 import { metaOf, markDirty } from '../core/store.js';
 import {
-  markConquered, completeRaid, refreshUnlocks, raidLump, record, isConquered,
+  markConquered, completeRaid, refreshUnlocks, effectiveEnemyMult, record, isConquered,
 } from './world.js';
-import { recalcIncome } from './idle.js';
+import { recalcIncome, incomePerSec } from './idle.js';
 import { consume as consumeBoosters } from './boosters.js';
 import { META_EVENTS, emit } from './events.js';
 
 /** One-off bounty the first time a region falls: 2 minutes of its own income. */
 export const firstClearBonus = (region) => region.rewardPerSec * FIRST_CLEAR_BONUS_SECONDS;
+
+/**
+ * What a raid on `regionId` pays right now, in crowns. The relationship it
+ * implements — and the two faults it replaces — are stated in full on the RAID
+ * block in content/regions.data.js:
+ *
+ *     lump = EMPIRE income/sec x RAID.lumpSeconds x effectiveEnemyMult
+ *
+ * `incomePerSec` and NOT `baseIncomePerSec`, deliberately: Tithe and Royal Mint
+ * multiply idle income by up to 3.19x between them, so anchoring the lump to
+ * the un-upgraded base would let the shop quietly re-open the exact hole this
+ * closes. Multiplying by the difficulty the player actually faces is what makes
+ * reward-per-difficulty constant across clears rather than merely intended to
+ * be — there is no second per-clear dial that can fall behind the first.
+ *
+ * The `max` is a floor for a state that cannot legitimately occur (a `clears`
+ * record without the conquest that produced it, i.e. a hand-edited save), and
+ * it guarantees a raid never pays LESS than the region's own ten minutes.
+ */
+export function raidLump(metaState, regionId) {
+  const meta = metaOf(metaState);
+  const region = REGION_BY_ID[regionId];
+  if (!region) return 0;
+  const rate = Math.max(incomePerSec(meta), region.rewardPerSec);
+  return rate * RAID.lumpSeconds * effectiveEnemyMult(meta, regionId);
+}
 
 /**
  * @param {object} metaState  root state or the meta slice

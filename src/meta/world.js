@@ -107,20 +107,20 @@ export function canRaid(meta, id, now) {
   return raidCooldownRemaining(meta, id, now) === 0;
 }
 
-/** Each clear makes the region +15% harder. Applied to the region's enemyMult. */
+/**
+ * Each clear makes the region +15% harder. Applied to the region's enemyMult.
+ *
+ * This is also the DIFFICULTY TERM THE PAYOUT IS PROPORTIONAL TO — see the RAID
+ * block in content/regions.data.js and meta/rewards.js `raidLump`. The crowns
+ * live over there because rewards.js owns every crown in the game and because
+ * the lump is anchored to empire income, which world.js cannot see without
+ * importing idle.js back the other way.
+ */
 export function effectiveEnemyMult(meta, id) {
   const region = REGION_BY_ID[id];
   if (!region) return 1;
   const clears = record(meta, id).clears;
   return region.enemyMult * (1 + RAID.harderPerClear) ** Math.max(0, clears);
-}
-
-/** ...and +10% richer. A lump in crowns, paid once, never added to income. */
-export function raidLump(meta, id) {
-  const region = REGION_BY_ID[id];
-  if (!region) return 0;
-  const clears = Math.max(0, record(meta, id).clears);
-  return region.rewardPerSec * RAID.lumpSeconds * (1 + RAID.richerPerClear) ** (clears - 1);
 }
 
 /** Bookkeeping half of a won raid. meta/rewards.js owns paying for it. */
@@ -161,14 +161,14 @@ export function worldView(meta, now) {
   });
 }
 
-/** Regions whose raid timer expired since `previousNow`. main.js polls this to
- *  fire RAID_READY without every region needing its own timer. */
-export function raidsBecomingReady(meta, previousNow, now) {
-  const ready = [];
-  for (const id of REGION_IDS) {
-    const rec = record(meta, id);
-    if (rec.status !== 'conquered') continue;
-    if (rec.raidReadyAt > previousNow && rec.raidReadyAt <= now) ready.push(id);
-  }
-  return ready;
-}
+// There is deliberately no `raidsBecomingReady` / RAID_READY poll here. It
+// existed as an exported, finished-looking function that main.js never called,
+// no screen ever subscribed to and no test ever covered — the third state this
+// project has been burned by twice (dead boosters, an unclickable UI). The
+// META_EVENTS.RAID_READY name in meta/events.js is now unemitted and should go
+// with it next time someone is in that file. Raid readiness IS surfaced, by
+// polling: screens/worldmap.js re-reads `modeOf` every 250ms for the selected
+// region and re-renders when it flips to 'raid', and every region card carries
+// `data-mode`. If a "a raid came off cooldown while you were away" banner is
+// ever wanted, it belongs next to the existing offline-earnings banner in
+// worldmap.js and should be written then, against that surface.

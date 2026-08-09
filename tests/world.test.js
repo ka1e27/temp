@@ -204,23 +204,32 @@ test('re-winning a conquered region pays a lump and never permanent income twice
   assert.equal(summary.raided, true);
   assert.equal(summary.incomeAdded, 0);
   assert.equal(s.meta.incomePerSec, incomeAfterConquest, 'raids never add permanent income');
-  assert.equal(summary.crowns, 1.0 * RAID.lumpSeconds);
+  // The lump is EMPIRE income x lumpSeconds x the difficulty actually faced.
+  // Riverfen alone: 1.0/s, one clear on the board, so enemyMult 1.0 x 1.15.
+  assert.equal(summary.crowns, 1.0 * RAID.lumpSeconds * 1.15);
   assert.equal(s.meta.regions.riverfen.clears, 2);
   assert.equal(canRaid(s.meta, 'riverfen', RAID.cooldownMs), false, 'cooldown restarts');
   assert.equal(canRaid(s.meta, 'riverfen', RAID.cooldownMs * 2), true);
 });
 
-test('each clear makes a region 15% harder and 10% richer', () => {
+test('each clear makes a region 15% harder, and pays exactly 15% more for it', () => {
   const s = world([]);
   const base = REGION_BY_ID.riverfen.enemyMult;
   assert.equal(effectiveEnemyMult(s.meta, 'riverfen'), base);
   markConquered(s.meta, 'riverfen', { now: 0 });
   assert.ok(Math.abs(effectiveEnemyMult(s.meta, 'riverfen') - base * 1.15) < 1e-12);
   assert.equal(previewReward(s, 'riverfen').kind, 'raid');
-  assert.equal(previewReward(s, 'riverfen').crowns, 1.0 * RAID.lumpSeconds);
+  // Riverfen alone pays 1.0/s, so the lump is lumpSeconds x the difficulty dial.
+  const one = previewReward(s, 'riverfen').crowns;
+  assert.ok(Math.abs(one - 1.0 * RAID.lumpSeconds * 1.15) < 1e-9);
   s.meta.regions.riverfen.clears = 2;
   assert.ok(Math.abs(effectiveEnemyMult(s.meta, 'riverfen') - base * 1.15 ** 2) < 1e-12);
-  assert.ok(Math.abs(previewReward(s, 'riverfen').crowns - 1.0 * RAID.lumpSeconds * 1.1) < 1e-9);
+  const two = previewReward(s, 'riverfen').crowns;
+  assert.ok(Math.abs(two - 1.0 * RAID.lumpSeconds * 1.15 ** 2) < 1e-9);
+  // The point of the pass: difficulty and reward move by the SAME factor, so
+  // the second clear is not worse value than the first. The old table paid
+  // 1.10 against 1.15 and lost 4.3% of its value on every single clear.
+  assert.ok(Math.abs(two / one - 1.15) < 1e-9, 'reward must track difficulty exactly');
 });
 
 test('an outcome from a different config is rejected at the seam', () => {
