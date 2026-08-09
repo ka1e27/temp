@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { createState } from '../src/core/store.js';
 import { OFFLINE } from '../src/content/upgrades.data.js';
-import { REGION_BY_ID } from '../src/content/regions.data.js';
+import { REGION_BY_ID, REGIONS, fullConquestIncome } from '../src/content/regions.data.js';
 import {
   incomePerSec, baseIncomePerSec, recalcIncome, accrue, tick,
   applyOfflineProgress, offlineCapMs, timeToAfford, projectCrowns,
@@ -176,11 +176,21 @@ test('pacing helpers: timeToAfford and projectCrowns agree', () => {
   assert.equal(timeToAfford(world([]), 100), Infinity, 'no income -> never');
 });
 
-test('the region table hits its ~274/s full-conquest target', () => {
+test('the region table hits its full-conquest income target', () => {
+  // Driven off `fullConquestIncome()` rather than a literal, because the literal
+  // was the bug: it read "~274/s" and had to be hand-edited the moment a fifth
+  // tier shipped, which is a test that asserts the table has not changed instead
+  // of asserting the seam still carries it. What is actually worth checking is
+  // that meta/idle.js `incomePerSec` agrees with the content table — a region
+  // whose reward never reaches the economy is the failure this catches.
   const all = Object.keys(REGION_BY_ID);
   const s = world(all);
-  const total = incomePerSec(s);
-  assert.ok(total > 250 && total < 300, `full conquest income ${total} should be ~274/s`);
+  assert.ok(Math.abs(incomePerSec(s) - fullConquestIncome()) < 1e-9,
+    `idle pays ${incomePerSec(s)}/s at full conquest; the table says ${fullConquestIncome()}/s`);
+  // ...and the shape claim that number encodes: 21 regions of a compounding
+  // ramp, no cliffs, ending several hundred times the opening region.
+  assert.ok(fullConquestIncome() > REGIONS[0].rewardPerSec * 300,
+    'the empire should be worth hundreds of times its first province');
 });
 
 // ---------------------------------------------------------------------------

@@ -164,7 +164,12 @@ export function enemyMods(region, mult) {
     garrisonCapBonus: stack(0),
     siegeDmgMult: stack(1, { tier: t(ENEMY_SCALING.atk) }),
     structureRegenMult: stack(1, { tier: t(ENEMY_SCALING.def) }),
-    unlockedUnits: [...ENEMY_UNITS_BY_TIER[Math.min(4, Math.max(1, region.tier)) - 1]],
+    // Clamped to the LENGTH of the table, not to a literal 4. The hardcoded
+    // number silently capped tier 5 at the tier-4 roster the moment a fifth
+    // tier shipped — the same class of bug as `knobsFor` in battle/aicore.js,
+    // which clamps to `AI_TIERS.length - 1` and is why that one was fine.
+    unlockedUnits: [...ENEMY_UNITS_BY_TIER[
+      Math.min(ENEMY_UNITS_BY_TIER.length, Math.max(1, region.tier)) - 1]],
   });
 }
 
@@ -193,6 +198,54 @@ export function withFreeMarshal(fx, expedition) {
   // available for troops instead of being a trap for the player who paid 4,000
   // crowns and then paid again.
   return { ...expedition, marshal: Math.max(expedition.marshal ?? 0, 1) };
+}
+
+/**
+ * ...AND SO DOES THEIRS. The mirror of `withFreeMarshal`, and the fix for a
+ * unit that was in the enemy's roster for this project's whole life without
+ * ever existing.
+ *
+ * `ENEMY_UNITS_BY_TIER` has listed `marshal` at tier 4 since tier 4 shipped,
+ * and it did nothing: no `MAPGEN.trainType` produces one, `AI.counterPick` maps
+ * marshal -> spearmen (what to build AGAINST one, not one to build), and
+ * `BASE_GARRISON` never held one. Removing marshal from the tier-4 roster
+ * changed thanescar's win rate by exactly 0 points, which is how the gap was
+ * found. Ironcrown's flavour text has advertised an enemy Marshal the whole
+ * time and it was simply false.
+ *
+ * Granted the same way the player's is — one commander, free, at the start —
+ * because the alternative is worse in both directions. Training one costs a
+ * yard forty seconds for a single body, so an AI that bought one would be
+ * making the same solver's purchase `tools/simplayer.js` deliberately declines;
+ * and a marshal that arrives at minute six is a difficulty spike nobody can
+ * see coming.
+ *
+ * IT STANDS IN THE THRONE, which is the whole design of it:
+ *   - `banner` is stack-local (battle/combat.js), so it buys +25% to whatever
+ *     comp he is IN. In the castle that is the garrison defending the win
+ *     condition — the fight the region is actually about.
+ *   - `trainBuff` (battle/training.js) makes the throne produce 40% faster, so
+ *     a siege that stalls is refilling the wall it is hitting.
+ *   - "until you kill it" is then literally true: the marshal dies with the
+ *     garrison, and battle/ai.js never sources an attack from the castle
+ *     (`kind === 'castle'` is filtered out of the launch pool), so he cannot
+ *     wander off and be picked up cheaply in a field.
+ *
+ * EXACTLY ONE, and deliberately applied AFTER `normalizeSites` rather than
+ * through `MAPGEN.garrison`: that table is multiplied by `enemyMult ^
+ * ENEMY_SCALING.garrison` and by the throne bonus, so a marshal placed there
+ * would be scaled into two or three of them on the late regions. `maxPerSite`
+ * is enforced in battle/training.js, which never sees a garrison mapgen wrote.
+ * `banner` is presence-based, so a second is worth nothing anyway — it would
+ * only be an invisible difficulty step that rides the difficulty dial.
+ */
+export function withEnemyMarshal(sites, unlockedUnits) {
+  if (!unlockedUnits.includes('marshal')) return sites;
+  const throne = sites.find((s) => s.owner === 'enemy' && s.kind === 'castle');
+  if (!throne || (throne.garrison.marshal ?? 0) > 0) return sites;
+  return sites.map((s) => (s === throne
+    ? { ...s, garrison: { ...s.garrison, marshal: 1 } }
+    : s));
 }
 
 // --- The entry point -------------------------------------------------------
@@ -230,8 +283,12 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
     ? fitComposition(slots, fx.units, options.composition)
     : distributeExpedition(slots, fx.units));
 
+  // Hoisted above the map because the enemy's roster decides what stands on it:
+  // `withEnemyMarshal` reads `unlockedUnits`, the same field the AI's training
+  // reads, so the commander and the units he commands can never disagree.
+  const enemy = enemyMods(region, mult);
   const gen = callMapGen(mapGen, { region, seed, mult, isRaid });
-  const sites = normalizeSites(gen.sites, mult);
+  const sites = withEnemyMarshal(normalizeSites(gen.sites, mult), enemy.unlockedUnits);
   const ids = new Set(sites.map((s) => s.id));
   const blockedOnSites = new Set(sites.map((s) => `${s.hex[0]},${s.hex[1]}`));
 
@@ -255,7 +312,7 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
     sites,
     adjacency: (gen.adjacency ?? []).filter(([a, b]) => a !== b && ids.has(a) && ids.has(b)),
     player: playerMods(meta, expedition),
-    enemy: enemyMods(region, mult),
+    enemy,
     boosters: toConfigBoosters(meta, selectedBoosters),
     rules: {
       victory: 'capture-castle',

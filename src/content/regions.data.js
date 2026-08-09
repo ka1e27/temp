@@ -1,8 +1,8 @@
-// The campaign: 18 region hexes in 4 tiers (4 / 5 / 5 / 4), adjacency-gated.
+// The campaign: 21 region hexes in 5 tiers (4 / 5 / 5 / 4 / 3), adjacency-gated.
 // PURE DATA. No logic reads a number that is not defined here or in balance.js.
 //
 // The load-bearing rule of this table: MAP SIZE, SITE COUNT AND DEVELOPMENT
-// SCALE TOGETHER WITH THE DIAL. A tier-4 region is a bigger war — 17x13, 37
+// SCALE TOGETHER WITH THE DIAL. A tier-5 region is a bigger war — 19x15, 44
 // sites, enemy country already built up the SITE_LEVELS ladder — not a tier-1
 // fight with inflated numbers. If you raise `enemyMult` without also raising
 // `grid`, `siteCounts` and `develop`, you have made the game worse.
@@ -10,10 +10,15 @@
 // The five columns that must never go backwards down this table are
 // `enemyMult`, `grid` area, `siteCounts.enemy`, `siteCounts.player` and
 // `develop`. tests/campaign.test.js asserts every one of them off REGIONS, so a
-// nineteenth region cannot ship untested the way regions 6-18 did.
+// twenty-second region cannot ship untested the way regions 6-18 did. That has
+// already paid for itself: the tier-5 rows below were caught and re-shaped by
+// those assertions before they were ever played.
 //
 // `targetLengthMin` is NOT one of them, and that is measured rather than
-// chosen: see the tier-3 and tier-4 headers below.
+// chosen: see the tier-3 and tier-4 headers below. It is measured over WINS —
+// how long it takes to TAKE the region, which is what the world map is claiming
+// — and NOT over all runs, which past the 50% mark measures how fast you die
+// instead. tools/simrunner.js documents the difference with numbers.
 //
 // `hex` places the region on the world map; `adjacentTo` must be exactly its
 // true hex neighbours among the shipped set (tests/modifiers asserts this).
@@ -96,9 +101,17 @@
 // +0.50, so anything past tier 2 must be moved in steps of 0.05 and re-measured,
 // never extrapolated.
 //
-// Measured at n=240 with the ladder live, in campaign order:
-//     98 95 98 95 | 92 91 87 80 79 | 77 73 73 68 68 | 70 63 63 58
-// Regions 1-5 are untouched by this pass and are the first five of those.
+// THE CURRENT MEASURED CURVE, in campaign order. Tiers 1-4 at n=96, tier 5
+// confirmed at n=240 (it is the tier whose band edges are closest, and the dial
+// is at its most non-linear there — ravensmarch lost 22 points over +0.10):
+//
+//     tier 1   88 84 84 86        tier 4   46 45 52 45
+//     tier 2   81 75 66 76 80     tier 5   38 30 27
+//     tier 3   64 65 71 55 57
+//
+// Every one of the twenty-one reports `ok` against its tier's WIN_BAND and its
+// advertised length. Nothing is balance-frozen any more — the expedition re-base
+// changed regions 1-5 by construction, so they are solved with the rest.
 // ---------------------------------------------------------------------------
 
 /**
@@ -108,83 +121,19 @@
  * `import { RAID } from '../content/regions.data.js'` keeps working. Same shape
  * as content/balance.js re-exporting ./ai.data.js.
  *
- * `HARD_CAP_MIN_BY_TIER` and `HARD_CAP_RATIO` are additionally IMPORTED below,
- * because `T()` reads them to derive each row's `hardCapMs`.
+ * `HARD_CAP_MIN_BY_TIER`, `HARD_CAP_RATIO` and the two clamps are additionally
+ * IMPORTED below, because `T()` reads them to derive each row. What a `develop`
+ * and a `castleGateFrac` MEAN is documented at `DEVELOP_CLAMP` / `GATE_CLAMP`
+ * over there — they are statements about every region, which is that file's job.
  */
 export {
   HARD_CAP_MIN_BY_TIER, HARD_CAP_RATIO, RAID, FIRST_CLEAR_BONUS_SECONDS,
   ENEMY_SCALING, ENEMY_UNITS_BY_TIER, BASE_GARRISON, NEUTRAL_GARRISON,
-  PLAYER_SITE_GARRISON, BATTLE_START, FALLBACK_MAP,
+  PLAYER_SITE_GARRISON, BATTLE_START, FALLBACK_MAP, DEVELOP_CLAMP, GATE_CLAMP,
 } from './regions.rules.js';
-import { HARD_CAP_MIN_BY_TIER, HARD_CAP_RATIO } from './regions.rules.js';
-
-/**
- * HOW DEVELOPED THE ENEMY'S COUNTRY IS — the second half of "a bigger war, not
- * a tier-1 fight with inflated numbers", and the knob that makes the late
- * regions LONG instead of merely lethal.
- *
- * `develop` is a site LEVEL (content/balance.js SITE_LEVELS), not a multiplier.
- * The enemy's castle and strongholds start built to it and its farms one step
- * below, so a tier-4 region is fought over ground that has been worked: x1.96
- * structure HP and repair, x1.75 farm gold, x1.75 training throughput, +40
- * garrison cap. Nothing about a level is a new rule — it is the same ladder the
- * player buys in-battle, handed to the defender at the start.
- *
- * This is what the flavour text has always claimed and nothing implemented.
- * Karrowmere says "every enemy stronghold is upgraded, so token forces bounce
- * off the walls"; before this it generated the same level-1 outposts riverfen
- * does. It also fixes the thing that made the endgame a walkover REGARDLESS of
- * enemyMult: victory is capture-castle, and a level-1 castle is 480 HP repairing
- * at 5/s, which a hundred militia break in under five seconds. Measured at
- * n=48, obsidian resolved in 3.3-5.5 minutes at every dial setting from 1.75 to
- * 3.61 — won or lost, it was never a 23-minute war, because the prize could not
- * hold out. At develop 4 the same castle is 1317 HP repairing at 13.7/s and has
- * to be besieged by an army that brought engines.
- *
- * Tier 1 and kaldan are pinned at 1: regions 1-5 are balance-frozen.
- *
- * WHERE THE FRACTION LANDS MATTERS MORE THAN HOW BIG IT IS, and that is the one
- * thing the original column got wrong. battle/mapgen.js `developLevels` promotes
- * `round(share x pool)` forts BEST FIRST, and the best fort is the CASTLE — the
- * win condition. So the promotion that costs the player the most is not the
- * biggest step in this column, it is whichever step first crosses
- * `share >= 0.5 / pool`. Measured at n=96: vaelstrand at develop 2.05 (castle
- * level 2) won 82%; duskfell, one row later at 2.15, is the same map with the
- * same site counts and won 56%, and the whole difference was one castle level.
- *
- * Two rules follow, and the column below obeys both.
- *   1. Put a castle promotion on a region where the PLAYER also takes a step —
- *      thanescar (2.20) is the first, and it is the tier-4 opener where the
- *      expedition also gains two starting sites.
- *   2. Where two neighbouring regions should differ only slightly, give them
- *      develop values inside the SAME rounding bucket (greywater 1.50 and
- *      thornmoor 1.55 both promote two of four forts) rather than values that
- *      look adjacent but straddle a boundary.
- */
-const DEVELOP_CLAMP = (n) => Math.max(1, Math.min(5, Number(n) || 1));
-
-/**
- * THE CASTLE GATE — the fraction of the region's non-castle sites the player
- * must hold before the castle's siege can actually complete (see
- * battle/state.js `castleSealed`, applied in battle/sim.js `siegePhase`).
- * Below it, hp floors at 1 and the siege can run forever without capturing —
- * the same shape as `breachSeconds() === Infinity` one level up: you cannot
- * finish the war by beelining the capital, you have to hold the countryside.
- *
- * This is the SHAPE fix for the thing enemyMult, develop and map size could
- * not touch: victory is capture-castle, so no matter how big or how developed
- * the map got, a player who could reach the throne could always end the war
- * the moment its siege landed, and sites off that one path were never fought
- * over. Gating the throne on territory is what makes "bigger map" mean
- * "longer battle" instead of "more scenery to walk past".
- *
- * 0 for tier 1 and kaldan: regions 1-5 are balance-frozen and rushing the
- * castle is supposed to work early. It rises through tiers 2-4 so a tier-3/4
- * clear genuinely requires converting real ground first, not just the shortest
- * path to the throne. Tuned against tools/simrunner.js at n>=96 (n=240 spot
- * check on tiers 3-4): every region stays winnable inside its hard cap.
- */
-const GATE_CLAMP = (n) => Math.max(0, Math.min(0.85, Number(n) || 0));
+import {
+  HARD_CAP_MIN_BY_TIER, HARD_CAP_RATIO, DEVELOP_CLAMP, GATE_CLAMP,
+} from './regions.rules.js';
 
 // id, name, tier, hex, adjacentTo, enemyMult, cols, rows, [enemy,neutral,player],
 // develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour
@@ -322,15 +271,62 @@ export const REGIONS = Object.freeze([
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
     3.75, 17, 13, [14, 6, 13], 2.2, 0.65, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.'),
-  T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown'],
+  T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
     3.81, 17, 13, [14, 6, 13], 2.45, 0.68, 34, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.'),
-  T('ironcrown', 'Ironcrown', 4, [4, 0], ['vaelstrand', 'duskfell', 'blackspire', 'obsidian'],
-    4, 17, 13, [14, 6, 13], 2.48, 0.7, 40.8, 7.5,
-    'The enemy fields a Marshal. Its whole army hits 20% harder until you kill it.'),
-  T('obsidian', 'The Obsidian Throne', 4, [4, 1], ['ironcrown', 'duskfell', 'thanescar'],
-    4.1, 17, 13, [15, 6, 16], 2.52, 0.72, 49, 8.5,
-    'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. The last one.'),
+  T('ironcrown', 'Ironcrown', 4, [4, 0],
+    ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
+    3.9, 17, 13, [14, 6, 13], 2.48, 0.7, 40.8, 7.5,
+    'A Marshal holds the throne: the castle guard fights 25% harder and trains 40% faster.'),
+  T('obsidian', 'The Obsidian Throne', 4, [4, 1],
+    ['ironcrown', 'duskfell', 'thanescar', 'gravenreach', 'nightharrow'],
+    4, 17, 13, [15, 6, 16], 2.52, 0.72, 49, 8.5,
+    'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. Their capital.'),
+
+  // --- Tier 5 (3) -- the enemy's homeland, east of the throne. ---
+  //
+  // The campaign used to END at a capital, which is a strange place for a war
+  // to stop: taking the enemy's capital is the moment you find out how much
+  // country is behind it. These three are that country, and they are the first
+  // ground in the game the enemy has ever had to defend rather than hold.
+  //
+  // WHAT MAKES TIER 5 HARD IS NOT A NEW UNIT. The roster runs out at tier 4
+  // (regions.rules.js ENEMY_UNITS_BY_TIER repeats itself here, on purpose — a
+  // tier whose identity is a new unit is a tier that cannot be tuned, because a
+  // unit is a cliff and the dial is a slope). Three things carry it instead:
+  //
+  //   1. THE COMMANDER. AI_TIERS[4] is the first that thinks more than once a
+  //      second, commits on a margin under 1.10, and runs FOUR simultaneous
+  //      attacks. `concurrent` is the knob the player feels, because the answer
+  //      to two threats is to shuttle one relief force and the answer to four
+  //      is that there is no such thing as a reserve.
+  //   2. THE GROUND. `develop` finally crosses into level-4 walls on
+  //      nightharrow, which is the single largest step in this column and is
+  //      deliberately spent on the LAST region rather than the tier opener (see
+  //      DEVELOP_CLAMP: a castle promotion is 25-40 points, so it is a finale,
+  //      not a ramp). 18x14 and 19x15 are the biggest maps in the campaign.
+  //   3. THE MARSHAL IN THE THRONE, which by tier 5 is standing on a level-4
+  //      castle: +25% to the garrison defending the win condition and +40% to
+  //      the rate it refills. Measured at n=96, granting it cost tier 4 between
+  //      1 and 8 points — that is the size of this half of the step, and it is
+  //      already paid for by the time a player arrives here.
+  //
+  // `castleGateFrac` runs 0.74-0.80 and is NOT doing the work (it is worth
+  // about a point — see the note above tier 3). It is here so the last three
+  // regions cannot be rushed, which is the guarantee it was added for.
+  //
+  // The band is WIN_BAND[4] = [22, 42]: these are meant to cost a good player
+  // several attempts. Measured at n=240, in campaign order: see CLAUDE.md.
+  T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach'],
+    4.12, 18, 13, [16, 6, 17], 2.6, 0.74, 61, 8,
+    'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.'),
+  T('gravenreach', 'Gravenreach', 5, [5, 0],
+    ['ironcrown', 'obsidian', 'ravensmarch', 'nightharrow'],
+    4.42, 18, 14, [17, 6, 19], 2.8, 0.77, 76, 8.5,
+    'Every wall here is built and manned. Half the enemy yards retrain to answer whatever you brought.'),
+  T('nightharrow', 'Nightharrow', 5, [5, 1], ['obsidian', 'gravenreach'],
+    4.56, 19, 15, [18, 7, 23], 3.1, 0.8, 95, 9,
+    'The last of them, behind level-four walls with a Marshal on the gate. Bring engines and bring time.'),
 ]);
 
 // Riverfen is the only region reachable with an empire of zero.
@@ -348,11 +344,19 @@ export const REGION_IDS = Object.freeze(REGIONS.map((r) => r.id));
 export const totalSites = (region) =>
   region.siteCounts.enemy + region.siteCounts.neutral + region.siteCounts.player;
 
-/** Income at 100% conquest, for balance sanity checks. ~276/s by design — the
- *  tail was re-spread onto a smooth x1.2-a-region ramp (the old table stepped
- *  1.8 -> 4.0 -> 13.0 -> 38.0 at the tier boundaries, and the first region of
- *  every tier was therefore the hardest in the campaign, because it met a new
- *  AI tier before the income that pays for the answer to it) but the total is
- *  deliberately unchanged. */
+/** Income at 100% conquest, for balance sanity checks. 508/s: the first
+ *  eighteen regions pay 276 and tier 5 adds 232.
+ *
+ *  That 276 is itself load-bearing and unchanged. The tail was re-spread onto a
+ *  smooth x1.2-a-region ramp (the old table stepped 1.8 -> 4.0 -> 13.0 -> 38.0
+ *  at the tier boundaries, and the first region of every tier was therefore the
+ *  hardest in the campaign, because it met a new AI tier before the income that
+ *  pays for the answer to it) with the total deliberately held constant.
+ *
+ *  Tier 5 continues the same x1.24-1.25 ramp rather than stepping, which is why
+ *  it nearly doubles the figure: eighteen regions of compounding is most of the
+ *  curve, and three more at the same rate is the rest of it. Nothing reads this
+ *  total as a budget — `meta/rewards.js` `raidLump` is denominated in seconds of
+ *  EMPIRE income, so raids stay stage-invariant however large it gets. */
 export const fullConquestIncome = () =>
   REGIONS.reduce((a, r) => a + r.rewardPerSec, 0);

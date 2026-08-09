@@ -50,7 +50,7 @@ function instrumented(regionId, seed, opts = {}) {
 // One region per tier: the gap was measured at +6 points in tier 2 and +38 in
 // tier 4, so "the bot upgrades" has to be true at the END of the campaign too,
 // not just where gold is easy.
-const PER_TIER = ['riverfen', 'kaldan', 'karrowmere', 'obsidian'];
+const PER_TIER = ['riverfen', 'kaldan', 'karrowmere', 'obsidian', 'nightharrow'];
 
 test('harness: the scripted player actually exercises the site-upgrade ladder', () => {
   // Behavioural, not a grep. The original investigation confirmed the gap by
@@ -120,7 +120,7 @@ test('harness: the enemy is deliberately NOT given the same button', () => {
   // enemy already receives this exact ladder for free at mapgen through
   // `develop`, which is tuned into every region's difficulty. Teaching ai.js to
   // buy upgrades as well would double-count the same mechanic and silently
-  // re-tune all eighteen regions at once. If that is ever the intent, it is a
+  // re-tune all twenty-one regions at once. If that is ever the intent, it is a
   // balance pass, not a bug fix — and this assertion is where it starts.
   const { battle } = instrumented('obsidian', 31337);
   const enemy = battle.sites.filter((s) => s.owner === 'enemy');

@@ -1,7 +1,7 @@
-// World map — 18 regions as hexes on one grid. Conquered hexes flood with your
+// World map — 21 regions as hexes on one grid. Conquered hexes flood with your
 // colour, so the campaign literally looks like a spreading empire.
 //
-// DOM rather than canvas: 18 static, clickable, labelled things are exactly
+// DOM rather than canvas: 21 static, clickable, labelled things are exactly
 // what the browser is already good at, and it gets focus, keyboard nav and
 // accessibility for free. Canvas would mean reimplementing all of it.
 //

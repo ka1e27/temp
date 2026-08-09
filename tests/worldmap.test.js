@@ -27,7 +27,7 @@ const VIEW = { w: 1046, h: 768 };
 
 test('the campaign is bigger than the screen it is looked at through', () => {
   const map = layoutHexes(HEXES);
-  assert.equal(map.cells.length, 18, 'every region gets a plate');
+  assert.equal(map.cells.length, REGIONS.length, 'every region gets a plate');
   assert.ok(map.width > VIEW.w * 1.25, `map ${map.width}px wide vs a ${VIEW.w}px window`);
   assert.ok(map.height > VIEW.h * 1.25, `map ${map.height}px tall vs a ${VIEW.h}px window`);
   // ...and a plate is big enough to read, not a token on a diagram.
@@ -55,7 +55,7 @@ test('plates are laid out on the axial grid, spaced, and never negative', () => 
 
 test('no two regions land on the same plate', () => {
   const seen = new Set(layoutHexes(HEXES).cells.map((c) => `${c.x},${c.y}`));
-  assert.equal(seen.size, 18);
+  assert.equal(seen.size, REGIONS.length);
 });
 
 // ===========================================================================

@@ -130,6 +130,21 @@ export const AI_TIERS = [
   { reactionTicks: 19, commitRatio: 0.80, safetyMargin: 1.15,
     economyMult: 0.6600, concurrent: 3, retreatDiscipline: 0.90, counterShare: 0.40,
     ramAppetite: 1.0, stagingRatio: 0.80, stagingKeep: 0.05 },
+  // Tier 5. Every knob that was already at its ceiling stays there — `ramAppetite`
+  // is 1.0 at tier 4 and there is no 1.1 — so what separates this commander is
+  // TEMPO, not appetite: it thinks about a third more often, commits on a
+  // thinner margin, and runs a fourth simultaneous attack. `concurrent` is the
+  // one that is felt, because the player's answer to two threats is to shuttle
+  // one relief force and the answer to four is that they cannot.
+  //
+  // `counterShare` 0.50 is the first setting where HALF the walls answer your
+  // army — and it is deliberately not higher, because the spear backbone in
+  // battle/ai.js `adapt` reserves one stronghold before either share spends
+  // anything, and a share that eats the rest is how the enemy disarmed itself
+  // the first time (see tests/campaign.test.js, "never disarms itself").
+  { reactionTicks: 15, commitRatio: 0.85, safetyMargin: 1.08,
+    economyMult: 0.7200, concurrent: 4, retreatDiscipline: 0.95, counterShare: 0.50,
+    ramAppetite: 1.0, stagingRatio: 0.85, stagingKeep: 0.05 },
 ];
 
 /** AI knobs that are the SAME at every tier. Per-tier knobs live in AI_TIERS. */

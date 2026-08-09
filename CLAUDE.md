@@ -120,12 +120,32 @@ All of it lives in `src/content/balance.js`. A balance pass should be a one-file
 presentation change must leave those numbers **identical**.
 
 **The verdict gate is PER TIER, and it has a ceiling as well as a floor** —
-`WIN_BAND` in `tools/simrunner.js`: `[[78,92], [66,84], [50,72], [34,56]]`. It used to be a
-single 55% floor, which stopped being usable once the endgame was meant to be a genuine
-wall: a region designed to cost you two or three attempts reads as TOO HARD against a
-number chosen when every region was a probable win. The ceiling is the half that never
+`WIN_BAND` in `tools/simrunner.js`: `[[78,92], [66,84], [50,72], [34,56], [22,42]]`. It used
+to be a single 55% floor, which stopped being usable once the endgame was meant to be a
+genuine wall: a region designed to cost you two or three attempts reads as TOO HARD against
+a number chosen when every region was a probable win. The ceiling is the half that never
 existed and mattered more — most of this project's real mis-tunes were regions that were
 too EASY, and a walkover reports "ok" against a floor right up until someone plays it.
+
+**Battle length is measured over WINS, not over all runs**, and that mattered more than it
+sounds. `targetLengthMin` is what the world map tells the player the region costs, and what
+a player means by that is how long it takes to *take* it — a loss is not a short battle, it
+is one that ended early because they were being rolled up. The two only agree while wins
+dominate, and they come apart exactly where the campaign gets hard. Measured at n=64:
+
+```
+region        win%   all-med  win-med   advertised
+emberholt      84%     12.1     13.0       16.5
+karrowmere     63%      6.5      8.4        8.5
+obsidian       39%      5.1      8.0        8.5
+nightharrow    34%      3.6     11.1        9
+```
+
+Emberholt barely moves; nightharrow moves by a factor of three. Gating on the all-runs
+median would have forced every tier-5 region to advertise five minutes — shorter than tier
+*one* — to describe a battle that actually takes eleven. Below five wins in the sample the
+length gate steps aside entirely and lets the win-rate verdict speak. The same fix is in
+`tests/campaignplay.test.js`.
 
 **`n=12` (the CLI default) is far too noisy to tune on, and has hidden real mis-tunes three
 separate times.** Kaldan's long-standing "58% ok" was an n=12 artefact; one build measured
@@ -179,14 +199,15 @@ That table has since been retuned again, for the *uphill raid* pass (a smaller l
 force, an enemy warm-up, and a shop with no ceiling). **The current measured curve, n=240:**
 
 ```
-tier 1   88 85 87 85
-tier 2   78 74 71 80 75
-tier 3   62 63 64 63 54
-tier 4   52 45 45 46
+tier 1   88 84 84 86        tier 4   46 45 52 45
+tier 2   81 75 66 76 80     tier 5   38 30 27
+tier 3   64 65 71 55 57
 ```
 
-Nothing is frozen any more: the expedition re-base changed regions 1–5 by construction, so
-they were solved with the rest. What replaced the freeze is the per-tier `WIN_BAND`.
+Tiers 1–4 at n=96, tier 5 confirmed at n=240. All twenty-one report `ok` against their
+tier's band *and* their advertised length. Nothing is frozen any more: the expedition
+re-base changed regions 1–5 by construction, so they were solved with the rest. What
+replaced the freeze is the per-tier `WIN_BAND`.
 
 `--noupgrades` reverts `npm run sim` to the old bot, so the delta stays measurable rather
 than remembered. `tests/harness.test.js` pins all of it — including a negative control, since
@@ -211,15 +232,15 @@ the original bug was precisely a mechanic nothing ever asked about.
 **Still open, same ladder.** The enemy AI deliberately does *not* get this button —
 `ai.js`/`aicore.js`/`aihome.js` never upgrade, and `tests/harness.test.js` pins that. It
 already receives the ladder via `develop`, so teaching it to buy upgrades would double-count
-the same mechanic and silently re-tune all eighteen regions. If that is ever wanted, it is a
+the same mechanic and silently re-tune all twenty-one regions. If that is ever wanted, it is a
 balance pass, not a bug fix.
 
-**Also inert, found while measuring this:** the enemy's `marshal` unlock does nothing. No
-`MAPGEN.trainType` produces one and `counterPick` never picks one — removing marshal from
-the tier-4 roster changed thanescar's win rate by exactly 0 points. Ironcrown's flavour text
-("The enemy fields a Marshal") is **still false**, and is the one thing from this list that
-has not been fixed: the player's marshal was reworked, the enemy's was not. Giving the AI a
-real one is a difficulty change and would need its own measured pass.
+**The enemy's `marshal` unlock used to be inert, and is now real** — see the tier-5 section
+below. It was listed in `ENEMY_UNITS_BY_TIER` at tier 4 for this project's whole life and
+nothing produced one, so removing it changed thanescar's win rate by exactly 0 points.
+Ironcrown's "The enemy fields a Marshal" was simply false. `meta/modifiers.js`
+`withEnemyMarshal` now grants exactly one, into the throne, mirroring the player's
+`withFreeMarshal`. `tests/marshal.test.js` pins it, negative control included.
 
 ## The uphill-raid pass: what moved and why
 
@@ -265,6 +286,65 @@ expedition budget can never buy one. Unlocking grants exactly one free per landi
 the budget (`withFreeMarshal`), and more are commissioned in battle with the `RECRUIT`
 verb: pay gold, he arrives at once, `trainType` untouched. Only units with a `maxPerSite`
 are commissionable, which is what makes buying one outright safe.
+
+## Tier 5, and the enemy Marshal that finally exists
+
+The campaign ran to eighteen regions and ended at a capital, which is a strange place for a
+war to stop — taking the enemy's capital is when you find out how much country is behind
+it. Three more regions sit east of the throne at hex `[5,-1]`, `[5,0]`, `[5,1]`:
+**Ravensmarch**, **Gravenreach**, **Nightharrow**. Obsidian is no longer "the last one";
+it is their capital.
+
+**The enemy Marshal is real now, and it was the tier's starting point.**
+`ENEMY_UNITS_BY_TIER` listed `marshal` at tier 4 for this project's entire life and nothing
+produced one — no `MAPGEN.trainType` builds it, `AI.counterPick` maps marshal→spearmen
+(what to field *against* one), `BASE_GARRISON` never held one. Ironcrown's flavour text was
+simply false. `meta/modifiers.js` `withEnemyMarshal` now grants **exactly one, into the
+throne**, mirroring the player's `withFreeMarshal`:
+
+- `banner` is stack-local, so where he stands decides what he buys. In the castle it is
+  +25% to the garrison defending the win condition, and `trainBuff` makes the throne refill
+  40% faster — a stall now feeds the wall you are hitting.
+- "Until you kill it" is literally true: `battle/ai.js` filters `kind === 'castle'` out of
+  the launch pool, so he cannot wander off and be farmed in a field.
+- Applied **after `normalizeSites`**, deliberately. `MAPGEN.garrison` is multiplied by
+  `enemyMult ^ ENEMY_SCALING.garrison` *and* the throne bonus, so a marshal placed in that
+  table would be scaled into two or three on the late regions — and `maxPerSite` lives in
+  `battle/training.js`, which never sees a garrison mapgen wrote.
+
+Measured at n=96, granting it cost tier 4 **1–8 points** (thanescar 54→46, blackspire
+46→45, ironcrown 45→40, obsidian 48→40). All four stayed inside `WIN_BAND` — but ironcrown
+fell below `campaignplay`'s winnable floor, so tier 4's dial was walked back by roughly what
+the marshal costs (ironcrown 4.0→3.9, obsidian 4.1→4.0). **Tier 4 plays as it was tuned to;
+the marshal is paid for, not absorbed.**
+
+**What makes tier 5 hard is not a new unit.** The roster runs out at tier 4, so
+`ENEMY_UNITS_BY_TIER` repeats itself — a tier whose identity is a new unit is a tier that
+cannot be tuned, because a unit is a cliff and the dial is a slope. Three things carry it:
+`AI_TIERS[4]` (the first commander that thinks more than once a second, commits under a
+1.10 margin, and runs **four** simultaneous attacks — `concurrent` is the knob the player
+feels, because the answer to two threats is one relief force and the answer to four is that
+there is no reserve); the ground (19×15, `develop` 2.6→3.1); and the marshal on a level-4
+castle.
+
+**Three measured facts from the tune, all of which cost time to learn:**
+
+- **`enemyMult` is even more non-linear here than at tier 4.** Ravensmarch lost **22 points
+  over +0.10** (4.15→4.25). Move it in steps of ≤0.03 at tier 5, and confirm at n=240 —
+  n=64 and n=96 disagreed by 13 points on the same dial setting.
+- **The level-4 castle is worth 11 points**, not the 25–40 a promotion costs at tiers 3–4
+  (nightharrow: develop 3.1 → 10%, develop 2.95 → 21% at n=48). `develop` 3.05 does *not*
+  promote it — `developLevels` needs `share ≥ 0.5/pool` and the fort pool is 6, so 3.1 is
+  the first value that lands.
+- **A player starting site is worth ~13 points at tier 5**, and it is the only lever that
+  lowers the opening force ratio, because `MAPGEN.garrison.player` bodies are the only part
+  of the landing force that scales with anything but `EXPEDITION`.
+
+`MAX_OPENING_RATIO` in `tests/campaign.test.js` became a per-tier ladder for the same reason
+`WIN_BAND` did. The old single 2.6 was set just clear of the worst ratio the campaign then
+produced (emberholt, 2.556) when tier 4 was the end; tier 5 opens at 2.60–2.68 and is
+measurably still convertible there. It is still a hard ceiling per tier, still required to
+be non-decreasing, and still capped at 3× globally.
 
 ### Gestures and controls
 

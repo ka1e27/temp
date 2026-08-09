@@ -12,6 +12,7 @@
 import { mkdir } from 'node:fs/promises';
 import { launch } from './cdp.js';
 import { compositionSlots } from '../src/meta/composition.js';
+import { REGIONS } from '../src/content/regions.data.js';
 
 const URL = process.env.URL || 'http://localhost:8080/';
 const OUT = 'screenshots';
@@ -338,11 +339,16 @@ try {
       hexes: document.querySelectorAll('.wm-hex').length,
       crowns: document.querySelector('.crowns')?.textContent,
     }));
-    if (wm.hexes !== 18) throw new Error(`expected 18 region hexes, got ${wm.hexes}`);
-    // The map is bigger than its window and you pan around it, so some of the
-    // 18 are legitimately off screen. Tag the one nearest the middle and hit
-    // test THAT — still a real region and a real hit test, just not whichever
-    // one happens to come first in the DOM.
+    // Driven off REGIONS rather than a literal: the literal read 18 and broke
+    // the moment a fifth tier shipped, which makes the smoke test assert that
+    // the campaign has not grown instead of that every region gets a plate.
+    if (wm.hexes !== REGIONS.length) {
+      throw new Error(`expected ${REGIONS.length} region hexes, got ${wm.hexes}`);
+    }
+    // The map is bigger than its window and you pan around it, so some are
+    // legitimately off screen. Tag the one nearest the middle and hit test
+    // THAT — still a real region and a real hit test, just not whichever one
+    // happens to come first in the DOM.
     const onScreen = await page.eval(() => {
       const m = document.querySelector('.wm-map').getBoundingClientRect();
       let best = null;
@@ -356,7 +362,7 @@ try {
       if (best) best.el.dataset.smoke = '1';
       return best?.el.getAttribute('aria-label') ?? null;
     });
-    if (!onScreen) throw new Error('not one of the 18 region hexes is fully on screen');
+    if (!onScreen) throw new Error('not one region hex is fully on screen');
     await hitPoint('.wm-hex[data-smoke="1"]', `the region hex "${onScreen}"`);
     step(`world map: ${wm.hexes} regions, treasury ${wm.crowns}`);
     await page.screenshot(`${OUT}/03-worldmap.png`);

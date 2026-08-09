@@ -46,10 +46,13 @@ const conqueredBefore = (id) => REGION_IDS.slice(0, REGIONS.findIndex((r) => r.i
  * You are raiding regions the enemy owns outright, so the campaign descends:
  * the opening teaches, the endgame is meant to cost you attempts.
  */
-const WIN_BAND = [[78, 92], [66, 84], [50, 72], [34, 56]];
+const WIN_BAND = [[78, 92], [66, 84], [50, 72], [34, 56], [22, 42]];
 
-console.log(`\n  region        n   win%   median   target    verdict`);
-console.log(`  ${'-'.repeat(58)}`);
+// `win-med` is the gated one — how long it takes to TAKE the region. `all-med`
+// is every run including the losses, reported so a fast-loss profile stays
+// visible rather than being averaged away.
+console.log(`\n  region        n   win%  win-med all-med   target    verdict`);
+console.log(`  ${'-'.repeat(66)}`);
 
 let anyBad = false;
 for (const id of regionIds) {
@@ -68,23 +71,59 @@ for (const id of regionIds) {
   const losses = runs.filter((r) => r.status === 'loss').length;
   const ahead = runs.filter((r) => r.status === 'timeout' && r.mineN > r.foeN).length;
   const behind = runs.filter((r) => r.status === 'timeout' && r.mineN <= r.foeN).length;
-  const mins = runs.map((r) => r.ticks / TICK_HZ / 60).sort((a, b) => a - b);
-  const median = mins[Math.floor(mins.length / 2)];
+  const medianOf = (a) => (a.length
+    ? a.map((r) => r.ticks / TICK_HZ / 60).sort((x, y) => x - y)[Math.floor(a.length / 2)]
+    : NaN);
+  const allMed = medianOf(runs);
+  const winMed = medianOf(wins);
   const winPct = Math.round((wins.length / runs.length) * 100);
   const target = region.targetLengthMin;
 
-  // A region is healthy when it wins about as often as its TIER intends, in
-  // roughly the advertised time. Too fast is as wrong as too slow.
-  const lengthOk = median >= target * 0.5 && median <= target * 1.6;
+  /**
+   * LENGTH IS MEASURED OVER WINS, and the median of ALL runs is reported beside
+   * it rather than gated on.
+   *
+   * `targetLengthMin` is the number the world map shows the player, and what a
+   * player means by "how long is this region" is how long it takes to TAKE it.
+   * A loss is not a short battle, it is a battle that ended early because they
+   * were being rolled up — the all-runs median measures how fast you die, and
+   * the two quantities only look alike while wins dominate.
+   *
+   * They stop looking alike exactly where the campaign is supposed to get hard.
+   * Measured at n=64 with the ladder live:
+   *
+   *     region        win%   all-med  win-med   advertised
+   *     emberholt      84%     12.1     13.0       16.5
+   *     karrowmere     63%      6.5      8.4        8.5
+   *     obsidian       39%      5.1      8.0        8.5
+   *     nightharrow    34%      3.6     11.1        9
+   *
+   * Emberholt barely moves; nightharrow moves by a factor of three, and its
+   * advertised nine minutes goes from a 60% overstatement to accurate. Gating on
+   * the all-runs median would have forced every tier-5 region to advertise five
+   * minutes — shorter than tier ONE — to describe a battle that actually takes
+   * eleven. That is not a tuning problem, it is the wrong instrument: it was
+   * chosen when every region was a probable win and it silently stopped
+   * measuring what it names somewhere around the 50% mark.
+   *
+   * Below `MIN_WINS_FOR_LENGTH` there is no honest win median to take, so the
+   * length gate steps aside and lets the win-rate verdict speak — a region that
+   * wins five times in a hundred has a difficulty problem, and reporting it as
+   * TOO FAST would name the wrong one.
+   */
+  const MIN_WINS_FOR_LENGTH = 5;
+  const gradeLength = wins.length >= MIN_WINS_FOR_LENGTH;
+  const lengthOk = !gradeLength || (winMed >= target * 0.5 && winMed <= target * 1.6);
   const [lo, hi] = WIN_BAND[region.tier - 1];
-  const verdict = median > target * 1.6 ? 'TOO SLOW'
+  const verdict = gradeLength && winMed > target * 1.6 ? 'TOO SLOW'
     : winPct < lo ? 'TOO HARD'
       : winPct > hi ? 'TOO EASY'
         : lengthOk ? 'ok' : 'TOO FAST';
   if (verdict !== 'ok') anyBad = true;
 
+  const fmt = (v) => (Number.isNaN(v) ? '   --' : v.toFixed(1).padStart(5));
   console.log(`  ${id.padEnd(12)} ${String(N).padStart(2)}  ${String(winPct).padStart(4)}%`
-    + `  ${median.toFixed(1).padStart(5)}m  ${String(target).padStart(5)}m    ${verdict.padEnd(9)}`
+    + `  ${fmt(winMed)}m ${fmt(allMed)}m  ${String(target).padStart(5)}m    ${verdict.padEnd(9)}`
     + `  losses=${losses} timeout(ahead=${ahead},behind=${behind})`);
 }
 

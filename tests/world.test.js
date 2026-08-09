@@ -46,9 +46,9 @@ test('adjacentTo is real, symmetric hex adjacency between shipped regions', () =
   }
 });
 
-test('tier counts are 4 / 5 / 5 / 4 and difficulty only ever goes up', () => {
-  const counts = [1, 2, 3, 4].map((t) => REGIONS.filter((r) => r.tier === t).length);
-  assert.deepEqual(counts, [4, 5, 5, 4]);
+test('tier counts are 4 / 5 / 5 / 4 / 3 and difficulty only ever goes up', () => {
+  const counts = [1, 2, 3, 4, 5].map((t) => REGIONS.filter((r) => r.tier === t).length);
+  assert.deepEqual(counts, [4, 5, 5, 4, 3]);
   for (let i = 1; i < REGIONS.length; i++) {
     assert.ok(REGIONS[i].enemyMult > REGIONS[i - 1].enemyMult, `${REGIONS[i].id} is not harder`);
     assert.ok(REGIONS[i].rewardPerSec >= REGIONS[i - 1].rewardPerSec);
@@ -103,8 +103,17 @@ test('map size, site count and battle length scale together across tiers', () =>
     assert.ok(REGIONS[i].targetLengthMin >= REGIONS[i - 1].targetLengthMin,
       `${REGIONS[i].id} got shorter than ${REGIONS[i - 1].id}`);
   }
+  // The final region is the biggest board and the biggest war in the campaign.
+  // Pinned as a FLOOR rather than an exact grid: it was `deepEqual([17, 13])`,
+  // which is a restatement of one table row and had to be edited by hand the
+  // moment a fifth tier shipped. What it is actually protecting is that the last
+  // region never quietly becomes a small one.
   const last = REGIONS[REGIONS.length - 1];
-  assert.deepEqual([last.grid.cols, last.grid.rows], [17, 13]);
+  const biggest = Math.max(...REGIONS.map((r) => r.grid.cols * r.grid.rows));
+  assert.equal(last.grid.cols * last.grid.rows, biggest,
+    `${last.id} is the last region but not the biggest board`);
+  assert.ok(last.grid.cols >= 17 && last.grid.rows >= 13,
+    `${last.id} is ${last.grid.cols}x${last.grid.rows} — smaller than the endgame ever was`);
   assert.ok(last.siteCounts.enemy + last.siteCounts.neutral + last.siteCounts.player >= 22);
 });
 
