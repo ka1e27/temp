@@ -15,14 +15,18 @@
 //
 // Split out of battle-panel.js so it can be read and tested without a DOM.
 // PURE: no DOM, no clock.
-import { SITES, UNITS, RALLY_KEEP, TERRAIN } from '../content/balance.js';
+import {
+  SITES, UNITS, RALLY_KEEP, TERRAIN, SITE_LEVELS, SITE_UPGRADE,
+} from '../content/balance.js';
 import { siteGoldPerSec, factionGoldPerSec } from '../battle/economy.js';
 import { groundOf, siteDefMultOf, terrainName, isOpen } from '../battle/terrain.js';
 import {
   trainJob, siteTrainRate, siteTrainCostPerSec, factionTrainCostPerSec, garrisonCap,
 } from '../battle/training.js';
-import { clampRallyKeep, rallyKeepOf, castleSealed, siteControlFraction } from '../battle/state.js';
-import { total, groundMult } from '../battle/combat.js';
+import {
+  clampRallyKeep, rallyKeepOf, castleSealed, siteControlFraction, effectiveLevel,
+} from '../battle/state.js';
+import { total, groundMult, siteMaxHp, siteRegen } from '../battle/combat.js';
 import { TICK_HZ } from '../core/loop.js';
 import { fixed, duration, rate } from '../ui/format.js';
 
@@ -74,6 +78,40 @@ export function siteIntel(state, site) {
     out.cap = garrisonCap(state, site);
   }
   return out;
+}
+
+/**
+ * "What the NEXT level changes" — read straight off SITE_LEVELS/SITE_UPGRADE,
+ * the one table economy.js, training.js and combat.js already multiply into
+ * their own formulas (see that table's own comment in content/balance.js).
+ * Deliberately the LEVEL's own contribution, not the fully compounded number:
+ * goldRateMult, terrain and brownout are real but orthogonal to what pressing
+ * Upgrade itself does, and folding them in would make the preview drift for
+ * reasons that have nothing to do with the button the player is looking at.
+ *
+ * hp/regen come from combat.js's OWN siteMaxHp()/siteRegen() with the level
+ * substituted — the exact functions the siege phase calls at tick time —
+ * rather than reimplementing `SITES[kind].hp * SITE_LEVELS[level-1].hp` here a
+ * second time.
+ *
+ * @returns {?{earns:boolean, trains:boolean, hp:{cur,next}, regen:{cur,next},
+ *             cap:{cur,next}, goldMult:{cur,next}, trainMult:{cur,next}}}
+ *   null at max level — nothing left to preview.
+ */
+export function upgradePreview(site) {
+  const cur = effectiveLevel(site);
+  if (!SITE_UPGRADE[cur - 1]) return null;
+  const a = SITE_LEVELS[cur - 1];
+  const b = SITE_LEVELS[cur];
+  return {
+    earns: SITES[site.kind].gold > 0,
+    trains: SITES[site.kind].train > 0,
+    hp: { cur: siteMaxHp(site.kind, cur), next: siteMaxHp(site.kind, cur + 1) },
+    regen: { cur: siteRegen(site.kind, cur), next: siteRegen(site.kind, cur + 1) },
+    cap: { cur: a.cap, next: b.cap },
+    goldMult: { cur: a.gold, next: b.gold },
+    trainMult: { cur: a.train, next: b.train },
+  };
 }
 
 /** `+4.0/s gold · -3.0/s training · net +1.0/s`. Empty for a site that neither

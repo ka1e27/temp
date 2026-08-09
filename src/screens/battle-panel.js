@@ -23,10 +23,12 @@ import { duration } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
 import { createFollower } from './battle-follow.js';
 import { createFillBar, createCompBar } from './battle-bars.js';
-import { updateTerrainBubbles, updateEconBubbles, updateUnitStatBubbles, clearBubbles }
-  from './battle-bubbles.js';
 import {
-  siteIntel, trainLine, gateLine, stepRallyKeep, keepLabel,
+  updateTerrainBubbles, updateEconBubbles, updateUnitStatBubbles,
+  updateUpgradePreviewBubbles, clearBubbles,
+} from './battle-bubbles.js';
+import {
+  siteIntel, trainLine, gateLine, stepRallyKeep, keepLabel, upgradePreview,
 } from './battle-econ.js';
 import { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
 
@@ -71,6 +73,10 @@ export function createSitePanel(o) {
   // difficulty dial, and this row is what makes it visible.
   const terrain = h('div.hud-site-terrain.bubbles', {});
   const stat = h('div.hud-selection-sub.hud-site-stat', { text: '' });
+  // "What upgrading gives you" — bubbles read straight off upgradePreview(),
+  // sitting directly above the button they explain (see battle-econ.js/
+  // battle-bubbles.js for why every number here is real, never fabricated).
+  const upgradePreviewRow = h('div.hud-upgrade-preview.bubbles', {});
   const upgrade = h('button.btn.hud-upgrade', {
     'data-interactive': true, type: 'button',
     on: { click: () => { const id = targetId(); if (id) input.upgrade(id); } },
@@ -86,7 +92,7 @@ export function createSitePanel(o) {
   const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, stat);
-  const actions = h('div.hud-site-actions', {}, keep.el, upgrade);
+  const actions = h('div.hud-site-actions', {}, keep.el, upgradePreviewRow, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, and a panel that let clicks through would sit
   // over the board, take a click on its own text as a click on empty ground,
@@ -154,7 +160,7 @@ export function createSitePanel(o) {
     wrote |= hpBar.show(false);
     wrote |= compBar.show(false);
     wrote |= trainBar.show(false);
-    wrote |= clearBubbles(money, terrain, trainStats) ? 1 : 0;
+    wrote |= clearBubbles(money, terrain, trainStats, upgradePreviewRow) ? 1 : 0;
     return wrote;
   }
 
@@ -229,6 +235,8 @@ export function createSitePanel(o) {
 
     const offer = upgradeOffer(state, site);
     wrote |= setShown(site.owner === 'player');
+    wrote |= updateUpgradePreviewBubbles(upgradePreviewRow,
+      site.owner === 'player' ? upgradePreview(site) : null);
     wrote |= set.upLabel(upgradeLabel(offer));
     set.upOff(!offer.can);
     setDisabled(!offer.can);

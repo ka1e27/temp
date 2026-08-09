@@ -19,10 +19,13 @@ import { runTraining, siteTrainRate, siteTrainCostPerSec } from '../src/battle/t
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { emptyComp, total } from '../src/battle/combat.js';
 import { EVENTS } from '../src/battle/events.js';
-import { AI_TIERS, CENTIGOLD, SITES, UNITS } from '../src/content/balance.js';
+import {
+  AI_TIERS, CENTIGOLD, SITES, UNITS, SITE_LEVELS, SITE_UPGRADE,
+} from '../src/content/balance.js';
 import { TICK_HZ } from '../src/core/loop.js';
-import { siteIntel, goldLine, trainLine, goldFlow, flowLine }
-  from '../src/screens/battle-econ.js';
+import {
+  siteIntel, goldLine, trainLine, goldFlow, flowLine, upgradePreview,
+} from '../src/screens/battle-econ.js';
 import { createOrders } from '../src/screens/battle-orders.js';
 import { createView } from '../src/screens/battle-input.js';
 
@@ -277,5 +280,64 @@ test('the panel lines say the numbers out loud', () => {
   // camp 4.0 + farm 2.0 in; camp 3.75 + stronghold 3.0 out.
   assert.equal(flowLine(goldFlow(s, 'player')), '+6.0/s income · -6.8/s training');
   near(goldFlow(s, 'player').net, 6 - 6.75, 1e-9);
+});
+
+// ---------------------------------------------------------------------------
+// upgradePreview() — "what does the next level actually change"
+// ---------------------------------------------------------------------------
+// Expected numbers are computed from the REAL SITES/SITE_LEVELS constants
+// here, not copied from upgradePreview()'s own source — so a balance change
+// (the ladder has already grown from 3 to 5 levels once) moves both sides of
+// the assertion together instead of leaving a stale literal behind.
+
+test('upgradePreview: a stronghold at L1 previews L2 — HP, regen, cap and train, no gold', () => {
+  const s = fixture();
+  const hold = at(s, 'hold'); // stronghold: earns nothing, trains, starts at L1
+  const p = upgradePreview(hold);
+
+  const a = SITE_LEVELS[0];
+  const b = SITE_LEVELS[1];
+  assert.equal(p.earns, false, 'a stronghold has no gold column to preview');
+  assert.equal(p.trains, true);
+  near(p.hp.cur, SITES.stronghold.hp * a.hp);
+  near(p.hp.next, SITES.stronghold.hp * b.hp);
+  near(p.regen.cur, SITES.stronghold.hpRegen * a.regen);
+  near(p.regen.next, SITES.stronghold.hpRegen * b.regen);
+  assert.equal(p.cap.cur, a.cap);
+  assert.equal(p.cap.next, b.cap);
+  near(p.trainMult.cur, a.train);
+  near(p.trainMult.next, b.train);
+});
+
+test('upgradePreview: a farm previews gold but not train — it cannot train at any level', () => {
+  const s = fixture();
+  const farm = at(s, 'f1');
+  const p = upgradePreview(farm);
+  assert.equal(p.earns, true);
+  assert.equal(p.trains, false, 'SITES.farm.train is 0 at every level');
+  near(p.goldMult.cur, SITE_LEVELS[0].gold);
+  near(p.goldMult.next, SITE_LEVELS[1].gold);
+});
+
+test('upgradePreview: null at max level — nothing left to buy, nothing to preview', () => {
+  const s = fixture();
+  const hold = at(s, 'hold');
+  hold.level = SITE_LEVELS.length; // the top rung
+  assert.equal(upgradePreview(hold), null);
+  assert.equal(SITE_UPGRADE[hold.level - 1], undefined, 'sanity: this really is past the last step');
+});
+
+test('upgradePreview: an in-progress upgrade previews the level it is ACTUALLY at, not the paid-for one', () => {
+  // site.level increments the moment the upgrade is paid for, but the site
+  // keeps producing at the OLD level until the work lands (effectiveLevel()).
+  // The preview has to agree, or it would show "what does the level after
+  // next look like" while the button still reads "still building".
+  const s = fixture();
+  const hold = at(s, 'hold');
+  hold.level = 2;
+  hold.upgradeTicksLeft = 100; // still building L2 -> L3
+  const p = upgradePreview(hold);
+  near(p.hp.cur, SITES.stronghold.hp * SITE_LEVELS[0].hp); // still effectively L1
+  near(p.hp.next, SITES.stronghold.hp * SITE_LEVELS[1].hp);
 });
 

@@ -85,7 +85,7 @@ export function updateTerrainBubbles(host, intel) {
       });
     }
   }
-  renderBubbles(host, list);
+  return renderBubbles(host, list);
 }
 
 /**
@@ -112,7 +112,7 @@ export function updateEconBubbles(host, intel) {
       cls: intel.net < 0 ? 'is-negative' : '',
     });
   }
-  renderBubbles(host, list);
+  return renderBubbles(host, list);
 }
 
 /**
@@ -125,7 +125,7 @@ export function updateEconBubbles(host, intel) {
  * something about.
  */
 export function updateUnitStatBubbles(host, unitId) {
-  if (!unitId || !UNITS[unitId]) { renderBubbles(host, []); return; }
+  if (!unitId || !UNITS[unitId]) return renderBubbles(host, []);
   const spec = UNITS[unitId];
   const hue = `var(--c-${unitId})`;
   const list = [
@@ -135,5 +135,45 @@ export function updateUnitStatBubbles(host, unitId) {
   if (spec.siege >= 1) {
     list.push({ label: `SIEGE ${fixed(spec.siege, 1)}`, hue, note: `${unitId}'s damage against structure HP.` });
   }
-  renderBubbles(host, list);
+  return renderBubbles(host, list);
+}
+
+/**
+ * "What upgrading gives you" — every field read straight off upgradePreview()'s
+ * deltas, never recomputed here (see battle-econ.js for why). Percentages for
+ * the multiplier fields (hp, regen, gold, train), a flat difference for cap,
+ * because SITE_LEVELS' cap column is additive, not a multiplier — see that
+ * table's own comment in content/balance.js.
+ *
+ * Deliberately shows the LEVEL's own contribution, not the fully compounded
+ * number a farm's actual income would become — terrain, goldRateMult and
+ * brownout are real but have nothing to do with what pressing Upgrade does,
+ * and folding them in would make this preview drift for reasons unrelated to
+ * the button the player is looking at.
+ */
+export function updateUpgradePreviewBubbles(host, preview) {
+  if (!preview) return renderBubbles(host, []);
+  const pct = (cur, next) => `+${Math.round((next / cur - 1) * 100)}%`;
+  const list = [
+    { label: `HP ${pct(preview.hp.cur, preview.hp.next)}`, hue: 'var(--c-accent)',
+      note: 'Structure HP at the next level.' },
+    { label: `REGEN ${pct(preview.regen.cur, preview.regen.next)}`, hue: 'var(--c-accent)',
+      note: 'How fast structure damage repairs, at the next level.' },
+    { label: `CAP +${preview.cap.next - preview.cap.cur}`, hue: 'var(--c-accent)',
+      note: 'How many more troops this site can hold, at the next level.' },
+  ];
+  if (preview.earns) {
+    list.push({
+      label: `GOLD ${pct(preview.goldMult.cur, preview.goldMult.next)}`, hue: 'var(--c-gold)',
+      note: 'This site\'s own production rate at the next level — terrain and '
+        + 'shop upgrades are unaffected by this button.',
+    });
+  }
+  if (preview.trains) {
+    list.push({
+      label: `TRAIN ${pct(preview.trainMult.cur, preview.trainMult.next)}`, hue: 'var(--c-accent)',
+      note: 'How much faster this site trains at the next level.',
+    });
+  }
+  return renderBubbles(host, list);
 }
