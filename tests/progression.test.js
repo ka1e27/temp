@@ -22,8 +22,9 @@ import { siteGoldPerSec, goldOf } from '../src/battle/economy.js';
 import { garrisonCap, trainMultiplier, trainJob } from '../src/battle/training.js';
 import { SITE_LEVELS, SITE_UPGRADE, CENTIGOLD } from '../src/content/balance.js';
 import { UPGRADES, UPGRADE_BY_ID, upgradeCost } from '../src/content/upgrades.data.js';
-import { buy, levelOf, costToMax, shopListing } from '../src/meta/upgrades.js';
-import { incomePerSec } from '../src/meta/idle.js';
+import { buy, levelOf, costToMax, shopListing, isEndless } from '../src/meta/upgrades.js';
+import { incomePerSec, offlineCapMs } from '../src/meta/idle.js';
+import { OFFLINE } from '../src/content/upgrades.data.js';
 import { REGION_IDS, REGIONS, fullConquestIncome } from '../src/content/regions.data.js';
 import { metaFor } from '../tools/simplayer.js';
 
@@ -166,53 +167,84 @@ const maxOut = (meta, id) => {
   assert.equal(levelOf(meta, id), UPGRADE_BY_ID[id].maxLevel, `${id} did not reach max`);
 };
 
-const totalToMax = () => UPGRADES.reduce((sum, u) => {
+/** Crowns to take one line from nothing to `levels`. */
+const costOf = (id, levels) => {
   let c = 0;
-  for (let l = 0; l < u.maxLevel; l++) c += upgradeCost(u, l);
-  return sum + c;
-}, 0);
+  for (let l = 0; l < levels; l++) c += upgradeCost(UPGRADE_BY_ID[id], l);
+  return c;
+};
 
-test('the opening ladder is untouched — regions 1-5 are tuned against these exact costs', () => {
-  // The endgame was added as NEW lines rather than extra levels on the old
-  // ones, precisely so this stays true. If a level ever gets added to one of
-  // these, the early campaign has to be re-measured.
-  const frozen = {
-    tithe: 5, warChest: 5, richSoil: 4, granary: 4, standingArmy: 6,
-    drillYards: 4, veterancy: 5, bulwark: 5, sappers: 4,
-  };
-  for (const [id, maxLevel] of Object.entries(frozen)) {
-    assert.equal(UPGRADE_BY_ID[id].maxLevel, maxLevel, `${id} maxLevel moved`);
-  }
-  const meta = richMeta(0);
-  assert.equal(costToMax(meta, 'standingArmy'), 120 + 252 + 529 + 1111 + 2334 + 4901);
-});
-
-test('maxing the whole shop is an endgame project, not an afternoon', () => {
-  const before = 59589; // what every upgrade in the game used to cost, in total
-  const now = totalToMax();
-  assert.ok(now > before * 50, `the shop still runs dry: ${now} crowns to max everything`);
+test('the shop cannot run out, because none of the six lines has an end', () => {
+  // It used to. Every upgrade in the game maxed for 59,589 crowns — about six
+  // minutes of idling for a region-14 player — and the last four regions had
+  // nothing left to buy at all. That is a strange thing for an idle game to do
+  // to a player who idles.
+  const endless = UPGRADES.filter(isEndless);
+  assert.equal(endless.length, 6, 'six lines carry the whole late game');
+  for (const u of endless) assert.equal(costToMax(richMeta(0), u.id), Infinity);
 
   // The real test of "it runs out": a player who owns the entire world, has
   // bought everything they can, and idles for an hour must STILL have something
   // left on the board to buy.
   const meta = metaFor(REGION_IDS.slice(0, REGIONS.length - 1), 60).meta;
   meta.crowns += incomePerSec(meta) * 3600;
-  const unbought = shopListing(meta).flatMap((g) => g.items)
-    .filter((i) => i.level < i.maxLevel);
+  const unbought = shopListing(meta).flatMap((g) => g.items).filter((i) => i.affordable);
   assert.ok(unbought.length > 0, 'a full-conquest player has nothing left to buy');
-  assert.ok(now > fullConquestIncome() * 3600,
-    'one hour of full-conquest income must not buy the entire shop');
 });
 
-test('every shop line is affordable in the campaign it is meant for', () => {
-  // The opposite failure: content nobody can ever reach. Each new line must be
-  // out of reach at Kaldan and within reach by the last region.
+test('the curve, not a ceiling, is what slows a line down', () => {
+  // Power grows with the LOGARITHM of crowns spent, which is what lets a very
+  // patient player get strong without making an ordinary one irrelevant.
+  const levelsFor = (crowns) => {
+    const meta = richMeta(crowns);
+    let n = 0;
+    while (buy(meta, 'treasury', null).ok) n++;
+    return n;
+  };
+  const cheap = levelsFor(1e6);
+  const rich = levelsFor(1e9);
+  const absurd = levelsFor(1e12);
+  assert.ok(cheap > 5, 'an early player still makes real progress');
+  assert.ok(rich > cheap && absurd > rich, 'more crowns always buys more');
+  assert.ok(absurd < cheap * 3,
+    `a million times the crowns bought ${absurd} levels against ${cheap} — that is linear, not a curve`);
+});
+
+test('an hour of full-conquest income does not buy the whole late game', () => {
+  // The old bound was "total to max"; with no max, the honest version is that
+  // one hour cannot take a single line to a level that trivialises it.
+  const hour = fullConquestIncome() * 3600;
+  const meta = richMeta(hour);
+  let n = 0;
+  while (buy(meta, 'arms', null).ok) n++;
+  assert.ok(n * 0.06 < 3,
+    `one hour bought +${(n * 0.06 * 100).toFixed(0)}% attack — the curve is too flat`);
+});
+
+test('the opening is still affordable, so regions 1-5 stay reachable', () => {
+  // The frozen-ladder test in a form that survives the collapse: what matters
+  // for the early campaign is that a first purchase is within an early player's
+  // reach, not that a particular id has a particular cap.
+  const opening = metaFor([], 10).meta;                 // a region-1 player
+  const firstCosts = UPGRADES.filter(isEndless).map((u) => u.cost.base);
+  assert.ok(Math.min(...firstCosts) <= 60,
+    'nothing in the opening shop is affordable at region 1');
+  assert.ok(costOf('standingArmy', 3) < 700,
+    'three levels of the most-felt line must be an early-campaign project');
+  assert.equal(levelOf(opening, 'unlockMarshal'), 0, 'and the big unlocks stay out of reach');
+});
+
+test('every line is reachable in the campaign, and none of them early', () => {
+  // The opposite failure to running dry: content nobody can afford. Each of the
+  // six must be movable by the last region, and the expensive unlocks must not
+  // be trivially affordable at Kaldan.
   const early = metaFor(REGION_IDS.slice(0, 4), 10).meta;   // the Kaldan player
   const late = metaFor(REGION_IDS.slice(0, REGIONS.length - 1), 60).meta;
-  for (const id of ['armoury', 'musterField', 'quartermaster', 'levyReform', 'mintage', 'ordnance']) {
-    assert.equal(levelOf(early, id), 0, `${id} is cheap enough to disturb the early game`);
-    assert.ok(levelOf(late, id) > 0, `${id} is never reachable`);
+  for (const u of UPGRADES.filter(isEndless)) {
+    assert.ok(levelOf(late, u.id) > 0, `${u.id} is never reachable`);
   }
+  assert.equal(levelOf(early, 'unlockMarshal'), 0,
+    'the marshal is cheap enough to disturb the early game');
 });
 
 // ===========================================================================
@@ -230,9 +262,9 @@ function configWith(ups, regionId = 'kaldan') {
   );
 }
 
-test('Armoury raises the attack AND defence the simulation actually fights with', () => {
+test('Arms raises the attack AND defence the simulation actually fights with', () => {
   const base = configWith({});
-  const armed = configWith({ armoury: UPGRADE_BY_ID.armoury.maxLevel });
+  const armed = configWith({ arms: 10 });
   assert.ok(armed.player.unitAtkMult > base.player.unitAtkMult * 1.4);
   assert.ok(armed.player.unitDefMult > base.player.unitDefMult * 1.4);
   // The enemy must not inherit the player's shopping.
@@ -249,11 +281,12 @@ test('Armoury raises the attack AND defence the simulation actually fights with'
   assert.ok(kills(armed) > kills(base), 'a +60% army killed no more than a bare one');
 });
 
-test('Quartermaster fills the treasury the battle actually spends', () => {
+test('War Chest fills the treasury the battle actually spends', () => {
   const base = configWith({});
-  const rich = configWith({ quartermaster: UPGRADE_BY_ID.quartermaster.maxLevel });
+  const rich = configWith({ warChest: 8 });
   assert.equal(base.player.goldRateMult, 1, 'the baseline must be exactly 1.0');
   assert.ok(rich.player.goldRateMult > 1.5, 'goldRateMult never moved');
+  assert.ok(rich.player.startGold > base.player.startGold + 900, 'nor did the opening purse');
   assert.equal(rich.enemy.goldRateMult, base.enemy.goldRateMult);
 
   const earned = (cfg) => {
@@ -266,12 +299,16 @@ test('Quartermaster fills the treasury the battle actually spends', () => {
   assert.ok(earned(rich) > earned(base) * 1.2, 'the farms paid the same either way');
 });
 
-test('Levy Reform makes the same treasury buy more soldiers', () => {
+test('Drill makes the same treasury buy more soldiers, faster, into a bigger site', () => {
+  // One line, three channels — which is what collapsing four upgrades into it
+  // was supposed to buy. All three have to actually reach the battle.
   const base = configWith({});
-  const cheap = configWith({ levyReform: UPGRADE_BY_ID.levyReform.maxLevel });
+  const drilled = configWith({ drill: 12 });
   assert.equal(base.player.trainCostMult, 1);
-  assert.ok(cheap.player.trainCostMult < 0.6, 'trainCostMult never moved');
-  assert.equal(cheap.enemy.trainCostMult, base.enemy.trainCostMult);
+  assert.ok(drilled.player.trainCostMult < 0.65, 'trainCostMult never moved');
+  assert.ok(drilled.player.trainSpeedMult > 1.5, 'trainSpeedMult never moved');
+  assert.ok(drilled.player.garrisonCapBonus >= 12 * 12, 'garrisonCapBonus never moved');
+  assert.equal(drilled.enemy.trainCostMult, base.enemy.trainCostMult);
 
   const perCycle = (cfg) => {
     const b = startBattle(cfg);
@@ -279,45 +316,49 @@ test('Levy Reform makes the same treasury buy more soldiers', () => {
     const job = trainJob(b, site);
     return job.cost / job.progress;   // centigold per training cycle
   };
-  assert.ok(perCycle(cheap) < perCycle(base) * 0.65, 'training cost the same either way');
+  assert.ok(perCycle(drilled) < perCycle(base) * 0.7, 'training cost the same either way');
 });
 
-test('Muster Field lands more troops on the beach than Standing Army alone can', () => {
-  const capped = configWith({ standingArmy: UPGRADE_BY_ID.standingArmy.maxLevel });
-  const more = configWith({
-    standingArmy: UPGRADE_BY_ID.standingArmy.maxLevel,
-    musterField: UPGRADE_BY_ID.musterField.maxLevel,
-  });
+test('Standing Army keeps landing more troops, with no level at which it stops', () => {
+  // This used to need a SECOND upgrade (Muster Field) to carry on past six
+  // levels. One line does it now, and the point is that it never runs out.
+  const few = configWith({ standingArmy: 4 });
+  const many = configWith({ standingArmy: 14 });
   const n = (cfg) => total(cfg.player.expedition);
-  assert.ok(n(more) > n(capped) + 20, `expedition did not grow: ${n(capped)} -> ${n(more)}`);
-  const b = startBattle(more);
+  assert.ok(n(many) > n(few) + 20, `expedition did not grow: ${n(few)} -> ${n(many)}`);
+  assert.ok(many.player.marchSpeedMult > few.player.marchSpeedMult, 'and they arrive sooner');
+
+  const b = startBattle(many);
   const camp = b.sites.find((s) => s.kind === 'camp');
-  assert.equal(total(camp.garrison), n(more), 'the extra troops never deployed');
+  assert.equal(total(camp.garrison), n(many), 'the extra troops never deployed');
 });
 
-test('Royal Mint and Ordnance Yard reach the idle economy and the walls', () => {
+test('Treasury and Siegeworks reach the idle economy and the walls', () => {
   const meta = metaFor(REGION_IDS, 0).meta;   // the whole world conquered
   meta.crowns = 50_000_000;
   const income0 = incomePerSec(meta);
   assert.ok(income0 > 0, 'a conquered world must pay something to begin with');
-  maxOut(meta, 'mintage');
-  assert.ok(incomePerSec(meta) > income0 * 1.5, 'Royal Mint pays nothing');
+  for (let i = 0; i < 6; i++) assert.ok(buy(meta, 'treasury', null).ok);
+  assert.ok(incomePerSec(meta) > income0 * 1.5, 'Treasury pays nothing');
+  assert.ok(offlineCapMs(meta) > OFFLINE.baseCapMs, 'and it did not extend an absence either');
 
-  const siege0 = configWith({}).player.siegeDmgMult;
-  const shelled = configWith({ ordnance: UPGRADE_BY_ID.ordnance.maxLevel });
-  assert.ok(shelled.player.siegeDmgMult > siege0 * 1.5, 'Ordnance Yard breaks nothing');
+  const base = configWith({});
+  const shelled = configWith({ siegeworks: 8 });
+  assert.ok(shelled.player.siegeDmgMult > base.player.siegeDmgMult * 1.5,
+    'Siegeworks breaks nothing');
+  assert.ok(shelled.player.structureRegenMult > base.player.structureRegenMult * 1.5,
+    'nor does it hold anything');
 });
 
-test('the contract did not have to change: every new line rides a field that already existed', () => {
+test('the contract did not have to change: every line rides a field that already existed', () => {
   // The number tracks bumps this test is NOT about: v4 was rules.castleGateFrac,
   // v5 the rally target list and rules.rallyKeepDefault. The point of THIS test
-  // is that armoury/quartermaster/levyReform/musterField/ordnance did not need
-  // one of their own — they all ride fields the contract already had.
+  // is that the six endless lines needed no field of their own — they all ride
+  // fields the contract already had.
   assert.equal(CONTRACT_VERSION, 5);
-  const cfg = configWith({
-    armoury: 3, quartermaster: 3, levyReform: 3, musterField: 2, ordnance: 3,
-  });
-  for (const k of ['unitAtkMult', 'unitDefMult', 'goldRateMult', 'trainCostMult', 'siegeDmgMult']) {
+  const cfg = configWith({ arms: 3, warChest: 3, drill: 3, standingArmy: 2, siegeworks: 3 });
+  for (const k of ['unitAtkMult', 'unitDefMult', 'goldRateMult', 'trainCostMult',
+    'siegeDmgMult', 'structureRegenMult', 'marchSpeedMult', 'farmYieldMult']) {
     assert.equal(typeof cfg.player[k], 'number', `${k} is not a contract field`);
     assert.ok(Number.isFinite(cfg.player[k]) && cfg.player[k] > 0);
   }

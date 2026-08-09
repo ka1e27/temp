@@ -139,8 +139,13 @@ export function createShopScene(ctx) {
   }
 
   function upgradeRow(item) {
-    const maxed = item.level >= item.maxLevel;
-    const owned = item.maxLevel > 1 ? `${item.level}/${item.maxLevel}` : (item.level ? 'owned' : '');
+    const maxed = item.reason === 'maxed';
+    // An endless line has no denominator to show — "7 / Infinity" is noise, and
+    // "7 / 64" would advertise a floating-point ceiling as though it were a
+    // design one. Just the level it is at.
+    const owned = item.endless ? (item.level ? `Lv ${item.level}` : '')
+      : item.maxLevel > 1 ? `${item.level}/${item.maxLevel}`
+        : (item.level ? 'owned' : '');
 
     return h('div.shop-row', { 'data-maxed': maxed ? '1' : null },
       h('div.shop-row-main', {},

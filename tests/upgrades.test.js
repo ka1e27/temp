@@ -3,10 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createState } from '../src/core/store.js';
-import { UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS, BOOSTER_SHOP, upgradeCost }
-  from '../src/content/upgrades.data.js';
 import {
-  levelOf, nextCost, costAtLevel, costToMax, canBuy, buy,
+  UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS, BOOSTER_SHOP, RETIRED_UPGRADES,
+  SAFE_MAX_LEVEL, upgradeCost,
+} from '../src/content/upgrades.data.js';
+import {
+  levelOf, nextCost, costAtLevel, costToMax, canBuy, buy, isEndless, isMaxed,
   upgradeEffects, unlockedUnits, hasFeature, shopListing,
 } from '../src/meta/upgrades.js';
 import {
@@ -36,79 +38,107 @@ test('every upgrade sits in a declared group and has a sane cost curve', () => {
   }
 });
 
-test('the plan-specified upgrades exist with the plan-specified numbers', () => {
-  const expect = {
-    tithe: [5, 60, 2.2], warChest: [5, 100, 2.0], richSoil: [4, 140, 2.15],
-    granary: [4, 120, 2.0], standingArmy: [6, 120, 2.1], sappers: [4, 260, 2.1],
-    unlockRaiders: [1, 250, 1], unlockRams: [1, 600, 1], unlockMarshal: [1, 4000, 1],
-    fieldManual: [1, 150, 1], scoutReport: [1, 200, 1],
-    tactician: [1, 450, 1], standingOrders: [1, 1500, 1],
-  };
-  for (const [id, [maxLevel, base, rate]] of Object.entries(expect)) {
-    const u = UPGRADE_BY_ID[id];
-    assert.ok(u, `missing upgrade ${id}`);
-    assert.equal(u.maxLevel, maxLevel, `${id} maxLevel`);
-    assert.equal(u.cost.base, base, `${id} base cost`);
-    assert.equal(u.cost.rate, rate, `${id} cost rate`);
+test('the six endless lines exist, and they are the only endless ones', () => {
+  const endless = UPGRADES.filter(isEndless).map((u) => u.id).sort();
+  assert.deepEqual(endless,
+    ['arms', 'drill', 'siegeworks', 'standingArmy', 'treasury', 'warChest']);
+  for (const id of endless) {
+    assert.equal(UPGRADE_BY_ID[id].group, 'empire', `${id} belongs in the empire group`);
+    assert.ok(UPGRADE_BY_ID[id].cost.rate > 1,
+      `${id} must actually get more expensive, or it is free money forever`);
   }
-  assert.equal(UPGRADE_BY_ID.tithe.effects[0].value, 0.15);
-  assert.equal(UPGRADE_BY_ID.standingArmy.effects[0].value, 4);
-  assert.equal(UPGRADE_BY_ID.warChest.effects[0].value, 150);
-  assert.equal(UPGRADE_BY_ID.sappers.effects[0].value, 0.15);
+  // Everything else is bought exactly once.
+  for (const u of UPGRADES) {
+    if (!isEndless(u)) assert.equal(u.maxLevel, 1, `${u.id} is neither endless nor one-off`);
+  }
 });
 
-test('cost is strictly monotonic in level for every multi-level upgrade', () => {
+test('the shop is small enough to read at a glance', () => {
+  // The complaint this whole change answers. Twenty-six entries across six
+  // groups, each with a paragraph, is a reading exercise rather than a choice.
+  assert.ok(UPGRADES.length <= 14, `${UPGRADES.length} upgrades is too many to scan`);
+  assert.ok(UPGRADE_GROUPS.length <= 3, 'three headings at most');
   for (const u of UPGRADES) {
+    assert.ok(u.desc.length <= 100, `${u.id} description is ${u.desc.length} chars — too long`);
+  }
+});
+
+test('every retired upgrade is really gone, and its old price is remembered', () => {
+  // The prices have to survive the deletion or the refund in core/store.js
+  // cannot pay what was actually charged.
+  for (const [id, spec] of Object.entries(RETIRED_UPGRADES)) {
+    assert.equal(UPGRADE_BY_ID[id], undefined, `${id} is retired but still on sale`);
+    assert.ok(spec.base > 0 && spec.rate >= 1, `${id} has no usable old price`);
+  }
+  // The four that were sold and did nothing at all.
+  for (const id of ['fieldManual', 'scoutReport', 'standingOrders', 'wreckingCrew']) {
+    assert.ok(RETIRED_UPGRADES[id], `${id} was inert and must be refunded`);
+  }
+});
+
+test('cost is strictly monotonic in level, all the way to the safe ceiling', () => {
+  for (const u of UPGRADES) {
+    const top = Math.min(u.maxLevel, SAFE_MAX_LEVEL);
     let prev = -Infinity;
-    for (let l = 0; l < u.maxLevel; l++) {
+    for (let l = 0; l < top; l++) {
       const c = upgradeCost(u, l);
       assert.ok(Number.isInteger(c), `${u.id} L${l} cost ${c} must be an integer`);
       assert.ok(c > 0, `${u.id} L${l} cost must be positive`);
-      if (u.maxLevel > 1) assert.ok(c > prev, `${u.id} L${l} cost ${c} <= previous ${prev}`);
+      if (top > 1) assert.ok(c > prev, `${u.id} L${l} cost ${c} <= previous ${prev}`);
       prev = c;
     }
-    assert.equal(costAtLevel(u.id, u.maxLevel), Infinity, `${u.id} past max`);
+    assert.equal(costAtLevel(u.id, top), Infinity, `${u.id} past its ceiling`);
   }
 });
 
-test('Tithe follows 60 x 2.2^n exactly', () => {
+test('an endless line still ENDS before the arithmetic stops being exact', () => {
+  // Not a design cap — a floating-point one. Past it a price is no longer an
+  // exact integer and eventually becomes Infinity, and a button reading
+  // "Infinity crowns" is a bug rather than a challenge.
+  const m = meta(0, { treasury: SAFE_MAX_LEVEL });
+  assert.equal(canBuy(m, 'treasury').reason, 'maxed');
+  assert.equal(nextCost(m, 'treasury'), Infinity);
+  assert.ok(isMaxed(UPGRADE_BY_ID.treasury, SAFE_MAX_LEVEL));
+  assert.ok(!isMaxed(UPGRADE_BY_ID.treasury, SAFE_MAX_LEVEL - 1));
+  // ...and the last legal price is still an exact, representable integer.
+  const last = costAtLevel('treasury', SAFE_MAX_LEVEL - 1);
+  assert.ok(Number.isSafeInteger(last), `${last} is past MAX_SAFE_INTEGER`);
+});
+
+test('Treasury follows 45 x 1.58^n exactly', () => {
   assert.deepEqual(
-    [0, 1, 2, 3, 4].map((l) => costAtLevel('tithe', l)),
-    [60, 132, 290, 639, 1406],
+    [0, 1, 2, 3, 4].map((l) => costAtLevel('treasury', l)),
+    [45, 71, 112, 177, 280],
   );
 });
 
-test('Standing Army follows 120 x 2.1^n exactly', () => {
-  assert.deepEqual(
-    [0, 1, 2, 3, 4, 5].map((l) => costAtLevel('standingArmy', l)),
-    [120, 252, 529, 1111, 2334, 4901],
-  );
-});
-
-test('costToMax equals the sum of the remaining levels', () => {
-  const m = meta(0, { tithe: 2 });
-  assert.equal(costToMax(m, 'tithe'), 290 + 639 + 1406);
-  assert.equal(costToMax(meta(0, { tithe: 5 }), 'tithe'), 0);
+test('an endless line has no total: costToMax is Infinity, honestly', () => {
+  // The right answer rather than a missing feature — there is no "max" to save
+  // up for, which is the whole point. A one-off still totals normally.
+  assert.equal(costToMax(meta(0), 'treasury'), Infinity);
+  assert.equal(costToMax(meta(0, { treasury: 9 }), 'treasury'), Infinity);
+  assert.equal(costToMax(meta(0), 'tactician'), 450);
+  assert.equal(costToMax(meta(0, { tactician: 1 }), 'tactician'), 0);
 });
 
 // --- purchase --------------------------------------------------------------
 
 test('purchase is atomic: exact cost deducted, level raised, nothing else', () => {
   const m = meta(200);
-  const r = buy(m, 'tithe');
-  assert.deepEqual({ ok: r.ok, cost: r.cost, level: r.level }, { ok: true, cost: 60, level: 1 });
-  assert.equal(m.crowns, 140);
-  assert.equal(levelOf(m, 'tithe'), 1);
-  assert.equal(m.stats.crownsSpent, 60);
+  const r = buy(m, 'treasury');
+  assert.deepEqual({ ok: r.ok, cost: r.cost, level: r.level }, { ok: true, cost: 45, level: 1 });
+  assert.equal(m.crowns, 155);
+  assert.equal(levelOf(m, 'treasury'), 1);
+  assert.equal(m.stats.crownsSpent, 45);
 });
 
 test('cannot buy at cost - 0.001, and nothing is mutated by the refusal', () => {
-  const m = meta(60 - 0.001);
-  const r = buy(m, 'tithe');
+  const m = meta(45 - 0.001);
+  const r = buy(m, 'treasury');
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'insufficient');
-  assert.equal(m.crowns, 60 - 0.001, 'crowns untouched');
-  assert.equal(levelOf(m, 'tithe'), 0, 'level untouched');
+  assert.equal(m.crowns, 45 - 0.001, 'crowns untouched');
+  assert.equal(levelOf(m, 'treasury'), 0, 'level untouched');
   assert.equal(m.stats.crownsSpent, 0);
 });
 
@@ -120,16 +150,38 @@ test('crowns can never go negative, however many purchases are attempted', () =>
   }
 });
 
-test('buying to max then once more is a no-op', () => {
+test('buying a one-off to max then once more is a no-op', () => {
   const m = meta(1e9);
-  for (let i = 0; i < 5; i++) assert.equal(buy(m, 'tithe').ok, true);
+  assert.equal(buy(m, 'tactician').ok, true);
   const before = m.crowns;
-  const r = buy(m, 'tithe');
+  const r = buy(m, 'tactician');
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'maxed');
   assert.equal(m.crowns, before);
-  assert.equal(levelOf(m, 'tithe'), 5);
-  assert.equal(nextCost(m, 'tithe'), Infinity);
+  assert.equal(levelOf(m, 'tactician'), 1);
+  assert.equal(nextCost(m, 'tactician'), Infinity);
+});
+
+test('an endless line keeps taking money, and the price keeps climbing', () => {
+  // The property the six lines exist for: what stops you is the curve, not a
+  // ceiling. Ten times the idling buys a few more levels, not ten times as many.
+  const m = meta(1e9);
+  let last = 0;
+  let bought = 0;
+  while (buy(m, 'treasury').ok) {
+    const c = costAtLevel('treasury', levelOf(m, 'treasury') - 1);
+    assert.ok(c > last, 'each level cost more than the one before it');
+    last = c;
+    bought++;
+  }
+  assert.ok(bought > 25, `a billion crowns should buy well past a cap (${bought} levels)`);
+  assert.ok(m.crowns >= 0);
+  // Logarithmic, not linear: a hundred times the money is nowhere near a
+  // hundred times the levels.
+  const rich = meta(1e11);
+  let more = 0;
+  while (buy(rich, 'treasury').ok) more++;
+  assert.ok(more < bought * 2, `${more} levels for 100x the crowns is not a curve`);
 });
 
 test('an unknown upgrade id is refused, not thrown', () => {
@@ -143,8 +195,8 @@ test('float crowns from idle accrual never round a purchase into existence', () 
   const m = meta(0);
   for (let i = 0; i < 600; i++) m.crowns += 0.1; // 59.999999999999→ish
   assert.ok(m.crowns < 60 || m.crowns >= 60);
-  const affordable = m.crowns >= 60;
-  assert.equal(buy(m, 'tithe').ok, affordable);
+  const affordable = m.crowns >= 45;
+  assert.equal(buy(m, 'treasury').ok, affordable);
   assert.ok(m.crowns >= 0);
 });
 
@@ -152,13 +204,23 @@ test('float crowns from idle accrual never round a purchase into existence', () 
 
 test('effects land in the right buckets and scale linearly with level', () => {
   const fx = upgradeEffects(meta(0, {
-    tithe: 3, veterancy: 2, warChest: 2, standingArmy: 4, biggerCamp: 3,
+    treasury: 3, arms: 2, warChest: 2, standingArmy: 4, drill: 3,
   }));
-  assert.ok(Math.abs(fx.add.income - 0.45) < 1e-12);
-  assert.ok(Math.abs(fx.add.atk - 0.16) < 1e-12);
-  assert.equal(fx.flat.startGold, 300);
-  assert.equal(fx.flat.expedition, 16);
-  assert.equal(fx.flat.garrisonCap, 75);
+  assert.ok(Math.abs(fx.add.income - 0.36) < 1e-12, 'treasury 3 x 0.12');
+  assert.ok(Math.abs(fx.add.atk - 0.12) < 1e-12, 'arms 2 x 0.06');
+  assert.ok(Math.abs(fx.add.def - 0.12) < 1e-12, 'the same line moves both');
+  assert.equal(fx.flat.startGold, 240, 'warChest 2 x 120');
+  assert.equal(fx.flat.expedition, 20, 'standingArmy 4 x 5');
+  assert.equal(fx.flat.garrisonCap, 36, 'drill 3 x 12');
+  // The one multiplicative bucket: compounding, not summed.
+  assert.ok(Math.abs(fx.mult.trainCost - 0.96 ** 3) < 1e-12);
+});
+
+test('one line can move several channels at once, which is what made it one line', () => {
+  const fx = upgradeEffects(meta(0, { warChest: 1 }));
+  assert.equal(fx.flat.startGold, 120);
+  assert.ok(Math.abs(fx.add.goldRate - 0.08) < 1e-12);
+  assert.ok(Math.abs(fx.add.farmYield - 0.10) < 1e-12);
 });
 
 test('militia and spearmen are free; everything else needs an unlock', () => {
@@ -169,23 +231,27 @@ test('militia and spearmen are free; everything else needs an unlock', () => {
   );
 });
 
-test('utility upgrades set feature flags', () => {
-  assert.equal(hasFeature(meta(0), 'exactPreview'), false);
-  assert.equal(hasFeature(meta(0, { fieldManual: 1 }), 'exactPreview'), true);
+test('the one surviving feature flag is set by the one upgrade that sells it', () => {
+  assert.equal(hasFeature(meta(0), 'doubleSpeed'), false);
   assert.equal(hasFeature(meta(0, { tactician: 1 }), 'doubleSpeed'), true);
+  // The three that were sold and read by nobody are gone entirely.
+  assert.equal(hasFeature(meta(0, { fieldManual: 1 }), 'exactPreview'), false);
+  assert.equal(hasFeature(meta(0, { scoutReport: 1 }), 'scoutReport'), false);
 });
 
 test('shopListing reports affordability without mutating anything', () => {
   const m = meta(150);
   const before = JSON.stringify(m);
   const listing = shopListing(m);
-  const economy = listing.find((g) => g.id === 'economy');
-  const tithe = economy.items.find((i) => i.id === 'tithe');
-  assert.equal(tithe.cost, 60);
-  assert.equal(tithe.affordable, true);
-  const tac = listing.find((g) => g.id === 'utility').items.find((i) => i.id === 'tactician');
+  const empire = listing.find((g) => g.id === 'empire');
+  const treasury = empire.items.find((i) => i.id === 'treasury');
+  assert.equal(treasury.cost, 45);
+  assert.equal(treasury.affordable, true);
+  assert.equal(treasury.endless, true, 'the shop needs to know not to draw a denominator');
+  const tac = listing.find((g) => g.id === 'unlocks').items.find((i) => i.id === 'tactician');
   assert.equal(tac.cost, 450);
   assert.equal(tac.affordable, false);
+  assert.equal(tac.endless, false);
   assert.equal(JSON.stringify(m), before);
 });
 

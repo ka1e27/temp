@@ -38,14 +38,17 @@ test('unconquered regions pay nothing no matter their status', () => {
   assert.equal(incomePerSec(s), 0);
 });
 
-test('Tithe levels are additive, not compounding', () => {
-  const one = incomePerSec(world(['riverfen'], { tithe: 1 }));
-  const two = incomePerSec(world(['riverfen'], { tithe: 2 }));
-  const five = incomePerSec(world(['riverfen'], { tithe: 5 }));
-  assert.equal(one, 1.15);
-  assert.ok(Math.abs(two - 1.30) < 1e-12, `+15% twice is +30%, got ${two}`);
-  assert.ok(Math.abs(five - 1.75) < 1e-12);
-  assert.notEqual(two, 1.15 * 1.15); // NOT compounding
+test('Treasury levels are additive, not compounding', () => {
+  // The line has no cap, so this is also what stops it running away: additive
+  // levels against an exponential price means power grows with the LOGARITHM of
+  // crowns spent. Compounding here would make a patient player unbounded.
+  const one = incomePerSec(world(['riverfen'], { treasury: 1 }));
+  const two = incomePerSec(world(['riverfen'], { treasury: 2 }));
+  const ten = incomePerSec(world(['riverfen'], { treasury: 10 }));
+  assert.ok(Math.abs(one - 1.12) < 1e-12);
+  assert.ok(Math.abs(two - 1.24) < 1e-12, `+12% twice is +24%, got ${two}`);
+  assert.ok(Math.abs(ten - 2.20) < 1e-12);
+  assert.notEqual(two, 1.12 * 1.12); // NOT compounding
 });
 
 test('recalcIncome caches onto meta.incomePerSec', () => {
@@ -76,12 +79,13 @@ test('tick accrues and resynchronises lastSeenAt to wall clock', () => {
 
 // --- offline ---------------------------------------------------------------
 
-test('offline cap is 8h base and 24h with Granary maxed', () => {
+test('offline cap is 8h base, +2h a Treasury level, and never past 24h', () => {
   assert.equal(offlineCapMs(world([]).meta), OFFLINE.baseCapMs);
-  assert.equal(offlineCapMs(world([], { granary: 1 }).meta), 12 * HOUR);
-  assert.equal(offlineCapMs(world([], { granary: 4 }).meta), 24 * HOUR);
-  // Never exceeds the design maximum even if content adds levels later.
-  assert.equal(offlineCapMs(world([], { granary: 99 }).meta), OFFLINE.hardMaxCapMs);
+  assert.equal(offlineCapMs(world([], { treasury: 1 }).meta), 10 * HOUR);
+  assert.equal(offlineCapMs(world([], { treasury: 8 }).meta), 24 * HOUR);
+  // Treasury is ENDLESS, so this ceiling is the only thing bounding it — a
+  // player who idles for a month must not be able to bank a month.
+  assert.equal(offlineCapMs(world([], { treasury: 99 }).meta), OFFLINE.hardMaxCapMs);
 });
 
 test('offline accrual under the cap is exactly rate x elapsed', () => {
@@ -105,11 +109,14 @@ test('a 30-day gap credits exactly the cap, not 30 days', () => {
   assert.ok(Number.isFinite(s.meta.crowns) && s.meta.crowns === 8 * 3600);
 });
 
-test('a 30-day gap with Granary maxed credits 24h', () => {
-  const s = world(['riverfen'], { granary: 4 }, 0);
+test('a 30-day gap with the cap fully extended credits 24h', () => {
+  // Treasury extends the cap AND raises the rate, so the payout is checked
+  // against the rate this player actually has rather than a bare 1.0/s.
+  const s = world(['riverfen'], { treasury: 8 }, 0);
+  const rate = incomePerSec(s);
   const r = applyOfflineProgress(s, 30 * DAY);
   assert.equal(r.creditedMs, 24 * HOUR);
-  assert.equal(r.crowns, 24 * 3600);
+  assert.ok(Math.abs(r.crowns - rate * 24 * 3600) < 1e-6);
 });
 
 test('a backwards clock grants nothing and goes nowhere near negative', () => {
@@ -153,11 +160,12 @@ test('zero income still resyncs the anchor', () => {
   assert.equal(s.lastSeenAt, 3 * DAY);
 });
 
-test('an explicit capMs override wins over the Granary cap', () => {
-  const s = world(['riverfen'], { granary: 4 }, 0);
+test('an explicit capMs override wins over the Treasury cap', () => {
+  const s = world(['riverfen'], { treasury: 8 }, 0);
+  const rate = incomePerSec(s);
   const r = applyOfflineProgress(s, 10 * DAY, 60_000);
   assert.equal(r.creditedMs, 60_000);
-  assert.equal(r.crowns, 60);
+  assert.ok(Math.abs(r.crowns - rate * 60) < 1e-9);
 });
 
 test('pacing helpers: timeToAfford and projectCrowns agree', () => {

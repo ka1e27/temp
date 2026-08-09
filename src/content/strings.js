@@ -83,10 +83,9 @@ export const UNITS_UI = Object.freeze({
   marshal: Object.freeze({
     name: 'Marshal',
     role: 'Commander',
-    desc: 'One per site. Every troop standing with it fights 20% harder and '
-      + 'the stronghold it sits in trains 30% faster. Eight slots — the price '
-      + 'of eight militia — so it pays for itself in a big army, not a small '
-      + 'one.',
+    desc: 'One per site. Every troop standing with it fights 25% harder and '
+      + 'the stronghold it sits in trains 40% faster. One rides free with '
+      + 'every expedition once unlocked; commission more in battle for gold.',
   }),
 });
 

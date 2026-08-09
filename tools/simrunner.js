@@ -31,6 +31,23 @@ const regionIds = args.region ? String(args.region).split(',')
  */
 const conqueredBefore = (id) => REGION_IDS.slice(0, REGIONS.findIndex((r) => r.id === id));
 
+/**
+ * The win-rate band each TIER is aiming at, as [floor, ceiling] percentages.
+ *
+ * This was a single global floor of 55%, which stopped being usable the moment
+ * the campaign was meant to end in a genuine wall: an endgame region designed to
+ * take two or three attempts reads as TOO HARD against a number chosen when
+ * every region was supposed to be a probable win.
+ *
+ * A CEILING matters as much as a floor, and there never was one. Most of this
+ * project's real mis-tunes were regions that were too EASY — a walkover reports
+ * "ok" against a floor and looks healthy right up until someone plays it.
+ *
+ * You are raiding regions the enemy owns outright, so the campaign descends:
+ * the opening teaches, the endgame is meant to cost you attempts.
+ */
+const WIN_BAND = [[78, 92], [66, 84], [50, 72], [34, 56]];
+
 console.log(`\n  region        n   win%   median   target    verdict`);
 console.log(`  ${'-'.repeat(58)}`);
 
@@ -56,13 +73,14 @@ for (const id of regionIds) {
   const winPct = Math.round((wins.length / runs.length) * 100);
   const target = region.targetLengthMin;
 
-  // A region is healthy when a competent player usually wins, in roughly the
-  // advertised time. Too fast is as wrong as too slow.
+  // A region is healthy when it wins about as often as its TIER intends, in
+  // roughly the advertised time. Too fast is as wrong as too slow.
   const lengthOk = median >= target * 0.5 && median <= target * 1.6;
-  const winOk = winPct >= 55;
-  const verdict = winOk && lengthOk ? 'ok'
-    : !winOk ? 'TOO HARD'
-      : median > target * 1.6 ? 'TOO SLOW' : 'TOO FAST';
+  const [lo, hi] = WIN_BAND[region.tier - 1];
+  const verdict = median > target * 1.6 ? 'TOO SLOW'
+    : winPct < lo ? 'TOO HARD'
+      : winPct > hi ? 'TOO EASY'
+        : lengthOk ? 'ok' : 'TOO FAST';
   if (verdict !== 'ok') anyBad = true;
 
   console.log(`  ${id.padEnd(12)} ${String(N).padStart(2)}  ${String(winPct).padStart(4)}%`

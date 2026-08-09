@@ -10,8 +10,10 @@
 // and `crowns` can never go negative — including at cost - 0.001, which a
 // float-accumulating idle income WILL produce.
 
-import { UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS, STARTING_UNITS, OFFLINE, upgradeCost }
-  from '../content/upgrades.data.js';
+import {
+  UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS, STARTING_UNITS, OFFLINE, SAFE_MAX_LEVEL,
+  upgradeCost,
+} from '../content/upgrades.data.js';
 import { META_EVENTS, emit } from './events.js';
 
 export { UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS };
@@ -21,12 +23,25 @@ export function levelOf(meta, id) {
   return meta?.upgrades?.[id] ?? 0;
 }
 
+/**
+ * Is this line finished?
+ *
+ * For a one-off purchase that is `maxLevel`. For an ENDLESS line it is the
+ * floating-point ceiling instead (content/upgrades.data.js `SAFE_MAX_LEVEL`):
+ * past it a price is no longer an exact integer, and a shop button reading
+ * "Infinity crowns" would be a bug rather than a challenge.
+ */
+export const isMaxed = (u, level) => level >= Math.min(u.maxLevel, SAFE_MAX_LEVEL);
+
+/** Does this line have no design cap? True for the six empire lines. */
+export const isEndless = (u) => !Number.isFinite(u?.maxLevel);
+
 /** Cost of the NEXT level, or Infinity when maxed. Always an integer. */
 export function nextCost(meta, id) {
   const u = UPGRADE_BY_ID[id];
   if (!u) return Infinity;
   const level = levelOf(meta, id);
-  if (level >= u.maxLevel) return Infinity;
+  if (isMaxed(u, level)) return Infinity;
   return upgradeCost(u, level);
 }
 
@@ -34,14 +49,21 @@ export function nextCost(meta, id) {
  *  for the shop tooltip's "total to max" line. */
 export function costAtLevel(id, level) {
   const u = UPGRADE_BY_ID[id];
-  if (!u || level < 0 || level >= u.maxLevel) return Infinity;
+  if (!u || level < 0 || isMaxed(u, level)) return Infinity;
   return upgradeCost(u, level);
 }
 
-/** Total crowns to take an upgrade from its current level to max. */
+/**
+ * Total crowns to take an upgrade from its current level to max.
+ *
+ * `Infinity` for an endless line, and that is the honest answer rather than a
+ * missing feature: there is no "max" to save up for, which is the whole point of
+ * the six lines. Callers that want a next step want `nextCost`.
+ */
 export function costToMax(meta, id) {
   const u = UPGRADE_BY_ID[id];
   if (!u) return Infinity;
+  if (isEndless(u)) return Infinity;
   let total = 0;
   for (let l = levelOf(meta, id); l < u.maxLevel; l++) total += upgradeCost(u, l);
   return total;
@@ -54,7 +76,7 @@ export function canBuy(meta, id) {
   const u = UPGRADE_BY_ID[id];
   if (!u) return { ok: false, reason: 'unknown', cost: Infinity, level: 0, maxLevel: 0 };
   const level = levelOf(meta, id);
-  if (level >= u.maxLevel) {
+  if (isMaxed(u, level)) {
     return { ok: false, reason: 'maxed', cost: Infinity, level, maxLevel: u.maxLevel };
   }
   const cost = upgradeCost(u, level);
@@ -154,6 +176,8 @@ export function shopListing(meta) {
         desc: u.desc,
         level: levelOf(meta, u.id),
         maxLevel: u.maxLevel,
+        // The shop shows "Lv 7" rather than "7 / Infinity" for these.
+        endless: isEndless(u),
         cost: check.cost,
         affordable: check.ok,
         reason: check.reason,

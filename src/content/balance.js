@@ -25,8 +25,13 @@ export const UNITS = {
   rams:     { gold: 80,  trainSec: 20, batch: 1, speed: 30,  atk: 6,  def: 2,  siege: 12,
               counters: { spearmen: 2.6 }, base: 0.4,
               ground: { highland: 0.65, river: 0.75 } },
+  // banner 0.20 -> 0.25 and trainBuff 0.30 -> 0.40. He is no longer bought with
+  // expedition slots (one rides free with the unlock, see meta/composition.js
+  // `maxOf`), so his numbers no longer have to justify costing eight militia —
+  // they only have to be worth the 4,000-crown unlock and the 250 gold a second
+  // one costs to commission.
   marshal:  { gold: 180, trainSec: 40, batch: 1, speed: 60,  atk: 20, def: 14, siege: 2.0,
-              counters: {}, banner: 0.20, trainBuff: 0.30, maxPerSite: 1 },
+              counters: {}, banner: 0.25, trainBuff: 0.40, maxPerSite: 1 },
 };
 
 /**
@@ -225,7 +230,32 @@ export const BOOSTERS = {
  * and Muster Field, all of which compound with the ground you take rather than
  * replacing the need to take it.
  */
-export const EXPEDITION = { base: 19, perRegion: 12, taperAfter: 4, perRegionLate: 6 };
+/**
+ * RE-BASED SO THE EMPIRE, NOT THE HANDOUT, IS WHAT YOU LAND WITH.
+ *
+ * base 19 -> 12 and perRegion 12 -> 10. A raid is supposed to be uphill: you are
+ * attacking a region the enemy holds outright, and at 19 base slots the opening
+ * force was large enough to simply roll the first regions rather than have to
+ * build into them. What replaces it is the same thing that was always meant to
+ * carry the campaign — conquest and the shop, both of which the player earns.
+ *
+ * The shape this produces, before any upgrades:
+ *      region 1   12 slots   (was 19)
+ *      region 5   52         (was 67)
+ *      region 18  117        (was 145)
+ * The RATIO of end to start goes from 7.6x to 9.75x, which is the point: more of
+ * your landing force is something you went and got.
+ *
+ * The taper past `taperAfter` conquests is unchanged in spirit and re-cut with
+ * the rest: it exists because victory is capture-castle, so a landing force that
+ * outgrows the map ends late battles before they start.
+ *
+ * Note this pairs with a WARM-UP on the enemy (content/ai.data.js `AI.warmup`).
+ * Landing smaller against an opponent that presses from tick 0 is not a harder
+ * fight, it is a shorter one — the enemy now spends its first ninety seconds
+ * consolidating, which turns "start with less" into a game not a coin flip.
+ */
+export const EXPEDITION = { base: 12, perRegion: 10, taperAfter: 4, perRegionLate: 5 };
 
 /**
  * A rallied site forwards its garrison once it can do so and still keep this
@@ -289,10 +319,17 @@ export const MAPGEN = {
   throneGarrisonPerDevelop: 1.80,
   trainType: { camp: 'militia', castle: 'militia', stronghold: 'spearmen', farm: 'militia' },
   /** Starting garrisons before enemyMult. The player's camp is deliberately
-   *  empty: the expedition deploys into it at tick 0. */
+   *  empty: the expedition deploys into it at tick 0.
+   *
+   *  THESE ARE THE LIVE NUMBERS. `PLAYER_SITE_GARRISON` and friends in
+   *  content/regions.rules.js are only read by meta/fallbackMap.js, which the
+   *  real path never uses — a balance pass that edits those changes nothing.
+   *
+   *  Thinned along with EXPEDITION above: a foothold should be a foothold, not
+   *  a second army. The player's outposts start held rather than garrisoned. */
   garrison: {
-    player: { camp: {}, farm: { militia: 5, spearmen: 2 },
-              stronghold: { militia: 4, spearmen: 3 } },
+    player: { camp: {}, farm: { militia: 3, spearmen: 1 },
+              stronghold: { militia: 3, spearmen: 2 } },
     enemy: {
       castle: { militia: 4, spearmen: 3 },
       farm: { militia: 4 },

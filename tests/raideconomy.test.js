@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { createState } from '../src/core/store.js';
 import { CONTRACT_VERSION, hashBattleConfig } from '../src/battle/contract.js';
 import { REGIONS, REGION_IDS, REGION_BY_ID, RAID } from '../src/content/regions.data.js';
-import { UPGRADES, upgradeCost } from '../src/content/upgrades.data.js';
+import { UPGRADE_BY_ID, OFFLINE, upgradeCost } from '../src/content/upgrades.data.js';
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { generateBattleMap } from '../src/battle/mapgen.js';
 import { markConquered, refreshUnlocks, effectiveEnemyMult } from '../src/meta/world.js';
@@ -93,16 +93,17 @@ test('the payoff ratio is invariant to how big the empire has become', () => {
 });
 
 test('the lump follows the income upgrades, so the shop cannot re-open the hole', () => {
-  // Tithe and Royal Mint multiply idle income by up to 3.19x between them. A
-  // lump anchored to un-upgraded income would decay against them exactly the
-  // way the region-anchored one decayed against conquest.
+  // Treasury has no cap, so it can multiply idle income without bound. A lump
+  // anchored to un-upgraded income would decay against it exactly the way the
+  // region-anchored one decayed against conquest — and now forever, rather than
+  // only until the line maxed.
   const plain = stage(REGIONS.length, 0);
   const rich = stage(REGIONS.length, 0);
   rich.meta.crowns = 100_000;
-  for (let i = 0; i < 5; i++) assert.ok(buy(rich.meta, 'tithe', null).ok, 'could not buy Tithe');
-  assert.equal(levelOf(rich.meta, 'tithe'), 5, 'Tithe did not reach max');
+  for (let i = 0; i < 8; i++) assert.ok(buy(rich.meta, 'treasury', null).ok, 'could not buy Treasury');
+  assert.equal(levelOf(rich.meta, 'treasury'), 8);
   const grew = incomePerSec(rich.meta) / incomePerSec(plain.meta);
-  assert.ok(grew > 1.7, `Tithe should move income a lot, moved it ${grew.toFixed(2)}x`);
+  assert.ok(grew > 1.7, `Treasury should move income a lot, moved it ${grew.toFixed(2)}x`);
   assert.ok(
     Math.abs(raidLump(rich.meta, 'obsidian') / raidLump(plain.meta, 'obsidian') - grew) < 1e-9,
     'the raid lump must grow with income, not stand still while it grows',
@@ -256,7 +257,7 @@ test('the next thing to buy is always under the ~180s pacing target', () => {
   for (let n = 1; n <= REGIONS.length; n++) {
     const s = stage(n);
     const next = shopListing(s.meta).flatMap((g) => g.items)
-      .filter((i) => i.level < i.maxLevel)
+      .filter((i) => Number.isFinite(i.cost))
       .sort((a, b) => a.cost - b.cost)[0];
     assert.ok(next, `nothing left to buy at ${n} regions — the shop ran dry`);
     const wait = timeToAfford(s.meta, next.cost);
@@ -268,31 +269,29 @@ test('the next thing to buy is always under the ~180s pacing target', () => {
   }
 });
 
-test('the offline cap still buys something, and the Granary line pays for itself', () => {
+test('the offline cap still buys something, and Treasury pays for its own extension', () => {
   // "Meaningful" has to mean measurable: a capped-out absence must be worth
-  // more than the cheapest unbought line and less than the whole remaining
-  // shop, or the cap has stopped being a decision in either direction.
-  const totalShop = UPGRADES.reduce((sum, u) => {
-    let c = 0;
-    for (let l = 0; l < u.maxLevel; l++) c += upgradeCost(u, l);
-    return sum + c;
-  }, 0);
+  // more than the cheapest thing left on the board, or the cap has stopped
+  // being a decision.
   for (let n = 1; n <= REGIONS.length; n++) {
     const s = stage(n);
     const rate = incomePerSec(s.meta);
     const capped = (rate * offlineCapMs(s.meta)) / 1000;
     const cheapest = shopListing(s.meta).flatMap((g) => g.items)
-      .filter((i) => i.level < i.maxLevel).sort((a, b) => a.cost - b.cost)[0];
+      .filter((i) => Number.isFinite(i.cost)).sort((a, b) => a.cost - b.cost)[0];
     assert.ok(capped > cheapest.cost,
       `a full offline claim at ${n} regions cannot buy even ${cheapest.id}`);
-    // Granary: every level must return its own cost within a single capped
-    // absence at the stage it becomes affordable, or it is a trap purchase.
-    const level = levelOf(s.meta, 'granary');
-    if (level > 0) {
-      const perLevel = (rate * 4 * 3600);
-      assert.ok(perLevel > upgradeCost({ cost: { base: 120, rate: 2.0 } }, level - 1),
-        `Granary level ${level} costs more than the 4h it grants is worth at ${n} regions`);
+
+    // Treasury's offline half: every level must return its own cost within a
+    // single capped absence at the stage it becomes affordable, or it is a trap
+    // purchase. It stops granting hours at the 24h ceiling, so only levels that
+    // actually bought time are checked.
+    const level = levelOf(s.meta, 'treasury');
+    const granted = Math.min(level, (OFFLINE.hardMaxCapMs - OFFLINE.baseCapMs) / (2 * 3600 * 1000));
+    if (granted > 0) {
+      const perLevel = rate * 2 * 3600;
+      assert.ok(perLevel > upgradeCost(UPGRADE_BY_ID.treasury, granted - 1),
+        `Treasury level ${granted} costs more than the 2h it grants is worth at ${n} regions`);
     }
   }
-  assert.ok(totalShop > 0);
 });

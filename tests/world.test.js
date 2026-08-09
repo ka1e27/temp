@@ -115,11 +115,11 @@ test('map size, site count and battle length scale together across tiers', () =>
 // 60-80% with zero losses. Change them only with fresh simrunner output.
 test('the vertical slice matches the tuned balance table', () => {
   const table = [
-    ['riverfen', 1, 1.00, 11, 9, 5, 3, 3, 1.0, 8.0],
-    ['ashford', 1, 1.15, 12, 9, 6, 3, 3, 1.2, 10.0],
-    ['ironwood', 1, 1.30, 13, 10, 7, 3, 4, 1.5, 12.0],
-    ['saltmere', 1, 1.45, 13, 10, 8, 4, 4, 1.8, 13.0],
-    ['kaldan', 2, 1.85, 15, 11, 9, 4, 5, 4.0, 14.0],
+    ['riverfen', 1, 1.27, 11, 9, 5, 3, 3, 1.0, 8.0],
+    ['ashford', 1, 1.91, 12, 9, 6, 3, 3, 1.2, 10.0],
+    ['ironwood', 1, 2.26, 13, 10, 7, 3, 4, 1.5, 12.0],
+    ['saltmere', 1, 2.74, 13, 10, 8, 4, 4, 1.8, 13.0],
+    ['kaldan', 2, 2.75, 15, 11, 9, 4, 5, 4.0, 14.0],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;
@@ -205,8 +205,12 @@ test('re-winning a conquered region pays a lump and never permanent income twice
   assert.equal(summary.incomeAdded, 0);
   assert.equal(s.meta.incomePerSec, incomeAfterConquest, 'raids never add permanent income');
   // The lump is EMPIRE income x lumpSeconds x the difficulty actually faced.
-  // Riverfen alone: 1.0/s, one clear on the board, so enemyMult 1.0 x 1.15.
-  assert.equal(summary.crowns, 1.0 * RAID.lumpSeconds * 1.15);
+  // Riverfen alone pays 1.0/s, and one clear is on the board, so the dial is
+  // its own enemyMult x 1.15. Read from content rather than written down: this
+  // test is about the RELATIONSHIP, and hardcoding the dial made it fail every
+  // balance pass for no reason.
+  const dial = REGION_BY_ID.riverfen.enemyMult * (1 + RAID.harderPerClear);
+  assert.ok(Math.abs(summary.crowns - 1.0 * RAID.lumpSeconds * dial) < 1e-9);
   assert.equal(s.meta.regions.riverfen.clears, 2);
   assert.equal(canRaid(s.meta, 'riverfen', RAID.cooldownMs), false, 'cooldown restarts');
   assert.equal(canRaid(s.meta, 'riverfen', RAID.cooldownMs * 2), true);
@@ -221,11 +225,11 @@ test('each clear makes a region 15% harder, and pays exactly 15% more for it', (
   assert.equal(previewReward(s, 'riverfen').kind, 'raid');
   // Riverfen alone pays 1.0/s, so the lump is lumpSeconds x the difficulty dial.
   const one = previewReward(s, 'riverfen').crowns;
-  assert.ok(Math.abs(one - 1.0 * RAID.lumpSeconds * 1.15) < 1e-9);
+  assert.ok(Math.abs(one - 1.0 * RAID.lumpSeconds * base * 1.15) < 1e-9);
   s.meta.regions.riverfen.clears = 2;
   assert.ok(Math.abs(effectiveEnemyMult(s.meta, 'riverfen') - base * 1.15 ** 2) < 1e-12);
   const two = previewReward(s, 'riverfen').crowns;
-  assert.ok(Math.abs(two - 1.0 * RAID.lumpSeconds * 1.15 ** 2) < 1e-9);
+  assert.ok(Math.abs(two - 1.0 * RAID.lumpSeconds * base * 1.15 ** 2) < 1e-9);
   // The point of the pass: difficulty and reward move by the SAME factor, so
   // the second clear is not worse value than the first. The old table paid
   // 1.10 against 1.15 and lost 4.3% of its value on every single clear.

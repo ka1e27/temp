@@ -42,12 +42,22 @@ export const CONTRACT_VERSION = 5;
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
 
-/** Shop unlocks that have to reach the battle layer or its HUD. */
+/**
+ * Shop unlocks that have to reach the battle layer or its HUD.
+ *
+ * There used to be four, and three of them were fiction. `hasMod` is called in
+ * exactly one place in the whole of `src/` — screens/battle-speed.js, for
+ * `doubleSpeed` — so Field Manual, Scout Report and Standing Orders crossed this
+ * seam, were validated by `assertBattleConfig`, and were then read by nobody.
+ * Worse, Field Manual charged 150 crowns for exact preview numbers that
+ * screens/battle-preview.js already shows to everyone unconditionally.
+ *
+ * tests/seam.test.js only ever guarded the SOLD -> DECLARED direction, which is
+ * how three inert features shipped green. The list is now the features that
+ * actually do something, and the test guards both directions.
+ */
 export const FEATURE_IDS = [
-  'exactPreview',   // Field Manual  — preview shows exact survivor counts
-  'scoutReport',    // Scout Report  — enemy composition visible before entering
-  'doubleSpeed',    // Tactician     — unlocks 4x battle speed
-  'standingOrders', // Standing Orders — captured sites auto-reinforce the front
+  'doubleSpeed',    // Tactician — battle speeds past 2x
 ];
 
 /** @typedef {'farm'|'stronghold'|'camp'|'castle'} SiteKind */

@@ -103,17 +103,31 @@
  * It also, finally, makes duskfell's "the enemy counter-trains here for the
  * first time" less of a lie: at tier 3 only a fifth of the walls answer you.
  */
+/**
+ * `aggression` IS GONE, and it never did anything.
+ *
+ * It was a per-tier multiplier applied at exactly one place — battle/ai.js, on a
+ * candidate score that is only ever SORTED. There is no score threshold anywhere
+ * in the file, so multiplying every candidate by 0.60 or by 1.20 cannot change
+ * the ordering, cannot change how many attacks launch, and cannot change which
+ * one goes first. The 0.60 / 0.75 / 1.00 / 1.20 ladder bought precisely nothing,
+ * and it read like the main difficulty dial.
+ *
+ * Deleting it changes no behaviour by construction. What actually varies the
+ * enemy's appetite is `commitRatio`, `safetyMargin` and `concurrent` — and, from
+ * this build, how long the battle has been running (see `AI.warmup`).
+ */
 export const AI_TIERS = [
-  { reactionTicks: 45, aggression: 0.60, commitRatio: 0.45, safetyMargin: 1.60,
+  { reactionTicks: 45, commitRatio: 0.45, safetyMargin: 1.60,
     economyMult: 0.2746, concurrent: 1, retreatDiscipline: 0.10, counterShare: 0,
     ramAppetite: 0.1, stagingRatio: 0, stagingKeep: 1.0 },
-  { reactionTicks: 32, aggression: 0.75, commitRatio: 0.50, safetyMargin: 1.50,
+  { reactionTicks: 32, commitRatio: 0.50, safetyMargin: 1.50,
     economyMult: 0.5300, concurrent: 1, retreatDiscipline: 0.35, counterShare: 0,
     ramAppetite: 0.4, stagingRatio: 0.70, stagingKeep: 0.35 },
-  { reactionTicks: 26, aggression: 1.00, commitRatio: 0.70, safetyMargin: 1.25,
+  { reactionTicks: 26, commitRatio: 0.70, safetyMargin: 1.25,
     economyMult: 0.5800, concurrent: 2, retreatDiscipline: 0.65, counterShare: 0.20,
     ramAppetite: 0.8, stagingRatio: 0.70, stagingKeep: 0.05 },
-  { reactionTicks: 19, aggression: 1.20, commitRatio: 0.80, safetyMargin: 1.15,
+  { reactionTicks: 19, commitRatio: 0.80, safetyMargin: 1.15,
     economyMult: 0.6600, concurrent: 3, retreatDiscipline: 0.90, counterShare: 0.40,
     ramAppetite: 1.0, stagingRatio: 0.80, stagingKeep: 0.05 },
 ];
@@ -138,6 +152,37 @@ export const AI = {
   // because it is a difficulty ladder rather than a constant of the engine.
   stagingCapMult: 2,        // how far over a garrison cap the AI will mass to strike
   thinkJitter: 0.2,
+
+  /**
+   * THE OPENING IS QUIETER THAN THE MIDDLE.
+   *
+   * You are raiding a region the enemy already owns outright, and you land with
+   * a fraction of what it has. Before this, the AI was exactly as aggressive on
+   * tick 0 as at minute ten — it thought on the very first tick and committed
+   * immediately — so the smaller landing force this build ships would simply be
+   * met at the beach and rolled over. Nothing about that is an interesting
+   * fight; it is a coin flip decided before either side has an economy.
+   *
+   * So the enemy spends the first `rampSec` consolidating rather than pressing:
+   * a higher `safetyMargin` (it wants a bigger edge before it will commit), a
+   * lower `commit` (it sends less when it does) and one fewer concurrent attack.
+   * Each eases linearly to the tier's real value, and every one of them is a
+   * knob that PROVABLY bites, unlike the `aggression` this replaces.
+   *
+   * `reactionTicks` is deliberately NOT ramped: tests/ai.test.js pins the think
+   * jitter as a fixed band off it, and a moving think interval would make the
+   * AI's cadence — not its judgement — the thing that changes.
+   *
+   * This is a difficulty knob AND a pacing one. It buys the player the first
+   * ninety seconds to take neutral ground and get farms running, which is the
+   * opening the whole "land small, grow into it" shape needs in order to exist.
+   */
+  warmup: {
+    rampSec: 90,        // fully aggressive after this long
+    safetyMult: 1.45,   // x this on safetyMargin at tick 0, easing to x1
+    commitMult: 0.55,   // x this on commitRatio at tick 0, easing to x1
+    holdConcurrent: 1,  // this many fewer simultaneous attacks at tick 0
+  },
 
   // --- surplus: press when there is army going spare ----------------------
   // "More troops than it needs to hold what it has" is measurable: reserve is

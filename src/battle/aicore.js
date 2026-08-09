@@ -5,6 +5,7 @@
 // them without either file growing past the budget. Nothing here decides
 // anything — every function is a measurement or an order-emitter.
 // PURE.
+import { TICK_HZ } from '../core/loop.js';
 import { AI_TIERS, AI, RALLY_MIN_GARRISON } from '../content/balance.js';
 import {
   power, total, emptyComp, addComp, scaleComp, breachSeconds, siegeDps, siteRegen,
@@ -21,6 +22,38 @@ export const STEPS = 20; // fraction search resolution: 5% increments
 export const knobsFor = (state) => AI_TIERS[
   Math.max(0, Math.min(AI_TIERS.length - 1, (state.rules?.aiTier ?? 1) - 1))
 ];
+
+/**
+ * How far through its warm-up the enemy is: 0 on tick 0, 1 once `rampSec` has
+ * elapsed. PURE, and a function of the TICK — so it is part of the simulation
+ * and replays identically, unlike anything read off a clock.
+ */
+export function warmupProgress(state) {
+  const ramp = (AI.warmup?.rampSec ?? 0) * TICK_HZ;
+  if (!(ramp > 0)) return 1;
+  return Math.min(1, Math.max(0, (state.tick ?? 0) / ramp));
+}
+
+/**
+ * The tier's knobs, softened by how early in the battle it is.
+ *
+ * Interpolates each multiplier from its opening value toward 1 as the warm-up
+ * completes, so there is no step change anywhere — an enemy that suddenly
+ * doubled its appetite at second 90 would read as a scripted event rather than
+ * as a war getting going.
+ */
+export function rampFor(state, knobs) {
+  const t = warmupProgress(state);
+  if (t >= 1) return knobs;
+  const w = AI.warmup;
+  const ease = (mult) => mult + (1 - mult) * t;
+  return {
+    ...knobs,
+    safetyMargin: knobs.safetyMargin * ease(w.safetyMult),
+    commitRatio: knobs.commitRatio * ease(w.commitMult),
+    concurrent: Math.max(1, knobs.concurrent - Math.round(w.holdConcurrent * (1 - t))),
+  };
+}
 
 export const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 

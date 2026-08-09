@@ -22,7 +22,7 @@ import { groundOf } from './terrain.js';
 import { attritionMods } from './economy.js';
 import { garrisonCap } from './training.js';
 import {
-  ME, FOE, STEPS, knobsFor, byId, defenceOf, attackPower, sourceFrom, poolOf,
+  ME, FOE, STEPS, knobsFor, rampFor, byId, defenceOf, attackPower, sourceFrom, poolOf,
   minFraction, launch, adjacentSources, threatOn, frontDistance,
 } from './aicore.js';
 import { homeGuard, pressure, commitFor, stagingFor, concurrentFor } from './aihome.js';
@@ -117,7 +117,7 @@ function attack(state, knobs, out, busy, taken, rng) {
     const held = site.adj.filter((id) => siteById(state, id)?.owner === ME).length;
     const value = (AI.siteValue[site.kind] ?? 100) * (1 + 0.25 * (site.level - 1))
       * (1 + AI.consolidationBonus * held);
-    const score = (value * 100) / need * knobs.aggression * rng.jitter(0.1);
+    const score = ((value * 100) / need) * rng.jitter(0.1);
     cands.push({ site, sources, need, score });
   }
 
@@ -357,7 +357,10 @@ export function think(state) {
   if (state.status !== 'running') return;
   if (state.tick < (state.ai.nextThinkTick ?? 0)) return;
 
-  const tier = knobsFor(state);
+  // The tier's numbers, softened while the enemy is still getting going. You
+  // are raiding country it already owns; the first ninety seconds are the only
+  // window a small landing force has to become an army.
+  const tier = rampFor(state, knobsFor(state));
   const rng = createRng(state.rngState >>> 0);
   const out = [];
   const busy = new Set();   // sources committed this think — local, never stored

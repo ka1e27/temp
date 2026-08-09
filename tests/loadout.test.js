@@ -120,19 +120,28 @@ test('for one fixed budget, four different units are the right answer', () => {
   assert.equal(best((s) => siegeDps(s)), 'rams', 'rams break walls');
 });
 
-test('a marshal pays for its eight slots in a big army and not a small one', () => {
-  // The marshal is a +20% banner over the WHOLE force, so its worth scales with
-  // what is standing next to it. That is the decision; a fixed price would make
-  // it either an auto-include or a trap.
-  const withMarshal = (budget) => {
-    const c = pureStack('militia', budget - UNIT_SLOTS.marshal);
-    return { ...c, marshal: 1 };
-  };
+test('the marshal is free precisely because his slot price never worked', () => {
+  // The banner is a flat multiplier over the WHOLE force, so what he is worth
+  // scales with the army standing next to him — and what he COST did not. Eight
+  // slots is 42% of a region-1 budget and 7% of a late one, so the same purchase
+  // was a trap early and an auto-include late. That is not a decision, so he
+  // stopped being priced in slots at all: one rides free with the unlock, and
+  // more are commissioned for gold in battle.
   const foe = foeOf('militia');
-  const gain = (b) => power(withMarshal(b), foe) - power(pureStack('militia', b), foe);
+  const free = (b) => ({ ...pureStack('militia', b), marshal: 1 });
+  const paid = (b) => ({ ...pureStack('militia', b - UNIT_SLOTS.marshal), marshal: 1 });
 
-  assert.ok(gain(16) < 0, 'at 16 slots a marshal costs more army than it buys');
-  assert.ok(gain(40) > 0, 'at 40 slots the banner has enough troops to multiply');
+  // Free, he is strictly positive at EVERY budget — which is the whole point.
+  for (const b of [12, 16, 40, 120]) {
+    assert.ok(power(free(b), foe) > power(pureStack('militia', b), foe),
+      `a free marshal must never make an army worse (budget ${b})`);
+  }
+
+  // Paid for, his value against the troops he displaces still climbs with the
+  // budget: that slope is exactly why one fixed price could never be right.
+  const edge = (b) => power(paid(b), foe) / power(pureStack('militia', b), foe);
+  assert.ok(edge(120) > edge(40) && edge(40) > edge(16),
+    'the banner has to be worth more in a bigger army, or the slot price was fine');
 });
 
 // ===========================================================================
@@ -233,8 +242,10 @@ test('the Launch gate is what refuses an over-budget army', () => {
 
 test('a loadout survives save + load through the real persistence path', () => {
   const s = world(['riverfen'], ALL);
+  // Deliberately lopsided, so "came back intact" is distinguishable from "fell
+  // back to the default spread" at any budget.
   const chosen = carryComposition(expeditionSlots(s.meta), unlockedUnits(s.meta), {
-    militia: 4, spearmen: 3, raiders: 2, rams: 1, marshal: 1,
+    militia: 0, spearmen: 0, raiders: 5, rams: 1, marshal: 1,
   });
   s.meta.loadout = { ...chosen };
 

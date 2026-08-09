@@ -72,9 +72,9 @@ test('order matters: the fixed order differs from every plausible alternative', 
 
 test('flat upgrade bonuses join the BASE, they are never applied after a multiplier', () => {
   const p = playerMods(world([], { warChest: 2 }).meta, {});
-  assert.equal(p.startGold, 300 + 2 * 150, 'War Chest adds to base gold');
-  const q = playerMods(world([], { biggerCamp: 3 }).meta, {});
-  assert.equal(q.garrisonCapBonus, 75);
+  assert.equal(p.startGold, 300 + 2 * 120, 'War Chest adds to base gold');
+  const q = playerMods(world([], { drill: 3 }).meta, {});
+  assert.equal(q.garrisonCapBonus, 36);
 });
 
 test('the enemy difficulty dial rides the TIER bucket, AI knobs ride multiplicative', () => {
@@ -140,13 +140,15 @@ test('the expedition budget = base + perRegion x conquered + Standing Army level
   assert.equal(
     expeditionSlots(world(['riverfen', 'ashford', 'ironwood', 'saltmere'])), base + perRegion * 4,
   );
-  // Standing Army adds 4 per level on top, making it the most directly felt
-  // purchase in the shop.
-  assert.equal(expeditionSlots(world([], { standingArmy: 1 })), base + 4);
-  assert.equal(expeditionSlots(world([], { standingArmy: 6 })), base + 24);
+  // Standing Army adds 5 per level on top, making it the most directly felt
+  // purchase in the shop — and it has no cap, so this never stops being true.
+  assert.equal(expeditionSlots(world([], { standingArmy: 1 })), base + 5);
+  assert.equal(expeditionSlots(world([], { standingArmy: 6 })), base + 30);
+  assert.equal(expeditionSlots(world([], { standingArmy: 20 })), base + 100,
+    'well past where the old six-level cap used to stop it');
   assert.equal(
     expeditionSlots(world(['riverfen', 'ashford'], { standingArmy: 3 })),
-    base + perRegion * 2 + 12,
+    base + perRegion * 2 + 15,
   );
 });
 
@@ -250,7 +252,7 @@ test('the expedition really lands in the player mods and grows with the empire',
     world(['riverfen', 'ashford', 'ironwood', 'saltmere'], { standingArmy: 2 }), 'kaldan', [], null,
   );
   assert.equal(
-    compositionSlots(late.player.expedition), EXPEDITION.base + EXPEDITION.perRegion * 4 + 8,
+    compositionSlots(late.player.expedition), EXPEDITION.base + EXPEDITION.perRegion * 4 + 10,
   );
   assert.equal(total(late.enemy.expedition), 0, 'the enemy head start is land, not a free army');
 });

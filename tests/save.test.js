@@ -14,6 +14,7 @@ import {
 } from '../src/meta/save.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { buy } from '../src/meta/upgrades.js';
+import { RETIRED_UPGRADES } from '../src/content/upgrades.data.js';
 import { recalcIncome } from '../src/meta/idle.js';
 
 const V1 = JSON.parse(readFileSync(new URL('./fixtures/save.v1.json', import.meta.url), 'utf8'));
@@ -25,7 +26,7 @@ function played(now = 1_000_000) {
   refreshUnlocks(s.meta);
   markConquered(s.meta, 'ashford', { now, durationMs: 401_000 });
   refreshUnlocks(s.meta);
-  buy(s.meta, 'tithe'); buy(s.meta, 'tithe');
+  buy(s.meta, 'treasury'); buy(s.meta, 'treasury');
   s.meta.crowns = 9876.5;
   s.meta.boosters.rally = 2;
   s.meta.stats.battles = 7;
@@ -65,7 +66,7 @@ test('round-trip preserves everything that matters', () => {
   assert.equal(r.ok, true);
   assert.equal(r.state.seed, 31337);
   assert.equal(r.state.meta.crowns, 9876.5);
-  assert.equal(r.state.meta.upgrades.tithe, 2);
+  assert.equal(r.state.meta.upgrades.treasury, 2);
   assert.equal(r.state.meta.boosters.rally, 2);
   assert.equal(r.state.meta.stats.battles, 7);
   assert.equal(r.state.meta.regions.riverfen.status, 'conquered');
@@ -131,8 +132,10 @@ test('a v1 save loads through the public path and yields correct income', () => 
   assert.equal(boot.loaded, true);
   assert.equal(boot.from, 1);
   assert.equal(boot.state.meta.regions.riverfen.status, 'conquered');
-  // riverfen 1.0 + ashford 1.2 = 2.2, x (1 + 2 x 0.15) Tithe = 2.86
-  assert.ok(Math.abs(boot.state.meta.incomePerSec - 2.86) < 1e-12);
+  // riverfen 1.0 + ashford 1.2 = 2.2. The save's two Tithe levels were refunded
+  // rather than carried, so there is no income multiplier left on this player.
+  assert.ok(Math.abs(boot.state.meta.incomePerSec - 2.2) < 1e-12);
+  assert.equal(boot.state.meta.upgrades.tithe, undefined);
   assert.equal(boot.state.meta.regions.saltmere.status, 'available',
     'unlocks are recomputed on load, so new adjacency rules apply retroactively');
 });
@@ -273,7 +276,43 @@ test('a v1 export string still imports', () => {
   const r = importSave(code, { now: 0 });
   assert.equal(r.ok, true);
   assert.equal(r.from, 1);
-  assert.equal(r.state.meta.crowns, 1234.5);
+  assert.equal(r.state.meta.crowns, 1234.5 + 60 + 132, 'with the retired Tithe refunded');
+});
+
+test('a retired upgrade is refunded once, at exactly what it charged', () => {
+  // Four of the retired lines (Field Manual, Scout Report, Standing Orders,
+  // Wrecking Crew) were SOLD and did nothing at all — no consumer anywhere in
+  // the engine. The rest were folded into the six endless lines. Either way the
+  // player paid for a promise this build does not keep.
+  const owed = (id, levels) => {
+    const spec = RETIRED_UPGRADES[id];
+    let c = 0;
+    for (let l = 0; l < levels; l++) c += Math.round(spec.base * spec.rate ** l);
+    return c;
+  };
+  const state = fromPersisted({
+    saveVersion: 3,
+    meta: { crowns: 1000, upgrades: { tithe: 3, standingOrders: 1, treasury: 2 } },
+  }, { now: 0 });
+
+  assert.equal(state.meta.crowns, 1000 + owed('tithe', 3) + owed('standingOrders', 1));
+  assert.equal(state.meta.upgrades.tithe, undefined);
+  assert.equal(state.meta.upgrades.standingOrders, undefined);
+  assert.equal(state.meta.upgrades.treasury, 2, 'a live line is untouched');
+});
+
+test('the refund happens exactly once, however many times a save is reloaded', () => {
+  // It is idempotent because the key is DELETED as it is refunded: a save
+  // written after the refund has no retired ids left to find. Without that, a
+  // player who reopened the game would be paid again every time.
+  const first = fromPersisted({
+    saveVersion: 3, meta: { crowns: 0, upgrades: { tithe: 4 } },
+  }, { now: 0 });
+  const paid = first.meta.crowns;
+  assert.ok(paid > 0, 'the fixture must actually be owed something');
+
+  const again = fromPersisted(toPersisted(first), { now: 0 });
+  assert.equal(again.meta.crowns, paid, 'a second load must not pay a second time');
 });
 
 // --- autosave --------------------------------------------------------------

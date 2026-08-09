@@ -15,6 +15,7 @@
 
 import { REGIONS } from '../content/regions.data.js';
 import { UNIT_IDS } from '../content/balance.js';
+import { RETIRED_UPGRADES } from '../content/upgrades.data.js';
 
 /**
  * Version of the PERSISTED SHAPE. It lives here rather than in meta/save.js
@@ -169,6 +170,8 @@ export function fromPersisted(data, { now = 0 } = {}) {
   meta.crowns = Math.max(0, num(m.crowns, 0));
   meta.incomePerSec = Math.max(0, num(m.incomePerSec, 0));
   meta.upgrades = sanitizeLevels(m.upgrades);
+  // ...and hand back the crowns for anything that no longer exists.
+  meta.crowns += refundRetired(meta.upgrades);
   meta.boosters = sanitizeLevels(m.boosters);
   meta.loadout = sanitizeComposition(m.loadout);
   meta.stats = { ...createStats(), ...(m.stats ?? {}) };
@@ -225,6 +228,32 @@ function sanitizeSettings(raw) {
   const speed = num(raw.defaultSpeed, NaN);
   if (Number.isFinite(speed) && speed > 0) out.defaultSpeed = speed;
   return out;
+}
+
+/**
+ * Refund every level of an upgrade this build no longer sells, and delete it.
+ *
+ * The shop collapsed twenty-six capped upgrades into six endless lines. Four of
+ * the retired ones were worse than merged — Field Manual, Scout Report,
+ * Standing Orders and Wrecking Crew were SOLD and did nothing at all, having no
+ * consumer anywhere in the engine. Either way the player paid for a promise this
+ * build does not keep, so they get the crowns back at exactly what they were
+ * charged (content/upgrades.data.js `RETIRED_UPGRADES` keeps the old prices for
+ * precisely this).
+ *
+ * It happens on LOAD and it is idempotent, because the key is deleted as it is
+ * refunded: a save written after the refund has no retired ids left to find.
+ * Mutates `upgrades` and returns the crowns owed.
+ */
+function refundRetired(upgrades) {
+  let owed = 0;
+  for (const [id, spec] of Object.entries(RETIRED_UPGRADES)) {
+    const level = upgrades[id];
+    if (!(level > 0)) continue;
+    for (let l = 0; l < level; l++) owed += Math.round(spec.base * spec.rate ** l);
+    delete upgrades[id];
+  }
+  return owed;
 }
 
 function sanitizeLevels(obj) {
