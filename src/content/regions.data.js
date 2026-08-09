@@ -97,14 +97,38 @@ export const FALLBACK_MAP = Object.freeze({ blockedFrac: 0.08, degree: 3 });
  */
 const DEVELOP_CLAMP = (n) => Math.max(1, Math.min(5, Number(n) || 1));
 
+/**
+ * THE CASTLE GATE — the fraction of the region's non-castle sites the player
+ * must hold before the castle's siege can actually complete (see
+ * battle/state.js `castleSealed`, applied in battle/sim.js `siegePhase`).
+ * Below it, hp floors at 1 and the siege can run forever without capturing —
+ * the same shape as `breachSeconds() === Infinity` one level up: you cannot
+ * finish the war by beelining the capital, you have to hold the countryside.
+ *
+ * This is the SHAPE fix for the thing enemyMult, develop and map size could
+ * not touch: victory is capture-castle, so no matter how big or how developed
+ * the map got, a player who could reach the throne could always end the war
+ * the moment its siege landed, and sites off that one path were never fought
+ * over. Gating the throne on territory is what makes "bigger map" mean
+ * "longer battle" instead of "more scenery to walk past".
+ *
+ * 0 for tier 1 and kaldan: regions 1-5 are balance-frozen and rushing the
+ * castle is supposed to work early. It rises through tiers 2-4 so a tier-3/4
+ * clear genuinely requires converting real ground first, not just the shortest
+ * path to the throne. Tuned against tools/simrunner.js at n>=96 (n=240 spot
+ * check on tiers 3-4): every region stays winnable inside its hard cap.
+ */
+const GATE_CLAMP = (n) => Math.max(0, Math.min(0.85, Number(n) || 0));
+
 // id, name, tier, hex, adjacentTo, enemyMult, cols, rows, [enemy,neutral,player],
-// develop, rewardPerSec, targetLengthMin, flavour
+// develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour
 const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
-  develop, rewardPerSec, targetLengthMin, flavour) => ({
+  develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour) => ({
   id, name, tier, hex, adjacentTo, enemyMult,
   grid: { cols, rows },
   siteCounts: { enemy: siteCounts[0], neutral: siteCounts[1], player: siteCounts[2] },
   develop: DEVELOP_CLAMP(develop),
+  castleGateFrac: GATE_CLAMP(castleGateFrac),
   rewardPerSec, targetLengthMin, flavour,
   hardCapMs: Math.round(
     Math.max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
@@ -116,82 +140,100 @@ const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
 export const REGIONS = Object.freeze([
   // --- Tier 1 (4) -- the vertical slice. These five rows are balance-frozen. ---
   T('riverfen', 'Riverfen', 1, [0, 0], ['ashford', 'ironwood'],
-    1.00, 11, 9, [5, 3, 3], 1, 1.0, 8,
+    1.00, 11, 9, [5, 3, 3], 1, 0, 1.0, 8,
     'Flooded lowlands: two neutral farms sit in the open and the enemy is slow to claim them.'),
   T('ashford', 'Ashford Downs', 1, [1, 0], ['riverfen', 'ironwood', 'saltmere', 'kaldan', 'highmarch'],
-    1.15, 12, 9, [6, 3, 3], 1, 1.2, 10,
+    1.15, 12, 9, [6, 3, 3], 1, 0, 1.2, 10,
     'Open chalk downs with almost no cover — a fast raid arrives before the wall does.'),
   T('ironwood', 'Ironwood', 1, [0, 1], ['riverfen', 'ashford', 'saltmere', 'emberholt'],
-    1.30, 13, 10, [7, 3, 4], 1, 1.5, 12,
+    1.30, 13, 10, [7, 3, 4], 1, 0, 1.5, 12,
     'Dense timber and single-file passes: chokepoints turn every push into a committed one.'),
   T('saltmere', 'Saltmere', 1, [1, 1],
     ['ashford', 'ironwood', 'kaldan', 'greywater', 'thornmoor', 'emberholt'],
-    1.45, 13, 10, [8, 4, 4], 1, 1.8, 13,
+    1.45, 13, 10, [8, 4, 4], 1, 0, 1.8, 13,
     'A salt lagoon splits the field; whoever holds the causeway strongholds holds the region.'),
 
   // --- Tier 2 (5) -- the first real wall. Kaldan proves the upgrade layer matters. ---
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
-    1.85, 15, 11, [9, 4, 5], 1, 4.0, 14,
+    1.85, 15, 11, [9, 4, 5], 1, 0, 4.0, 14,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    1.98, 15, 11, [9, 4, 7], 1.35, 5.5, 15,
+    1.98, 15, 11, [9, 4, 7], 1.35, 0.15, 5.5, 15,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    2.00, 15, 11, [10, 5, 7], 1.5, 6.6, 15.5,
+    2.00, 15, 11, [10, 5, 7], 1.5, 0.20, 6.6, 15.5,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    2.02, 15, 12, [11, 5, 7], 1.62, 7.9, 16,
+    2.02, 15, 12, [11, 5, 7], 1.62, 0.25, 7.9, 16,
     'Bramble country: five neutral farms make the opening land grab the whole battle.'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    2.04, 16, 12, [11, 5, 7], 1.72, 9.5, 16.5,
+    2.04, 16, 12, [11, 5, 7], 1.72, 0.30, 9.5, 16.5,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
-  // --- Tier 3 (5) -- ~16x12, ~8 min. Sieges are the whole conversation now. ---
+  // --- Tier 3 (5) -- ~16x12, ~7-8.5 min. Sieges are the whole conversation now. ---
   //
-  // The advertised length DROPS here, from tier 2's 14-16.5 minutes, and it is
-  // the honest number rather than the one the column used to carry. Victory is
-  // capture-castle: by tier 3 the player lands with rams, a siege line and an
-  // army the size of the garrison, and a clean win takes six to nine minutes
-  // whatever else is done to the region. Measured at n=240 with the enemy dial
-  // re-curved, the country developed, the throne garrisoned, the expedition
-  // tapered and the map grown to 26 enemy sites on a 21x15 grid — none of it
-  // moved a clean win past ten minutes, because sites off the path to the
-  // throne are never fought over. These numbers now say what the regions do.
+  // The advertised length still DROPS here, from tier 2's 14-16.5 minutes, and
+  // that is measured rather than authored: the previous pass tried raising
+  // enemyMult, developing the enemy's country, garrisoning the throne, growing
+  // the map to 26 enemy sites on a 21x15 grid and tapering the expedition, and
+  // NONE of it moved a clean win past ten minutes, for a reason none of those
+  // levers touch — victory is capture-castle, and sites off the direct path to
+  // the throne were never fought over. A bigger map does not make a longer
+  // battle when the player can walk past most of it.
+  //
+  // `castleGateFrac` (see the comment above GATE_CLAMP) is the fix: the throne
+  // cannot fall below that fraction of the region's OTHER sites in play hands,
+  // so a clean win now costs real conquest of the countryside, not just the
+  // shortest road to the capital. Measured at n=240 with the gate live, every
+  // tier-3 region still resolves in the neighbourhood of 7-8.5 minutes for a
+  // scripted player who already sweeps broadly when winning — the throne
+  // itself was never the long pole, the countryside always was, and this bot
+  // already goes and gets it. What the gate buys is the GUARANTEE: a rush
+  // strategy that skips the countryside now finds the castle sealed instead of
+  // an early win, and the regions the mechanism was built to fix (blackspire,
+  // ironcrown, obsidian below) gained 1.2-2.0 real minutes at matched n.
+  // These numbers say what the regions do; see tests/world.test.js ("map size,
+  // site count and battle length scale together across tiers") for why the
+  // campaign-wide monotonic length claim is still NOT restored here.
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    2.06, 16, 12, [11, 5, 9], 1.75, 11.4, 10.5,
+    2.06, 16, 12, [11, 5, 9], 1.75, 0.55, 11.4, 7,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    2.08, 16, 12, [12, 5, 9], 1.9, 13.7, 11,
+    2.08, 16, 12, [12, 5, 9], 1.9, 0.58, 13.7, 7,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    2.10, 16, 12, [13, 5, 9], 2.05, 16.4, 11,
+    2.10, 16, 12, [13, 5, 9], 2.05, 0.60, 16.4, 7,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    2.12, 17, 12, [13, 5, 9], 2.2, 19.7, 11,
+    2.12, 17, 12, [13, 5, 9], 2.2, 0.62, 19.7, 8.5,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    2.14, 17, 12, [14, 6, 9], 2.35, 23.6, 11,
+    2.14, 17, 12, [14, 6, 9], 2.35, 0.65, 23.6, 8.5,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.'),
 
-  // --- Tier 4 (4) -- 17x13, 33-36 sites, ~6-8 min, develop 2.35-2.95.
+  // --- Tier 4 (4) -- 17x13, 33-36 sites, ~6.5-8.5 min, develop 2.35-2.95.
   // The endgame: the enemy's country is built, its throne is a capital with an
-  // army in it, and it fields rams, a marshal and three concurrent attacks. ---
+  // army in it, it fields rams, a marshal and three concurrent attacks, AND its
+  // castle is gated behind the deepest territory requirement in the campaign
+  // (0.65-0.72). A player who reaches the throne early sees it stay sealed
+  // (screens/battle-panel.js says so) until enough of the endgame map has
+  // actually changed hands. ---
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    2.16, 17, 13, [14, 6, 10], 2.35, 28.4, 11,
+    2.16, 17, 13, [14, 6, 10], 2.35, 0.65, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown'],
-    2.30, 17, 13, [15, 6, 11], 2.45, 34.0, 11,
+    2.30, 17, 13, [15, 6, 11], 2.45, 0.68, 34.0, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.'),
   T('ironcrown', 'Ironcrown', 4, [4, 0], ['vaelstrand', 'duskfell', 'blackspire', 'obsidian'],
-    2.32, 17, 13, [16, 6, 11], 2.7, 40.8, 11,
+    2.32, 17, 13, [16, 6, 11], 2.7, 0.70, 40.8, 7.5,
     'The enemy fields a Marshal. Its whole army hits 20% harder until you kill it.'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1], ['ironcrown', 'duskfell', 'thanescar'],
-    2.42, 17, 13, [17, 6, 13], 2.95, 49.0, 11,
+    2.42, 17, 13, [17, 6, 13], 2.95, 0.72, 49.0, 8.5,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. The last one.'),
 ]);
 

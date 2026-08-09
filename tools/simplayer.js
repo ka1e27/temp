@@ -13,6 +13,7 @@ import { recalcIncome, incomePerSec } from '../src/meta/idle.js';
 import { shopListing, buy } from '../src/meta/upgrades.js';
 import { breachSeconds, total, resolveField } from '../src/battle/combat.js';
 import { groundOf, siteDefMultOf } from '../src/battle/terrain.js';
+import { siteControlFraction } from '../src/battle/state.js';
 import { UNIT_IDS } from '../src/content/balance.js';
 
 /** Farms first (economy wins fights), then the war machine, then the prize. */
@@ -75,6 +76,14 @@ export function playerTurn(state) {
     for (const id of src.adj) {
       const t = state.sites.find((x) => x.id === id);
       if (!t || t.owner === 'player' || t.siege?.owner === 'player') continue;
+      // The castle gate is VISIBLE (see screens/battle-panel.js) precisely so a
+      // competent player does not commit an army to a siege that cannot
+      // finish — a sealed castle would otherwise soak up a wave every turn and
+      // starve every other front while it sits there doing nothing. A real
+      // player reads "SEALED" and goes to take the countryside instead; this
+      // bot does the same read directly off the territory fraction.
+      if (t.kind === 'castle'
+        && siteControlFraction(state, 'player') < (state.rules.castleGateFrac ?? 0)) continue;
 
       // Terrain through the sim's own functions, not a hardcoded table: the
       // game shows the player an EXACT preview, so a competent player reads the

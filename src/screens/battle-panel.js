@@ -24,7 +24,7 @@ import { duration } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
 import { createFollower } from './battle-follow.js';
 import {
-  siteIntel, goldLine, trainLine, terrainLine, stepRallyKeep, keepLabel,
+  siteIntel, goldLine, trainLine, terrainLine, gateLine, stepRallyKeep, keepLabel,
 } from './battle-econ.js';
 
 export { createWithdraw, createAlert } from './battle-alert.js';
@@ -225,7 +225,7 @@ export function createSitePanel(o) {
     set.drain(intel.net < 0);
     wrote |= set.trains(trainLine(intel));
     wrote |= set.terrain(terrainLine(intel));
-    wrote |= set.stat(statusLine(site));
+    wrote |= set.stat(statusLine(site, intel));
     // A hold-back only means anything where there is a rally to hold back from.
     wrote |= keep.show(site.owner === 'player' && site.rallyTarget ? site : null);
 
@@ -342,10 +342,11 @@ function squadById(state, id) {
   return null;
 }
 
-function statusLine(site) {
+function statusLine(site, intel) {
   if (site.upgradeTicksLeft > 0) {
     return `building · ${duration(site.upgradeTicksLeft / TICK_HZ)} left`;
   }
+  if (intel?.gate?.sealed) return `UNDER SIEGE · ${gateLine(intel)}`;
   if (site.siege) return 'UNDER SIEGE';
   if (site.shieldTicks > 0) return 'fortified';
   if (site.rallyTarget) return `rallying → ${site.rallyTarget}`;

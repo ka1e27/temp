@@ -70,16 +70,27 @@ test('map size, site count and battle length scale together across tiers', () =>
     // `--all` mode simulated a player with zero conquests, so regions 6-18 only
     // ever reported 0% TOO HARD and their advertised lengths were authored, not
     // measured. Measured now at n=96 and n=240, and with victory set to
-    // capture-castle, a tier-4 region resolves in six to nine minutes whatever
-    // else is done to it: raising enemyMult, developing the enemy's country,
-    // garrisoning the throne, growing the map to 26 enemy sites on a 21x15 grid
-    // and tapering the expedition were all tried, and none of them moved a
-    // clean win past about ten minutes, because sites off the path to the
-    // throne are simply never fought over. The numbers now say what the regions
-    // do — which is also what this file's own tier comments always said
-    // ("~9 min" for tier 3, "~10-11 min" for tier 4) before the column drifted
-    // away from them. tests/campaign.test.js asserts the stronger property that
-    // replaces this one: no region may advertise a length it cannot deliver.
+    // capture-castle, a tier-4 region resolves in roughly six-and-a-half to
+    // eight-and-a-half minutes whatever else is done to it: raising enemyMult,
+    // developing the enemy's country, garrisoning the throne, growing the map
+    // to 26 enemy sites on a 21x15 grid and tapering the expedition were all
+    // tried, and none of them moved a clean win past about ten minutes, because
+    // sites off the path to the throne were simply never fought over.
+    //
+    // `castleGateFrac` (content/regions.data.js) fixed the CAUSE — the castle
+    // cannot fall below a territory threshold, so beelining the throne no
+    // longer skips the countryside — and it measurably lengthened the regions
+    // that were shortest (blackspire, ironcrown and obsidian each gained
+    // 1.2-2.0 minutes at matched n). It did not, on its own, push the campaign
+    // median past ten minutes: a scripted player that already sweeps broadly
+    // when it wins was rarely the thing being gated, and pushing the threshold
+    // far enough to bind that player consistently cost more win rate than it
+    // was worth (n=48: ironcrown fell to 46% before the gate values here were
+    // dialled back). The numbers now say what the regions do — which is also
+    // roughly what this file's own tier comments always said ("~9 min" for
+    // tier 3, "~10-11 min" for tier 4) before the column drifted away from
+    // them. tests/campaign.test.js asserts the stronger property that replaces
+    // this one: no region may advertise a length it cannot deliver.
     if (a.tier === b.tier) {
       assert.ok(b.targetLengthMin >= a.targetLengthMin, `${b.id} got shorter than ${a.id}`);
     }

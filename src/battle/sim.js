@@ -18,6 +18,7 @@ import {
 } from './combat.js';
 import {
   createBattleState, siteById, effectiveLevel, armySize, sitesOwned, rallyKeepOf,
+  castleSealed,
 } from './state.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
@@ -95,8 +96,15 @@ function siegePhase(state) {
       // Ceiling is hpMax, or the current HP when Emergency Fortify has pushed a
       // site above it: an overheal may drain away, but repair never restores it.
       const ceiling = Math.max(site.hpMax, site.hp);
-      site.hp = Math.min(ceiling, site.hp - dps + regen);
-      if (site.hp <= 0) { capture(state, site); flipped = true; }
+      // The castle gate: below the region's territory threshold, a sealed
+      // castle's HP has a FLOOR instead of a ceiling of zero — the siege grinds
+      // but can never complete, the same shape breachSeconds() already gives an
+      // under-strength siege against a stronghold. One extra hp keeps it out of
+      // the capture check without inventing a second state field.
+      const sealed = castleSealed(state, site);
+      const floor = sealed ? 1 : 0;
+      site.hp = Math.min(ceiling, Math.max(floor, site.hp - dps + regen));
+      if (!sealed && site.hp <= 0) { capture(state, site); flipped = true; }
     } else if (site.hp < site.hpMax) {
       site.hp = Math.min(site.hpMax, site.hp + regen);
     }

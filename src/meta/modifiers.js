@@ -232,6 +232,7 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
       aiTier: region.tier,          // 1-based: index AI_TIERS with tier - 1
       isRaid,
       targetLengthMs: Math.round(region.targetLengthMin * 60 * 1000),
+      castleGateFrac: region.castleGateFrac,
     },
   };
 

@@ -179,6 +179,11 @@ export function createBattleState(config) {
       victory: config.rules.victory ?? 'capture-castle',
       hardCapTicks: Math.round(config.rules.hardCapMs / (1000 / TICK_HZ)),
       aiTier: config.rules.aiTier ?? 1,
+      // The fraction of the region's non-castle sites a faction must hold
+      // before its siege of the castle can actually complete — see
+      // `castleSealed` below and sim.js `siegePhase`. 0 (the default) means
+      // "no gate", which is exactly today's behaviour.
+      castleGateFrac: config.rules.castleGateFrac ?? 0,
     },
 
     meta: { lastFlipTick: 0, attritionStage: 0 },
@@ -207,6 +212,31 @@ export function armySize(state, faction) {
 
 export function sitesOwned(state, faction) {
   return state.sites.filter((s) => s.owner === faction);
+}
+
+/** Fraction of the region's non-castle sites `faction` currently owns. This
+ *  is the territory half of the castle gate (see `castleSealed`): a SITE
+ *  count, not painted hexes, so it cannot be nudged by influence radius or
+ *  contested bands — you either hold the place or you do not. */
+export function siteControlFraction(state, faction) {
+  const rest = state.sites.filter((s) => s.kind !== 'castle');
+  if (!rest.length) return 1;
+  return rest.filter((s) => s.owner === faction).length / rest.length;
+}
+
+/**
+ * Is `castle` currently sealed against whoever is besieging it — i.e. its HP
+ * cannot reach 0 no matter how long the siege runs, the same shape as
+ * `breachSeconds() === Infinity` for an under-strength siege against a
+ * stronghold (see battle/combat.js). A region with no gate (`castleGateFrac`
+ * 0, the default) never seals; a castle with no active siege is never
+ * "sealed" either, since the question does not apply.
+ */
+export function castleSealed(state, castle) {
+  if (castle.kind !== 'castle' || !castle.siege) return false;
+  const need = state.rules.castleGateFrac ?? 0;
+  if (need <= 0) return false;
+  return siteControlFraction(state, castle.siege.owner) < need;
 }
 
 /** Effective per-level spec for a site, accounting for an in-progress upgrade

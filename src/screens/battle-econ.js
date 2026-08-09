@@ -21,7 +21,7 @@ import { groundOf, siteDefMultOf, terrainName, isOpen } from '../battle/terrain.
 import {
   trainJob, siteTrainRate, siteTrainCostPerSec, factionTrainCostPerSec, garrisonCap,
 } from '../battle/training.js';
-import { clampRallyKeep, rallyKeepOf } from '../battle/state.js';
+import { clampRallyKeep, rallyKeepOf, castleSealed, siteControlFraction } from '../battle/state.js';
 import { total, groundMult } from '../battle/combat.js';
 import { TICK_HZ } from '../core/loop.js';
 import { fixed, duration, rate } from '../ui/format.js';
@@ -62,6 +62,13 @@ export function siteIntel(state, site) {
     ground,
     defMult: siteDefMultOf(state, site),
     riverFarm: site.kind === 'farm' && ground.river,
+    // The castle gate, visible rather than a secret rule (see battle/state.js
+    // castleSealed): a siege that cannot complete must say so, the same spirit
+    // as the "if unreinforced" caveats elsewhere on this panel.
+    gate: site.kind === 'castle'
+      ? { sealed: castleSealed(state, site), need: state.rules.castleGateFrac ?? 0,
+        have: siteControlFraction(state, site.siege?.owner ?? 'player') }
+      : null,
   };
   if (out.trains && (site.owner === 'player' || site.owner === 'enemy')) {
     out.cap = garrisonCap(state, site);
@@ -106,6 +113,18 @@ export function terrainLine(intel) {
   const worst = tellingUnit(g);
   if (worst) parts.push(worst);
   return parts.join(' · ');
+}
+
+/**
+ * `SEALED · holds 46% of 60% needed` — why a siege that looks won on paper is
+ * not finishing. Empty whenever the gate does not apply (no threshold, no
+ * active siege, or the threshold is already met), the same "say nothing when
+ * there is nothing to say" rule as goldLine() and terrainLine().
+ */
+export function gateLine(intel) {
+  const g = intel.gate;
+  if (!g || !g.sealed) return '';
+  return `SEALED · holds ${Math.round(g.have * 100)}% of ${Math.round(g.need * 100)}% needed`;
 }
 
 /**

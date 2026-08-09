@@ -140,7 +140,10 @@ test('terrain crosses the seam intact: what mapgen carved is what the battle is 
   const meta = createState({ seed: 21, now: 0 }).meta;
   const config = buildBattleConfig(meta, 'kaldan', [], generateBattleMap, { seed: 21 });
   assertBattleConfig(config);
-  assert.equal(config.contractVersion, 3, 'the terrain layer is contract v3');
+  // Terrain itself landed in v3; the pin tracks CONTRACT_VERSION rather than
+  // that literal number, so a later bump (the castle gate's v4) does not make
+  // this assertion lie about what buildBattleConfig actually stamps on a config.
+  assert.equal(config.contractVersion, CONTRACT_VERSION, 'the terrain layer rides the current contract');
   assert.ok(config.grid.rivers.length > 0, 'the production path must record its rivers');
 
   const battle = startBattle(config);

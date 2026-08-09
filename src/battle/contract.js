@@ -20,7 +20,13 @@ import { fnv1a, stableStringify } from '../core/hash.js';
 // exist purely to modify what happens on a hex (see battle/terrain.js). They
 // have to cross the seam because a battle must be reproducible from its config
 // alone, and terrain now changes combat, siege and income.
-export const CONTRACT_VERSION = 3;
+//
+// v4: `rules.castleGateFrac` — the territory gate on whether a siege of the
+// castle can actually complete (see battle/state.js `castleSealed`). It has to
+// cross the seam because meta owns the per-region dial (content/regions.data.js)
+// and battle owns the siege math that reads it; OPTIONAL, so a config that omits
+// it (every hand-built fixture) is a region with no gate, not an invalid one.
+export const CONTRACT_VERSION = 4;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
@@ -239,7 +245,16 @@ export function assertBattleConfig(c) {
   }
 
   if (!c.rules || typeof c.rules !== 'object') e.push('rules: missing');
-  else if (!(c.rules.hardCapMs > 0)) e.push('rules.hardCapMs: must be > 0');
+  else {
+    if (!(c.rules.hardCapMs > 0)) e.push('rules.hardCapMs: must be > 0');
+    // OPTIONAL, like grid.rivers before it: absent means "no gate", not invalid.
+    if (c.rules.castleGateFrac !== undefined) {
+      const f = c.rules.castleGateFrac;
+      if (typeof f !== 'number' || !Number.isFinite(f) || f < 0 || f > 1) {
+        e.push(`rules.castleGateFrac: expected a number in [0, 1], got ${f}`);
+      }
+    }
+  }
 
   if (e.length) throw new TypeError(`Invalid BattleConfig:\n  - ${e.join('\n  - ')}`);
   return c;
