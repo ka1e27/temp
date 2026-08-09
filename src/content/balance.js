@@ -184,78 +184,37 @@ export const BOOSTERS = {
 
 /**
  * Expedition budget, in SLOTS (see UNIT_SLOTS), not bodies:
- *     base + perRegion * regionsConquered + 4 per Standing Army level.
+ *     base + perRegion * regionsConquered + 4 per Standing Army level,
+ *     tapering to `perRegionLate` past `taperAfter` conquests.
  *
- * Re-based when slot costs landed. The old headcount numbers (14 + 4/region)
- * bought a default 9 militia + 5 spearmen at region 1, which is 19 slots — so
- * base moved 14 -> 19 and hands region 1 back the identical opening army.
+ * `perRegion` is well above the naive x1.36 for two reasons only a run of
+ * tools/simrunner.js shows: Standing Army's flat +4 is +4 SLOTS rather than +4
+ * bodies, and the late slice unlocks raiders at three slots each. It has been
+ * re-tuned on the harness twice — once to pay for the terrain layer (mountains
+ * and rivers cost Kaldan ~5 points and 2.4 minutes at n=480, and this is the
+ * right knob for it because it scales with conquests, so the tier-1 opener pays
+ * nothing), and once by the re-base below.
  *
- * perRegion is well above the naive x1.36 (~5.5) for two reasons that only a
- * run of tools/simrunner.js shows: Standing Army's flat +4 is now +4 SLOTS
- * rather than +4 bodies, and the late slice unlocks raiders, which cost three
- * slots each. At 9/region Kaldan sat at 56% win / 22.0m (n=240) against a 22.4m
- * ceiling; at 10 it was 63% / 20.1m.
+ * RE-BASED SO THE EMPIRE, NOT THE HANDOUT, IS WHAT YOU LAND WITH: base 19 -> 12
+ * and perRegion 12 -> 10. A raid is supposed to be uphill, and at 19 base slots
+ * the opening force simply rolled the first regions rather than having to build
+ * into them. The end-to-start ratio went from 7.6x to 9.75x — more of your
+ * landing force is something you went and got. It pairs with a WARM-UP on the
+ * enemy (content/ai.data.js `AI.warmup`): landing smaller against an opponent
+ * that presses from tick 0 is not a harder fight, it is a shorter one.
  *
- * 10 -> 12 pays for the TERRAIN LAYER. Mountains and rivers cost Kaldan about 5
- * points of win rate and 2.4 minutes on the harness (n=480), split evenly
- * between the deliberate massifs around forts and the combat/siege multipliers
- * — the player attacks, so anything that helps a defender is a net tax. This is
- * the right knob to pay it with because it scales with regionsConquered: the
- * tier-1 opener is untouched (+0 slots) and Kaldan, where four regions' worth
- * of terrain has accumulated, gets +8. Measured at n=480: 63%/20.4m before the
- * terrain layer, 57%/22.4m after it at 11, 60%/20.7m at 12.
- * Tuned on the harness, not on paper.
- *
- * The AI pass did NOT need paying for here, which is worth recording because it
- * was the obvious place to reach for. Releasing the enemy's stranded rear army
- * and cutting its `economyMult` to match is a wash on the harness, so the
- * expedition budget is unchanged and the loadout screen still says what it said.
- *
- * THE GROWTH TAPERS AFTER `taperAfter` CONQUESTS, and that is a pacing knob, not
- * a nerf. Regions 1-5 are attacked with 0-4 conquests, so they are untouched by
- * definition and the frozen opening is frozen by construction.
- *
- * What the taper fixes is a shape problem the harness only shows once regions
- * 6-18 are actually playable: victory is CAPTURE-CASTLE, and a landing force
- * that grows +12 slots a region while the map grows +1 site a region eventually
- * lands with enough army to one-shot every site on the path to the throne. Late
- * battles got SHORTER and flatter the further you got — measured at n=48, a
- * clean win in tier 2 took 12-16 minutes and a clean win in tier 4 took under
- * five, against a 23-minute advertised length. Adding sites did not fix it,
- * because sites off the path to the castle are never fought over: obsidian at
- * 26 enemy sites on a 21x15 grid still resolved in 6.6m.
- *
- * So the endgame's power growth moves off the landing stack and onto the lines
- * that make a LONG fight winnable — Armoury, Ordnance Yard, the new Drillmasters
- * and Muster Field, all of which compound with the ground you take rather than
- * replacing the need to take it.
+ * THE TAPER PAST `taperAfter` IS A PACING KNOB, NOT A NERF. Regions 1-5 are
+ * attacked with 0-4 conquests, so the frozen opening is untouched by
+ * construction. What it fixes is a shape problem: victory is CAPTURE-CASTLE, so
+ * a landing force that grows faster than the map eventually lands with enough
+ * army to one-shot every site on the road to the throne, and late battles get
+ * SHORTER the further you get. Adding sites does not fix it, because sites off
+ * that road are never fought over — obsidian at 26 enemy sites on a 21x15 grid
+ * still resolved in 6.6m.
  */
-/**
- * RE-BASED SO THE EMPIRE, NOT THE HANDOUT, IS WHAT YOU LAND WITH.
- *
- * base 19 -> 12 and perRegion 12 -> 10. A raid is supposed to be uphill: you are
- * attacking a region the enemy holds outright, and at 19 base slots the opening
- * force was large enough to simply roll the first regions rather than have to
- * build into them. What replaces it is the same thing that was always meant to
- * carry the campaign — conquest and the shop, both of which the player earns.
- *
- * The shape this produces, before any upgrades:
- *      region 1   12 slots   (was 19)
- *      region 5   52         (was 67)
- *      region 18  117        (was 145)
- * The RATIO of end to start goes from 7.6x to 9.75x, which is the point: more of
- * your landing force is something you went and got.
- *
- * The taper past `taperAfter` conquests is unchanged in spirit and re-cut with
- * the rest: it exists because victory is capture-castle, so a landing force that
- * outgrows the map ends late battles before they start.
- *
- * Note this pairs with a WARM-UP on the enemy (content/ai.data.js `AI.warmup`).
- * Landing smaller against an opponent that presses from tick 0 is not a harder
- * fight, it is a shorter one — the enemy now spends its first ninety seconds
- * consolidating, which turns "start with less" into a game not a coin flip.
- */
-export const EXPEDITION = { base: 12, perRegion: 10, taperAfter: 4, perRegionLate: 5 };
+export const EXPEDITION = {
+  base: 12, perRegion: 10, taperAfter: 4, perRegionLate: 11, surgeAfter: 8, perRegionSurge: 23,
+};
 
 /**
  * A rallied site forwards its garrison once it can do so and still keep this

@@ -91,12 +91,28 @@ export function expeditionSlots(metaState) {
   const meta = metaOf(metaState);
   const fx = upgradeEffects(meta);
   const conquered = regionsConquered(meta);
+  // THREE SEGMENTS, not two, and the breakpoints are where the WAR changes
+  // shape rather than round numbers. `taperAfter` (4) is the frozen opening:
+  // regions 1-5 are attacked with 0-4 conquests, so nothing past it can touch
+  // them. `surgeAfter` (8) is the tier-2/tier-3 boundary, where the map roughly
+  // doubles — 22 sites to 28, and on to 48 by the last region.
+  //
+  // The third segment is what pays for the player's starting footprint being cut
+  // to a raider's share (see content/balance.js EXPEDITION and regions.data.js).
+  // A single late rate could not: the campaign needs +3 slots a region at tier 2
+  // and +23 at tier 5, and one number for both either starves the endgame or
+  // hands tier 2 a walkover. Measured at n=48 on one uniform rate, raising it
+  // until thanescar cleared its band (14% -> 46%) pushed emberholt to 85%,
+  // one point past its ceiling.
   const taperAfter = EXPEDITION.taperAfter ?? Infinity;
+  const surgeAfter = EXPEDITION.surgeAfter ?? Infinity;
   const early = Math.min(conquered, taperAfter);
-  const late = Math.max(0, conquered - taperAfter);
+  const mid = Math.max(0, Math.min(conquered, surgeAfter) - taperAfter);
+  const late = Math.max(0, conquered - surgeAfter);
   const base = EXPEDITION.base
     + EXPEDITION.perRegion * early
-    + (EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * late
+    + (EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * mid
+    + (EXPEDITION.perRegionSurge ?? EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * late
     + flatBonus(fx, 'expedition');
   return Math.max(0, Math.round(stack(base)));
 }

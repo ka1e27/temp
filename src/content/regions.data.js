@@ -101,17 +101,25 @@
 // +0.50, so anything past tier 2 must be moved in steps of 0.05 and re-measured,
 // never extrapolated.
 //
-// THE CURRENT MEASURED CURVE, in campaign order. Tiers 1-4 at n=96, tier 5
-// confirmed at n=240 (it is the tier whose band edges are closest, and the dial
-// is at its most non-linear there — ravensmarch lost 22 points over +0.10):
+// THE CURRENT MEASURED CURVE, in campaign order, at n=64 with the band edges
+// confirmed at n=240:
 //
-//     tier 1   88 84 84 86        tier 4   46 45 52 45
-//     tier 2   81 75 66 76 80     tier 5   38 30 27
-//     tier 3   64 65 71 55 57
+//     tier 1   86 83 81 88        tier 4   48 44 53 56
+//     tier 2   78 75 75 83 81     tier 5   30 36 39   (33 33 35 at n=240)
+//     tier 3   63 59 67 63 61
 //
 // Every one of the twenty-one reports `ok` against its tier's WIN_BAND and its
 // advertised length. Nothing is balance-frozen any more — the expedition re-base
 // changed regions 1-5 by construction, so they are solved with the rest.
+//
+// NOTE THE DIAL RAMP STEEPENED AT TIER 3 (+0.21 a region against tier 4's
+// +0.08), and that is the second load-bearing rule doing its job rather than an
+// inconsistency. `EXPEDITION.perRegionSurge` hands the player +23 slots a region
+// from region 10 on, which is a far bigger step than the +11 before it, so the
+// dial has to climb faster there simply to stand still. Measured before the
+// ramp was re-cut, tier 3 ran 23 / 29 / 42 / 60 / 79 across five regions on a
+// +0.16 ramp — a 56-point slope inside a 22-point band, entirely because the
+// player outgrew it region by region.
 // ---------------------------------------------------------------------------
 
 /**
@@ -174,18 +182,18 @@ export const REGIONS = Object.freeze([
     2.75, 15, 11, [9, 4, 5], 1, 0, 4, 14,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    2.76, 15, 11, [9, 4, 6], 1.35, 0.15, 5.5, 15,
+    2.76, 15, 11, [9, 5, 5], 1.35, 0.15, 5.5, 15,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    2.77, 15, 12, [10, 5, 6], 1.5, 0.2, 6.6, 15.5,
+    2.77, 15, 12, [10, 6, 5], 1.5, 0.2, 6.6, 15.5,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    2.79, 15, 12, [11, 5, 6], 1.7, 0.25, 7.9, 16,
+    2.79, 15, 12, [11, 6, 5], 1.7, 0.25, 7.9, 16,
     'Bramble country: five neutral farms make the opening land grab the whole battle.'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    2.88, 16, 12, [11, 5, 6], 1.7, 0.3, 9.5, 16.5,
+    2.88, 16, 12, [11, 6, 5], 1.7, 0.3, 9.5, 16.5,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
   // --- Tier 3 (5) -- 16x12 to 17x13, ~7.5-8 min. Sieges are the conversation. ---
@@ -200,11 +208,26 @@ export const REGIONS = Object.freeze([
   // the first, and emberholt shipped at 94%. As a per-tier share the boundary
   // costs about nine points, which the columns below absorb.
   //
-  // The other half of the answer is `siteCounts.player`, and it is the biggest
-  // lever in this table: gallowmoor measured +21 points per extra starting
-  // site at n=96. Tier 3 lands with eleven and tier 4 with thirteen, which is
-  // what pays for meeting a smarter commander — the empire behind you IS the
-  // answer to the endgame, and it should be visible on the map at tick zero.
+  // `siteCounts.player` IS THE BIGGEST LEVER IN THIS TABLE AND IT IS NO LONGER
+  // WHAT PAYS FOR A TIER. It measured +21 points per extra starting site on
+  // gallowmoor, so every pass that needed a region easier reached for it, and
+  // nothing asserted where that ended up: the player was starting tier 5
+  // holding 44-48% of the board against the enemy's 38-41% — on nightharrow,
+  // twenty-three sites to the enemy's eighteen, in the deepest region of the
+  // enemy's own homeland. The campaign's premise is that you are RAIDING
+  // country the enemy holds outright, and the raid stopped being a raid exactly
+  // where it was meant to be hardest. Every difficulty number passed, because
+  // difficulty was measured and ownership never was.
+  //
+  // The column is now a flat raider's share (~27%) the whole way down and
+  // tests/campaign.test.js pins it, ceiling and creep both. What replaced it as
+  // the answer to a harder tier is the EXPEDITION (balance.js
+  // `perRegionLate` 5 -> 11, which by construction cannot touch regions 1-5)
+  // and the enemy's WARM-UP (ai.data.js `AI_TIERS[].warmupSec`, 90s at tiers
+  // 1-2 rising to 225s at tier 5). The empire behind you buys an ARMY and the
+  // time to land it, not a province the map hands you before the battle starts.
+  // The ground it used to hand you is NEUTRAL now: still there, still takeable,
+  // just no longer free.
   //
   // The advertised length still DROPS here, from tier 2's 14-16.5 minutes, and
   // that is measured rather than authored: the previous pass tried raising
@@ -230,21 +253,21 @@ export const REGIONS = Object.freeze([
   // site count and battle length scale together across tiers") for why the
   // campaign-wide monotonic length claim is still NOT restored here.
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    2.95, 16, 12, [12, 5, 11], 1.8, 0.55, 11.4, 7,
+    2.89, 16, 12, [11, 9, 8], 1.8, 0.55, 11.4, 7,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    3.15, 16, 12, [12, 5, 11], 1.92, 0.58, 13.7, 7,
+    3.05, 16, 12, [12, 8, 8], 1.92, 0.58, 13.7, 7,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    3.16, 17, 13, [13, 5, 11], 2, 0.6, 16.4, 7,
+    3.15, 17, 13, [13, 8, 8], 2, 0.6, 16.4, 7,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    3.38, 17, 13, [13, 5, 11], 2.05, 0.62, 19.7, 8.5,
+    3.48, 17, 13, [13, 8, 8], 2.05, 0.62, 19.7, 8.5,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    3.57, 17, 13, [14, 6, 12], 2.08, 0.65, 23.6, 8.5,
+    3.7, 17, 13, [14, 9, 9], 2.08, 0.65, 23.6, 8.5,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.'),
 
   // --- Tier 4 (4) -- 17x13, 33-37 sites, ~7 min, develop 2.20-2.52.
@@ -269,18 +292,18 @@ export const REGIONS = Object.freeze([
   // MAPGEN.enemyStrongholdShare rounds up a fifth stronghold — a step worth
   // ~25 points on its own. The landing force is what pays for it. ---
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    3.75, 17, 13, [14, 6, 13], 2.2, 0.65, 28.4, 6.5,
+    3.75, 17, 13, [14, 10, 9], 2.2, 0.65, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
-    3.81, 17, 13, [14, 6, 13], 2.45, 0.68, 34, 7.5,
+    3.81, 17, 13, [14, 10, 9], 2.45, 0.68, 34, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.'),
   T('ironcrown', 'Ironcrown', 4, [4, 0],
     ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
-    3.9, 17, 13, [14, 6, 13], 2.48, 0.7, 40.8, 7.5,
+    3.95, 17, 13, [14, 10, 9], 2.48, 0.7, 40.8, 7.5,
     'A Marshal holds the throne: the castle guard fights 25% harder and trains 40% faster.'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1],
     ['ironcrown', 'duskfell', 'thanescar', 'gravenreach', 'nightharrow'],
-    4, 17, 13, [15, 6, 16], 2.52, 0.72, 49, 8.5,
+    4, 17, 13, [15, 12, 11], 2.52, 0.72, 49, 8.5,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. Their capital.'),
 
   // --- Tier 5 (3) -- the enemy's homeland, east of the throne. ---
@@ -318,14 +341,14 @@ export const REGIONS = Object.freeze([
   // The band is WIN_BAND[4] = [22, 42]: these are meant to cost a good player
   // several attempts. Measured at n=240, in campaign order: see CLAUDE.md.
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach'],
-    4.12, 18, 13, [16, 6, 17], 2.6, 0.74, 61, 8,
+    4.12, 18, 13, [16, 12, 11], 2.6, 0.74, 61, 8,
     'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],
     ['ironcrown', 'obsidian', 'ravensmarch', 'nightharrow'],
-    4.42, 18, 14, [17, 6, 19], 2.8, 0.77, 76, 8.5,
+    4.3, 18, 14, [16, 15, 11], 2.8, 0.77, 76, 8.5,
     'Every wall here is built and manned. Half the enemy yards retrain to answer whatever you brought.'),
   T('nightharrow', 'Nightharrow', 5, [5, 1], ['obsidian', 'gravenreach'],
-    4.56, 19, 15, [18, 7, 23], 3.1, 0.8, 95, 9,
+    4.45, 19, 15, [17, 18, 13], 3.1, 0.8, 95, 9,
     'The last of them, behind level-four walls with a Marshal on the gate. Bring engines and bring time.'),
 ]);
 

@@ -29,7 +29,12 @@ export const knobsFor = (state) => AI_TIERS[
  * and replays identically, unlike anything read off a clock.
  */
 export function warmupProgress(state) {
-  const ramp = (AI.warmup?.rampSec ?? 0) * TICK_HZ;
+  // Per TIER, falling back to the campaign-wide value. A tier-5 landing owns a
+  // raider's share of a 48-site map and has to convert the neutral pool before
+  // it has an economy; the warm-up is the window that happens in, so it scales
+  // with how much there is to take. Still a pure function of `state.tick`, so
+  // it replays identically.
+  const ramp = (knobsFor(state).warmupSec ?? AI.warmup?.rampSec ?? 0) * TICK_HZ;
   if (!(ramp > 0)) return 1;
   return Math.min(1, Math.max(0, (state.tick ?? 0) / ramp));
 }

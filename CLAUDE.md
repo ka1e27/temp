@@ -199,15 +199,73 @@ That table has since been retuned again, for the *uphill raid* pass (a smaller l
 force, an enemy warm-up, and a shop with no ceiling). **The current measured curve, n=240:**
 
 ```
-tier 1   88 84 84 86        tier 4   46 45 52 45
-tier 2   81 75 66 76 80     tier 5   38 30 27
-tier 3   64 65 71 55 57
+tier 1   86 83 81 88        tier 4   48 44 53 56
+tier 2   78 75 75 83 81     tier 5   30 36 39   (33 33 35 at n=240)
+tier 3   63 59 67 63 61
 ```
 
-Tiers 1–4 at n=96, tier 5 confirmed at n=240. All twenty-one report `ok` against their
+n=64 with the band edges confirmed at n=240. All twenty-one report `ok` against their
 tier's band *and* their advertised length. Nothing is frozen any more: the expedition
 re-base changed regions 1–5 by construction, so they were solved with the rest. What
 replaced the freeze is the per-tier `WIN_BAND`.
+
+## A raid stays a raid: the starting-footprint pass
+
+`siteCounts.player` is the biggest difficulty lever in the region table, so every pass that
+needed a region easier reached for it — and **nothing asserted where that ended up.** Share
+of the board owned at tick 0, before this was pinned:
+
+```
+tier 1   player 25-29%   enemy 45-50%     reads as a raid
+tier 3   player 38-39%   enemy 43-45%
+tier 4   player 39-43%   enemy 41-42%     parity
+tier 5   player 44-48%   enemy 38-41%     you own more than they do
+```
+
+On Nightharrow — the deepest region of the enemy's homeland — the player started holding
+**23 sites to the enemy's 18.** The campaign's premise is that you are raiding country the
+enemy holds outright, and the raid stopped being a raid exactly where it should be hardest.
+Every difficulty number passed, because difficulty was measured and ownership never was.
+
+It is now a flat ~27% the whole way, with the freed sites turned **neutral** rather than
+deleted — the country you used to start owning is still there, still takeable, just no
+longer free. `tests/campaign.test.js` pins the ceiling *and* the creep.
+
+**What paid for it — and what didn't.** Cutting the footprint costs 30–55 points a region.
+
+| Lever | Worth | Notes |
+|---|---|---|
+| `EXPEDITION.perRegionSurge` | **+32 on one region** | The main payer, and *strongly non-linear* |
+| `AI_TIERS[].economyMult` | ~3 pts / 0.01 | The other payer; smooth where the dial isn't |
+| `enemyMult` | **blocked** | Tier 3 would need 2.60 against tier 2's 2.88, and it must be non-decreasing |
+| `AI.warmup` | ~0 | 90s→165s moved gallowmoor 16%→10%. The player wasn't losing the opening |
+| `castleGateFrac` | 1 pt | Swept 0.65→0.38 on thanescar. *Still* not a difficulty knob |
+
+**The expedition is non-linear and that is the whole finding.** `perRegionLate` 5→11 bought
+gallowmoor 7 points; 11→18 bought thanescar **32**. There is a threshold where the landing
+force can actually contest the neutral pool, and below it more slots do almost nothing. A
+starting site is an economy that compounds over ten minutes; a body in the landing stack is
+a one-time deposit — they do not trade one for one until the stack is big enough to take
+ground with.
+
+That forced a **third expedition segment** (`surgeAfter: 8`, `perRegionSurge: 23`): the
+campaign needs +3 slots a region at tier 2 and +23 at tier 5, and one rate for both either
+starves the endgame or hands tier 2 a walkover (measured — the uniform rate that cleared
+thanescar put emberholt at 85%, one point past its ceiling).
+
+**Two knock-on effects worth knowing:**
+
+- **The tier-3 dial ramp had to steepen to +0.21 a region** (tier 4 runs +0.08). The surge
+  hands the player a bigger step than the dial's, so tier 3 sloped 23 → 79 across five
+  regions — a 56-point slope inside a 22-point band.
+- **Two difficulty proxies in `campaign.test.js` broke and were replaced, not relaxed.**
+  `MAX_OPENING_RATIO` counted neutral ground as nobody's, so a big neutral pool read as a
+  rout (`foe/mine` 3.5 on nightharrow); it now splits into a floor on `foe/mine` (you must
+  be outnumbered) and a ceiling on `foe/(mine+neutral)` (it must be convertible) — which
+  also retired the per-tier ladder, since one global ceiling fits again. And the
+  "enemy gains on the player" headcount test now measures the two things that *are* true:
+  the enemy's absolute army rises every tier, and the share of your force that comes from
+  the expedition rather than handed ground goes 66% → 81%.
 
 `--noupgrades` reverts `npm run sim` to the old bot, so the delta stays measurable rather
 than remembered. `tests/harness.test.js` pins all of it — including a negative control, since

@@ -136,39 +136,81 @@ test('campaign: the taper leaves the frozen opening untouched', () => {
 });
 
 /**
- * The most the enemy may outnumber the whole landing force by, PER TIER.
+ * A RAID STAYS A RAID: the share of a region the player already owns at tick 0.
  *
- * This was one number, 2.6, and it had to become a ladder for the same reason
- * `WIN_BAND` in tools/simrunner.js did: it is a proxy for "still convertible",
- * and what counts as convertible is exactly what a tier is FOR. The bound's own
- * justification has always been empirical — at these ratios the harness clears
- * every region inside its tier's band — and 2.6 was set just clear of the worst
- * ratio the campaign then produced (emberholt, 2.556) when tier 4 was the end.
+ * This is the invariant nothing was asserting, and it drifted the whole length
+ * of the campaign without one test noticing. `siteCounts.player` is the biggest
+ * difficulty lever in the table, so every pass that needed a region easier
+ * reached for it — and the campaign's own premise is that you are RAIDING ground
+ * the enemy holds outright. Measured before this was pinned:
  *
- * Tier 5 opens at 2.60-2.68, and it is measurably still convertible there: the
- * three regions clear 22-42% at n>=96 with the ladder live. A single global 2.6
- * would not have been protecting the player from anything, it would have been
- * pinning the endgame to the difficulty of the tier that happened to ship first.
+ *     tier 1   player 25-29%   enemy 45-50%     reads as a raid
+ *     tier 3   player 38-39%   enemy 43-45%
+ *     tier 4   player 39-43%   enemy 41-42%     parity
+ *     tier 5   player 44-48%   enemy 38-41%     you own more than they do
  *
- * What is NOT relaxed is the shape. Every entry is a hard ceiling, the floor is
- * global, and the ladder is required to stay a ladder — a tier cannot quietly
- * award itself more room than the tier below (asserted below). A region at 3.5
- * still fails at every tier, which is the case this test exists for: thirteen
- * regions once shipped between 2.1 and 6.0, an army that could not take the
- * first farm.
+ * On the deepest region of the enemy's own homeland the player started holding
+ * twenty-three sites to the enemy's eighteen. The raid stopped being a raid
+ * exactly where it was supposed to be hardest, and every number still passed,
+ * because difficulty was measured and ownership never was.
+ *
+ * The replacement for the sites is the EXPEDITION, not a lower dial: the empire
+ * buys you an ARMY, not a province. `EXPEDITION.perRegionLate` went 5 -> 11,
+ * which by construction leaves regions 1-5 untouched (they are attacked with
+ * 0-4 conquests, below `taperAfter`) and pays for the ground taken away from
+ * tiers 2-5. The land the player used to start owning is NEUTRAL now, so it is
+ * still on the map and still takeable — it just has to be taken.
  */
-const MAX_OPENING_RATIO = [2.6, 2.6, 2.6, 2.6, 2.7];
+const MAX_PLAYER_SHARE = 0.33;
 
-test('campaign: the outnumbering ladder never awards a tier more room than the one below', () => {
-  for (let i = 1; i < MAX_OPENING_RATIO.length; i++) {
-    assert.ok(MAX_OPENING_RATIO[i] >= MAX_OPENING_RATIO[i - 1],
-      `tier ${i + 1} may open outnumbered by less than tier ${i} — that is not a ladder`);
+test('campaign: you are always raiding — the enemy holds more of every region than you do', () => {
+  for (const r of REGIONS) {
+    const c = r.siteCounts;
+    const t = c.enemy + c.neutral + c.player;
+    assert.ok(c.player / t <= MAX_PLAYER_SHARE,
+      `${r.id}: the player starts holding ${(c.player / t * 100).toFixed(0)}% of the region`
+      + ' — that is a defence, not a raid');
+    assert.ok(c.enemy > c.player,
+      `${r.id}: the player opens with ${c.player} sites against the enemy's ${c.enemy}`
+      + ' — you are supposed to be the one invading');
   }
-  assert.ok(Math.max(...MAX_OPENING_RATIO) <= 3,
-    'past 3x the landing force is not outnumbered, it is a rounding error');
-  assert.equal(MAX_OPENING_RATIO.length, Math.max(...REGIONS.map((r) => r.tier)),
-    'every tier needs a bound; a missing entry reads as undefined and passes everything');
+  // ...and it must not CREEP, which is how it got to 48% without anyone seeing.
+  // The endgame may not hand the player a bigger head start than the opening did.
+  const share = (r) => r.siteCounts.player
+    / (r.siteCounts.enemy + r.siteCounts.neutral + r.siteCounts.player);
+  const opening = Math.max(...REGIONS.filter((r) => r.tier === 1).map(share));
+  for (const r of REGIONS) {
+    assert.ok(share(r) <= opening + 0.02,
+      `${r.id} opens with ${(share(r) * 100).toFixed(0)}% of the board against tier 1's`
+      + ` ${(opening * 100).toFixed(0)}% — the raid is getting easier to start, not harder`);
+  }
 });
+
+/**
+ * The most the enemy may outnumber the CONTESTABLE force by.
+ *
+ * This was `enemyTroops / playerTroops`, capped per tier at 2.6-2.7, and the
+ * denominator was wrong in a way that only showed once the neutral pool got
+ * large. Neutral sites belong to nobody and are the opening move — counting
+ * them as neither side's makes a map with a lot of open country read as a rout.
+ * With the player's footprint cut to a raider's share, raw `foe/mine` runs to
+ * 3.5 on nightharrow while the fight is not remotely 3.5:1.
+ *
+ * So there are two claims here, and they were tangled into one number:
+ *
+ *   1. YOU ARE OUTNUMBERED. `foe/mine` must stay well above 1 — a raid you
+ *      outnumber is not a raid. That is the floor.
+ *   2. IT IS CONVERTIBLE. `foe / (mine + neutral)` — the enemy against
+ *      everything that is not already theirs — is the number that says whether
+ *      the ground is winnable, and it is a smooth 1.1 -> 1.8 across all
+ *      twenty-one regions, TIGHTER at tiers 3-5 than at tier 2.
+ *
+ * Splitting them also retires the per-tier ladder this file grew when tier 5
+ * shipped. That ladder was a symptom of the wrong denominator: once the right
+ * one is used, a single global ceiling fits the whole campaign again.
+ */
+const MAX_CONTESTED_RATIO = 1.9;
+const MIN_OUTNUMBERED = 1.5;
 
 test('campaign: a player who has taken everything before region N can field enough to take N', () => {
   // "Enough" is measured against what is actually standing on the map, not
@@ -178,58 +220,81 @@ test('campaign: a player who has taken everything before region N can field enou
     const { config } = configFor(i);
     const mine = config.sites.filter((s) => s.owner === 'player')
       .reduce((a, s) => a + total(s.garrison), 0) + total(config.player.expedition);
-    const ratio = enemyTroops(config) / mine;
+    const neutral = config.sites.filter((s) => s.owner === 'neutral')
+      .reduce((a, s) => a + total(s.garrison), 0);
+    const foe = enemyTroops(config);
     // You are RAIDING a region the enemy holds outright, and the landing force
     // was re-based down (content/balance.js EXPEDITION) precisely so that being
     // outnumbered is the starting position rather than a late surprise. It also
     // pairs with the enemy's warm-up (content/ai.data.js AI.warmup) — landing
     // outnumbered against an opponent that presses from tick 0 would be a coin
-    // flip, not a fight. The ceiling is per tier; see MAX_OPENING_RATIO.
-    const cap = MAX_OPENING_RATIO[REGIONS[i].tier - 1];
-    assert.ok(ratio <= cap,
-      `${REGIONS[i].id}: the enemy opens with ${ratio.toFixed(2)}x the player's whole force`
-      + ` (tier ${REGIONS[i].tier} allows ${cap}x) — no competent player can convert that`);
-    assert.ok(ratio >= 0.6,
-      `${REGIONS[i].id}: the player opens with more than they can lose (${ratio.toFixed(2)}x)`);
+    // flip, not a fight. See MAX_CONTESTED_RATIO for why the ceiling counts the
+    // neutral pool and the floor does not.
+    assert.ok(foe / mine >= MIN_OUTNUMBERED,
+      `${REGIONS[i].id}: the enemy opens on only ${(foe / mine).toFixed(2)}x the player's`
+      + ' force — a raid you outnumber is not a raid');
+    assert.ok(foe / (mine + neutral) <= MAX_CONTESTED_RATIO,
+      `${REGIONS[i].id}: the enemy opens with ${(foe / (mine + neutral)).toFixed(2)}x everything`
+      + ' that is not already theirs — no competent player can convert that');
   }
 });
 
-test('campaign: difficulty rises — the enemy gains on the player, region by region', () => {
-  const ratios = REGIONS.map((r, i) => {
-    const { config } = configFor(i);
-    const mine = config.sites.filter((s) => s.owner === 'player')
-      .reduce((a, s) => a + total(s.garrison), 0) + total(config.player.expedition);
-    return { id: r.id, v: enemyTroops(config) / mine };
-  });
-  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-  const byTier = [1, 2, 3, 4].map((t) => mean(
-    ratios.filter((_, i) => REGIONS[i].tier === t).map((x) => x.v),
-  ));
-  // END TO END, not tier by tier. Raw force ratio is a PROXY for difficulty and
-  // it stopped being a monotone one: tier 3 hands the player eleven starting
-  // sites against tier 2's six, so the bodies on the board tip back toward the
-  // player at that boundary even though the region is harder. What carries the
-  // difficulty there is map size, `develop`, the AI tier and the dial — none of
-  // which this ratio can see. Asserting a monotone proxy would force the table
-  // to satisfy a number nobody plays.
+test('campaign: the endgame is a bigger war, and the empire is what answers it', () => {
+  // THIS TEST USED TO ASSERT A HEADCOUNT PROXY AND THE PROXY IS NOW WRONG, which
+  // is worth stating plainly because it had already been half-retired once. It
+  // compared mean `enemyTroops / playerForce` per tier and required the endgame's
+  // to exceed the opening's. Measured now, that number FALLS after tier 2:
   //
-  // The real curve is measured, not asserted here: tools/simrunner.js reports
-  // ~86% / ~76% / ~61% / ~47% per tier at n=240 against the per-tier bands in
-  // `WIN_BAND`. What stays here is the end-to-end claim, which is the one this
-  // test was written to protect.
-  // 1.3 -> 1.2, and the reason is the opposite of a relaxation: the OPENING got
-  // harder. Tier 1 used to land with a comfortable numerical edge (a mean ratio
-  // near 0.9) and now lands outnumbered like everywhere else, which compresses
-  // any end-to-end ratio of ratios. The endgame did not get easier — measured at
-  // n=240 it fell from ~58% to ~47% — it is the baseline that moved.
-  assert.ok(byTier[3] > byTier[0] * 1.2,
-    'the endgame must be meaningfully harder than the opening, not merely different');
-  assert.ok(byTier[1] > byTier[0],
-    'and the first real wall must outweigh the opening');
-  // The opening is no longer a walkover, and that IS a campaign-shape claim:
-  // you are raiding country the enemy already owns, from region one.
-  assert.ok(byTier[0] > 1.4,
-    'tier 1 must land outnumbered too — a raid you outnumber is not a raid');
+  //     tier 1  1.94    tier 3  1.79    tier 5  1.73
+  //     tier 2  2.20    tier 4  1.70
+  //
+  // and the campaign is nonetheless correctly ordered — tools/simrunner.js at
+  // n=240 reports ~85 / ~78 / ~63 / ~50 / ~34 per tier against `WIN_BAND`. The
+  // ratio fell because the player's footprint was cut to a raider's share and
+  // the EXPEDITION was surged to pay for it, so more of the same force arrives in
+  // the landing stack instead of standing on the map. Opening headcount stopped
+  // tracking difficulty; what carries it now is map size, `develop`, the AI tier,
+  // the enemy's economy and the dial, none of which a headcount can see.
+  //
+  // Asserting it anyway would force the table to satisfy a number nobody plays —
+  // the exact failure this file's older comment warned about. So the two claims
+  // that are still TRUE, still load-bearing, and cheap to check are asserted
+  // instead, and the win-rate curve stays where it can actually be measured.
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  const perTier = (fn) => [1, 2, 3, 4, 5].map((t) => mean(
+    REGIONS.map((r, i) => ({ t: r.tier, v: fn(i) })).filter((x) => x.t === t).map((x) => x.v),
+  ));
+
+  // 1. THE WAR ITSELF GETS BIGGER. The enemy's opening army, in absolute bodies.
+  const army = perTier((i) => enemyTroops(configFor(i).config));
+  for (let t = 1; t < army.length; t++) {
+    assert.ok(army[t] > army[t - 1],
+      `tier ${t + 1} fields ${army[t].toFixed(0)} against tier ${t}'s ${army[t - 1].toFixed(0)}`
+      + ' — the endgame must be a bigger war, not the same one re-priced');
+  }
+  assert.ok(army[4] > army[0] * 4,
+    'the last tier should face multiples of the first, not a fraction more');
+
+  // 2. AND THE EMPIRE, NOT THE MAP, IS WHAT ANSWERS IT. The share of the
+  //    player's opening force that arrives in the landing stack rather than
+  //    standing on ground they were handed. This is the whole design statement
+  //    of the footprint cut, and it is the thing that would silently reverse if
+  //    a future pass reached for `siteCounts.player` again to make a region
+  //    easier: 66% at tier 1 rising to 81% at tier 5.
+  const fromEmpire = perTier((i) => {
+    const { config } = configFor(i);
+    const exp = total(config.player.expedition);
+    const ground = config.sites.filter((s) => s.owner === 'player')
+      .reduce((a, s) => a + total(s.garrison), 0);
+    return exp / (exp + ground);
+  });
+  assert.ok(fromEmpire[0] > 0.5,
+    'even region one should be mostly the force you brought');
+  assert.ok(fromEmpire[4] > fromEmpire[0],
+    'the endgame must lean MORE on what you earned and less on what the map gave you');
+  assert.ok(fromEmpire[4] > 0.75,
+    `the endgame landing is only ${(fromEmpire[4] * 100).toFixed(0)}% expedition —`
+    + ' the map is handing the player a province again');
 });
 
 // ===========================================================================

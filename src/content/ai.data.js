@@ -81,6 +81,53 @@
  * gold and its strongholds on x2.19 training — rather than from a hidden dial
  * that the region description never mentions. Taking a farm off the enemy is
  * worth proportionally what it looks like it is worth.
+ *
+ * ---------------------------------------------------------------------------
+ * TIERS 3-5 CUT AGAIN (0.58/0.66/0.72 -> 0.42/0.55/0.62) WHEN THE PLAYER'S
+ * STARTING FOOTPRINT CAME DOWN, and this is one of the two knobs that paid.
+ *
+ * The campaign had been buying its late difficulty with `siteCounts.player`,
+ * which left the player starting tier 5 owning MORE of the enemy's homeland
+ * than the enemy did (see regions.data.js, tier 3 header). Cutting that back to
+ * a raider's ~27% costs 30-55 points a region. `enemyMult`, the obvious answer,
+ * is BLOCKED: tier 3 would need about 2.60 against tier 2's 2.88 and the dial is
+ * required non-decreasing — a contradiction, not a tuning problem, exactly like
+ * the tier-2 seven-site knot documented in regions.data.js.
+ *
+ * Two other levers were measured and REJECTED, which is worth recording so the
+ * next pass does not re-derive them:
+ *
+ *   - The WARM-UP bought ~0. Extending it 90s -> 165s at tier 3 moved gallowmoor
+ *     16% -> 10% and thanescar 9% -> 15%, which is noise at n=48. The player was
+ *     not losing the opening, so buying more of it changed nothing. (The per-tier
+ *     `warmupSec` field it added is kept — it is the right shape and costs
+ *     nothing — but it is not what carries the tier.)
+ *   - `castleGateFrac` is STILL not a difficulty knob, and this was the obvious
+ *     place to expect it to have become one: swept 0.65 -> 0.38 on thanescar it
+ *     moved the win rate ONE point, even with the player starting on a third of
+ *     the ground it used to. It buys the guarantee against a rush. That is all.
+ *
+ * What they ruled out is what makes this the right knob: at 27% of the sites
+ * against the enemy's 41-45% the player loses on PRODUCTION, and `economyMult`
+ * is the one number that says how much the enemy's ground is worth to it. It is
+ * also smooth where `enemyMult` is violently non-linear — measured on gallowmoor
+ * before the expedition surge landed, 0.50 -> 13%, 0.42 -> 35%, 0.34 -> 63%,
+ * about three points per 0.01.
+ *
+ * The other half is content/balance.js `perRegionSurge`, and the two are a PAIR:
+ * solved separately, 0.34 here plus the surge put tier 3 at 73-96%, and 0.50
+ * put it at 23-79%. Neither is a tier-3 problem — the expedition moved and this
+ * had to be re-solved against it.
+ *
+ * THE LADDER IS NOT MONOTONIC AND NEVER HAS TO BE (0.53 at tier 2, 0.42 at tier
+ * 3). It is a per-tier handicap that exists to make each tier's fight right, not
+ * an advertised difficulty. It does mean the enemy's ABSOLUTE opening income
+ * dips across that boundary — measured, emberholt 24.8 gold/s to gallowmoor 19.1
+ * — which is real and is the price of the seam. Two smaller dips already existed
+ * for unrelated reasons (kaldan -> highmarch, blackspire -> ironcrown). What is
+ * pinned instead is the property that actually bites, and it is comfortable:
+ * tests/campaign.test.js caps the enemy at 4x the player's opening income, and
+ * the worst region in the campaign is nightharrow at 1.51x.
  */
 /**
  * `adaptComposition: boolean` became `counterShare: number` — the share of the
@@ -120,16 +167,16 @@
 export const AI_TIERS = [
   { reactionTicks: 45, commitRatio: 0.45, safetyMargin: 1.60,
     economyMult: 0.2746, concurrent: 1, retreatDiscipline: 0.10, counterShare: 0,
-    ramAppetite: 0.1, stagingRatio: 0, stagingKeep: 1.0 },
+    ramAppetite: 0.1, stagingRatio: 0, stagingKeep: 1.0, warmupSec: 90 },
   { reactionTicks: 32, commitRatio: 0.50, safetyMargin: 1.50,
     economyMult: 0.5300, concurrent: 1, retreatDiscipline: 0.35, counterShare: 0,
-    ramAppetite: 0.4, stagingRatio: 0.70, stagingKeep: 0.35 },
+    ramAppetite: 0.4, stagingRatio: 0.70, stagingKeep: 0.35, warmupSec: 90 },
   { reactionTicks: 26, commitRatio: 0.70, safetyMargin: 1.25,
-    economyMult: 0.5800, concurrent: 2, retreatDiscipline: 0.65, counterShare: 0.20,
-    ramAppetite: 0.8, stagingRatio: 0.70, stagingKeep: 0.05 },
+    economyMult: 0.4200, concurrent: 2, retreatDiscipline: 0.65, counterShare: 0.20,
+    ramAppetite: 0.8, stagingRatio: 0.70, stagingKeep: 0.05, warmupSec: 165 },
   { reactionTicks: 19, commitRatio: 0.80, safetyMargin: 1.15,
-    economyMult: 0.6600, concurrent: 3, retreatDiscipline: 0.90, counterShare: 0.40,
-    ramAppetite: 1.0, stagingRatio: 0.80, stagingKeep: 0.05 },
+    economyMult: 0.5500, concurrent: 3, retreatDiscipline: 0.90, counterShare: 0.40,
+    ramAppetite: 1.0, stagingRatio: 0.80, stagingKeep: 0.05, warmupSec: 195 },
   // Tier 5. Every knob that was already at its ceiling stays there — `ramAppetite`
   // is 1.0 at tier 4 and there is no 1.1 — so what separates this commander is
   // TEMPO, not appetite: it thinks about a third more often, commits on a
@@ -143,8 +190,8 @@ export const AI_TIERS = [
   // anything, and a share that eats the rest is how the enemy disarmed itself
   // the first time (see tests/campaign.test.js, "never disarms itself").
   { reactionTicks: 15, commitRatio: 0.85, safetyMargin: 1.08,
-    economyMult: 0.7200, concurrent: 4, retreatDiscipline: 0.95, counterShare: 0.50,
-    ramAppetite: 1.0, stagingRatio: 0.85, stagingKeep: 0.05 },
+    economyMult: 0.6200, concurrent: 4, retreatDiscipline: 0.95, counterShare: 0.50,
+    ramAppetite: 1.0, stagingRatio: 0.85, stagingKeep: 0.05, warmupSec: 225 },
 ];
 
 /** AI knobs that are the SAME at every tier. Per-tier knobs live in AI_TIERS. */
@@ -193,6 +240,14 @@ export const AI = {
    * opening the whole "land small, grow into it" shape needs in order to exist.
    */
   warmup: {
+    // Per-tier via `AI_TIERS[].warmupSec`; this is the fallback and the tier-1/2
+    // value. It rises steeply from tier 3 (165/195/225s) because THE PLAYER NO
+    // LONGER STARTS OWNING THE COUNTRY. A landing that holds a raider's ~27% of
+    // a 48-site region has to go and take the neutral pool before it has an
+    // economy at all, and measured at n=64 it was being rolled up before it
+    // could: tiers 3-5 lost in an all-runs median of 2.0-3.6 minutes. The
+    // warm-up is the window that conversion happens in, so it has to scale with
+    // how much there is to convert.
     rampSec: 90,        // fully aggressive after this long
     safetyMult: 1.45,   // x this on safetyMargin at tick 0, easing to x1
     commitMult: 0.55,   // x this on commitRatio at tick 0, easing to x1
