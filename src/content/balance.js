@@ -128,6 +128,23 @@ export const SITE_UPGRADE = [
   { gold: 2200, sec: 65 }, // L4 -> L5
 ];
 
+/**
+ * COMMISSIONING, as opposed to training.
+ *
+ * A marshal is one body per site and takes 40 seconds — by far the slowest thing
+ * in the game — so producing one meant retasking a whole stronghold, waiting,
+ * and remembering to set it back. That is why a 4,000-crown unlock went unused.
+ *
+ * A commission skips the queue entirely: pay, and he rides in. The price carries
+ * the difference. 250 against a 180 training cost is the 40 seconds of a
+ * stronghold's output you did NOT spend, which at a level-1 site is roughly six
+ * militia — so commissioning is the convenient answer and training is still the
+ * cheap one. `maxPerSite` is unchanged and still binds.
+ */
+export const RECRUIT = {
+  marshal: { gold: 250 },
+};
+
 /** Territory influence radius by site kind, and the movement effect. */
 export const INFLUENCE_RADIUS = { farm: 1, stronghold: 2, camp: 3, castle: 3 };
 export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.75 };

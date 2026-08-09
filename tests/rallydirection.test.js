@@ -64,12 +64,12 @@ test('two sites can never rally INTO each other — the newer order wins', () =>
   const state = fixture();
   state.commands.push({ t: 'RALLY', site: 'a', target: 'b' });
   drainCommands(state);
-  assert.equal(siteOf(state, 'a').rallyTarget, 'b');
+  assert.deepEqual(siteOf(state, 'a').rallyTargets, ['b']);
 
   state.commands.push({ t: 'RALLY', site: 'b', target: 'a' });
   drainCommands(state);
-  assert.equal(siteOf(state, 'b').rallyTarget, 'a', 'the newer order takes effect');
-  assert.equal(siteOf(state, 'a').rallyTarget, null, 'the reciprocal one is dropped');
+  assert.deepEqual(siteOf(state, 'b').rallyTargets, ['a'], 'the newer order takes effect');
+  assert.deepEqual(siteOf(state, 'a').rallyTargets, [], 'the reciprocal one is dropped');
 });
 
 test('the loop cannot form through a rally CHAIN either', () => {
@@ -77,14 +77,14 @@ test('the loop cannot form through a rally CHAIN either', () => {
   const { ord } = harness(state);
   ord.issueRallyChain(siteOf(state, 'a'), ['b'], siteOf(state, 'c'));
   drainCommands(state);
-  assert.equal(siteOf(state, 'a').rallyTarget, 'b');
-  assert.equal(siteOf(state, 'b').rallyTarget, 'c');
+  assert.deepEqual(siteOf(state, 'a').rallyTargets, ['b']);
+  assert.deepEqual(siteOf(state, 'b').rallyTargets, ['c']);
 
   // Now point the middle back at the start: b->a must kill a->b, not coexist.
   state.commands.push({ t: 'RALLY', site: 'b', target: 'a' });
   drainCommands(state);
-  assert.equal(siteOf(state, 'b').rallyTarget, 'a');
-  assert.equal(siteOf(state, 'a').rallyTarget, null);
+  assert.deepEqual(siteOf(state, 'b').rallyTargets, ['a']);
+  assert.deepEqual(siteOf(state, 'a').rallyTargets, []);
 });
 
 test('a would-be loop SETTLES instead of trading troops forever', () => {
@@ -119,11 +119,11 @@ test('dragging the same direction twice CLEARS the rally', () => {
 
   ord.toggleRally(a(), b());
   drainCommands(state);
-  assert.equal(a().rallyTarget, 'b');
+  assert.deepEqual(a().rallyTargets, ['b']);
 
   ord.toggleRally(a(), b());
   drainCommands(state);
-  assert.equal(a().rallyTarget, null, 'the second drag in the same direction removes it');
+  assert.deepEqual(a().rallyTargets, [], 'the second drag in the same direction removes it');
 });
 
 test('dragging the OTHER way flips the link instead of doubling it', () => {
@@ -135,16 +135,16 @@ test('dragging the OTHER way flips the link instead of doubling it', () => {
   ord.toggleRally(siteOf(state, 'b'), siteOf(state, 'a'));
   drainCommands(state);
 
-  assert.equal(siteOf(state, 'b').rallyTarget, 'a', 'now points the other way');
-  assert.equal(siteOf(state, 'a').rallyTarget, null, 'and only the other way');
+  assert.deepEqual(siteOf(state, 'b').rallyTargets, ['a'], 'now points the other way');
+  assert.deepEqual(siteOf(state, 'a').rallyTargets, [], 'and only the other way');
 });
 
 test('the three states cycle: off -> this way -> that way -> off', () => {
   const state = fixture();
   const { ord } = harness(state);
   const dir = () => {
-    if (siteOf(state, 'a').rallyTarget === 'b') return 'a->b';
-    if (siteOf(state, 'b').rallyTarget === 'a') return 'b->a';
+    if (siteOf(state, 'a').rallyTargets.includes('b')) return 'a->b';
+    if (siteOf(state, 'b').rallyTargets.includes('a')) return 'b->a';
     return 'off';
   };
 
@@ -167,13 +167,13 @@ test('re-dragging a whole rally chain cancels it', () => {
   const { ord } = harness(state);
   ord.issueRallyChain(siteOf(state, 'a'), ['b'], siteOf(state, 'c'));
   drainCommands(state);
-  assert.equal(siteOf(state, 'a').rallyTarget, 'b');
-  assert.equal(siteOf(state, 'b').rallyTarget, 'c');
+  assert.deepEqual(siteOf(state, 'a').rallyTargets, ['b']);
+  assert.deepEqual(siteOf(state, 'b').rallyTargets, ['c']);
 
   ord.issueRallyChain(siteOf(state, 'a'), ['b'], siteOf(state, 'c'));
   drainCommands(state);
-  assert.equal(siteOf(state, 'a').rallyTarget, null);
-  assert.equal(siteOf(state, 'b').rallyTarget, null);
+  assert.deepEqual(siteOf(state, 'a').rallyTargets, []);
+  assert.deepEqual(siteOf(state, 'b').rallyTargets, []);
 });
 
 test('toggling still refuses what was always illegal', () => {

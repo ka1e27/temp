@@ -24,7 +24,8 @@ import { TICK_HZ } from '../core/loop.js';
  * @property {number} upgradeTicksLeft     >0 while building (produces at OLD level)
  * @property {?{owner:string, comp:Object}} siege  hostile force grinding hp down
  * @property {number} shieldTicks          Emergency Fortify
- * @property {?string} rallyTarget         auto-send destination
+ * @property {string[]} rallyTargets       auto-send destinations, fed in turn
+ * @property {number} rallyCursor          which of them is next; sim-owned
  * @property {number} rallyKeep            troops the rally leaves at home
  * @property {string[]} adj                adjacent site ids
  */
@@ -108,10 +109,15 @@ export function createBattleState(config) {
       upgradeTicksLeft: 0,
       siege: null,
       shieldTicks: 0,
-      rallyTarget: null,
-      // Per-site, because the right hold-back differs by role. The default is
-      // the old global, so a battle nobody touches behaves exactly as before.
-      rallyKeep: RALLY_KEEP.default,
+      // A LIST, because one site may feed several neighbours in turn — see
+      // battle/rally.js. `rallyCursor` is which one is next and belongs to the
+      // sim, never to the view, or a replay desynchronises from its log.
+      rallyTargets: [],
+      rallyCursor: 0,
+      // Per-site, because the right hold-back differs by role. The player's
+      // standing preference crosses the seam in `rules.rallyKeepDefault`, so
+      // "leave nothing behind" is a setting rather than forty clicks a battle.
+      rallyKeep: clampRallyKeep(config.rules?.rallyKeepDefault ?? RALLY_KEEP.default),
       adj: [],
     };
   });
@@ -260,3 +266,20 @@ export function clampRallyKeep(n) {
 
 /** How many troops a rallied site keeps at home before forwarding the rest. */
 export const rallyKeepOf = (site) => clampRallyKeep(site.rallyKeep);
+
+/**
+ * A site's rally destinations, as an array, whatever shape it is stored in.
+ *
+ * Tolerant of the single-`rallyTarget` shape this replaced. A resume blob from
+ * the older contract is discarded rather than migrated (meta/resume.js), so this
+ * is not load-bearing for saves — it is here so that a hand-built test fixture
+ * or an older snapshot reads as a one-target rally instead of as no rally at
+ * all, which would fail silently rather than loudly.
+ */
+export function rallyTargetsOf(site) {
+  if (Array.isArray(site?.rallyTargets)) return site.rallyTargets;
+  return site?.rallyTarget ? [site.rallyTarget] : [];
+}
+
+/** Is `id` one of this site's rally destinations? */
+export const ralliesTo = (site, id) => rallyTargetsOf(site).includes(id);

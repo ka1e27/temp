@@ -226,7 +226,7 @@ try {
     const from = b.sites.find((s) => s.owner === 'player' && s.adj.length > 0);
     const to = from && b.sites.find((s) => from.adj.includes(s.id));
     if (!from || !to) return null;
-    from.rallyTarget = null;
+    from.rallyTargets = [];
     const a = g.__view.siteScreen(from, {});
     const z = g.__view.siteScreen(to, {});
     return {
@@ -240,9 +240,9 @@ try {
     await page.drag(rally.from, rally.to, 12, 'right');
     await page.sleep(600);
     const got = await page.eval((id) => window.__game.state.battle.sites
-      .find((s) => s.id === id)?.rallyTarget ?? null, rally.fromId);
-    if (got !== rally.toId) {
-      throw new Error(`right-drag ${rally.fromId} -> ${rally.toId} set rallyTarget=${got}`);
+      .find((s) => s.id === id)?.rallyTargets ?? [], rally.fromId);
+    if (!got.includes(rally.toId)) {
+      throw new Error(`right-drag ${rally.fromId} -> ${rally.toId} set rallyTargets=${got}`);
     }
     step(`right-drag rally: ${rally.fromId} -> ${rally.toId}`);
   }

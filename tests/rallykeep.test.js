@@ -19,7 +19,7 @@ import { emptyComp, total } from '../src/battle/combat.js';
 import { EVENTS } from '../src/battle/events.js';
 import { RALLY_KEEP, RALLY_MIN_GARRISON } from '../src/content/balance.js';
 import { stepRallyKeep, keepLabel } from '../src/screens/battle-econ.js';
-import { pressKeep } from '../src/screens/battle-panel.js';
+import { setKeep } from '../src/screens/battle-panel.js';
 import { createOrders } from '../src/screens/battle-orders.js';
 import { createView } from '../src/screens/battle-input.js';
 
@@ -97,39 +97,39 @@ test('the hold-back is PER SITE: two rallied sites keep different numbers', () =
   assert.equal(total(hold.garrison), 16, 'keep 16 holds sixteen back');
 });
 
-test('the panel stepper walks the value and the SIMULATION follows it', () => {
+test('the panel slider sets the value and the SIMULATION follows it', () => {
   const s = fixture();
   const { view, input } = harness(s);
   const camp = at(s, 'camp');
   camp.garrison = { ...emptyComp(), militia: 30 };
-  camp.rallyTarget = 'f1';
+  camp.rallyTargets = ['f1'];
   view.selection.push('camp');
 
-  assert.equal(pressKeep(s, 'camp', 1, input), true);
+  assert.equal(setKeep(s, 'camp', RALLY_KEEP.default + RALLY_KEEP.step, input), true);
   step(s);
   assert.deepEqual(reasons(s), []);
   assert.equal(camp.rallyKeep, RALLY_KEEP.default + RALLY_KEEP.step);
   assert.equal(total(camp.garrison), RALLY_KEEP.default + RALLY_KEEP.step);
 
-  assert.equal(pressKeep(s, 'camp', -1, input), true);
+  assert.equal(setKeep(s, 'camp', RALLY_KEEP.default - RALLY_KEEP.step, input), true);
   step(s);
-  assert.equal(camp.rallyKeep, RALLY_KEEP.default);
-  assert.equal(pressKeep(s, 'nope', 1, input), false, 'a dead selection queues nothing');
+  assert.equal(camp.rallyKeep, RALLY_KEEP.default - RALLY_KEEP.step);
+  assert.equal(setKeep(s, 'nope', 4, input), false, 'a dead selection queues nothing');
 });
 
-test('the stepper cannot walk out of the RALLY_KEEP band', () => {
+test('the slider cannot set a value outside the RALLY_KEEP band', () => {
   const s = fixture();
   const { input } = harness(s);
   const camp = at(s, 'camp');
 
   camp.rallyKeep = RALLY_KEEP.max;
-  pressKeep(s, 'camp', 1, input);
+  setKeep(s, 'camp', RALLY_KEEP.max + 50, input);
   step(s);
   assert.equal(camp.rallyKeep, RALLY_KEEP.max);
   assert.equal(keepLabel(camp), `keeps ${RALLY_KEEP.max}`);
 
   camp.rallyKeep = RALLY_KEEP.min;
-  pressKeep(s, 'camp', -1, input);
+  setKeep(s, 'camp', RALLY_KEEP.min - 50, input);
   step(s);
   assert.equal(camp.rallyKeep, RALLY_KEEP.min);
   assert.equal(keepLabel(camp), 'sends everything');
@@ -140,7 +140,7 @@ test('an out-of-range order is CLAMPED by the sim, and the clamp bites', () => {
   const s = fixture();
   const camp = at(s, 'camp');
   camp.garrison = { ...emptyComp(), militia: RALLY_KEEP.max + 5 };
-  camp.rallyTarget = 'f1';
+  camp.rallyTargets = ['f1'];
   s.commands.push({ t: 'RALLY_KEEP', site: 'camp', keep: 9999 });
   step(s);
 
@@ -188,7 +188,7 @@ test('a site resumed without the field falls back to the old global', () => {
   const s = fixture();
   const camp = at(s, 'camp');
   camp.garrison = { ...emptyComp(), militia: 20 };
-  camp.rallyTarget = 'f1';
+  camp.rallyTargets = ['f1'];
   delete camp.rallyKeep;                       // a save written before the field existed
   assert.equal(rallyKeepOf(camp), RALLY_MIN_GARRISON);
   step(s);
@@ -211,11 +211,11 @@ test('capturing a site clears the previous owner\'s standing order', () => {
   const s = fixture();
   const hold = at(s, 'hold');
   hold.rallyKeep = RALLY_KEEP.max;
-  hold.rallyTarget = 'f1';
+  hold.rallyTargets = ['f1'];
   hold.hp = 1;
   hold.siege = { owner: 'enemy', comp: { ...emptyComp(), militia: 30 } };
   step(s);
   assert.equal(hold.owner, 'enemy');
-  assert.equal(hold.rallyTarget, null);
+  assert.deepEqual(hold.rallyTargets, []);
   assert.equal(hold.rallyKeep, RALLY_KEEP.default);
 });

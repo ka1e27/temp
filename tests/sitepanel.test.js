@@ -198,25 +198,26 @@ test('the rally row appears only on a site that HAS a rally', () => {
   panel.update(s);
   assert.equal(panel.el.find('hud-keep').classList.contains('is-open'), false);
 
-  camp.rallyTarget = 'f1';
+  camp.rallyTargets = ['f1'];
   panel.update(s);
   const row = panel.el.find('hud-keep');
   assert.equal(row.classList.contains('is-open'), true);
   assert.equal(row.find('keep-value').textContent, `keeps ${RALLY_KEEP.default}`);
 });
 
-test('pressing + on the rally row moves the SIMULATION, not just the label', () => {
+test('dragging the rally slider moves the SIMULATION, not just the label', () => {
   const s = fixture();
   const { panel, view } = mountPanel(s);
   const camp = at(s, 'camp');
   camp.garrison = { ...emptyComp(), militia: 30 };
-  camp.rallyTarget = 'f1';
+  camp.rallyTargets = ['f1'];
   select(view, 'camp');
   panel.update(s);
 
-  const [minus, plus] = panel.el.find('hud-keep').findAll('keep-step');
-  plus.fire('click');
-  assert.equal(s.commands.length, 1, 'the click queued exactly one order');
+  const slider = panel.el.find('hud-keep').find('keep-slider');
+  slider.value = `${RALLY_KEEP.default + RALLY_KEEP.step}`;
+  slider.fire('input');
+  assert.equal(s.commands.length, 1, 'the drag queued exactly one order');
   assert.equal(camp.rallyKeep, RALLY_KEEP.default, 'and did NOT touch the site itself');
 
   step(s);
@@ -227,28 +228,38 @@ test('pressing + on the rally row moves the SIMULATION, not just the label', () 
   assert.equal(panel.el.find('keep-value').textContent,
     `keeps ${RALLY_KEEP.default + RALLY_KEEP.step}`);
 
-  minus.fire('click');
+  slider.value = '0';
+  slider.fire('input');
   step(s);
-  assert.equal(camp.rallyKeep, RALLY_KEEP.default);
+  assert.equal(camp.rallyKeep, 0);
 });
 
-test('the stepper disables itself at the ends of the band', () => {
+test('the rally slider spans the whole legal band and clamps past its ends', () => {
+  // A slider cannot "disable" its ends the way a stepper did, so the guarantee
+  // moved: the control ADVERTISES the band, and anything outside it is clamped
+  // by the sim rather than refused. Both halves are checked here because a
+  // mis-advertised range is a control that silently cannot reach a legal value.
   const s = fixture();
   const { panel, view } = mountPanel(s);
   const camp = at(s, 'camp');
-  camp.rallyTarget = 'f1';
+  camp.rallyTargets = ['f1'];
   select(view, 'camp');
-
-  camp.rallyKeep = RALLY_KEEP.max;
   panel.update(s);
-  const [minus, plus] = panel.el.find('hud-keep').findAll('keep-step');
-  assert.equal(plus.disabled, true);
-  assert.equal(minus.disabled, false);
 
-  camp.rallyKeep = RALLY_KEEP.min;
-  panel.update(s);
-  assert.equal(minus.disabled, true);
-  assert.equal(plus.disabled, false);
+  const slider = panel.el.find('hud-keep').find('keep-slider');
+  assert.equal(slider.attrs.min, `${RALLY_KEEP.min}`);
+  assert.equal(slider.attrs.max, `${RALLY_KEEP.max}`);
+  assert.equal(slider.attrs.step, `${RALLY_KEEP.step}`);
+
+  slider.value = `${RALLY_KEEP.max + 100}`;
+  slider.fire('input');
+  step(s);
+  assert.equal(camp.rallyKeep, RALLY_KEEP.max, 'over the top is clamped, not refused');
+
+  slider.value = '-5';
+  slider.fire('input');
+  step(s);
+  assert.equal(camp.rallyKeep, RALLY_KEEP.min);
 });
 
 test('the Upgrade button still reaches the simulation', () => {

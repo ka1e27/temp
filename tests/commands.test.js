@@ -89,12 +89,12 @@ test('a rally point turns a rear site into passive income', () => {
   const camp = at(s, 'camp');
   s.commands.push({ t: 'RALLY', site: 'camp', target: 'f1' });
   step(s);
-  assert.equal(camp.rallyTarget, 'f1');
+  assert.deepEqual(camp.rallyTargets, ['f1']);
   assert.equal(s.squads.length, 1, 'a garrison over the threshold ships out at once');
   assert.equal(total(camp.garrison), RALLY_MIN_GARRISON);
   s.commands.push({ t: 'RALLY', site: 'camp', target: null });
   step(s);
-  assert.equal(camp.rallyTarget, null);
+  assert.deepEqual(camp.rallyTargets, []);
 });
 
 test('Emergency Fortify is the siege-breaker it says it is', () => {
@@ -131,12 +131,12 @@ test('the HUD spelling of an order is accepted, not silently dropped', () => {
   s.commands.push({ t: 'BOOSTER', id: 'bombard', target: 'sh' });   // site alias
   step(s);
   assert.deepEqual(events(s, 'command-rejected'), []);
-  assert.equal(at(s, 'camp').rallyTarget, 'f1');
+  assert.deepEqual(at(s, 'camp').rallyTargets, ['f1']);
   assert.ok(at(s, 'sh').hp < at(s, 'sh').hpMax);
 
   s.commands.push({ t: 'RALLY', from: 'camp', to: null });
   step(s);
-  assert.equal(at(s, 'camp').rallyTarget, null);
+  assert.deepEqual(at(s, 'camp').rallyTargets, []);
 
   const squad = s.squads[0];
   s.commands.push({ t: 'RETREAT', squad });                         // a squad by object

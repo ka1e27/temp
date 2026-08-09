@@ -10,13 +10,14 @@
 // PURE.
 import { TICK_HZ } from '../core/loop.js';
 import {
-  SITES, SITE_UPGRADE, BOOSTERS, UNIT_IDS, CENTIGOLD,
+  SITES, SITE_UPGRADE, UNIT_IDS, UNITS, CENTIGOLD, RECRUIT,
 } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
-import { siteById, clampRallyKeep } from './state.js';
-import { spawnSquad, retreatTarget, reverseSquad, travelTicks } from './movement.js';
+import { siteById, clampRallyKeep, rallyTargetsOf, ralliesTo } from './state.js';
+import { spawnSquad, retreatTarget, reverseSquad } from './movement.js';
 import { applyGold, goldOf } from './economy.js';
 import { pushEvent, EVENTS } from './events.js';
+import { BOOST } from './boosters.js';
 
 const sec = (s) => Math.round(s * TICK_HZ);
 
@@ -109,6 +110,38 @@ function cmdTrain(state, cmd, by) {
   return null;
 }
 
+/**
+ * COMMISSION a single unit, paid for in gold and delivered at once.
+ *
+ * Deliberately NOT a training order: `trainType` is untouched, so a stronghold
+ * keeps building its spearwall while its commander rides in. That is the whole
+ * point — a marshal used to cost a site's entire output for forty seconds, and
+ * the retasking was what made a 4,000-crown unlock not worth using.
+ *
+ * Only units with a `maxPerSite` are commissionable. That is not an arbitrary
+ * whitelist: a cap is exactly what makes "buy it outright" safe, because there
+ * is no amount of gold that turns into an army this way.
+ */
+function cmdRecruit(state, cmd, by) {
+  const site = siteById(state, cmd.site);
+  if (!site) return 'unknown-site';
+  if (site.owner !== by) return 'not-your-site';
+  if (!SITES[site.kind].train) return 'site-cannot-train';
+  const unit = cmd.unit;
+  const spec = RECRUIT[unit];
+  if (!spec || !UNIT_IDS.includes(unit)) return 'not-commissionable';
+  if (!state.mods[by].unlockedUnits.includes(unit)) return 'unit-locked';
+  const cap = UNITS[unit].maxPerSite ?? Infinity;
+  if ((site.garrison[unit] || 0) >= cap) return 'already-commissioned';
+  const costCg = spec.gold * CENTIGOLD;
+  if (goldOf(state.factions[by]) < costCg) return 'insufficient-gold';
+
+  applyGold(state.factions[by], -costCg);
+  site.garrison[unit] = (site.garrison[unit] || 0) + 1;
+  pushEvent(state, EVENTS.UNITS_TRAINED, { siteId: site.id, owner: by, unit, count: 1 });
+  return null;
+}
+
 function cmdUpgrade(state, cmd, by) {
   const site = siteById(state, cmd.site);
   if (!site) return 'unknown-site';
@@ -124,23 +157,56 @@ function cmdUpgrade(state, cmd, by) {
   return null;
 }
 
+/**
+ * Set, add, remove or clear a rally destination.
+ *
+ * A site may feed SEVERAL neighbours, taking them in turn (battle/rally.js), so
+ * this is a set operation rather than an assignment. `mode`:
+ *   'set'    (default) replace the list with this one target
+ *   'add'    append if absent
+ *   'remove' drop this target
+ *   'toggle' add if absent, remove if present — what a right-drag does
+ * A null target always clears the whole list, whatever the mode.
+ */
 function cmdRally(state, cmd, by) {
   const site = siteById(state, cmd.site ?? cmd.from);
   if (!site) return 'unknown-site';
   if (site.owner !== by) return 'not-your-site';
   const targetId = cmd.target !== undefined ? cmd.target : (cmd.to ?? null);
-  if (targetId == null) { site.rallyTarget = null; return null; }
+  if (targetId == null) { setTargets(site, []); return null; }
   const target = siteById(state, targetId);
   if (!target) return 'unknown-target';
   if (!site.adj.includes(target.id)) return 'not-adjacent';
+
+  const current = rallyTargetsOf(site);
+  const has = current.includes(target.id);
+  const mode = cmd.mode ?? 'set';
+  let next;
+  if (mode === 'remove' || (mode === 'toggle' && has)) {
+    next = current.filter((id) => id !== target.id);
+  } else if (mode === 'add' || mode === 'toggle') {
+    next = has ? current : [...current, target.id];
+  } else {
+    next = [target.id];
+  }
+  setTargets(site, next);
+
   // A pair of sites rallying INTO each other pumps troops back and forth
   // forever, burning march time and leaving both permanently under-garrisoned.
-  // The newer order wins and the reciprocal one is dropped, so the loop cannot
+  // The newer order wins and the reciprocal link is dropped, so the loop cannot
   // exist no matter which path the orders arrived by — a drag, a rally chain,
-  // or a resumed save.
-  if (target.rallyTarget === site.id) target.rallyTarget = null;
-  site.rallyTarget = target.id;
+  // or a resumed save. With lists this drops only the ONE offending link, so a
+  // site feeding two neighbours keeps the innocent one.
+  if (next.includes(target.id) && ralliesTo(target, site.id)) {
+    setTargets(target, rallyTargetsOf(target).filter((id) => id !== site.id));
+  }
   return null;
+}
+
+/** Write a target list and keep the cursor inside it. */
+function setTargets(site, targets) {
+  site.rallyTargets = targets;
+  site.rallyCursor = targets.length ? (site.rallyCursor | 0) % targets.length : 0;
 }
 
 /**
@@ -223,97 +289,6 @@ function cmdWithdraw(state, cmd, by) {
   return null;
 }
 
-// --- boosters --------------------------------------------------------------
-// All five resolve HERE, in the order-drain phase, before arrivals — so
-// bombard-then-strike is a legal, learnable combo.
-
-function hopsFrom(state, origin, radius) {
-  const out = [];
-  const seen = { [origin.id]: true };
-  let frontier = [origin];
-  for (let d = 0; d < radius && frontier.length; d++) {
-    const next = [];
-    for (const s of frontier) {
-      for (const id of s.adj) {
-        if (seen[id]) continue;
-        seen[id] = true;
-        const n = siteById(state, id);
-        if (n) { out.push(n); next.push(n); }
-      }
-    }
-    frontier = next;
-  }
-  return out;
-}
-
-const BOOST = {
-  rally(state, by, site) {
-    if (!site) return 'needs-target';
-    const spec = BOOSTERS.rally;
-    const sources = hopsFrom(state, site, spec.radius)
-      .filter((s) => s.owner === by && total(s.garrison) > 0)
-      .sort((a, b) => (a.id < b.id ? -1 : 1));
-    if (!sources.length) return 'no-sources';
-    // One shared arrival tick: the guaranteed alpha strike.
-    let common = 0;
-    const parts = sources.map((s) => {
-      const comp = scaleComp(s.garrison, spec.fraction);
-      const t = state.tick + travelTicks(state, s, site, comp, by);
-      if (t > common) common = t;
-      return { s, comp };
-    });
-    let sent = 0;
-    for (const { s, comp } of parts) {
-      if (total(comp) === 0) continue;
-      s.garrison = subComp(s.garrison, comp);
-      spawnSquad(state, { owner: by, from: s.id, to: site.id, comp, arriveTick: common });
-      sent++;
-    }
-    return sent ? null : 'no-sources';
-  },
-
-  march(state, by) {
-    const spec = BOOSTERS.march;
-    let n = 0;
-    for (const sq of state.squads) {
-      if (sq.owner !== by) continue;
-      const left = sq.arriveTick - state.tick;
-      if (left <= 1) continue;
-      sq.arriveTick = state.tick + Math.max(1, Math.ceil(left * spec.factor));
-      n++;
-    }
-    return n ? null : 'nothing-in-flight';
-  },
-
-  bombard(state, by, site) {
-    if (!site) return 'needs-target';
-    if (site.owner === by) return 'not-a-target';
-    const spec = BOOSTERS.bombard;
-    const killed = scaleComp(site.garrison, spec.garrisonFrac);
-    site.garrison = subComp(site.garrison, killed);
-    if (state.factions[site.owner]) state.factions[site.owner].unitsLost += total(killed);
-    state.factions[by].unitsKilled += total(killed);
-    site.hp = Math.max(1, site.hp - spec.hp); // NEVER captures
-    return null;
-  },
-
-  fortify(state, by, site) {
-    if (!site) return 'needs-target';
-    if (site.owner !== by) return 'not-your-site';
-    const spec = BOOSTERS.fortify;
-    site.hp += spec.hp;             // deliberate overheal: it is an emergency
-    site.shieldTicks = sec(spec.sec);
-    return null;
-  },
-
-  tithe(state, by) {
-    const spec = BOOSTERS.tithe;
-    applyGold(state.factions[by], spec.gold * CENTIGOLD);
-    state.factions[by].goldEarnedCg += spec.gold * CENTIGOLD;
-    state.factions[by].trainBoostTicks = sec(spec.sec);
-    return null;
-  },
-};
 
 function cmdBooster(state, cmd, by) {
   if (by !== 'player') return 'boosters-are-the-players';
@@ -344,6 +319,7 @@ function cmdBooster(state, cmd, by) {
 const HANDLERS = {
   SEND: cmdSend,
   TRAIN: cmdTrain,
+  RECRUIT: cmdRecruit,
   UPGRADE: cmdUpgrade,
   RALLY: cmdRally,
   RALLY_KEEP: cmdRallyKeep,

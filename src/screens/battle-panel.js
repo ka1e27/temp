@@ -14,9 +14,8 @@
 // HARD RULE, same as everywhere: nothing here mutates simulation state. The
 // Upgrade button and the rally stepper append commands through `input`, exactly
 // like a click on the board does.
-import { RALLY_KEEP } from '../content/balance.js';
 import { total } from '../battle/combat.js';
-import { rallyKeepOf } from '../battle/state.js';
+import { rallyKeepOf, rallyTargetsOf } from '../battle/state.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration } from '../ui/format.js';
@@ -28,9 +27,12 @@ import {
   updateUpgradePreviewBubbles, clearBubbles,
 } from './battle-bubbles.js';
 import {
-  siteIntel, trainLine, gateLine, stepRallyKeep, keepLabel, upgradePreview,
+  siteIntel, trainLine, gateLine, upgradePreview,
 } from './battle-econ.js';
 import { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
+import { createKeepRow, createRecruitRow } from './battle-actions.js';
+// Re-exported so nothing downstream has to know the actions group moved out.
+export { setKeep, recruit, recruitOffer } from './battle-actions.js';
 
 export { createWithdraw, createAlert } from './battle-alert.js';
 export { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
@@ -82,6 +84,7 @@ export function createSitePanel(o) {
     on: { click: () => { const id = targetId(); if (id) input.upgrade(id); } },
   }, 'Upgrade');
   const keep = createKeepRow(getState, input, targetId);
+  const hire = createRecruitRow(getState, input, targetId);
   // Four visual groups, so the eye chunks "what this site IS" (head) from
   // "what it's WORTH" (econ) from "why it's hard / what's happening to it"
   // (context) from "what you can do about it" (actions) instead of scanning
@@ -92,7 +95,7 @@ export function createSitePanel(o) {
   const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, stat);
-  const actions = h('div.hud-site-actions', {}, keep.el, upgradePreviewRow, upgrade);
+  const actions = h('div.hud-site-actions', {}, keep.el, hire.el, upgradePreviewRow, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, and a panel that let clicks through would sit
   // over the board, take a click on its own text as a click on empty ground,
@@ -173,7 +176,10 @@ export function createSitePanel(o) {
     const site = id ? siteOf(state, id) : null;
     setAnchor(site);
     set.open(!!site);
-    if (!site) { setShown(false); keep.show(null); blankVitals(); set.siege(false); return; }
+    if (!site) {
+      setShown(false); keep.show(null); hire.show(null);
+      blankVitals(); set.siege(false); return;
+    }
 
     // Every bind* returns whether it really touched the DOM, so `wrote` is a
     // free answer to "did the panel's box just change?". Bitwise, not `||`:
@@ -190,6 +196,7 @@ export function createSitePanel(o) {
       set.siege(false);
       setShown(false);
       keep.show(null);
+      hire.show(null);
       if (wrote) follower.markDirty();
       return;
     }
@@ -231,7 +238,8 @@ export function createSitePanel(o) {
     set.statWarn(hostile);
     set.siege(hostile);
     // A hold-back only means anything where there is a rally to hold back from.
-    wrote |= keep.show(site.owner === 'player' && site.rallyTarget ? site : null);
+    wrote |= keep.show(site.owner === 'player' && rallyTargetsOf(site).length ? site : null);
+    wrote |= hire.show(site);
 
     const offer = upgradeOffer(state, site);
     wrote |= setShown(site.owner === 'player');
@@ -262,6 +270,7 @@ export function createSitePanel(o) {
     set.statWarn(false);
     set.siege(false);
     wrote |= keep.show(null);
+    wrote |= hire.show(null);
     if (wrote) follower.markDirty();
   }
 
@@ -282,65 +291,6 @@ export function createSitePanel(o) {
   };
 }
 
-/**
- * The per-site rally hold-back: how many troops a rallied site keeps at home
- * before forwarding the rest. A back-line farm should keep almost nothing; a
- * front stronghold feeding a siege has to hold enough to survive the
- * counter-attack, and one global number cannot be both.
- *
- * The buttons append a RALLY_KEEP command through `input` — nothing here writes
- * to the site. The value shown is read back off the simulation, so a rejected
- * order visibly does nothing rather than leaving the control lying.
- */
-function createKeepRow(getState, input, targetId) {
-  const value = h('span.keep-value.num', { text: '' });
-  const step = (dir, glyph) => h('button.btn.ghost.keep-step', {
-    'data-interactive': true, type: 'button',
-    title: dir < 0 ? 'Forward more of this garrison' : 'Hold more of this garrison back',
-    'aria-label': dir < 0 ? 'Keep fewer troops at home' : 'Keep more troops at home',
-    on: { click: () => pressKeep(getState(), targetId(), dir, input) },
-  }, glyph);
-  const down = step(-1, '−');
-  const up = step(1, '+');
-  const el = h('div.hud-keep', {}, h('span.keep-label', { text: 'Rally' }), down, value, up);
-
-  const set = { value: bindText(value, ''), open: bindClass(el, 'is-open') };
-  let lo = null;
-  let hi = null;
-
-  return {
-    el,
-    /** @param {?object} site the selected site, or null to hide the row.
-     *  @returns {boolean} true when the row appeared, vanished or changed. */
-    show(site) {
-      let wrote = set.open(!!site) ? 1 : 0;
-      if (!site) return !!wrote;
-      const n = rallyKeepOf(site);
-      wrote |= set.value(keepLabel(site));
-      if (lo !== (n <= RALLY_KEEP.min)) { lo = n <= RALLY_KEEP.min; down.disabled = lo; }
-      if (hi !== (n >= RALLY_KEEP.max)) { hi = n >= RALLY_KEEP.max; up.disabled = hi; }
-      return !!wrote;
-    },
-  };
-}
-
-/**
- * What a hold-back stepper does when pressed: read the site back off the
- * SIMULATION, work out the next legal value, and append exactly one order.
- * Nothing here writes to the site — a rejected order therefore makes the
- * control visibly do nothing rather than leave it lying about the state.
- *
- * Exported because a button whose handler is untestable is how a dead control
- * ships green: a test can press this without a DOM and still travel the whole
- * real path into `state.commands[]`.
- * @returns {boolean} true when an order was queued.
- */
-export function pressKeep(state, siteId, dir, input) {
-  const site = siteId ? siteOf(state, siteId) : null;
-  if (!site) return false;
-  input.setRallyKeep(site.id, stepRallyKeep(site, dir));
-  return true;
-}
 
 function squadById(state, id) {
   for (let i = 0; i < state.squads.length; i++) {
@@ -368,7 +318,10 @@ function statusLine(site, intel) {
   if (intel?.gate?.sealed) return `UNDER SIEGE · ${gateLine(intel)}`;
   if (site.siege) return 'UNDER SIEGE';
   if (site.shieldTicks > 0) return 'fortified';
-  if (site.rallyTarget) return `rallying → ${site.rallyTarget}`;
+  // One site may feed several neighbours in turn, so the status names all of
+  // them — "rallying → a" when a two-way split is live would be a lie.
+  const rally = rallyTargetsOf(site);
+  if (rally.length) return `rallying → ${rally.join(' · ')}`;
   return '';
 }
 

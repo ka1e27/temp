@@ -14,16 +14,17 @@ import {
   UNITS, BOOSTERS, ATTRITION, ATTRITION_BLEED_SEC, ATTRITION_CHECK_TICKS, RALLY_KEEP,
 } from '../content/balance.js';
 import {
-  resolveField, siegeDps, siteRegen, siteMaxHp, emptyComp, addComp, scaleComp, total,
+  resolveField, siegeDps, siteRegen, siteMaxHp, emptyComp, addComp, total,
 } from './combat.js';
 import {
-  createBattleState, siteById, effectiveLevel, armySize, sitesOwned, rallyKeepOf,
-  castleSealed,
+  createBattleState, siteById, effectiveLevel, armySize, sitesOwned, castleSealed,
+  clampRallyKeep,
 } from './state.js';
+import { rallyPhase } from './rally.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget, clearPathCache } from './movement.js';
-import { drainCommands, subComp } from './commands.js';
+import { drainCommands } from './commands.js';
 import { runEconomy, attritionMods } from './economy.js';
 import { runTraining, garrisonCap } from './training.js';
 import { pushEvent, EVENTS } from './events.js';
@@ -71,8 +72,9 @@ function capture(state, site) {
   site.hp = Math.min(site.hp, site.hpMax);
   site.upgradeTicksLeft = 0;
   site.trainProgress = 0;
-  site.rallyTarget = null;
-  site.rallyKeep = RALLY_KEEP.default;   // the standing order died with the wall
+  site.rallyTargets = [];                // the standing order died with the wall
+  site.rallyCursor = 0;
+  site.rallyKeep = clampRallyKeep(state.rules?.rallyKeepDefault ?? RALLY_KEEP.default);
   site.shieldTicks = 0;
   pushEvent(state, EVENTS.SITE_CAPTURED, { siteId: site.id, kind: site.kind, from, to });
   state.meta.lastFlipTick = state.tick;
@@ -112,29 +114,7 @@ function siegePhase(state) {
   if (flipped) recomputeInfluence(state);
 }
 
-// --- phase 6: rally auto-send ----------------------------------------------
-
-function rallyPhase(state) {
-  for (const site of state.sites) {
-    if (!site.rallyTarget || !FACTIONS.includes(site.owner)) continue;
-    const target = siteById(state, site.rallyTarget);
-    if (!target || !site.adj.includes(target.id)) { site.rallyTarget = null; continue; }
-    const n = total(site.garrison);
-    // Per-site, not one global: a back-line farm keeps almost nothing, a front
-    // stronghold feeding a siege holds enough to survive the counter-attack.
-    const keep = rallyKeepOf(site);
-    if (n <= keep) continue;
-    const send = scaleComp(site.garrison, (n - keep) / n);
-    if (total(send) === 0) continue;
-    site.garrison = subComp(site.garrison, send);
-    const squad = spawnSquad(state, {
-      owner: site.owner, from: site.id, to: target.id, comp: send,
-    });
-    pushEvent(state, EVENTS.SQUAD_SENT, {
-      squadId: squad.id, owner: site.owner, from: site.id, to: target.id, rally: true,
-    });
-  }
-}
+// --- phase 6: rally auto-send lives in ./rally.js ---------------------------
 
 // --- phase 7: arrivals ------------------------------------------------------
 

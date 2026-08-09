@@ -203,8 +203,8 @@ test('a chained rally sets a rally on EVERY site along the road', () => {
     true,
   );
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, 'mid');
-  assert.equal(siteOf(state, 'mid').rallyTarget, 'far');
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, ['mid']);
+  assert.deepEqual(siteOf(state, 'mid').rallyTargets, ['far']);
 });
 
 test('a chained rally actually moves troops down the whole chain', () => {

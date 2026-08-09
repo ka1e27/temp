@@ -7,6 +7,7 @@
 // Allocation-free, same as its neighbour: module-scope scratch, dash arrays
 // mutated in place.
 import { arcPath, arcPoint, chevron } from './routes.js';
+import { rallyTargetsOf } from '../battle/state.js';
 
 const _a = { x: 0, y: 0 };
 const _b = { x: 0, y: 0 };
@@ -27,14 +28,18 @@ export function drawRallies(ctx, state, px, g) {
     ctx.beginPath();
     for (let i = 0; i < state.sites.length; i++) {
       const s = state.sites[i];
-      if (!s.rallyTarget || s.owner !== owner) continue;
-      const o = g.byId(s.rallyTarget);
-      if (!o) continue;
-      any = true;
-      g.pos(s, _a);
-      g.pos(o, _b);
-      ctx.moveTo(_a.x, _a.y);
-      ctx.lineTo(_b.x, _b.y);
+      if (s.owner !== owner) continue;
+      // One site may feed several neighbours in turn, so every link is drawn.
+      const targets = rallyTargetsOf(s);
+      for (let t = 0; t < targets.length; t++) {
+        const o = g.byId(targets[t]);
+        if (!o) continue;
+        any = true;
+        g.pos(s, _a);
+        g.pos(o, _b);
+        ctx.moveTo(_a.x, _a.y);
+        ctx.lineTo(_b.x, _b.y);
+      }
     }
     if (any) {
       ctx.strokeStyle = g.palette.border[owner];
@@ -69,26 +74,29 @@ function drawRallyArrows(ctx, state, px, g, owner) {
   ctx.beginPath();
   for (let i = 0; i < state.sites.length; i++) {
     const s = state.sites[i];
-    if (!s.rallyTarget || s.owner !== owner) continue;
-    const o = g.byId(s.rallyTarget);
-    if (!o) continue;
-    g.pos(s, _a);
-    g.pos(o, _b);
-    const dx = _b.x - _a.x;
-    const dy = _b.y - _a.y;
-    const m = Math.sqrt(dx * dx + dy * dy) || 1;
-    const hx = dx / m;
-    const hy = dy / m;
-    for (let k = 0; k < ARROW_AT.length; k++) {
-      const t = ARROW_AT[k];
-      const x = _a.x + dx * t;
-      const y = _a.y + dy * t;
-      // An open ">" traced along the line, NOT a filled arrowhead: troop pieces
-      // are solid chevrons, so a filled marker here reads as soldiers standing
-      // on the road rather than as the road's direction.
-      ctx.moveTo(x - hx * size + -hy * size * 0.62, y - hy * size + hx * size * 0.62);
-      ctx.lineTo(x, y);
-      ctx.lineTo(x - hx * size - -hy * size * 0.62, y - hy * size - hx * size * 0.62);
+    if (s.owner !== owner) continue;
+    const targets = rallyTargetsOf(s);
+    for (let n = 0; n < targets.length; n++) {
+      const o = g.byId(targets[n]);
+      if (!o) continue;
+      g.pos(s, _a);
+      g.pos(o, _b);
+      const dx = _b.x - _a.x;
+      const dy = _b.y - _a.y;
+      const m = Math.sqrt(dx * dx + dy * dy) || 1;
+      const hx = dx / m;
+      const hy = dy / m;
+      for (let k = 0; k < ARROW_AT.length; k++) {
+        const t = ARROW_AT[k];
+        const x = _a.x + dx * t;
+        const y = _a.y + dy * t;
+        // An open ">" traced along the line, NOT a filled arrowhead: troop pieces
+        // are solid chevrons, so a filled marker here reads as soldiers standing
+        // on the road rather than as the road's direction.
+        ctx.moveTo(x - hx * size + -hy * size * 0.62, y - hy * size + hx * size * 0.62);
+        ctx.lineTo(x, y);
+        ctx.lineTo(x - hx * size - -hy * size * 0.62, y - hy * size - hx * size * 0.62);
+      }
     }
   }
   ctx.stroke();

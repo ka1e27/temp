@@ -37,12 +37,18 @@ export const cmd = {
   send: (from, to, fraction, filter, via) => (via && via.length
     ? { t: 'SEND', from, to, fraction, filter, via }
     : { t: 'SEND', from, to, fraction, filter }),
-  rally: (site, target) => ({ t: 'RALLY', site, target: target ?? null }),
+  // `mode` is omitted entirely when unset rather than sent as undefined: these
+  // objects are asserted to be plain serializable data, and a key that only
+  // exists sometimes is a worse shape than one that never exists.
+  rally: (site, target, mode) => ({
+    t: 'RALLY', site, target: target ?? null, ...(mode ? { mode } : {}),
+  }),
   rallyKeep: (site, keep) => ({ t: 'RALLY_KEEP', site, keep }),
   retreat: (site) => ({ t: 'RETREAT', site }),
   retreatSquad: (squadId) => ({ t: 'RETREAT_SQUAD', squadId }),
   booster: (id, site) => ({ t: 'BOOSTER', id, site: site ?? null }),
   train: (site, unit) => ({ t: 'TRAIN', site, unit }),
+  recruit: (site, unit) => ({ t: 'RECRUIT', site, unit }),
   upgrade: (site) => ({ t: 'UPGRADE', site }),
   withdraw: () => ({ t: 'WITHDRAW' }),
 };
@@ -165,27 +171,27 @@ export function createOrders(o) {
   /**
    * What a rally DRAG along a link means, which is not simply "set it".
    *
-   * One link between two sites can be in exactly three states — off, pointing
-   * one way, pointing the other — so dragging it should cycle them rather than
-   * needing a separate gesture to undo. Dragging the SAME direction twice is the
-   * player saying "no, not that", so it clears.
+   * Each LINK is independently on or off, and dragging it flips that — so a
+   * second neighbour is added by dragging to it, and a link is removed by
+   * dragging it again. That is what lets one site feed two fronts (the sim
+   * alternates between them; see battle/rally.js).
    *
-   *   A -> B when it is already A -> B   ...clears the link
-   *   A -> B when it is currently B -> A ...flips it to A -> B
-   *   A -> B when the link is idle       ...sets A -> B
+   *   A -> B when A already feeds B    ...removes that link
+   *   A -> B when A feeds C only       ...adds B, so A now feeds C and B
+   *   A -> B when it is currently B -> A ...flips it, because the sim drops the
+   *                                        reciprocal link whenever it sets one
+   *   A -> A (release on the source)   ...clears every link
    *
-   * The flip is expressed as one order: commands.js drops a reciprocal rally
-   * whenever it sets one, because two sites pointing at each other pump troops
-   * back and forth forever. That invariant lives in the SIM, not here, so it
-   * holds for the rally chain and for a resumed save too.
+   * The reciprocal-drop invariant lives in the SIM, not here, so it holds for
+   * the rally chain and for a resumed save too. With lists it drops only the one
+   * offending link, so a site feeding two neighbours keeps the innocent one.
    * @returns {boolean} true when an order was issued.
    */
   function toggleRally(from, to) {
     if (!from || from.owner !== 'player') return false;
     if (!to || to.id === from.id) { push(cmd.rally(from.id, null)); return true; }
     if (!from.adj.includes(to.id)) return false;
-    if (from.rallyTarget === to.id) { push(cmd.rally(from.id, null)); return true; }
-    push(cmd.rally(from.id, to.id));
+    push(cmd.rally(from.id, to.id, 'toggle'));
     return true;
   }
 

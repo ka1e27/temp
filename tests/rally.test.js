@@ -1,4 +1,4 @@
-// Rally points, from the gesture down to `site.rallyTarget`.
+// Rally points, from the gesture down to `site.rallyTargets`.
 //
 // Rally had no test at all while it had exactly one input path — select, then
 // right-CLICK — and that path fired on pointerdown at the press point. So
@@ -65,7 +65,7 @@ test('rally drag: source to an adjacent site sets the rally in the simulation', 
 
   assert.equal(ord.issueRally(siteOf(state, 'camp'), siteOf(state, 'farm')), true);
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, 'farm');
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, ['farm']);
 });
 
 test('rally drag: releasing back on the source clears it — the explicit cancel', () => {
@@ -74,11 +74,11 @@ test('rally drag: releasing back on the source clears it — the explicit cancel
 
   ord.issueRally(siteOf(state, 'camp'), siteOf(state, 'farm'));
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, 'farm');
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, ['farm']);
 
   assert.equal(ord.issueRally(siteOf(state, 'camp'), siteOf(state, 'camp')), true);
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, null);
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, []);
 });
 
 test('rally drag: a non-adjacent target issues NOTHING, so an existing rally survives', () => {
@@ -93,7 +93,7 @@ test('rally drag: a non-adjacent target issues NOTHING, so an existing rally sur
   assert.equal(ord.issueRally(siteOf(state, 'camp'), siteOf(state, 'far')), false);
   assert.equal(state.commands.length, 0, 'an illegal rally must not reach the queue');
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, 'farm');
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, ['farm']);
 });
 
 test('rally drag: an enemy site is never a legal source', () => {
@@ -111,7 +111,7 @@ test('rally drag: adjacency is enforced by the SIM too, not just the input layer
   const state = fixture();
   state.commands.push({ t: 'RALLY', site: 'camp', target: 'far' });
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, null);
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, []);
   assert.ok(state.events.some((e) => e.reason === 'not-adjacent'));
 });
 
@@ -126,7 +126,7 @@ test('rally click: the selection rallies to the site under the pointer', () => {
   view.selection.push('camp');
   ord.setRally(0, 0);
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, 'farm');
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, ['farm']);
 });
 
 test('rally click: sources that cannot legally reach the target are skipped, not thrown', () => {
@@ -138,8 +138,8 @@ test('rally click: sources that cannot legally reach the target are skipped, not
   ord.setRally(0, 0);
   assert.equal(state.commands.length, 1);
   drainCommands(state);
-  assert.equal(siteOf(state, 'camp').rallyTarget, null);
-  assert.equal(siteOf(state, 'farm').rallyTarget, 'hold');
+  assert.deepEqual(siteOf(state, 'camp').rallyTargets, []);
+  assert.deepEqual(siteOf(state, 'farm').rallyTargets, ['hold']);
 });
 
 test('rally click and rally drag agree about every legal pair', () => {
