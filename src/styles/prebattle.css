@@ -159,3 +159,16 @@
   .pb-body { grid-template-columns: minmax(0, 1fr); }
   .pb-brief { grid-column: auto; }
 }
+
+/* The Marshal line. He is not a budget row — one rides free with every
+   expedition once unlocked — so the row shows what you have rather than a
+   control you could press, and says so where the army is chosen. */
+.pb-unit.is-free { opacity: 0.9; }
+.pb-unit-free {
+  margin-left: var(--s-2); padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--c-gold) 22%, transparent);
+  color: #fff6e2; font-size: var(--t-xs); font-weight: var(--w-bold);
+  text-transform: uppercase; letter-spacing: var(--track-label);
+}
+.pb-unit-note { font-size: var(--t-xs); white-space: nowrap; }

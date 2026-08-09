@@ -302,3 +302,55 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   RANGE SLIDERS
+   One rule for every slider in the game — the site panel's rally hold-back, the
+   HUD's speed control and the settings drawer — because they are the same
+   gesture and should not be three different-looking controls. Steppers were
+   replaced by these where the common intent is "none" or "most of it": both are
+   one throw of a slider and were a dozen presses of a button.
+
+   The track is drawn on the input itself rather than with ::before, so the
+   thumb's native hit area stays intact on touch. -moz- and -webkit- rules have
+   to be listed separately: a browser drops the WHOLE selector when it does not
+   recognise one pseudo-element in the list.
+   -------------------------------------------------------------------------- */
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  /* `width: 100%` is right in a block context (the settings drawer) and wrong
+     inside a flex row, where it becomes the flex-basis and pushes the slider
+     onto its own line. Rows that need it sized by the flex algorithm set
+     `width: auto` — see .keep-slider and .hud-speed-slider. */
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  height: var(--hit-sm); margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: var(--r-pill);
+  background: var(--c-line);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px; border-radius: var(--r-pill);
+  background: var(--c-line);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -5px;
+  border-radius: var(--r-pill);
+  background: var(--c-text); border: 2px solid var(--c-surface-2);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: var(--r-pill);
+  background: var(--c-text); border: 2px solid var(--c-surface-2);
+}
+input[type="range"]:hover::-webkit-slider-thumb { background: var(--c-accent); }
+input[type="range"]:hover::-moz-range-thumb { background: var(--c-accent); }
+input[type="range"]:disabled { opacity: 0.4; cursor: default; }
+
+@media (pointer: coarse) {
+  input[type="range"] { height: var(--hit); }
+  input[type="range"]::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; }
+}

@@ -201,3 +201,17 @@
 @media (pointer: coarse) {
   .shop-row { padding: var(--s-3); }
 }
+
+/* Settings drawer. Same drawer the export/import panes use, so only the rows
+   inside it need rules. */
+.menu-drawer-title {
+  margin: 0 0 var(--s-2); font-size: var(--t-sm);
+  text-transform: uppercase; letter-spacing: var(--track-label);
+  color: var(--c-text-dim);
+}
+.set-row + .set-row { margin-top: var(--s-4); }
+.set-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.set-value { font: var(--w-bold) var(--t-sm) / 1 var(--font-num); color: var(--c-text); }
+.set-slider { margin-top: var(--s-1); }
+.set-hint, .set-note { margin: var(--s-1) 0 0; font-size: var(--t-xs); line-height: 1.45; }
+.set-note { margin-top: var(--s-4); }

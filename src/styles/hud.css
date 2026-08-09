@@ -327,3 +327,18 @@
   .seg { min-width: var(--hit); }
   .hud-withdraw { min-height: var(--hit); }
 }
+
+/* The speed slider. Wider than the other HUD segments because it carries
+   sixteen stops (0.25x to 4x in quarters) and the label above it is the
+   readout, so the track only has to be draggable, not legible. */
+/* nowrap: `.hud-group-row` wraps by default (it used to hold three buttons),
+   and a wrapped slider drops onto its own line under the pause button. */
+.hud-speeds .hud-group-row { flex-wrap: nowrap; align-items: center; gap: var(--s-2); }
+.hud-speed-slider { width: auto; min-width: 96px; }
+/* Without the Tactician the track simply stops at 2x — the slider's own `max`
+   carries the gate, so a locked speed is unreachable rather than reachable and
+   then refused. This only marks the card so the cap is visible. */
+.hud-speeds.is-capped .hud-group-label::after {
+  content: " · capped";
+  color: var(--c-text-dim); font-weight: var(--w-normal);
+}

@@ -155,7 +155,7 @@
    holds a visible control, so a foreign site (neither) shows no dangling
    rule under its status line. */
 .hud-site-actions { display: flex; flex-direction: column; gap: var(--s-2); }
-.hud-site-actions:has(.hud-keep.is-open, .hud-upgrade) {
+.hud-site-actions:has(.hud-keep.is-open, .hud-recruit.is-open, .hud-upgrade) {
   margin-top: var(--s-3); padding-top: var(--s-3); border-top: var(--hairline);
 }
 
@@ -171,11 +171,17 @@
   font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
   min-width: 9ch; text-align: center; color: var(--c-text);
 }
-.keep-step {
-  min-width: var(--hit-sm); min-height: var(--hit-sm);
-  padding: 0; font: var(--w-bold) var(--t-sm) / 1 var(--font-num);
+.keep-slider { width: auto; min-width: 70px; }
+
+/* Commission a Marshal. Deliberately NOT the gold treatment the Upgrade button
+   gets: there is one warm accent on this panel and the site's own upgrade owns
+   it, so a second gold button would make the panel argue with itself. */
+.hud-recruit {
+  display: none;
+  min-height: var(--hit-sm); font-size: var(--t-sm); font-weight: var(--w-bold);
 }
-.keep-step:disabled { opacity: 0.35; }
+.hud-recruit.is-open { display: block; }
+.hud-recruit:disabled { opacity: 0.45; }
 
 /* The one button on this panel, so it gets the one warm accent: gold, because
    it is gold this action spends. Ghost/ordinary while unaffordable — the
@@ -195,8 +201,7 @@
 /* Touch: compact desktop metrics grow to a real thumb target. Moved here with
    the controls they size — the rule and the control belong in one file. */
 @media (pointer: coarse) {
-  .hud-upgrade { min-height: var(--hit); }
-  .keep-step { min-width: var(--hit); min-height: var(--hit); }
+  .hud-upgrade, .hud-recruit { min-height: var(--hit); }
 }
 
 /* --- Unit hover card ------------------------------------------------------
