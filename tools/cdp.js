@@ -8,24 +8,40 @@ const CHROME = process.env.CHROME_PATH || '/opt/pw-browsers/chromium';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Launch headless Chromium and wait for its first page target. */
-export async function launch({ url, port = 9333, width = 1440, height = 900 } = {}) {
+/**
+ * Launch headless Chromium and wait for its first page target.
+ *
+ * `port` MUST default to something that cannot collide across concurrent or
+ * back-to-back calls. It used to default to a fixed 9333: if anything was
+ * already bound there (a prior run that never got killed, an orphaned
+ * process), this spawn's OWN debugging port silently failed to bind, and the
+ * polling loop below then happily found the OLD process's pre-existing page
+ * instead — connecting to a foreign, already-navigated, already-mutating tab
+ * with NO indication anything was wrong. That tab can go on accumulating
+ * state (drags, sieges, sim ticks) from every unrelated script that ever
+ * calls launch() again, for as long as it lives — a single stale Chrome
+ * silently answering for every "fresh browser" verification is exactly the
+ * kind of failure that makes a passing check meaningless. Random port PLUS a
+ * loud runtime check that the tab we got is actually OUR tab, not a hitchhiker.
+ */
+export async function launch({ url, port, width = 1440, height = 900 } = {}) {
+  const debugPort = port ?? (20000 + Math.floor(Math.random() * 20000));
   const proc = spawn(CHROME, [
     '--headless=new',
     '--no-sandbox',
     '--disable-gpu',
     '--disable-dev-shm-usage',
     '--hide-scrollbars',
-    `--remote-debugging-port=${port}`,
+    `--remote-debugging-port=${debugPort}`,
     `--window-size=${width},${height}`,
-    url,
+    'about:blank',
   ], { stdio: 'ignore' });
 
   let target = null;
   for (let i = 0; i < 80 && !target; i++) {
     await sleep(250);
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/json/list`);
+      const res = await fetch(`http://127.0.0.1:${debugPort}/json/list`);
       const list = await res.json();
       target = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl);
     } catch { /* not up yet */ }
@@ -34,9 +50,21 @@ export async function launch({ url, port = 9333, width = 1440, height = 900 } = 
     proc.kill();
     throw new Error('Chromium DevTools endpoint never came up');
   }
+  // A target this soon after spawn should still be the blank page we asked
+  // for. If it is already somewhere else, this debug port was not exclusively
+  // ours — a leftover process answered instead of the one just spawned, and
+  // every subsequent command in this session would silently act on a browser
+  // nobody meant to be testing. Fail loudly rather than pretend.
+  if (target.url && !target.url.startsWith('about:blank') && target.url !== '') {
+    proc.kill();
+    throw new Error(`launch(): got a foreign tab already at "${target.url}" on port `
+      + `${debugPort} — a leftover Chrome process is answering instead of this one. `
+      + 'Kill stray chromium processes and retry.');
+  }
 
   const client = await connect(target.webSocketDebuggerUrl);
   client.close = ((inner) => async () => { inner(); proc.kill(); })(client.close);
+  await client.goto(url);
   return client;
 }
 

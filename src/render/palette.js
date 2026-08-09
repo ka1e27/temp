@@ -21,7 +21,6 @@ const VARS = {
   rank: '--c-rank',
   accent: '--c-accent',
   water: '--c-water',
-  waterLit: '--c-water-lit',
   warn: '--c-warn',
   danger: '--c-danger',
 };
@@ -48,11 +47,11 @@ export const FALLBACK = Object.freeze({
   text: '#e7ebf3', textDim: '#93a0b8',
   player: '#3ddc97', enemy: '#ff5c5c', neutral: '#6b7688',
   gold: '#ffc857', rank: '#ffdd8f', accent: '#5aa9ff',
-  water: '#6cc7f2', waterLit: '#eaf7ff', warn: '#ffc857', danger: '#ff5c5c',
+  water: '#6cc7f2', warn: '#ffc857', danger: '#ff5c5c',
   militia: '#e8e8ec', spearmen: '#5bd6a6', raiders: '#ffc857',
   rams: '#b07cff', marshal: '#ff8a3d',
   floodAlpha: 0.2, floodStrongAlpha: 0.42, gridAlpha: 0.5, blockedAlpha: 0.9,
-  riverAlpha: 0.62,
+  riverAlpha: 0.5,
 });
 
 /** '#abc' | '#aabbcc' -> 0xrrggbb. Returns null for anything else. */
@@ -261,43 +260,18 @@ export function derive(c) {
   // being INSIDE someone's ground.
   p.blocked = withAlpha(mix(c.bg, c.line, 0.8), c.blockedAlpha);
   p.blockedEdge = withAlpha(c.textDim, 0.55);
-  // WATER, in four concentric layers over one path, EVERY layer alpha
-  // composited rather than pre-mixed dark — glass over ground, not a solid
-  // ribbon painted on top of it. The old version pre-mixed the hue toward
-  // black and pushed the result to near-opaque, which is what read as a
-  // heavy, saturated teal; withAlpha() here leaves the raw light-blue hue
-  // alone and lets the hex's OWN colour blend through underneath it, per
-  // pixel, on whatever ground or territory flood the river happens to cross.
-  // Outermost first:
-  //   riverValley  the ground dipping into the cut. Pure black at low alpha —
-  //                no hue of its own — so it darkens the banks without
-  //                adding blue mass.
-  //   riverBed     the wet stone the water sits in, a little darker than the
-  //                water itself so the channel still reads as a
-  //                cross-section, but translucent, not a black gutter.
-  //   river        the water: the light-blue hue, plainly alpha-blended.
-  //   riverLit     the current catching light down the middle. Thin, pale,
-  //                and the only bright thing here — it is what makes the
-  //                channel read as shallow water with depth rather than as a
-  //                fat stroke.
-  // All of it stays under the front line in loudness: water is terrain, and the
-  // one line that must always win the eye is where the factions meet.
-  p.riverValley = withAlpha('#000000', c.riverAlpha * 0.30);
-  p.riverBed = withAlpha(mix(c.water, '#000000', 0.4), c.riverAlpha * 0.55);
-  p.river = withAlpha(c.water, c.riverAlpha * 0.72);
-  p.riverLit = withAlpha(c.waterLit, c.riverAlpha * 0.48);
-  // The floodplain: which hexes are wet, as a wash so faint it can never read
-  // as a chain of blue lozenges. It is answering a RULES question — a farm on
-  // water earns x1.35 and every unit fights differently there — so it has to be
-  // present at map zoom without competing with the channel it surrounds.
-  p.riverWash = withAlpha(c.water, c.riverAlpha * 0.3);
-  // The shore, drawn only where wet ground meets dry. One hairline on the
-  // lattice is worth more than any amount of extra tint: it says WHICH HEXES
-  // in the grid's own language, and a run of them outlines a floodplain rather
-  // than a chain of tiles. Mixed toward text rather than toward black: the
-  // one river element allowed to be crisp, since a single-pixel hairline
-  // never reads as a heavy ribbon however bright it is.
-  p.riverBank = withAlpha(mix(c.water, c.text, 0.35), c.riverAlpha * 0.85);
+  // WATER. ONE flat translucent fill, nothing else — the third pass at this
+  // (see river.js for the full history). The first two both shaded it: a
+  // four-layer stack of a darkened valley, a darkened bed, the water and a
+  // lit core, plus a wash over the whole floodplain and a hairline shore.
+  // Direct player feedback on that version: get rid of the shading, make the
+  // river a translucent light blue, leave the rest of the tile its normal
+  // colour. So there is exactly one river colour now — the raw hue at one
+  // alpha, chosen so the hex's own ground and territory tint still show
+  // through it plainly while the water itself stays unambiguously blue — and
+  // nothing paints outside the ribbon shape river.js builds: no wash, no
+  // shore, no second darker or lighter pass.
+  p.river = withAlpha(c.water, c.riverAlpha);
   p.track = withAlpha(c.line, 0.95);
   p.shade = withAlpha(c.bg, 0.55);
   // Training progress. Dimmer than the selection accent it shares a hue with:

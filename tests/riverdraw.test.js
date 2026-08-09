@@ -1,51 +1,49 @@
-// THE WATER'S GEOMETRY, as pure functions.
+// THE RIVER'S GEOMETRY, third pass — see the banner in src/render/river.js
+// for the full history of what pass 1 and pass 2 got wrong. This file proves
+// the CENTRELINE claims arithmetically rather than by looking at a
+// screenshot, which is exactly how pass 1 shipped an enclosed loop nobody
+// noticed. The ribbon built on top of this centreline — the filled shapes
+// actually painted, the winding-direction and hub-coverage proofs — is
+// tests/riverribbon.test.js; split there to stay under the 400-line cap.
 //
-// Rivers are drawn hex by hex: water enters and leaves at the MIDPOINT OF EACH
-// SHARED EDGE, as a straight spoke to the hex centre. Every claim that makes
-// that read as terrain rather than as an overlay is geometric, and every one
-// is wrong-by-a-rounding-error invisible: the crossing point two neighbours
-// compute must be the SAME POINT; the tangent there must be the edge normal
-// from both sides, or the join kinks; the spoke must stay INSIDE its own hex,
-// or one hex's water spills over a tile it does not occupy; a confluence of
-// three or more spokes must meet at that ONE shared point, or it opens back
-// into the closed-loop-with-an-island bug this file exists to catch. So they
-// are tested as arithmetic, over all 64 local configurations, rather than by
-// looking at a picture.
+//   NO SEAM   an edge midpoint is bit-identical from either hex (unchanged
+//             since pass 1 — hexGeom.js is untouched here), and every
+//             crossing's tangent is exactly the edge normal, whether it
+//             belongs to a straight line, a spring, or a bend's quadratic.
+//   NO LOOP   0 or 1 open edge is one subpath; 2 opposite edges is one
+//             subpath; a bend is ONE continuous, non-self-intersecting
+//             quadratic (proved by the Bezier convex-hull property, checked
+//             by sampling); 3+ open edges is the only case with more than
+//             one subpath, and every one of them reaches the exact same
+//             shared point, the hex centre — riverribbon.test.js takes it
+//             from there to prove the FILLED version of that fact.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  CORNER_X, CORNER_Y, EDGE_CORNERS, DIR_Q, DIR_R, OPPOSITE, SQRT3,
+  EDGE_CORNERS, CORNER_X, CORNER_Y, DIR_Q, DIR_R, OPPOSITE, SQRT3,
   hexCx, hexCy, edgeMidX, edgeMidY, inradius,
 } from '../src/render/hexGeom.js';
-import {
-  setRiverLayer, drawRivers, traceChannel, channelMask, outletMask, rimOutlet,
-  riverLayer,
-} from '../src/render/river.js';
-import { derive, FALLBACK } from '../src/render/palette.js';
-import { siteRadius } from '../src/render/siteShapes.js';
+import { traceChannel, channelMask, outletMask, rimOutlet } from '../src/render/river.js';
 
 const SIZE = 34;
-const P = derive(FALLBACK);
+const WIDTH = SIZE * 0.5; // must match RIVER_WIDTH_FRAC in river.js
 const near = (a, b, eps = 1e-9, m = '') => assert.ok(Math.abs(a - b) <= eps,
   `${m} ${a} !~ ${b} (delta ${Math.abs(a - b)})`);
+const bits = (...ds) => ds.reduce((m, d) => m | (1 << d), 0);
+const unit = ([x, y]) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
 
 /** Records path calls so a curve can be inspected as data. */
 function recorder() {
   return {
-    ops: [], lineWidth: 0, strokeStyle: '', fillStyle: '', lineCap: '', lineJoin: '',
-    beginPath() { this.ops.push(['begin']); },
-    closePath() { this.ops.push(['close']); },
+    ops: [],
     moveTo(x, y) { this.ops.push(['moveTo', x, y]); },
     lineTo(x, y) { this.ops.push(['lineTo', x, y]); },
-    quadraticCurveTo(ax, ay, x, y) { this.ops.push(['quad', ax, ay, x, y]); },
-    bezierCurveTo(ax, ay, bx, by, x, y) { this.ops.push(['cubic', ax, ay, bx, by, x, y]); },
-    stroke() { this.ops.push(['stroke', this.lineWidth, this.strokeStyle]); },
-    fill() { this.ops.push(['fill', this.fillStyle]); },
+    quadraticCurveTo(cx, cy, x, y) { this.ops.push(['quad', cx, cy, x, y]); },
   };
 }
 
-const KIND = { lineTo: 'line', quad: 'quad', cubic: 'cubic' };
+const KIND = { lineTo: 'line', quad: 'quad' };
 
 /** Path ops -> one entry per segment, with its control points in order. */
 function segments(ops) {
@@ -62,7 +60,7 @@ function segments(ops) {
   return out;
 }
 
-/** de Casteljau, so one sampler covers lines, quadratics and cubics. */
+/** de Casteljau, so one sampler covers lines and quadratics alike. */
 function at(seg, t) {
   let p = seg.pts.map((q) => q.slice());
   while (p.length > 1) {
@@ -75,29 +73,28 @@ function at(seg, t) {
   return p[0];
 }
 
-/** Direction of travel at each end: the first and last legs of the hull. */
 const startDir = (s) => [s.pts[1][0] - s.pts[0][0], s.pts[1][1] - s.pts[0][1]];
 const endDir = (s) => [s.pts.at(-1)[0] - s.pts.at(-2)[0], s.pts.at(-1)[1] - s.pts.at(-2)[1]];
-const unit = ([x, y]) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
-const cross = (a, b) => a[0] * b[1] - a[1] * b[0];
 
-/** Is a point inside the closed hex? The hex is three slabs, each bounded by
- *  the inradius along one of the edge normals. */
-function insideHex(px, py, cx, cy, size) {
-  const R = inradius(size) + 1e-9;
+/** Is a point inside the closed hex? Three slabs, each bounded by the
+ *  inradius along one of the edge normals. */
+function insideHex(px, py, cx, cy, size, slack = 1e-9) {
+  const R = inradius(size) + slack;
   const dx = px - cx;
   const dy = (py - cy) * (SQRT3 / 2);
   return Math.abs(dx) <= R && Math.abs(dx * 0.5 + dy) <= R && Math.abs(dy - dx * 0.5) <= R;
 }
 
-const trace = (q, r, mask, headT = 1, rim = 0, back = 0) => {
+const trace = (q, r, mask, rim = 0, back = 0) => {
   const ctx = recorder();
-  traceChannel(ctx, q, r, SIZE, mask, headT, rim, back);
+  traceChannel(ctx, q, r, SIZE, mask, rim, back);
   return segments(ctx.ops);
 };
-const bits = (...ds) => ds.reduce((m, d) => m | (1 << d), 0);
 
-// --- 1. The crossing point: both hexes must land on the SAME two numbers ----
+// --- 1. The crossing point: both hexes land on the SAME two numbers ---------
+// Unchanged mechanism from pass 1 and pass 2 — hexGeom.js is not part of this
+// rewrite — but re-proved here because it is the one property every ribbon
+// shape in riverribbon.test.js depends on for a seamless join.
 
 test('an edge midpoint is bit-identical from either hex, and really is the '
   + 'middle of the shared edge', () => {
@@ -110,16 +107,9 @@ test('an edge midpoint is bit-identical from either hex, and really is the '
         const o = OPPOSITE[d];
         const mx = edgeMidX(q, r, d, SIZE);
         const my = edgeMidY(q, r, d, SIZE);
-        // Object.is, not a tolerance: this is the one place in the renderer
-        // where "close enough" shows up as a hairline seam between two hexes'
-        // water. The mean-of-centres form gets it exactly because IEEE
-        // addition is commutative; the corner-offset form does NOT.
         assert.ok(Object.is(mx, edgeMidX(q + DIR_Q[d], r + DIR_R[d], o, SIZE))
           && Object.is(my, edgeMidY(q + DIR_Q[d], r + DIR_R[d], o, SIZE)),
         `${q},${r} dir ${d}: the two hexes disagree about where they meet`);
-        // And it is the mean of the two corners bounding that edge — the
-        // geometric definition, reached from the table the outline is drawn
-        // from — which puts it exactly one inradius out, ON the boundary.
         const [a, b] = EDGE_CORNERS[d];
         near(mx, cx + (CORNER_X[a] + CORNER_X[b]) * 0.5 * SIZE, 1e-9, 'x');
         near(my, cy + (CORNER_Y[a] + CORNER_Y[b]) * 0.5 * SIZE, 1e-9, 'y');
@@ -131,32 +121,30 @@ test('an edge midpoint is bit-identical from either hex, and really is the '
   assert.equal(checked, 13 * 13 * 6);
 });
 
-// --- 2. Topology: what a hex knows about its neighbours ---------------------
+// --- 2. Topology: what a hex knows about its neighbours (unchanged) ---------
 
 test('channelMask sees exactly the neighbours that are water', () => {
   const set = new Set(['0,0', '1,0', '-1,0', '0,1']);
   assert.equal(channelMask(set, 0, 0), bits(0, 3, 5));
-  // (0,1) is south-WEST of (1,0) on this lattice, not south of it — the offset
-  // rows are exactly why a renderer must ask the direction table, not guess.
   assert.equal(channelMask(set, 1, 0), bits(3, 4));
-  assert.equal(channelMask(set, 5, 5), 0);               // dry ground sees nothing
+  assert.equal(channelMask(set, 5, 5), 0);
   assert.equal(channelMask(new Set(), 0, 0), 0);
-  // One neighbour to the west, and nothing to the east but the rim.
   const onRim = channelMask(new Set(['9,0', '10,0']), 10, 0);
   assert.equal(rimOutlet(onRim, 10, 0, 11, 9), bits(0), 'should carry on over the rim');
   assert.equal(outletMask(onRim, 10, 0, 11, 9), bits(0, 3));
-  // The same shape in the middle of the board is a spring, and must stay one.
   const inland = channelMask(new Set(['4,4', '5,4']), 5, 4);
   assert.equal(rimOutlet(inland, 5, 4, 11, 9), 0, 'a spring is not a rim');
   assert.equal(outletMask(inland, 5, 4, 11, 9), inland);
-  // Two or more neighbours is never ambiguous, so nothing is added.
   const through = channelMask(new Set(['9,0', '10,0', '10,1']), 10, 0);
   assert.equal(rimOutlet(through, 10, 0, 11, 9), 0);
 });
 
-// --- 3. The curve through one hex, every case, exhaustively -----------------
+// --- 3. The centreline through one hex, every case, exhaustively ------------
 
-test('water never leaves the hex it belongs to, in any of the 64 configurations', () => {
+test('water never leaves the hex it belongs to, in any of the 64 '
+  + 'configurations — true of a bend by construction, since a quadratic '
+  + 'lies in the convex hull of its own control points, all three inside '
+  + 'the (convex) hex', () => {
   const cx = hexCx(2, 3, SIZE);
   const cy = hexCy(2, 3, SIZE);
   for (let mask = 0; mask < 64; mask++) {
@@ -170,9 +158,6 @@ test('water never leaves the hex it belongs to, in any of the 64 configurations'
   }
 });
 
-/** The end of `seg` that lands on `pt`, and the direction the water is heading
- *  as it leaves the hex there. Which end a subpath starts from is an internal
- *  detail; the crossing is not. */
 function crossingAt(seg, pt) {
   const hit = (p) => Math.hypot(p[0] - pt[0], p[1] - pt[1]) < 1e-9;
   if (hit(seg.pts[0])) return { end: seg.pts[0], out: unit(startDir(seg).map((v) => -v)) };
@@ -180,20 +165,19 @@ function crossingAt(seg, pt) {
   return null;
 }
 
-test('every crossing leaves perpendicular to the edge — which is what makes the '
-  + 'join with the next hex smooth', () => {
+test('every crossing leaves perpendicular to the edge, whether it belongs to '
+  + 'a straight line or a curve — a quadratic\'s tangent at t=0 is parallel '
+  + 'to (control - start) and at t=1 to (end - control), so putting the '
+  + 'centre in the control slot keeps BOTH ends radial', () => {
   const cx = hexCx(2, 3, SIZE);
   const cy = hexCy(2, 3, SIZE);
   let crossings = 0;
   for (let mask = 0; mask < 64; mask++) {
     for (const seg of trace(2, 3, mask)) {
-      // Only endpoints that sit ON an edge are crossings; a spring's head and a
-      // confluence are interior and free to point anywhere.
       for (let d = 0; d < 6; d++) {
         const c = crossingAt(seg, [edgeMidX(2, 3, d, SIZE), edgeMidY(2, 3, d, SIZE)]);
         if (!c) continue;
         crossings++;
-        // The outward edge normal is simply the direction away from the centre.
         const want = unit([c.end[0] - cx, c.end[1] - cy]);
         near(c.out[0], want[0], 1e-12, `mask ${mask} dir ${d} tangent x`);
         near(c.out[1], want[1], 1e-12, `mask ${mask} dir ${d} tangent y`);
@@ -205,8 +189,6 @@ test('every crossing leaves perpendicular to the edge — which is what makes th
 
 test('two neighbours meet at one point, moving in exactly opposite directions', () => {
   const set = new Set(['1,3', '2,3', '3,3', '4,3', '3,2']);
-  // Every shared edge on this little network, including the one into the hex
-  // that turns — a bend and a straight run have to agree just as exactly.
   for (const [q, r, d] of [[2, 3, 0], [3, 3, 0], [3, 3, 2]]) {
     const nq = q + DIR_Q[d];
     const nr = r + DIR_R[d];
@@ -218,39 +200,32 @@ test('two neighbours meet at one point, moving in exactly opposite directions', 
     assert.ok(here && there, `${q},${r} dir ${d}: one side never reached the edge`);
     assert.ok(Object.is(here.end[0], there.end[0]) && Object.is(here.end[1], there.end[1]),
       `met at ${here.end} and ${there.end} — that gap is a visible seam`);
-    // Leaving one hex and entering the next along the same line: no kink.
     near(here.out[0] * there.out[0] + here.out[1] * there.out[1], -1, 1e-12,
       `${q},${r} dir ${d}: headings`);
   }
 });
 
-test('a straight run is one unbroken line, and a bend meets at a real angle, '
-  + 'both as straight spokes through the centre', () => {
+test('a straight run and a bend are each ONE continuous piece — a straight '
+  + 'line through the centre, or a smooth quadratic bowed through it, never '
+  + 'the two straight facets pass 2 drew', () => {
   const cx = hexCx(2, 3, SIZE);
   const cy = hexCy(2, 3, SIZE);
   const straight = trace(2, 3, bits(0, 3));
-  assert.equal(straight.length, 2, 'one spoke per open edge, not one merged curve');
-  for (const seg of straight) {
-    assert.equal(seg.kind, 'line');
-    assert.equal(seg.pts.at(-1)[0], cx, 'every spoke ends at the hex centre');
-    assert.equal(seg.pts.at(-1)[1], cy);
-  }
-  // Two OPPOSITE spokes are exactly collinear through the centre — the union
-  // still reads as one unbroken line, the "geometric" straight run.
-  const [s0, s1] = straight;
-  near(cross(unit([s0.pts[0][0] - cx, s0.pts[0][1] - cy]),
-    unit([s1.pts[0][0] - cx, s1.pts[0][1] - cy])), 0, 1e-9,
-  'opposite edges must line up straight through the centre');
+  assert.equal(straight.length, 1, 'a straight run must be a single unbroken line, not two spokes');
+  assert.equal(straight[0].kind, 'line');
+  const mid = at(straight[0], 0.5);
+  near(mid[0], cx, 1e-9, 'a straight run passes exactly through the centre');
+  near(mid[1], cy, 1e-9);
 
   for (const [d1, d2] of [[0, 1], [0, 2], [1, 3], [2, 4], [3, 5]]) {
-    const [a, b] = trace(2, 3, bits(d1, d2));
-    // Not opposite, so the two spokes must NOT be collinear: a bend now
-    // meets at a genuine, faceted angle rather than sweeping through a
-    // continuously smooth curve — the "more geometric" look the water wants.
-    const va = unit([a.pts[0][0] - cx, a.pts[0][1] - cy]);
-    const vb = unit([b.pts[0][0] - cx, b.pts[0][1] - cy]);
-    assert.ok(Math.abs(cross(va, vb)) > 0.4,
-      `dirs ${d1}/${d2}: spokes are nearly collinear, no visible bend`);
+    const [seg] = trace(2, 3, bits(d1, d2));
+    assert.equal(seg.kind, 'quad', `dirs ${d1}/${d2}: a bend must be a genuine curve`);
+    assert.equal(seg.pts[1][0], cx, 'the control point is exactly the hex centre');
+    assert.equal(seg.pts[1][1], cy);
+    const chordMid = [(seg.pts[0][0] + seg.pts[2][0]) / 2, (seg.pts[0][1] + seg.pts[2][1]) / 2];
+    const curveMid = at(seg, 0.5);
+    assert.ok(Math.hypot(curveMid[0] - chordMid[0], curveMid[1] - chordMid[1]) > SIZE * 0.03,
+      `dirs ${d1}/${d2}: the curve sits on its own chord — it is straight, not bowed`);
   }
 });
 
@@ -260,9 +235,6 @@ test('a junction is a confluence: every arm meets at the SAME shared point, '
   const cy = hexCy(2, 3, SIZE);
   for (const dirs of [[0, 1, 3], [0, 2, 4], [1, 3, 5], [0, 1, 3, 4], [0, 1, 2, 3, 4, 5]]) {
     const segs = trace(2, 3, bits(...dirs));
-    // One spoke per arm — no separate stem-plus-tributary split, and so no
-    // cubic curve free to dive toward the middle and bow back out somewhere
-    // ELSE near it, which is what opened the loop with an island in it.
     assert.equal(segs.length, dirs.length, `${dirs}: one spoke per arm`);
     for (const seg of segs) {
       assert.equal(seg.kind, 'line');
@@ -270,9 +242,6 @@ test('a junction is a confluence: every arm meets at the SAME shared point, '
       near(end[0], cx, 1e-9, `${dirs}: an arm did not reach the shared centre`);
       near(end[1], cy, 1e-9, `${dirs}: an arm did not reach the shared centre`);
     }
-    // Every pair of arms shares its whole length only at that one common
-    // endpoint, so the region between any two is an open wedge — never a
-    // closed shape a loop could trace.
     for (let i = 0; i < segs.length; i++) {
       for (let j = i + 1; j < segs.length; j++) {
         const a = segs[i].pts[0];
@@ -284,116 +253,25 @@ test('a junction is a confluence: every arm meets at the SAME shared point, '
   }
 });
 
-test('a spring tapers to a head past the centre, and a pool is just a pool', () => {
+test('a spring tapers to a head past the centre, and a pool is just a point', () => {
   const cx = hexCx(2, 3, SIZE);
   const cy = hexCy(2, 3, SIZE);
   const [inlet, head] = trace(2, 3, bits(0))[0].pts;
   near(inlet[0], edgeMidX(2, 3, 0, SIZE), 1e-12);
-  // The head is past the centre, on the far side from where the water came in.
   const along = ((head[0] - inlet[0]) * (cx - inlet[0])
     + (head[1] - inlet[1]) * (cy - inlet[1])) / (inradius(SIZE) ** 2);
   assert.ok(along > 1, `the head stops short of the centre (${along.toFixed(2)})`);
   assert.ok(insideHex(head[0], head[1], cx, cy, SIZE), 'and it stays inside the hex');
-  // A narrower layer runs further, so the layers nest into a taper instead of
-  // stacking into a blunt end.
-  const short = trace(2, 3, bits(0), 0.5)[0];
-  assert.ok(Math.hypot(short.pts[1][0] - inlet[0], short.pts[1][1] - inlet[1])
-    < Math.hypot(head[0] - inlet[0], head[1] - inlet[1]));
-
   const pool = trace(2, 3, 0);
   assert.equal(pool.length, 1);
-  assert.deepEqual(pool[0].pts, [[cx, cy], [cx, cy]], 'a lone hex is a round of water');
+  assert.deepEqual(pool[0].pts, [[cx, cy], [cx, cy]]);
 });
 
-test('a run-off at the board edge stops half a stroke short, so every layer '
-  + 'ends flush ON the rim', () => {
+test('a run-off at the board edge stops half a ribbon short, so its round '
+  + 'cap lands exactly ON the rim', () => {
   const edge = [edgeMidX(2, 3, 0, SIZE), edgeMidY(2, 3, 0, SIZE)];
-  for (const w of [0.2, 0.56, 1.02]) {
-    const seg = trace(2, 3, bits(0, 3), 1, bits(0), SIZE * w * 0.5)[0];
-    const end = seg.pts[0][0] > seg.pts.at(-1)[0] ? seg.pts[0] : seg.pts.at(-1);
-    // endpoint + the round cap it wears == the boundary itself.
-    near(Math.hypot(end[0] - edge[0], end[1] - edge[1]), SIZE * w * 0.5, 1e-9, `width ${w}`);
-    assert.ok(insideHex(end[0], end[1], hexCx(2, 3, SIZE), hexCy(2, 3, SIZE), SIZE));
-  }
-});
-
-// --- 4. The layer as it is actually painted ---------------------------------
-
-const board = (over = {}) => ({
-  cols: 9, rows: 9, size: SIZE, palette: P, lineWidth: 1, ...over,
-});
-
-test('setRiverLayer takes keys or pairs, and the two agree exactly', () => {
-  const draw = (rivers) => {
-    setRiverLayer(rivers);
-    const ctx = recorder();
-    drawRivers(ctx, board());
-    return ctx.ops;
-  };
-  const byPair = draw([[2, 3], [3, 3], [4, 3]]);
-  assert.deepEqual(draw(['2,3', '3,3', '4,3']), byPair);
-  setRiverLayer([[2, 3]]);
-  assert.deepEqual([...riverLayer()], ['2,3']);
-  assert.deepEqual(draw(null), [], 'no water, no paint');
-});
-
-test('the channel is drawn in nested layers, widest first, all keyed off the hex', () => {
-  setRiverLayer([[2, 3], [3, 3], [4, 3]]);
-  const ctx = recorder();
-  drawRivers(ctx, board());
-  const widths = ctx.ops.filter((o) => o[0] === 'stroke').map((o) => o[1]);
-  assert.ok(widths.length >= 4, `expected the channel in layers, got ${widths.length} strokes`);
-  const channel = widths.slice(0, 4);
-  for (let i = 1; i < channel.length; i++) {
-    assert.ok(channel[i] < channel[i - 1],
-      `layer ${i} (${channel[i]}) must sit inside layer ${i - 1} (${channel[i - 1]})`);
-  }
-  // Thick enough to read as a river — the version this replaced drew the water
-  // at 0.26 of a hex and it looked like a wire — and never so thick that it
-  // swallows the smallest site body sitting on it, or reaches past the tile.
-  const water = channel[2];
-  assert.ok(water > SIZE * 0.4, `the water is only ${(water / SIZE).toFixed(2)} of a hex`);
-  assert.ok(water < siteRadius('farm', SIZE) * 2,
-    'the water must stay narrower than a farm, or a site on the river disappears');
-  assert.ok(channel[0] * 0.5 < inradius(SIZE),
-    'even the valley must not reach beyond the edge of its own hex');
-});
-
-test('the wet ground goes down BEFORE the channel, and the shore only where it '
-  + 'meets dry land', () => {
-  setRiverLayer([[2, 3], [3, 3]]);
-  const ctx = recorder();
-  drawRivers(ctx, board());
-  const kinds = ctx.ops.filter((o) => o[0] === 'fill' || o[0] === 'stroke');
-  assert.equal(kinds[0][0], 'fill', 'the floodplain is under the water, not over it');
-  assert.equal(kinds[0][1], P.riverWash);
-  assert.equal(kinds[kinds.length - 1][2], P.riverBank, 'the shore is drawn last');
-
-  // Two hexes side by side: 12 edges, of which the shared one is interior.
-  const bankOps = ctx.ops.slice(ctx.ops.lastIndexOf(
-    ctx.ops.filter((o) => o[0] === 'begin').pop()));
-  assert.equal(bankOps.filter((o) => o[0] === 'lineTo').length, 10,
-    'the shared edge must not be banked — a floodplain has one outline, not two');
-});
-
-test('a river hex off the grid is not drawn at all', () => {
-  setRiverLayer([[2, 3], [3, 3], [99, 99]]);
-  const ctx = recorder();
-  drawRivers(ctx, board());
-  assert.ok(ctx.ops.filter((o) => o[0] === 'moveTo')
-    .every(([, x, y]) => Math.hypot(x - hexCx(99, 99, SIZE), y - hexCy(99, 99, SIZE)) > SIZE),
-  'an off-grid hex leaked onto the board');
-});
-
-test('the palette gives the channel a dark bed and a lighter core, so it reads '
-  + 'as depth rather than as a stroke', () => {
-  const lum = (s) => {
-    assert.match(s, /^rgba\(/, 'must be a ready-made canvas colour');
-    const [r, g, b] = s.match(/[\d.]+/g).map(Number);
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  };
-  [P.riverWash, P.riverBank].forEach(lum);
-  assert.ok(lum(P.riverBed) < lum(P.river), 'the bed must be darker than the water');
-  assert.ok(lum(P.riverLit) > lum(P.river), 'the core must be lighter than the water');
-  assert.ok(lum(P.riverValley) < lum(P.riverBed), 'the valley is the deepest shadow');
+  const seg = trace(2, 3, bits(0, 3), bits(0), WIDTH * 0.5)[0];
+  const end = seg.pts[0][0] > seg.pts.at(-1)[0] ? seg.pts[0] : seg.pts.at(-1);
+  near(Math.hypot(end[0] - edge[0], end[1] - edge[1]), WIDTH * 0.5, 1e-9);
+  assert.ok(insideHex(end[0], end[1], hexCx(2, 3, SIZE), hexCy(2, 3, SIZE), SIZE));
 });

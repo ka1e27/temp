@@ -30,16 +30,13 @@
   --c-accent: #5aa9ff;
   /* Water. Its own token rather than a tint of --c-accent: a river is terrain
      and must never read as the selection/training highlight. A light, clear
-     blue rather than a dark saturated teal — every water layer is alpha
-     composited over the ground (see palette.js), so this hue is the thing
-     that shows through, not a pre-mixed dark tone painted opaque on top. */
+     blue rather than a dark saturated teal, alpha-composited over the ground
+     (see palette.js) as ONE flat fill — no second darker or lighter value on
+     top of it. That is a deliberate simplification: earlier passes layered a
+     darkened valley and bed under this hue and a near-white core over it, and
+     direct player feedback was to strip the shading back to one translucent
+     colour and leave the rest of the tile alone. */
   --c-water: #6cc7f2;
-  /* The lit core running down the middle of a channel. A river is drawn as a
-     translucent bed with a paler, brighter centre — that cross-section is
-     what makes water read as something the ground CONTAINS rather than as a
-     stroke laid over it, and it needs a second value to do it. Near-white so
-     the current genuinely catches light rather than just being "more blue". */
-  --c-water-lit: #eaf7ff;
   --c-warn: #ffc857;
   --c-danger: #ff5c5c;
 
@@ -60,14 +57,12 @@
   --a-flood-strong: 0.42;
   --a-grid: 0.5;
   --a-blocked: 0.9;
-  /* How loud the water is. One dial for the whole four-layer channel, because
-     the layers only work as a set — brightening the core alone turns a river
-     into a highlight. Water is terrain: it must stay quieter than the front
-     line, which is the one thing on the board that always wins the eye.
-     Every layer multiplies this DOWN (see palette.js) rather than pushing it
-     toward opaque, which is what keeps the channel reading as translucent
-     shallow water instead of a solid painted ribbon. */
-  --a-river: 0.62;
+  /* How loud the water is — the ONE alpha the flat river fill is drawn at.
+     Picked so the ground and territory tint underneath a river hex are still
+     clearly visible through it, while the water itself reads unambiguously
+     as blue. Water is terrain: it must stay quieter than the front line,
+     which is the one thing on the board that always wins the eye. */
+  --a-river: 0.5;
 
   /* --- Spacing: 4px scale ------------------------------------------------ */
   --s-1: 4px;
