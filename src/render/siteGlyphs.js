@@ -20,11 +20,10 @@
 //                      When every site carried a permanent ring the board was a
 //                      field of identical dots and nothing could be found; now
 //                      a ring means "look here".
-//   GOLD = RANK.       The one standing exception, subordinate by construction:
-//                      siteRank.js cuts a gold gauge into one cell per step of
-//                      the ladder — absent at level 1, never an alarm hue, never
-//                      growing, always INSIDE the rings above. Storeys say
-//                      "upgraded"; the gauge says how far.
+//   GOLD = UPGRADE, ON THE STOREY ITSELF. siteGild.js strokes each built
+//                      storey's own roofline gold — no ring, no orbit, nothing
+//                      outside the silhouette. Absent at level 1, never an
+//                      alarm hue: the gilt trim says "upgraded" on the tower.
 //
 // Everything draws in WORLD space and allocates nothing.
 import { UNIT_IDS, SITES, SITE_LEVELS } from '../content/balance.js';
@@ -33,7 +32,7 @@ import {
   levelScale, storeyCount, storeyScale, storeyRise, traceStructure,
   siteRingR, siteRingDy, siteFootYAt,
 } from './siteShapes.js';
-import { drawRankGauge, rankBand } from './siteRank.js';
+import { drawStoreyGild } from './siteGild.js';
 
 export { SITE_R, siteRadius, traceSiteShape, siteTier } from './siteShapes.js';
 
@@ -122,14 +121,16 @@ export function drawSiteBase(ctx, site, cx, cy, r, p, px) {
   const edge = p.owner[site.owner] || p.neutral;
   // Upper storeys are outlined a touch thinner than the ground floor, which is
   // what makes the stack read as receding rather than as one flat cluster.
+  // Each one also gets its own gilt trim, right after its own outline: the
+  // gold has to seat on THAT storey, not on the ground floor underneath it.
   for (let i = storeyCount(lv) - 1; i >= 0; i--) {
-    block(ctx, site.kind, true, cx, cy - R * storeyRise(i), R * storeyScale(i),
-      p, wash, edge, px * (1.3 + tier * 0.75), moat);
+    const cyi = cy - R * storeyRise(i);
+    const ri = R * storeyScale(i);
+    block(ctx, site.kind, true, cx, cyi, ri, p, wash, edge, px * (1.3 + tier * 0.75), moat);
+    drawStoreyGild(ctx, site.kind, cx, cyi, ri, i, p, px);
   }
   // Outline weight IS the hierarchy: a farm is hairline, a home base is bold.
   block(ctx, site.kind, false, cx, cy, R, p, wash, edge, px * (1.7 + tier * 1.15), moat);
-  // Rank last, so the gold seats in the moat rather than being painted over.
-  drawRankGauge(ctx, site, lv, cx, cy, r, p, px);
 }
 
 /**
@@ -272,8 +273,7 @@ export function drawHpRing(ctx, site, cx, cy, r, p, px) {
   // Centred on the STRUCTURE, not the site: a tall level-3 keep is not centred
   // on its own hex, and a ring that ignored that would hang off it.
   const my = cy - r * siteRingDy(site.kind, lv);
-  // Stepped out over the rank gauge; 0 at level 1, so this has not moved.
-  const rad = r * siteRingR(site.kind, lv) + px * (3 + rankBand(lv));
+  const rad = r * siteRingR(site.kind, lv) + px * 3;
   ctx.lineWidth = px * 3.5;
   ctx.lineCap = 'butt';
 
@@ -300,7 +300,7 @@ export function drawHpRing(ctx, site, cx, cy, r, p, px) {
 export function drawSiegeRing(ctx, site, cx, cy, r, p, px, spin) {
   if (!site.siege) return;
   const lv = builtLevel(site);
-  const rad = r * siteRingR(site.kind, lv) + px * (9 + rankBand(lv));
+  const rad = r * siteRingR(site.kind, lv) + px * 9;
   DASH[0] = px * 3;
   DASH[1] = px * 4;
   ctx.setLineDash(DASH);

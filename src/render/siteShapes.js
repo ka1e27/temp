@@ -57,6 +57,34 @@ const SHAPES = { stronghold: SHIELD, camp: TENT, castle: KEEP };
 /** Where the garrison core uses a simpler outline than the body. */
 const CORE_SHAPES = { camp: TENT_BODY };
 
+/** Vertex indices `from..to` inclusive, as a plain array — the run castle's
+ *  comb needs, spelled out without a 20-entry literal. */
+const run = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+
+/**
+ * The sub-chain of each kind's own CORE outline picked out as its "gilded
+ * trim" once a site is upgraded — both shoulders and the flat top of a
+ * shield, the two roof slopes of a tent meeting at the peak, the whole
+ * crenellated comb of a keep. Each is a vertex-index PATH (not necessarily
+ * ascending — a shield's trim wraps shoulder -> top -> shoulder) into the
+ * SAME point array a storey is traced from (see coreShapeOf), so the gold can
+ * never land anywhere the silhouette itself does not already reach.
+ *
+ * A farm has no polygon to slice, so it is absent here on purpose — siteGild.js
+ * gives it a cap arc across the top of the disc instead. Actually drawing the
+ * trim lives there too: it is a FILLED ribbon, not a stroke, so it can never
+ * be mistaken for another storey by tests/sitelevels.test.js, which counts
+ * storeys off stroked outlines.
+ */
+export const TRIM_PATH = {
+  stronghold: [6, 0, 1, 2],  // left shoulder -> flat top -> right shoulder
+  camp: [2, 3, 4],           // both roof slopes, corner to peak to corner
+  castle: run(1, 18),        // the entire battlement top, towers and merlons
+};
+
+/** The point array a storey — and therefore its trim — is traced from. */
+export const coreShapeOf = (kind) => CORE_SHAPES[kind] || SHAPES[kind];
+
 /**
  * Body radius as a fraction of the hex circumradius.
  *
@@ -196,9 +224,10 @@ export const LEVEL_SCALE = levelRamp(MAX_LEVEL);
  * is 62% of the one below and rises a shrinking share of the last step — so a
  * level-7 keep is a level-4 keep wearing finials, not a skyscraper. That bound
  * is the point: it keeps siteRingR() (and therefore everything that orbits a
- * site) finite, and it is why past three or four levels the exact number is
- * read off the RANK GAUGE in siteRank.js rather than counted off a roofline
- * nobody can resolve.
+ * site) finite — past three or four levels the exact count stops being
+ * resolvable off the roofline, which is fine, because the gilded trim
+ * siteGild.js paints onto each storey is meant to read as "more reinforced",
+ * not as a counter.
  *
  * The one thing a long ladder does move is the FIRST storey, lifted a fraction
  * higher: the level ramp above gets shallower the more levels there are, so
