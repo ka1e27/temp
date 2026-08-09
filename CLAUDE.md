@@ -422,6 +422,55 @@ produced (emberholt, 2.556) when tier 4 was the end; tier 5 opens at 2.60–2.68
 measurably still convertible there. It is still a hard ceiling per tier, still required to
 be non-decreasing, and still capped at 3× globally.
 
+## Three specialists, and a harness that cannot play them
+
+The roster was five units: a rock-paper-scissors of stats plus a siege engine. A sixth set
+of stats would only have moved which column of the same table you read, so the three added
+instead each own a **verb** — a hook in the simulation, not a bigger number on an existing
+one.
+
+| Unit | Slots | Verb | Why it matters |
+|---|---|---|---|
+| **Outriders** | 2 | `skirmish`, speed 165 | 3× a militia's march. Maps are 30–50% unclaimed at tick 0, so the race for neutral ground *is* the opening |
+| **Halberds** | 4 | `sunder` 0.50 | Halves the defender's `siteDefMult` — the one term no amount of militia answers (a castle defends at ×1.60 before walls) |
+| **Sappers** | 3 | `repair` 1.9 | `breachSeconds()` returns `Infinity` the moment repair out-paces siege damage, so a wall they garrison is *arithmetically* uncrackable without engines |
+
+All three are share-scaled like `counters`: a token escort strips nothing, so committing to
+the answer is what buys the answer.
+
+**They are opt-in, and that is what let three ship at once.** None has a
+`DEFAULT_COMPOSITION_WEIGHT` and none is in `ENEMY_UNITS_BY_TIER`, so
+`distributeExpedition` — which is what the harness fields — produces a byte-identical army
+and every number in `regions.data.js` still holds. Adding units did not re-tune the campaign.
+
+**`skirmish` was hardcoded to raiders.** `skirmishHome` read `sq.comp.raiders` while pulling
+the *fraction* from the spec, so the hardcoding was invisible and a second skirmisher would
+have escaped nothing at all. Generalised, with a negative control.
+
+**Four fixtures hardcoded the five-unit roster** and had to be derived from `UNIT_IDS`
+instead: `emptyComp()` itself (so `{...emptyComp(), ...x}` silently omitted the new units),
+the formation block map (positional — every assertion meant "index 3" rather than "rams"),
+and the loadout and preview fixtures.
+
+**THE HARNESS CANNOT DEMONSTRATE THEM, and this is the honest state.** Measured at n=48,
+substituting 25–35% of the budget onto a specialist makes `simplayer.js` *worse* everywhere:
+
+```
+region        default   +outriders   +halberds   +sappers
+gallowmoor      60%        44%         27%         33%
+thanescar       52%        25%         25%         27%
+nightharrow     40%        27%         19%         29%
+```
+
+That measures the BOT, not the units. It does not send outriders at distant neutrals, mass
+halberds against a castle, or garrison sappers in a threatened wall — it plays one
+undifferentiated army. The levers themselves are proven in `tests/units.test.js` against the
+real sim paths with negative controls (3× march, exact half-bonus strip, `breachSeconds`
+→ `Infinity`). **This is the same shape as the site-upgrade gap that went unnoticed for
+years**: a mechanic the harness does not exercise is a mechanic no balance number covers.
+Teaching the bot to field them is a balance pass, not a bug fix — and until it happens, no
+specialist should be given a default weight on the strength of harness numbers.
+
 ### Gestures and controls
 
 - **A tap never sends.** Tap-then-tap used to issue a send and fired by accident constantly

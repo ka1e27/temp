@@ -11,10 +11,10 @@
 // PURE.
 import { TICK_HZ } from '../core/loop.js';
 import {
-  UNITS, BOOSTERS, ATTRITION, ATTRITION_BLEED_SEC, ATTRITION_CHECK_TICKS, RALLY_KEEP,
+  UNIT_IDS, UNITS, BOOSTERS, ATTRITION, ATTRITION_BLEED_SEC, ATTRITION_CHECK_TICKS, RALLY_KEEP,
 } from '../content/balance.js';
 import {
-  resolveField, siegeDps, siteRegen, siteMaxHp, emptyComp, addComp, total,
+  resolveField, siegeDps, siteRegen, siteMaxHp, emptyComp, addComp, total, repairMult,
 } from './combat.js';
 import {
   createBattleState, siteById, effectiveLevel, armySize, sitesOwned, castleSealed,
@@ -88,7 +88,11 @@ function siegePhase(state) {
     const shielded = site.shieldTicks > 0;
     const regenMult = modOf(state, site.owner, 'structureRegenMult')
       * att.regenMult * (shielded ? BOOSTERS.fortify.regenMult : 1);
-    const regen = siteRegen(site.kind, effectiveLevel(site), regenMult) / TICK_HZ;
+    // Sappers repair what they garrison (combat.js `repairMult`), on the same
+    // term `structureRegenMult` already uses — so `breachSeconds`, which the AI
+    // and the preview both call, sees it without learning about the unit.
+    const regen = siteRegen(site.kind, effectiveLevel(site),
+      regenMult * repairMult(site.garrison)) / TICK_HZ;
 
     if (site.siege && site.siege.owner !== site.owner) {
       // Terrain is part of the siege, not just the field battle: rams work at a
@@ -118,17 +122,31 @@ function siegePhase(state) {
 
 // --- phase 7: arrivals ------------------------------------------------------
 
-/** A failed attack sends half of each raider contingent home. This is why a
- *  first-timer's bad probe costs 50%, not 100%. */
+/**
+ * A failed attack sends part of each SKIRMISHING contingent home — why a bad
+ * probe costs a fraction, not the squad.
+ *
+ * Driven off every unit's `skirmish` field, not off `comp.raiders` as it was.
+ * The VALUE was already read from the spec, so the hardcoded UNIT was invisible
+ * and a second skirmisher would have escaped nothing. tests/units.test.js pins
+ * it with a negative control.
+ */
 function skirmishHome(state, site, group) {
   for (const sq of group.squads) {
-    const back = Math.floor((sq.comp.raiders || 0) * (UNITS.raiders.skirmish ?? 0));
+    const escaped = {};
+    let back = 0;
+    for (const u of UNIT_IDS) {
+      const frac = UNITS[u].skirmish;
+      if (!frac) continue;
+      const n = Math.floor((sq.comp[u] || 0) * frac);
+      if (n > 0) { escaped[u] = n; back += n; }
+    }
     if (back <= 0) continue;
     const home = siteById(state, sq.from);
     const target = home && home.owner === group.owner
       ? home : retreatTarget(state, site, group.owner);
     if (!target) continue;
-    const comp = { ...emptyComp(), raiders: back };
+    const comp = { ...emptyComp(), ...escaped };
     spawnSquad(state, {
       owner: group.owner, from: site.id, to: target.id, comp, retreating: true,
     });
@@ -136,7 +154,10 @@ function skirmishHome(state, site, group) {
     const foe = group.owner === 'player' ? 'enemy' : 'player';
     if (state.factions[foe]) state.factions[foe].unitsKilled -= back;
     pushEvent(state, EVENTS.SKIRMISH_ESCAPE, {
-      siteId: site.id, owner: group.owner, raiders: back, to: target.id,
+      // `raiders` is kept as the headline count so existing consumers (the HUD
+      // toast, tests) keep reading a number rather than becoming undefined; it
+      // now means "bodies that got away", which is what it always displayed.
+      siteId: site.id, owner: group.owner, raiders: back, escaped, to: target.id,
     });
   }
 }

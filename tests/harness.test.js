@@ -122,11 +122,23 @@ test('harness: the enemy is deliberately NOT given the same button', () => {
   // buy upgrades as well would double-count the same mechanic and silently
   // re-tune all twenty-one regions at once. If that is ever the intent, it is a
   // balance pass, not a bug fix — and this assertion is where it starts.
-  const { battle } = instrumented('obsidian', 31337);
-  const enemy = battle.sites.filter((s) => s.owner === 'enemy');
-  assert.ok(enemy.length > 0, 'no enemy sites survived to check');
-  for (const s of enemy) {
-    assert.ok(s.upgradeTicksLeft === 0,
-      `enemy site ${s.id} was mid-upgrade — the AI has learned to build`);
+  // WATCHED THROUGHOUT, not sampled at the end. This read the final board, which
+  // only works while the enemy survives to be read — and a clean win leaves none
+  // standing, so the assertion quietly became "the battle ended" instead of
+  // "the AI never built". It now records every enemy site that was ever mid-
+  // upgrade, and separately proves the run was worth watching.
+  const battle = startRun('obsidian', 31337, before('obsidian'), 10);
+  let nextThink = 0;
+  const built = new Set();
+  let sawEnemy = 0;
+  while (battle.status === 'running' && battle.tick < battle.rules.hardCapTicks) {
+    if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
+    step(battle);
+    const enemy = battle.sites.filter((s) => s.owner === 'enemy');
+    sawEnemy = Math.max(sawEnemy, enemy.length);
+    for (const s of enemy) if (s.upgradeTicksLeft > 0) built.add(s.id);
   }
+  assert.ok(sawEnemy > 0, 'no enemy site existed at any point — the run proves nothing');
+  assert.equal(built.size, 0,
+    `enemy site(s) ${[...built].join(', ')} were mid-upgrade — the AI has learned to build`);
 });

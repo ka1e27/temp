@@ -90,6 +90,16 @@ export const UPGRADES = Object.freeze([
   // for gold at any site that trains.
   U('unlockMarshal', 'unlocks', 'Marshal', 1, 4000, 1, [unlock('unit', 'marshal')],
     'One rides free with every expedition: +25% to his whole army, +40% training.'),
+  // The three specialists. Each one buys a VERB rather than a stat line, and
+  // each is priced where the problem it answers first appears: outriders when
+  // the maps start being mostly unclaimed, halberds when castles start being
+  // built, sappers when holding ground stops being automatic.
+  U('unlockOutriders', 'unlocks', 'Outriders', 1, 400, 1, [unlock('unit', 'outriders')],
+'Three times a militia’s march. Wins the race for unclaimed ground.'),
+  U('unlockHalberds', 'unlocks', 'Halberds', 1, 1200, 1, [unlock('unit', 'halberds')],
+'Halves the defender’s site bonus. The answer to a castle militia bounce off.'),
+  U('unlockSappers', 'unlocks', 'Sappers', 1, 1800, 1, [unlock('unit', 'sappers')],
+'Nearly doubles a site’s repair. A siege without engines never breaches it.'),
   U('tactician', 'unlocks', 'Tactician', 1, 450, 1, [unlock('feature', 'doubleSpeed')],
     'Battle speeds past 2x. Slower speeds are free, and income never changes.'),
 
@@ -169,6 +179,18 @@ export const STARTING_UNITS = Object.freeze(['militia', 'spearmen']);
  */
 export const DEFAULT_COMPOSITION_WEIGHTS = Object.freeze({
   militia: 0.45, spearmen: 0.28, raiders: 0.17, rams: 0.10, marshal: 0,
+  // THE THREE SPECIALISTS ARE ZERO ON PURPOSE, and it is not an oversight to be
+  // tidied up later. A weight here is what the game picks FOR you; these are
+  // units whose whole point is that you looked at the map and chose them, so
+  // auto-spreading the budget across them would spend a player's slots on a
+  // siege-repair detachment in a region with nothing to hold.
+  //
+  // It also means the default army — and therefore every balance number in
+  // content/regions.data.js, all of which is measured against
+  // `distributeExpedition` — is byte-identical to what it was before they
+  // existed. Adding a unit did not re-tune the campaign, which is the only
+  // reason three of them could ship at once.
+  outriders: 0, halberds: 0, sappers: 0,
 });
 
 /**

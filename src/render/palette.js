@@ -25,10 +25,15 @@ const VARS = {
   danger: '--c-danger',
 };
 
+import { UNIT_IDS } from '../content/balance.js';
+
 const UNIT_VARS = {
   militia: '--c-militia',
   spearmen: '--c-spearmen',
+  outriders: '--c-outriders',
   raiders: '--c-raiders',
+  halberds: '--c-halberds',
+  sappers: '--c-sappers',
   rams: '--c-rams',
   marshal: '--c-marshal',
 };
@@ -50,6 +55,7 @@ export const FALLBACK = Object.freeze({
   water: '#6cc7f2', warn: '#ffc857', danger: '#ff5c5c',
   militia: '#e8e8ec', spearmen: '#5bd6a6', raiders: '#ffc857',
   rams: '#b07cff', marshal: '#ff8a3d',
+  outriders: '#7fd8ff', halberds: '#ff6fa5', sappers: '#c9a227',
   floodAlpha: 0.2, floodStrongAlpha: 0.42, gridAlpha: 0.5, blockedAlpha: 0.9,
   riverAlpha: 0.5,
 });
@@ -132,18 +138,20 @@ export function readPalette(el) {
  */
 export function derive(c) {
   const p = { ...c };
-  p.units = {
-    militia: c.militia, spearmen: c.spearmen, raiders: c.raiders,
-    rams: c.rams, marshal: c.marshal,
+  // Built from UNIT_IDS rather than listed: a unit missing from either map is
+  // one the renderer silently draws as `undefined`, which reads as a hole in a
+  // garrison ribbon rather than as an error.
+  p.units = Object.fromEntries(UNIT_IDS.map((u) => [u, c[u]]));
+  // The same hues, pulled back for the composition ribbon on a garrison plaque.
+  // At full strength militia-white was the brightest thing on the board and it
+  // buried the number it was sitting under.
+  const DIM = {
+    militia: 0.5, spearmen: 0.6, outriders: 0.6, raiders: 0.6,
+    halberds: 0.6, sappers: 0.65, rams: 0.7, marshal: 0.7,
   };
-  // The same five hues, pulled back for the composition ribbon on a garrison
-  // plaque. At full strength militia-white was the brightest thing on the
-  // board and it buried the number it was sitting under.
-  p.unitsDim = {
-    militia: withAlpha(c.militia, 0.5), spearmen: withAlpha(c.spearmen, 0.6),
-    raiders: withAlpha(c.raiders, 0.6), rams: withAlpha(c.rams, 0.7),
-    marshal: withAlpha(c.marshal, 0.7),
-  };
+  p.unitsDim = Object.fromEntries(
+    UNIT_IDS.map((u) => [u, withAlpha(c[u], DIM[u] ?? 0.6)]),
+  );
   // Neutral is lifted off the token slightly: it has to carry a garrison
   // number on a near-black plaque, and #6b7688 at 11px does not.
   p.owner = {

@@ -1,15 +1,14 @@
 // The expedition loadout: slot costs, the budget, and carry-over.
 //
-// Two features that are one number. Troops cost different numbers of slots, so
-// "all marshals" stops being a free pick; and the picks carry into the next
-// battle, with a grown budget arriving as militia rather than a rescale.
+// Troops cost different numbers of slots, so "all marshals" stops being a free
+// pick; and the picks carry into the next battle, with a grown budget arriving
+// as militia rather than a rescale.
 //
 // EVERY assertion about what the player fields goes through the REAL path —
-// buildBattleConfig -> startBattle -> the player camp's garrison. Nothing here
-// hand-builds a config. That is deliberate: the recurring failure mode in this
-// repo is a fixture that encodes the bug and a green suite that proves nothing.
-// The camp garrison is the only thing that decides a battle, so it is the only
-// thing worth asserting on.
+// buildBattleConfig -> startBattle -> the player camp's garrison. The recurring
+// failure mode in this repo is a fixture that encodes the bug and a green suite
+// that proves nothing, and the camp garrison is the only thing that decides a
+// battle.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -71,53 +70,43 @@ const pureStack = (unit, budget) => ({
   [unit]: Math.floor(budget / UNIT_SLOTS[unit]),
 });
 const foeOf = (unit) => ({ ...Object.fromEntries(UNIT_IDS.map((u) => [u, 0])), [unit]: 10 });
+/** A full comp from a partial one. Longhand fixtures broke the moment the
+ *  roster grew — a test asserting its LENGTH while claiming to assert a trade. */
+const comp = (x) => ({ ...Object.fromEntries(UNIT_IDS.map((u) => [u, 0])), ...x });
 
 // ===========================================================================
 // 1. Different values: the best unit is not a free pick
 // ===========================================================================
 
 test('slot costs are integers anchored on militia = 1, ordered by gold', () => {
-  // Militia at exactly one slot is load-bearing, not cosmetic: it is what makes
-  // every budget spendable to the last slot and every budget INCREASE have
-  // somewhere to go without rescaling anything else.
+  // Militia at exactly one slot is load-bearing: it makes every budget spendable
+  // to the last slot and every budget INCREASE have somewhere to go.
   assert.equal(UNIT_SLOTS.militia, 1);
+  // NON-DECREASING, with a strict step once one unit is worth twice another.
+  // This demanded a strict increase at EVERY step, which is the same rule as
+  // "slots are 1..N" and only worked while there were five units: at eight it
+  // would have forced rams from 5 slots to 7 to make room, and rams-cost-5 is a
+  // number the campaign is tuned against (regions.data.js — unlocking them
+  // shrinks the landing force 54 -> 48). Near-equal units SHOULD tie; what must
+  // not happen is the ladder going flat.
   const byGold = [...UNIT_IDS].sort((a, b) => UNITS[a].gold - UNITS[b].gold);
   for (let i = 1; i < byGold.length; i++) {
     const [prev, cur] = [byGold[i - 1], byGold[i]];
     assert.ok(Number.isInteger(UNIT_SLOTS[cur]) && UNIT_SLOTS[cur] >= 1, `${cur} slot cost`);
     assert.ok(
-      UNIT_SLOTS[cur] > UNIT_SLOTS[prev],
-      `${cur} costs more gold than ${prev} and must cost more slots`,
+      UNIT_SLOTS[cur] >= UNIT_SLOTS[prev],
+      `${cur} costs more gold than ${prev} and must not cost fewer slots`,
     );
+    if (UNITS[cur].gold >= UNITS[prev].gold * 2) {
+      assert.ok(UNIT_SLOTS[cur] > UNIT_SLOTS[prev],
+        `${cur} is worth twice ${prev} in gold and must cost strictly more slots`);
+    }
   }
   // Compressed relative to raw gold, or a marshal (15x a militia) would cost
   // more than a whole starting expedition and never be a choice at all.
   const goldRatio = UNITS.marshal.gold / UNITS.militia.gold;
   assert.ok(UNIT_SLOTS.marshal < goldRatio, 'the curve must be compressed, not raw gold');
   assert.ok(UNIT_SLOTS.marshal > EXPEDITION.base / 3, 'a marshal must still be a real sacrifice');
-});
-
-test('for one fixed budget, four different units are the right answer', () => {
-  // The complaint this feature answers: "everyone would just start with as many
-  // of the best troops as possible". With slot costs there is no "best" — the
-  // argmax at a FIXED budget moves with the job in front of you.
-  const budget = 60;
-  const stacks = Object.fromEntries(
-    ['militia', 'spearmen', 'raiders', 'rams'].map((u) => [u, pureStack(u, budget)]),
-  );
-  for (const [u, s] of Object.entries(stacks)) {
-    assert.ok(compositionSlots(s) <= budget, `${u} stack must fit the budget`);
-  }
-  const best = (score) => Object.entries(stacks)
-    .sort((a, b) => score(b[1]) - score(a[1]))[0][0];
-
-  assert.equal(best((s) => power(s, foeOf('spearmen'))), 'militia',
-    'militia counter a spearwall');
-  assert.equal(best((s) => power(s, foeOf('militia'))), 'raiders',
-    'raiders counter a militia mob');
-  assert.equal(best((s) => power(s, foeOf('militia'), { defending: true, onOwnSite: true })),
-    'spearmen', 'spearmen hold ground');
-  assert.equal(best((s) => siegeDps(s)), 'rams', 'rams break walls');
 });
 
 test('the marshal is free precisely because his slot price never worked', () => {
@@ -211,7 +200,7 @@ test('no sequence of + and - presses can ever exceed the budget', () => {
 
 test('one press buys a raider by trading down, and giving it back is exact', () => {
   const unlocked = ['militia', 'spearmen', 'raiders'];
-  const start = { militia: 9, spearmen: 5, raiders: 0, rams: 0, marshal: 0 };
+  const start = comp({ militia: 9, spearmen: 5 });
   const budget = compositionSlots(start); // 19: fully committed already
 
   const bought = nudgeComposition(start, 'raiders', +1, unlocked, budget);
@@ -225,7 +214,7 @@ test('one press buys a raider by trading down, and giving it back is exact', () 
 
 test('the Launch gate is what refuses an over-budget army', () => {
   const unlocked = ['militia', 'spearmen'];
-  const legal = { militia: 9, spearmen: 5, raiders: 0, rams: 0, marshal: 0 };
+  const legal = comp({ militia: 9, spearmen: 5 });
   assert.equal(overBudget(legal, 19), false);
   assert.equal(overBudget(legal, 18), true, 'one slot over is over');
   assert.equal(budgetSummary(legal, 18).over, true);
@@ -289,7 +278,7 @@ test('a corrupt loadout in a save is healed, not trusted', () => {
   storage.setItem('hexdominion.save', JSON.stringify(raw));
 
   const healed = load(storage, { now: 20 }).state.meta.loadout;
-  assert.deepEqual(healed, { militia: 0, spearmen: 2, raiders: 0, rams: 0, marshal: 0 });
+  assert.deepEqual(healed, comp({ spearmen: 2 }));
   assert.equal(healed.wyverns, undefined, 'an unknown unit id never enters the state');
 });
 

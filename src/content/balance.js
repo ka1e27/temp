@@ -2,7 +2,9 @@
 // balance pass is a single-file diff.
 // PURE DATA.
 
-export const UNIT_IDS = ['militia', 'spearmen', 'raiders', 'rams', 'marshal'];
+export const UNIT_IDS = [
+  'militia', 'spearmen', 'outriders', 'raiders', 'halberds', 'sappers', 'rams', 'marshal',
+];
 
 /**
  * Every unit costs 3.0-4.5 gold/sec to run (gold / trainSec), so switching what
@@ -32,6 +34,45 @@ export const UNITS = {
   // one costs to commission.
   marshal:  { gold: 180, trainSec: 40, batch: 1, speed: 60,  atk: 20, def: 14, siege: 2.0,
               counters: {}, banner: 0.25, trainBuff: 0.40, maxPerSite: 1 },
+
+  // --- The three specialists -----------------------------------------------
+  // Each one owns a VERB the roster did not have, rather than a better number
+  // on one it did. The first five are a rock-paper-scissors of stats plus a
+  // siege engine; adding a sixth set of stats would only have moved which
+  // column of the same table you read. What these do instead:
+  //
+  //   outriders  MOVE      three times a militia's march. The campaign is a
+  //                        beachhead landing into a map that is 30-50% unclaimed
+  //                        (see regions.data.js), so the race for neutral ground
+  //                        IS the opening, and this is the unit that wins it.
+  //                        They also carry `skirmish`, so a failed grab costs a
+  //                        fraction rather than the squad.
+  //   halberds   BREAK     the defender's ground advantage. `sunder` cuts
+  //                        `siteDefMult` — a castle defends at x1.60 and a
+  //                        level-5 wall stacks on top of that, which is exactly
+  //                        the fight where militia stop scaling.
+  //   sappers    HOLD      what you took. `repair` multiplies the site's HP
+  //                        regen while they garrison it, and battle/combat.js
+  //                        `breachSeconds` returns Infinity the moment repair
+  //                        out-paces siege damage — so a stronghold with sappers
+  //                        in it is not merely tougher, it is UNCRACKABLE by a
+  //                        force that did not bring engines. That is the same
+  //                        mechanism that already makes "a few troops cannot
+  //                        take a stronghold" true, handed to the player.
+  //
+  // None of them is in ENEMY_UNITS_BY_TIER, and none has a
+  // DEFAULT_COMPOSITION_WEIGHT: they are a deliberate pick on the loadout
+  // screen, so the default army — and every balance number measured against it
+  // — is exactly what it was.
+  outriders: { gold: 30,  trainSec: 10, batch: 1, speed: 165, atk: 6,  def: 3,  siege: 0.5,
+              counters: { rams: 0.9 }, skirmish: 0.6,
+              ground: { highland: 0.75, river: 1.25 } },
+  halberds: { gold: 65,  trainSec: 16, batch: 1, speed: 42,  atk: 12, def: 5,  siege: 1.2,
+              counters: { raiders: 0.5 }, sunder: 0.50,
+              ground: { highland: 1.10, river: 0.90 } },
+  sappers:  { gold: 55,  trainSec: 16, batch: 1, speed: 40,  atk: 3,  def: 7,  siege: 2.5,
+              counters: {}, repair: 1.9,
+              ground: { highland: 1.15, river: 0.95 } },
 };
 
 /**
@@ -84,7 +125,7 @@ export const UNITS = {
  * budget INCREASE always has somewhere to go.
  */
 export const UNIT_SLOTS = {
-  militia: 1, spearmen: 2, raiders: 3, rams: 5, marshal: 8,
+  militia: 1, spearmen: 2, outriders: 2, raiders: 3, halberds: 4, sappers: 3, rams: 5, marshal: 8,
 };
 
 /** Structure HP + regen is the master pacing knob: it sets BOTH battle length

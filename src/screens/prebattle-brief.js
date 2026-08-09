@@ -5,6 +5,8 @@
 // lines against a 400 cap, and these are the parts worth testing directly.
 
 import { compact, rate, duration } from '../ui/format.js';
+import { UNIT_IDS } from '../content/balance.js';
+import { UNITS_UI } from '../content/strings.js';
 import {
   expeditionSlots, carryComposition, distributeExpedition,
   compositionSlots, compositionTotal, overBudget, slotCost,
@@ -15,10 +17,12 @@ import { previewReward } from '../meta/rewards.js';
 
 export { compositionSlots, compositionTotal, overBudget, slotCost };
 
-export const UNIT_LABEL = Object.freeze({
-  militia: 'Militia', spearmen: 'Spearmen', raiders: 'Raiders',
-  rams: 'Rams', marshal: 'Marshal',
-});
+/** Derived from content/strings.js rather than listed, so the loadout screen
+ *  and the unit tooltip can never disagree about what a troop is called — and a
+ *  new unit cannot ship with a blank label. */
+export const UNIT_LABEL = Object.freeze(
+  Object.fromEntries(UNIT_IDS.map((u) => [u, UNITS_UI[u].name])),
+);
 
 /** Label + what the booster actually does. Shared with the shop. */
 export const BOOSTER_LABEL = Object.freeze({

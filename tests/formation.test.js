@@ -15,19 +15,24 @@ import { arcHeading, arcPoint } from '../src/render/routes.js';
 import { UNIT_IDS } from '../src/content/balance.js';
 
 const V = { x: 0, y: 0 };
+/** Derived from UNIT_IDS: a hardcoded roster in a fixture is a test that
+ *  silently stops covering the units added after it was written. */
 const comp = (o) => Object.assign(
-  { militia: 0, spearmen: 0, raiders: 0, rams: 0, marshal: 0 }, o,
+  Object.fromEntries(UNIT_IDS.map((u) => [u, 0])), o,
 );
 const totalOf = (c) => UNIT_IDS.reduce((a, u) => a + (c[u] || 0), 0);
 
-/** How many pieces each unit type ended up with. */
+/** How many pieces each unit type ended up with, KEYED BY UNIT ID.
+ *  It was a positional array of five, so every assertion below silently meant
+ *  "index 3" rather than "rams" and broke the moment the roster grew. */
 function blocks(c, pieces) {
   const t = totalOf(c);
   planUnits(c, t, pieces);
-  const out = [0, 0, 0, 0, 0];
-  for (let i = 0; i < pieces; i++) out[unitOfPiece(i)]++;
+  const out = Object.fromEntries(UNIT_IDS.map((u) => [u, 0]));
+  for (let i = 0; i < pieces; i++) out[UNIT_IDS[unitOfPiece(i)]]++;
   return out;
 }
+const pieceTotal = (b) => Object.values(b).reduce((a, x) => a + x, 0);
 
 // ---------------------------------------------------------------------------
 // Piece count
@@ -151,28 +156,36 @@ test('formation: the pieces always add up to exactly the piece count', () => {
     const t = totalOf(c);
     const p = pieceCount(t);
     const b = blocks(c, p);
-    assert.equal(b.reduce((a, x) => a + x, 0), p, JSON.stringify(c));
+    assert.equal(pieceTotal(b), p, JSON.stringify(c));
   }
 });
 
 test('formation: a type that is present keeps at least one piece', () => {
-  // A lone marshal inside a 90-stack is the most important thing in it.
-  const b = blocks(comp({ militia: 60, spearmen: 20, raiders: 8, rams: 1, marshal: 1 }), 30);
-  for (let u = 0; u < b.length; u++) assert.ok(b[u] >= 1, `${UNIT_IDS[u]} vanished`);
+  // A lone marshal inside a 90-stack is the most important thing in it. Only
+  // types actually IN the stack are checked — the old version asserted over
+  // every index, which happened to be the same thing while the fixture listed
+  // the entire roster and stopped being so the moment it did not.
+  const c = comp({ militia: 60, spearmen: 20, raiders: 8, rams: 1, marshal: 1 });
+  const b = blocks(c, 30);
+  for (const u of UNIT_IDS) {
+    if (c[u] > 0) assert.ok(b[u] >= 1, `${u} vanished`);
+    else assert.equal(b[u], 0, `${u} is not in this stack and must draw nothing`);
+  }
 });
 
 test('formation: the dominant contingent is never the one rounded away', () => {
   const b = blocks(comp({ militia: 100, marshal: 1 }), pieceCount(101));
-  assert.ok(b[0] > 20, `militia collapsed to ${b[0]}`);
-  assert.equal(b[4], 1);
-  assert.equal(b[1] + b[2] + b[3], 0, 'absent types must take no pieces');
+  assert.ok(b.militia > 20, `militia collapsed to ${b.militia}`);
+  assert.equal(b.marshal, 1);
+  const others = UNIT_IDS.filter((u) => u !== 'militia' && u !== 'marshal');
+  assert.equal(others.reduce((a, u) => a + b[u], 0), 0, 'absent types must take no pieces');
 });
 
 test('formation: blocks are proportional and contiguous, in battle order', () => {
   const c = comp({ militia: 20, rams: 20 });
   const p = pieceCount(40);
   const b = blocks(c, p);
-  assert.equal(b[0], b[3], 'an even split must draw evenly');
+  assert.equal(b.militia, b.rams, 'an even split must draw evenly');
   // Contiguous: the type index never returns to a value it has left.
   const seen = new Set();
   let last = -1;

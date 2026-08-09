@@ -243,13 +243,33 @@ export function spendCrowns(meta, crowns) {
   for (let guard = 0; guard < 400; guard++) {
     const affordable = shopListing(meta)
       .flatMap((g) => g.items)
-      .filter((i) => i.affordable && i.level < i.maxLevel)
+      .filter((i) => i.affordable && i.level < i.maxLevel && !buysNothingFor(i.id))
       .sort((a, b) => a.cost - b.cost);
     if (!affordable.length) break;
     buy(meta, affordable[0].id, null);
   }
   recalcIncome(meta, null);
 }
+
+/**
+ * Unlocks this bot cannot use, and therefore must not buy.
+ *
+ * It shops CHEAPEST-AFFORDABLE-FIRST, so a cheap unlock is bought almost
+ * immediately — and `distributeExpedition` only fields units with a
+ * DEFAULT_COMPOSITION_WEIGHT, which the three specialists deliberately do not
+ * have (they are a loadout decision, not a default). The bot was therefore
+ * spending 3,400 crowns on troops it would never field, and that money used to
+ * be Arms and Treasury levels: measured at n=64 the moment they were added to
+ * the shop, obsidian fell 47% -> 33% and ironcrown 52% -> 38% with no change to
+ * any region, any unit stat, or the default army.
+ *
+ * That is a MEASUREMENT ARTEFACT, not a difficulty change — a real player who
+ * buys outriders goes on to use them — so the fix is here rather than in the
+ * balance table. The rule is simply "buy what you can use": if the harness ever
+ * learns to field a specialist, delete its id from this set and re-measure.
+ */
+const UNUSED_BY_THIS_BOT = new Set(['unlockOutriders', 'unlockHalberds', 'unlockSappers']);
+const buysNothingFor = (id) => UNUSED_BY_THIS_BOT.has(id);
 
 /** A meta state for a player who has taken `conquered` and idled `idleMinutes`. */
 export function metaFor(conquered, idleMinutes = 0, seed = 1) {

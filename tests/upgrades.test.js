@@ -56,7 +56,17 @@ test('the six endless lines exist, and they are the only endless ones', () => {
 test('the shop is small enough to read at a glance', () => {
   // The complaint this whole change answers. Twenty-six entries across six
   // groups, each with a paragraph, is a reading exercise rather than a choice.
-  assert.ok(UPGRADES.length <= 14, `${UPGRADES.length} upgrades is too many to scan`);
+  // SPLIT BY WHAT STAYS ON SCREEN. A single cap on the total counted the
+  // endless lines and the one-off unlocks as the same thing, and they are not:
+  // an unlock has `max: 1`, so it leaves the shop the moment it is bought and
+  // the list a returning player scans is only ever the repeatable half. Capping
+  // the total is what made adding a unit look like making the shop worse.
+  const endless = UPGRADES.filter((u) => u.max > 1);
+  const oneOff = UPGRADES.filter((u) => u.max <= 1);
+  assert.ok(endless.length <= 8,
+    `${endless.length} permanent lines is too many to scan every visit`);
+  assert.ok(oneOff.length <= 12,
+    `${oneOff.length} one-off unlocks is too long a shopping list to start with`);
   assert.ok(UPGRADE_GROUPS.length <= 3, 'three headings at most');
   for (const u of UPGRADES) {
     assert.ok(u.desc.length <= 100, `${u.id} description is ${u.desc.length} chars — too long`);

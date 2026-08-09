@@ -16,7 +16,7 @@ import { createBattleState } from '../src/battle/state.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { emptyComp } from '../src/battle/combat.js';
 import { factionGoldPerSec, runEconomy } from '../src/battle/economy.js';
-import { AI_TIERS, CENTIGOLD } from '../src/content/balance.js';
+import { AI_TIERS, CENTIGOLD, UNIT_IDS } from '../src/content/balance.js';
 import { TICK_HZ } from '../src/core/loop.js';
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
@@ -248,9 +248,12 @@ test('hud: an un-injected preview still produces a finite, sane ETA', () => {
 test('input: the view starts at the documented defaults', () => {
   const v = createView();
   assert.equal(v.fraction, 0.5);
-  assert.deepEqual(filterList(v.filter), ['militia', 'spearmen', 'raiders', 'rams', 'marshal']);
+  // Every unit on by default: a filter that silently omitted a troop would send
+  // an army the player did not order. Driven off UNIT_IDS so a new one cannot
+  // ship switched off.
+  assert.deepEqual(filterList(v.filter), [...UNIT_IDS]);
   v.filter.spearmen = false;
-  assert.deepEqual(filterList(v.filter), ['militia', 'raiders', 'rams', 'marshal']);
+  assert.deepEqual(filterList(v.filter), UNIT_IDS.filter((u) => u !== 'spearmen'));
 });
 
 test('input: commands are plain serializable data', () => {

@@ -9,7 +9,9 @@ import { UNITS, UNIT_IDS, SITES, SITE_LEVELS } from '../content/balance.js';
 
 /** @typedef {Record<string, number>} Composition */
 
-export const emptyComp = () => ({ militia: 0, spearmen: 0, raiders: 0, rams: 0, marshal: 0 });
+/** Derived from UNIT_IDS, never listed. A hardcoded roster here is a unit that
+ *  silently does not exist to every `{...emptyComp(), ...x}` in the codebase. */
+export const emptyComp = () => Object.fromEntries(UNIT_IDS.map((u) => [u, 0]));
 
 export const total = (c) => UNIT_IDS.reduce((n, u) => n + (c[u] || 0), 0);
 
@@ -113,6 +115,61 @@ export function power(comp, foe, opts = {}) {
 }
 
 /**
+ * How much of a defender's SITE bonus an attacking force strips away.
+ *
+ * `siteDefMult` is the one term in `power` that no amount of army answers: a
+ * castle defends at x1.60 and a built wall stacks on top of it, so past a point
+ * more militia is simply more militia dying at the same ratio. `sunder` is the
+ * verb for that — halberds cut the ground out from under the garrison rather
+ * than out-statting it.
+ *
+ * SCALED BY SHARE, exactly like `counters`, and for the same reason: a token
+ * escort should not strip a castle. A force that is half halberds gets half of
+ * the unit's `sunder`, so committing to the answer is what buys the answer.
+ * Clamped so the bonus can never invert into an advantage for the attacker.
+ * PURE.
+ * @param {Composition} comp the ATTACKING force
+ * @param {number} siteDefMult the defender's static site bonus
+ */
+export function sunderedDefMult(comp, siteDefMult) {
+  if (!(siteDefMult > 1)) return siteDefMult;
+  const n = total(comp);
+  if (!n) return siteDefMult;
+  let strip = 0;
+  for (const u of UNIT_IDS) {
+    const s = UNITS[u].sunder;
+    if (s) strip += s * ((comp[u] || 0) / n);
+  }
+  if (strip <= 0) return siteDefMult;
+  return 1 + (siteDefMult - 1) * Math.max(0, 1 - Math.min(1, strip));
+}
+
+/**
+ * The multiplier a garrison applies to its own site's HP regen.
+ *
+ * Sappers are the answer to holding what you took. `breachSeconds` already
+ * returns Infinity when siege damage cannot out-pace repair — that is the
+ * mechanism that makes "a few troops genuinely cannot take a stronghold" true
+ * without a minimum-troops rule — and this hands the same mechanism to whoever
+ * garrisons the site. A wall with sappers behind it is not merely tougher; it
+ * is uncrackable by a force that did not bring engines.
+ *
+ * SHARE-SCALED like `sunder`, so a lone sapper in a hundred-man garrison is
+ * worth almost nothing and a dedicated engineer detachment is worth all of it.
+ * PURE.
+ */
+export function repairMult(comp) {
+  const n = total(comp);
+  if (!n) return 1;
+  let m = 1;
+  for (const u of UNIT_IDS) {
+    const r = UNITS[u].repair;
+    if (r) m += (r - 1) * ((comp[u] || 0) / n);
+  }
+  return m;
+}
+
+/**
  * Stage 1 — the field battle. One round, proportional attrition.
  * Ties go to the defender.
  * @returns {{win:boolean, attPower:number, defPower:number, ratio:number,
@@ -126,8 +183,16 @@ export function resolveField(attackers, defenders, opts = {}) {
 
   let attPower = power(attackers, defenders, { statMult: attMult, ground });
   if (shielded) attPower *= 0.5; // Emergency Fortify
+  // Halberds strip the ground out from under the garrison before the round is
+  // fought — see `sunderedDefMult`. Applied HERE rather than inside `power` so
+  // it reads as what it is: a property of the force attacking, not of the
+  // defenders being measured.
   const defPower = power(defenders, attackers, {
-    defending: true, onOwnSite: defenderOwnsSite, siteDefMult, statMult: defMult, ground,
+    defending: true,
+    onOwnSite: defenderOwnsSite,
+    siteDefMult: sunderedDefMult(attackers, siteDefMult),
+    statMult: defMult,
+    ground,
   });
 
   if (attPower > defPower) {

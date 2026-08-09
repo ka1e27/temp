@@ -15,6 +15,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { UNIT_IDS } from '../src/content/balance.js';
+
 class FakeNode {}
 globalThis.Node = FakeNode;                    // ui/dom.js tests `c instanceof Node`
 
@@ -302,7 +304,7 @@ test('the troop composition bar is stacked in proportion, with the total on it',
 
   const bar = panel.el.find('bar-comp');
   const segs = bar.findAll('bar-comp-seg');
-  assert.equal(segs.length, 5, 'one fixed segment per unit type, in UNIT_IDS order');
+  assert.equal(segs.length, UNIT_IDS.length, 'one fixed segment per unit type, in UNIT_IDS order');
   assert.equal(segs[0].style.width, '75%', 'militia: 3 of 4');
   assert.equal(segs[1].style.width, '25%', 'spearmen: 1 of 4');
   assert.equal(segs[2].style.width, '0%', 'raiders: none present');

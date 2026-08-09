@@ -80,6 +80,32 @@ export const UNITS_UI = Object.freeze({
       + 'of a normal unit in the field unless it is spearmen in the way (up to '
       + '+260%). Slowest thing you own: x0.65 highland, x0.75 river.',
   }),
+  outriders: Object.freeze({
+    name: 'Outriders',
+    role: 'Takes ground first',
+    desc: 'Three times a militia’s march — the fastest thing in the game by a '
+      + 'wide margin. A region is mostly unclaimed when you land, and this is '
+      + 'the unit that gets there first. Soft in a stand-up fight, but 60% of '
+      + 'a failed grab rides home. Up to +90% against rams. x1.25 river, '
+      + 'x0.75 highland.',
+  }),
+  halberds: Object.freeze({
+    name: 'Halberds',
+    role: 'Cracks fortifications',
+    desc: 'Cuts the defender’s SITE bonus in half — the one advantage no '
+      + 'amount of militia answers, because a castle defends at x1.60 before '
+      + 'its walls are counted. Scaled by how much of your force they are, so '
+      + 'bring them properly or not at all. Up to +50% against raiders. '
+      + 'x1.10 highland, x0.90 river.',
+  }),
+  sappers: Object.freeze({
+    name: 'Sappers',
+    role: 'Makes a site unbreakable',
+    desc: 'Nearly doubles the repair rate of whatever they garrison. A '
+      + 'besieger whose damage cannot out-pace repair never breaches at all, '
+      + 'however long they sit there — so a site you hold with sappers needs '
+      + 'engines to take, not numbers. x1.15 highland, x0.95 river.',
+  }),
   marshal: Object.freeze({
     name: 'Marshal',
     role: 'Commander',
