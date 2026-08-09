@@ -132,14 +132,16 @@ test('the enemy tier economy handicap is applied EXACTLY ONCE, end to end', () =
 test('the expedition budget = base + perRegion x conquered + Standing Army levels', () => {
   // The unit of all of these is SLOTS, not bodies — see content/balance.js
   // UNIT_SLOTS. A militia costs one, a marshal costs eight.
-  const { base, perRegion } = EXPEDITION;
+  // Only up to `taperAfter` conquests: past it the rate changes by design, and
+  // that is asserted in tests/campaign.test.js against the real segment shape
+  // rather than restated here.
+  const { base, perRegion, taperAfter } = EXPEDITION;
+  const empire = ['riverfen', 'ashford', 'ironwood', 'saltmere'];
   assert.equal(expeditionSlots(world([])), base);
-  assert.equal(expeditionSlots(world(['riverfen'])), base + perRegion);
-  assert.equal(expeditionSlots(world(['riverfen', 'ashford'])), base + perRegion * 2);
-  assert.equal(expeditionSlots(world(['riverfen', 'ashford', 'ironwood'])), base + perRegion * 3);
-  assert.equal(
-    expeditionSlots(world(['riverfen', 'ashford', 'ironwood', 'saltmere'])), base + perRegion * 4,
-  );
+  for (let i = 1; i <= taperAfter; i++) {
+    assert.equal(expeditionSlots(world(empire.slice(0, i))), base + perRegion * i,
+      `${i} conquest(s) should buy the opening rate exactly`);
+  }
   // Standing Army adds 5 per level on top, making it the most directly felt
   // purchase in the shop — and it has no cap, so this never stops being true.
   assert.equal(expeditionSlots(world([], { standingArmy: 1 })), base + 5);
@@ -251,8 +253,14 @@ test('the expedition really lands in the player mods and grows with the empire',
   const late = buildBattleConfig(
     world(['riverfen', 'ashford', 'ironwood', 'saltmere'], { standingArmy: 2 }), 'kaldan', [], null,
   );
+  // Kaldan is attacked with four conquests, which is one past `taperAfter`, so
+  // the fourth is spent at the mid rate rather than the opening one. Computed
+  // from the segments rather than restated, because what this test is for is
+  // that the budget REACHES the config at all.
+  const { base, perRegion, taperAfter, perRegionLate } = EXPEDITION;
   assert.equal(
-    compositionSlots(late.player.expedition), EXPEDITION.base + EXPEDITION.perRegion * 4 + 10,
+    compositionSlots(late.player.expedition),
+    base + perRegion * taperAfter + perRegionLate * (4 - taperAfter) + 10,
   );
   assert.equal(total(late.enemy.expedition), 0, 'the enemy head start is land, not a free army');
 });

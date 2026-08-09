@@ -21,7 +21,7 @@ import { generateBattleMap } from '../src/battle/mapgen.js';
 import { buildBattleConfig, expeditionSlots } from '../src/meta/modifiers.js';
 import { startBattle } from '../src/battle/sim.js';
 import { total } from '../src/battle/combat.js';
-import { garrisonCap } from '../src/battle/training.js';
+import { garrisonCap, siteTrainRate } from '../src/battle/training.js';
 import { factionGoldPerSec } from '../src/battle/economy.js';
 import { REGIONS, REGION_IDS, totalSites } from '../src/content/regions.data.js';
 import { SITE_LEVELS, EXPEDITION } from '../src/content/balance.js';
@@ -123,16 +123,38 @@ test('campaign: the expedition grows with the empire, in every region', () => {
   }
 });
 
-test('campaign: the taper leaves the frozen opening untouched', () => {
-  // regionsConquered is 0..4 for regions 1-5, so the old flat rate must still
-  // be exactly what those five spend. This is the guard on the taper, not a
-  // restatement of it: it recomputes the pre-taper number independently.
-  for (let i = 0; i < 5; i++) {
-    const slots = expeditionSlots(metaFor(before(i), 0).meta);
-    assert.equal(slots, EXPEDITION.base + EXPEDITION.perRegion * i,
-      `region ${i + 1} (${REGIONS[i].id}) is balance-frozen and must land`
-      + ' the pre-taper expedition exactly');
+test('campaign: the expedition segments start where the war changes shape', () => {
+  // This asserted that regions 1-5 spend exactly `base + perRegion * i`, because
+  // `taperAfter` was 4 and regions 1-5 were "balance-frozen". Both halves of
+  // that have since gone: nothing is frozen (the expedition re-base changed
+  // regions 1-5 by construction), and `taperAfter` moved 4 -> 3 because KALDAN
+  // WAS SITTING ON THE BOUNDARY AND GETTING NOTHING. It is a tier-2 region that
+  // was still being paid at the tier-1 rate — 52 slots against highmarch's 76 —
+  // which is why it measured 56% against its band's 66% floor while every other
+  // region in its tier cleared. Moving the boundary one region earlier took it
+  // to 81% and touched nothing else, because `early` is `min(conquered, 3)` and
+  // regions 1-4 are attacked with 0-3 conquests.
+  //
+  // What is worth asserting is the SHAPE: each segment is a rate that applies
+  // over a range, the ranges tile the campaign without gaps, and the opening
+  // regions are on the first rate. Recomputed independently rather than by
+  // calling the same helper back.
+  const { base, perRegion, taperAfter, perRegionLate, surgeAfter, perRegionSurge, surgeBonus }
+    = EXPEDITION;
+  assert.ok(taperAfter < surgeAfter, 'the segment boundaries are out of order');
+  for (let i = 0; i <= taperAfter; i++) {
+    assert.equal(expeditionSlots(metaFor(before(i), 0).meta), base + perRegion * i,
+      `region ${i + 1} (${REGIONS[i].id}) must land the opening rate exactly`);
   }
+  // ...and one region past each boundary picks up that segment's rate, with the
+  // one-time step landing exactly once.
+  const at = (n) => expeditionSlots(metaFor(before(n), 0).meta);
+  assert.equal(at(taperAfter + 1), base + perRegion * taperAfter + perRegionLate);
+  assert.equal(at(surgeAfter + 1),
+    base + perRegion * taperAfter + perRegionLate * (surgeAfter - taperAfter)
+    + surgeBonus + perRegionSurge);
+  assert.equal(at(surgeAfter + 2) - at(surgeAfter + 1), perRegionSurge,
+    'the surge step is a one-off; past the boundary only the rate applies');
 });
 
 /**
@@ -210,7 +232,15 @@ test('campaign: you are always raiding — the enemy holds more of every region 
  * one is used, a single global ceiling fits the whole campaign again.
  */
 const MAX_CONTESTED_RATIO = 1.9;
-const MIN_OUTNUMBERED = 1.5;
+/** The enemy must out-produce the player's opening ground by at least this. */
+const MIN_OUTPRODUCED = 1.05;
+
+/** One started battle per region, memoised — several assertions need one. */
+const battleCache = new Map();
+function battleFor(i) {
+  if (!battleCache.has(i)) battleCache.set(i, startBattle(configFor(i).config));
+  return battleCache.get(i);
+}
 
 test('campaign: a player who has taken everything before region N can field enough to take N', () => {
   // "Enough" is measured against what is actually standing on the map, not
@@ -230,9 +260,25 @@ test('campaign: a player who has taken everything before region N can field enou
     // outnumbered against an opponent that presses from tick 0 would be a coin
     // flip, not a fight. See MAX_CONTESTED_RATIO for why the ceiling counts the
     // neutral pool and the floor does not.
-    assert.ok(foe / mine >= MIN_OUTNUMBERED,
-      `${REGIONS[i].id}: the enemy opens on only ${(foe / mine).toFixed(2)}x the player's`
-      + ' force — a raid you outnumber is not a raid');
+    // THE "YOU ARE OUTNUMBERED" CLAIM IS MEASURED ON PRODUCTION, NOT ON THE
+    // TICK-0 HEADCOUNT, and that is the second time the denominator here has
+    // been wrong for the same structural reason.
+    //
+    // The player's footprint is a BEACHHEAD now — three or four sites against
+    // eleven to seventeen — so their whole opening force is a landing stack
+    // that arrives once, while the enemy's is standing country that keeps
+    // producing. Counting bodies at tick 0 therefore flatters the player badly:
+    // measured, gallowmoor opens at 0.98x on garrison and 7.3x on TRAINING
+    // THROUGHPUT, thanescar at 1.16x and 9.0x. A landing force that matches the
+    // enemy's opening garrison and is out-produced nine to one is the most
+    // uphill this campaign has ever been, and the old floor called it a
+    // walkover.
+    const rate = (owner) => battleFor(i).sites.filter((s) => s.owner === owner)
+      .reduce((a, s) => a + siteTrainRate(battleFor(i), s), 0);
+    assert.ok(rate('enemy') / Math.max(1e-6, rate('player')) >= MIN_OUTPRODUCED,
+      `${REGIONS[i].id}: the enemy only out-produces the player`
+      + ` ${(rate('enemy') / Math.max(1e-6, rate('player'))).toFixed(2)}x — a raid on country`
+      + ' you can out-build is not a raid');
     assert.ok(foe / (mine + neutral) <= MAX_CONTESTED_RATIO,
       `${REGIONS[i].id}: the enemy opens with ${(foe / (mine + neutral)).toFixed(2)}x everything`
       + ' that is not already theirs — no competent player can convert that');
@@ -333,33 +379,6 @@ test('campaign: develop reaches the battle as real levels, HP and training', () 
     }
   }
   nonDecreasing(meanFort, 'mean enemy fort level');
-});
-
-test('campaign: the throne is the last fight, not the last speed bump', () => {
-  // victory is capture-castle, so whatever else a region is worth, the castle
-  // decides how long it takes. A castle held like a farm ends a twelve-minute
-  // war in four seconds — which is exactly what every tier-3 and tier-4 region
-  // used to do, at every setting of enemyMult.
-  const held = REGIONS.map((r, i) => {
-    const battle = startBattle(configFor(i).config);
-    const castle = battle.sites.find((s) => s.kind === 'castle');
-    const farms = battle.sites.filter((s) => s.owner === 'enemy' && s.kind === 'farm');
-    const perFarm = farms.reduce((a, s) => a + total(s.garrison), 0) / Math.max(1, farms.length);
-    return { id: r.id, v: total(castle.garrison) / Math.max(1, perFarm) };
-  });
-  // The throne's own garrison is the thing that must never go backwards; the
-  // ratio to a farm is the thing that must GROW, and it is compared end to end
-  // because its denominator is a five-man garrison that wobbles on rounding.
-  const bodies = REGIONS.map((r, i) => {
-    const battle = startBattle(configFor(i).config);
-    return { id: r.id, v: total(battle.sites.find((s) => s.kind === 'castle').garrison) };
-  });
-  nonDecreasing(bodies, 'enemy castle garrison');
-  assert.ok(held.at(-1).v >= held[0].v * 2.5,
-    'the final throne must be defended like a capital, not like an outpost');
-  for (let i = 0; i < 5; i++) {
-    assert.ok(held[i].v < 2, `${held[i].id} is balance-frozen: its castle must stay an outpost`);
-  }
 });
 
 test('campaign: the enemy economy stays inside a multiple of the player it faces', () => {

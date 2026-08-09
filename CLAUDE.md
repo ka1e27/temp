@@ -199,9 +199,9 @@ That table has since been retuned again, for the *uphill raid* pass (a smaller l
 force, an enemy warm-up, and a shop with no ceiling). **The current measured curve, n=240:**
 
 ```
-tier 1   86 83 81 88        tier 4   48 44 53 56
-tier 2   78 75 75 83 81     tier 5   30 36 39   (33 33 35 at n=240)
-tier 3   63 59 67 63 61
+tier 1   89 84 84 84        tier 4   52 34 52 47
+tier 2   80 70 72 78 72     tier 5   22 23 36
+tier 3   55 64 53 59 69
 ```
 
 n=64 with the band edges confirmed at n=240. All twenty-one report `ok` against their
@@ -227,9 +227,27 @@ On Nightharrow — the deepest region of the enemy's homeland — the player sta
 enemy holds outright, and the raid stopped being a raid exactly where it should be hardest.
 Every difficulty number passed, because difficulty was measured and ownership never was.
 
-It is now a flat ~27% the whole way, with the freed sites turned **neutral** rather than
-deleted — the country you used to start owning is still there, still takeable, just no
-longer free. `tests/campaign.test.js` pins the ceiling *and* the creep.
+It is now a flat **3–4 sites everywhere** — a beachhead, not a province — with the freed
+sites turned **neutral** rather than deleted. `tests/campaign.test.js` pins the ceiling
+*and* the creep.
+
+**But the site table was never what a player looks at.** The board is coloured by
+INFLUENCE, and `recomputeInfluence` skipped every site that wasn't player or enemy, so a
+neutral farm sat inside whichever faction's colour reached it first — and that was almost
+always the player, because the camp carries the widest radius on the map. A 27% site share
+painted a 46% board:
+
+```
+region        sites P/E/N     board before      board now
+riverfen      3/5/3           42% / 43%         31% / 40%, 27% unclaimed
+nightharrow   13/17/18        46% / 42%          9% / 39%, 52% unclaimed
+```
+
+Difficulty was measured to four decimal places and the thing on screen was never checked
+once, so the campaign shipped with the player holding more of the enemy's capital than the
+enemy did. A neutral-won hex is simply OMITTED (absent already reads as `neutral`), so this
+cost nothing in the save and needed no contract bump. `tests/influence.test.js` is new —
+there was no influence test file at all — and pins it with a negative control.
 
 **What paid for it — and what didn't.** Cutting the footprint costs 30–55 points a region.
 

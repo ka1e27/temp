@@ -213,7 +213,8 @@ export const BOOSTERS = {
  * still resolved in 6.6m.
  */
 export const EXPEDITION = {
-  base: 12, perRegion: 10, taperAfter: 4, perRegionLate: 11, surgeAfter: 8, perRegionSurge: 23,
+  base: 12, perRegion: 10, taperAfter: 3, perRegionLate: 24,
+  surgeAfter: 8, surgeBonus: 232, perRegionSurge: 14,
 };
 
 /**

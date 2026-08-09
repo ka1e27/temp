@@ -109,10 +109,22 @@ export function expeditionSlots(metaState) {
   const early = Math.min(conquered, taperAfter);
   const mid = Math.max(0, Math.min(conquered, surgeAfter) - taperAfter);
   const late = Math.max(0, conquered - surgeAfter);
+  // `surgeBonus` is a ONE-TIME step at the boundary, not a rate, and separating
+  // it from `perRegionSurge` is what makes the late campaign tunable at all.
+  // The two things a landing force needs are a LEVEL (enough to contest a map
+  // the player barely starts on) and a SLOPE (how fast it grows region to
+  // region), and one number cannot set both: carrying the level on the rate
+  // alone meant +52 slots a region, which outgrew `enemyMult` faster than the
+  // dial could legally climb — every column in regions.data.js is required
+  // non-decreasing, so steepening tier 3 to keep up forces tier 4's opener up
+  // with it. Measured at n=48 on the rate-only version, every tier sloped
+  // UPWARD inside itself: tier 3 ran 42 / 67 / 81 / 77 / 79 against a 22-point
+  // band. The step buys the level once; the rate stays gentle enough to tune.
   const base = EXPEDITION.base
     + EXPEDITION.perRegion * early
     + (EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * mid
     + (EXPEDITION.perRegionSurge ?? EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * late
+    + (late > 0 ? (EXPEDITION.surgeBonus ?? 0) : 0)
     + flatBonus(fx, 'expedition');
   return Math.max(0, Math.round(stack(base)));
 }

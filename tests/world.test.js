@@ -124,11 +124,14 @@ test('map size, site count and battle length scale together across tiers', () =>
 // 60-80% with zero losses. Change them only with fresh simrunner output.
 test('the vertical slice matches the tuned balance table', () => {
   const table = [
+    // ironwood and kaldan gave a starting site back to the NEUTRAL pool when the
+    // player's footprint was cut to a beachhead — the totals and every other
+    // column are untouched. Measured at n=64 after that: 89 / 84 / 84 / 84 / 80.
     ['riverfen', 1, 1.27, 11, 9, 5, 3, 3, 1.0, 8.0],
     ['ashford', 1, 1.91, 12, 9, 6, 3, 3, 1.2, 10.0],
-    ['ironwood', 1, 2.26, 13, 10, 7, 3, 4, 1.5, 12.0],
+    ['ironwood', 1, 2.26, 13, 10, 7, 4, 3, 1.5, 12.0],
     ['saltmere', 1, 2.74, 13, 10, 8, 4, 4, 1.8, 13.0],
-    ['kaldan', 2, 2.75, 15, 11, 9, 4, 5, 4.0, 14.0],
+    ['kaldan', 2, 2.75, 15, 11, 9, 5, 4, 4.0, 14.0],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;

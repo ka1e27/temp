@@ -20,6 +20,7 @@ import { makeMods, CONTRACT_VERSION, assertBattleConfig } from '../src/battle/co
 import { emptyComp, total, siteMaxHp, siteRegen } from '../src/battle/combat.js';
 import { siteGoldPerSec, goldOf } from '../src/battle/economy.js';
 import { garrisonCap, trainMultiplier, trainJob } from '../src/battle/training.js';
+import { playerTurn } from '../tools/simplayer.js';
 import { SITE_LEVELS, SITE_UPGRADE, CENTIGOLD } from '../src/content/balance.js';
 import { UPGRADES, UPGRADE_BY_ID, upgradeCost } from '../src/content/upgrades.data.js';
 import { buy, levelOf, costToMax, shopListing, isEndless } from '../src/meta/upgrades.js';
@@ -273,12 +274,28 @@ test('Arms raises the attack AND defence the simulation actually fights with', (
 
   // And it has to change a battle, not just a field on a config: the same seed,
   // the same map, more of the enemy dead.
+  //
+  // THE PLAYER HAS TO ACTUALLY ATTACK for this to measure anything. This used to
+  // step the sim with no orders at all and rely on the enemy walking into the
+  // player's starting ground — which stopped happening when the footprint was cut
+  // to a beachhead behind a neutral buffer. Both sides then killed exactly zero
+  // and the assertion compared 0 > 0. Driving the same scripted bot the balance
+  // table is measured with is the fix, and it is the stronger test: it is a real
+  // army fighting a real battle rather than a garrison being walked into.
   const kills = (cfg) => {
     const b = startBattle(cfg);
-    for (let i = 0; i < 1200 && b.status === 'running'; i++) step(b);
+    let nextThink = 0;
+    for (let i = 0; i < 2400 && b.status === 'running'; i++) {
+      if (b.tick >= nextThink) { playerTurn(b); nextThink = b.tick + 20; }
+      step(b);
+    }
     return b.factions.player.unitsKilled;
   };
-  assert.ok(kills(armed) > kills(base), 'a +60% army killed no more than a bare one');
+  const armedKills = kills(armed);
+  const bareKills = kills(base);
+  assert.ok(bareKills > 0, 'the fixture produced no combat at all — it measures nothing');
+  assert.ok(armedKills > bareKills,
+    `a +60% army killed ${armedKills} against a bare one's ${bareKills}`);
 });
 
 test('War Chest fills the treasury the battle actually spends', () => {

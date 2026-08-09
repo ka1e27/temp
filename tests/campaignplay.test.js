@@ -38,6 +38,15 @@ function playOnce(i, seed) {
 
 const median = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
 
+/** Monotone helper that names the offender instead of just failing. */
+function nonDecreasing(values, label, key = (r) => r.id) {
+  for (let i = 1; i < values.length; i++) {
+    assert.ok(values[i].v >= values[i - 1].v,
+      `${label} must never go backwards: ${key(values[i - 1])}=${values[i - 1].v}`
+      + ` then ${key(values[i])}=${values[i].v}`);
+  }
+}
+
 test('campaign: every region is winnable by an ordinary player, at every tier', { timeout: 900000 }, () => {
   // Deliberately a FLOOR rather than a win-rate assertion: tuning happens on
   // tools/simrunner.js at n >= 96, and a band re-measured at n=8 fails on noise
@@ -117,10 +126,21 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
   // Driven off the LAST region, which is tier 5 — the highest `counterShare` in
   // AI_TIERS (0.50) and therefore the sharpest test of the spear backbone that
   // battle/ai.js `adapt` reserves before either share spends anything.
+  // MEASURED AS A SUSTAINED STATE, not an instantaneous worst, and the reason is
+  // that the bug this exists for was PERMANENT. A ratchet cannot repair itself —
+  // "a stronghold that flips never flips back" — so it shows up as thousands of
+  // consecutive ticks. What an instantaneous worst ALSO catches, now that the
+  // player lands with a real army, is the half-second after they capture the
+  // enemy's spear forts and before its next think re-orders one back. Measured
+  // on nightharrow: the enemy is spear-less for 6 ticks out of 3600 (0.2%), in
+  // one unbroken run of 0.6 seconds. Failing on that would be asserting that the
+  // AI reacts within one tick of losing a site, which is not a thing this game
+  // claims and not what the regression was.
   const i = REGIONS.length - 1;
   const battle = startBattle(configFor(i));
   let nextThink = 0;
-  const worst = { rams: 0, nonSpear: 0 };
+  const worst = { rams: 0, spearlessRun: 0 };
+  let run = 0;
   for (let t = 0; t < 3600 && battle.status === 'running'; t++) {
     if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
     step(battle);
@@ -128,14 +148,43 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
     if (forts.length < 4) continue;                   // too few left to say anything
     const share = (u) => forts.filter((s) => s.trainType === u).length / forts.length;
     worst.rams = Math.max(worst.rams, share('rams'));
-    worst.nonSpear = Math.max(worst.nonSpear, 1 - share('spearmen'));
+    run = share('spearmen') > 0 ? 0 : run + 1;
+    worst.spearlessRun = Math.max(worst.spearlessRun, run);
   }
   assert.ok(worst.rams <= 0.75,
     `${(worst.rams * 100).toFixed(0)}% of the enemy's strongholds were building siege engines`
     + ' — the ram appetite has ratcheted again');
-  assert.ok(worst.nonSpear <= 0.9,
-    'the enemy abandoned its spear backbone entirely; a wall held by def-2 rams'
-    + ' and def-4 raiders is not a wall');
+  assert.ok(worst.spearlessRun <= 30,
+    `the enemy held no spear fort at all for ${(worst.spearlessRun / 10).toFixed(1)}s straight —`
+    + ' a wall of def-2 rams and def-4 raiders is not a wall, and the backbone'
+    + ' reserve in battle/ai.js `adapt` is no longer repairing it');
+});
+
+test('campaign: the throne is the last fight, not the last speed bump', () => {
+  // victory is capture-castle, so whatever else a region is worth, the castle
+  // decides how long it takes. A castle held like a farm ends a twelve-minute
+  // war in four seconds — which is exactly what every tier-3 and tier-4 region
+  // used to do, at every setting of enemyMult.
+  const held = REGIONS.map((r, i) => {
+    const battle = startBattle(configFor(i));
+    const castle = battle.sites.find((s) => s.kind === 'castle');
+    const farms = battle.sites.filter((s) => s.owner === 'enemy' && s.kind === 'farm');
+    const perFarm = farms.reduce((a, s) => a + total(s.garrison), 0) / Math.max(1, farms.length);
+    return { id: r.id, v: total(castle.garrison) / Math.max(1, perFarm) };
+  });
+  // The throne's own garrison is the thing that must never go backwards; the
+  // ratio to a farm is the thing that must GROW, and it is compared end to end
+  // because its denominator is a five-man garrison that wobbles on rounding.
+  const bodies = REGIONS.map((r, i) => {
+    const battle = startBattle(configFor(i));
+    return { id: r.id, v: total(battle.sites.find((s) => s.kind === 'castle').garrison) };
+  });
+  nonDecreasing(bodies, 'enemy castle garrison');
+  assert.ok(held.at(-1).v >= held[0].v * 2.5,
+    'the final throne must be defended like a capital, not like an outpost');
+  for (let i = 0; i < 5; i++) {
+    assert.ok(held[i].v < 2, `${held[i].id} is balance-frozen: its castle must stay an outpost`);
+  }
 });
 
 test('campaign: conquest is what makes the next region possible', () => {

@@ -169,7 +169,7 @@ export const REGIONS = Object.freeze([
     1.91, 12, 9, [6, 3, 3], 1, 0, 1.2, 10,
     'Open chalk downs with almost no cover — a fast raid arrives before the wall does.'),
   T('ironwood', 'Ironwood', 1, [0, 1], ['riverfen', 'ashford', 'saltmere', 'emberholt'],
-    2.26, 13, 10, [7, 3, 4], 1, 0, 1.5, 12,
+    2.26, 13, 10, [7, 4, 3], 1, 0, 1.5, 12,
     'Dense timber and single-file passes: chokepoints turn every push into a committed one.'),
   T('saltmere', 'Saltmere', 1, [1, 1],
     ['ashford', 'ironwood', 'kaldan', 'greywater', 'thornmoor', 'emberholt'],
@@ -179,21 +179,21 @@ export const REGIONS = Object.freeze([
   // --- Tier 2 (5) -- the first real wall. Kaldan proves the upgrade layer matters. ---
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
-    2.75, 15, 11, [9, 4, 5], 1, 0, 4, 14,
+    2.75, 15, 11, [9, 5, 4], 1, 0, 4, 14,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    2.76, 15, 11, [9, 5, 5], 1.35, 0.15, 5.5, 15,
+    2.76, 15, 11, [10, 5, 4], 1.35, 0.15, 5.5, 15,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    2.77, 15, 12, [10, 6, 5], 1.5, 0.2, 6.6, 15.5,
+    2.77, 15, 12, [10, 7, 4], 1.5, 0.2, 6.6, 15.5,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    2.79, 15, 12, [11, 6, 5], 1.7, 0.25, 7.9, 16,
+    2.79, 15, 12, [11, 7, 4], 1.7, 0.25, 7.9, 16,
     'Bramble country: five neutral farms make the opening land grab the whole battle.'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    2.88, 16, 12, [11, 6, 5], 1.7, 0.3, 9.5, 16.5,
+    2.88, 16, 12, [11, 7, 4], 1.7, 0.3, 9.5, 16.5,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
   // --- Tier 3 (5) -- 16x12 to 17x13, ~7.5-8 min. Sieges are the conversation. ---
@@ -253,21 +253,21 @@ export const REGIONS = Object.freeze([
   // site count and battle length scale together across tiers") for why the
   // campaign-wide monotonic length claim is still NOT restored here.
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    2.89, 16, 12, [11, 9, 8], 1.8, 0.55, 11.4, 7,
+    3.26, 16, 12, [12, 12, 4], 1.8, 0.55, 11.4, 7,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    3.05, 16, 12, [12, 8, 8], 1.92, 0.58, 13.7, 7,
+    3.29, 16, 12, [12, 12, 4], 1.92, 0.58, 13.7, 7,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    3.15, 17, 13, [13, 8, 8], 2, 0.6, 16.4, 7,
+    3.36, 17, 13, [13, 12, 4], 2, 0.6, 16.4, 7,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    3.48, 17, 13, [13, 8, 8], 2.05, 0.62, 19.7, 8.5,
+    3.61, 17, 13, [13, 12, 4], 2.05, 0.62, 19.7, 8.5,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    3.7, 17, 13, [14, 9, 9], 2.08, 0.65, 23.6, 8.5,
+    3.82, 17, 13, [14, 14, 4], 2.08, 0.65, 23.6, 8.5,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.'),
 
   // --- Tier 4 (4) -- 17x13, 33-37 sites, ~7 min, develop 2.20-2.52.
@@ -292,18 +292,18 @@ export const REGIONS = Object.freeze([
   // MAPGEN.enemyStrongholdShare rounds up a fifth stronghold — a step worth
   // ~25 points on its own. The landing force is what pays for it. ---
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    3.75, 17, 13, [14, 10, 9], 2.2, 0.65, 28.4, 6.5,
+    3.85, 17, 13, [14, 15, 4], 2.2, 0.65, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
-    3.81, 17, 13, [14, 10, 9], 2.45, 0.68, 34, 7.5,
+    3.92, 17, 13, [14, 15, 4], 2.45, 0.68, 34, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.'),
   T('ironcrown', 'Ironcrown', 4, [4, 0],
     ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
-    3.95, 17, 13, [14, 10, 9], 2.48, 0.7, 40.8, 7.5,
+    4.1, 17, 13, [14, 15, 4], 2.48, 0.7, 40.8, 7.5,
     'A Marshal holds the throne: the castle guard fights 25% harder and trains 40% faster.'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1],
     ['ironcrown', 'duskfell', 'thanescar', 'gravenreach', 'nightharrow'],
-    4, 17, 13, [15, 12, 11], 2.52, 0.72, 49, 8.5,
+    4.14, 17, 13, [14, 20, 4], 2.52, 0.72, 49, 8.5,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. Their capital.'),
 
   // --- Tier 5 (3) -- the enemy's homeland, east of the throne. ---
@@ -341,14 +341,14 @@ export const REGIONS = Object.freeze([
   // The band is WIN_BAND[4] = [22, 42]: these are meant to cost a good player
   // several attempts. Measured at n=240, in campaign order: see CLAUDE.md.
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach'],
-    4.12, 18, 13, [16, 12, 11], 2.6, 0.74, 61, 8,
+    4.16, 18, 13, [15, 20, 4], 2.6, 0.74, 61, 8,
     'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],
     ['ironcrown', 'obsidian', 'ravensmarch', 'nightharrow'],
-    4.3, 18, 14, [16, 15, 11], 2.8, 0.77, 76, 8.5,
+    4.17, 18, 14, [16, 22, 4], 2.8, 0.77, 76, 8.5,
     'Every wall here is built and manned. Half the enemy yards retrain to answer whatever you brought.'),
   T('nightharrow', 'Nightharrow', 5, [5, 1], ['obsidian', 'gravenreach'],
-    4.45, 19, 15, [17, 18, 13], 3.1, 0.8, 95, 9,
+    4.36, 19, 15, [16, 27, 5], 2.85, 0.8, 95, 9,
     'The last of them, behind level-four walls with a Marshal on the gate. Bring engines and bring time.'),
 ]);
 
