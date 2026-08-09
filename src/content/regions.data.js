@@ -2,7 +2,7 @@
 // PURE DATA. No logic reads a number that is not defined here or in balance.js.
 //
 // The load-bearing rule of this table: MAP SIZE, SITE COUNT AND DEVELOPMENT
-// SCALE TOGETHER WITH THE DIAL. A tier-4 region is a bigger war — 17x13, 36
+// SCALE TOGETHER WITH THE DIAL. A tier-4 region is a bigger war — 17x13, 37
 // sites, enemy country already built up the SITE_LEVELS ladder — not a tier-1
 // fight with inflated numbers. If you raise `enemyMult` without also raising
 // `grid`, `siteCounts` and `develop`, you have made the game worse.
@@ -17,6 +17,38 @@
 //
 // `hex` places the region on the world map; `adjacentTo` must be exactly its
 // true hex neighbours among the shipped set (tests/modifiers asserts this).
+//
+// ---------------------------------------------------------------------------
+// THE SECOND LOAD-BEARING RULE, and the one this table used to break: A
+// REGION'S STEP MUST BE THE SIZE OF THE PLAYER'S STEP INTO IT.
+//
+// The columns rose smoothly — `enemyMult` moved +0.02 a region for thirteen
+// regions straight — but the player does not rise smoothly. Crowns compound at
+// roughly 1.3x a region and meta/upgrades.js buys cheapest-affordable-first, so
+// the two flat combat multipliers (Veterancy on attack, Bulwark on defence)
+// arrive in LUMPS about every second region and nothing at all arrives in
+// between. Measured off real BattleConfigs, the player's atk x def stepped
+// +15.4% into greywater, +14.3% into emberholt, +11.6% into blackspire and
+// EXACTLY 0% into highmarch, thornmoor, gallowmoor, thanescar and obsidian.
+//
+// Those are, one for one, the regions the win-rate curve zigzagged on: at n=96
+// greywater won 92% against highmarch's 84%, emberholt 94% against thornmoor's
+// 74%, vaelstrand 84% against sunder's 70%. Nothing was wrong with those three
+// regions. They were the regions the player walked into holding a freshly
+// bought multiplier, and the table handed them +0.02 on the dial like everyone
+// else. A +0.02 answer to a +15% player is a region that plays easier than the
+// one before it, and a difficulty curve that goes down is a lie on the map.
+//
+// So the steps below are UNEVEN ON PURPOSE. greywater, emberholt, sunder,
+// vaelstrand and blackspire take big ones (a map row, an enemy site, a whole
+// castle level); thornmoor, gallowmoor, thanescar and ironcrown take almost
+// none. thornmoor's is deliberately the smallest in tier 2 because the player's
+// step into it is NEGATIVE: unlocking rams re-spends the expedition at 5 slots
+// a body, so the landing force drops from 54 to 48 and the region is harder at
+// an unchanged dial. Two of the five columns are only required to be
+// NON-DECREASING, not strictly increasing, and that headroom is what pays for
+// this — greywater and thornmoor ship the same grid and the same site counts.
+// ---------------------------------------------------------------------------
 
 /** Battle hard cap per tier, in minutes. A backstop, not a timer you play
  *  against — each sits well above its tier's targetLengthMin. */
@@ -137,6 +169,24 @@ export const FALLBACK_MAP = Object.freeze({ blockedFrac: 0.08, degree: 3 });
  * to be besieged by an army that brought engines.
  *
  * Tier 1 and kaldan are pinned at 1: regions 1-5 are balance-frozen.
+ *
+ * WHERE THE FRACTION LANDS MATTERS MORE THAN HOW BIG IT IS, and that is the one
+ * thing the original column got wrong. battle/mapgen.js `developLevels` promotes
+ * `round(share x pool)` forts BEST FIRST, and the best fort is the CASTLE — the
+ * win condition. So the promotion that costs the player the most is not the
+ * biggest step in this column, it is whichever step first crosses
+ * `share >= 0.5 / pool`. Measured at n=96: vaelstrand at develop 2.05 (castle
+ * level 2) won 82%; duskfell, one row later at 2.15, is the same map with the
+ * same site counts and won 56%, and the whole difference was one castle level.
+ *
+ * Two rules follow, and the column below obeys both.
+ *   1. Put a castle promotion on a region where the PLAYER also takes a step —
+ *      thanescar (2.20) is the first, and it is the tier-4 opener where the
+ *      expedition also gains two starting sites.
+ *   2. Where two neighbouring regions should differ only slightly, give them
+ *      develop values inside the SAME rounding bucket (greywater 1.50 and
+ *      thornmoor 1.55 both promote two of four forts) rather than values that
+ *      look adjacent but straddle a boundary.
  */
 const DEVELOP_CLAMP = (n) => Math.max(1, Math.min(5, Number(n) || 1));
 
@@ -202,21 +252,37 @@ export const REGIONS = Object.freeze([
     1.85, 15, 11, [9, 4, 5], 1, 0, 4.0, 14,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    1.98, 15, 11, [9, 4, 7], 1.35, 0.15, 5.5, 15,
+    2.05, 15, 11, [9, 4, 7], 1.35, 0.15, 5.5, 15,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    2.00, 15, 11, [10, 5, 7], 1.5, 0.20, 6.6, 15.5,
+    2.13, 15, 12, [10, 5, 7], 1.50, 0.20, 6.6, 15.5,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    2.02, 15, 12, [11, 5, 7], 1.62, 0.25, 7.9, 16,
+    2.14, 15, 12, [10, 5, 7], 1.55, 0.25, 7.9, 16,
     'Bramble country: five neutral farms make the opening land grab the whole battle.'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    2.04, 16, 12, [11, 5, 7], 1.72, 0.30, 9.5, 16.5,
+    2.15, 16, 12, [12, 5, 7], 1.70, 0.30, 9.5, 16.5,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
-  // --- Tier 3 (5) -- ~16x12, ~7-8.5 min. Sieges are the whole conversation now. ---
+  // --- Tier 3 (5) -- 16x12 to 17x13, ~7.5-8 min. Sieges are the conversation. ---
+  //
+  // THE TIER BOUNDARY IS THE ONE STEP THE DIAL CANNOT UNDO. Every column here
+  // is required to be non-decreasing, so the first region of a tier can never
+  // be tuned EASIER than the last region of the tier before it — whatever the
+  // AI ladder adds at the boundary is a floor on the drop. Counter-training
+  // used to arrive here as a BOOLEAN worth 17 points on gallowmoor and 32 on
+  // karrowmere (content/ai.data.js `counterShare`), which left one choice:
+  // leave tier 2 a walkover, or push tier 3 under the harness floor. It did
+  // the first, and emberholt shipped at 94%. As a per-tier share the boundary
+  // costs about nine points, which the columns below absorb.
+  //
+  // The other half of the answer is `siteCounts.player`, and it is the biggest
+  // lever in this table: gallowmoor measured +21 points per extra starting
+  // site at n=96. Tier 3 lands with eleven and tier 4 with thirteen, which is
+  // what pays for meeting a smarter commander — the empire behind you IS the
+  // answer to the endgame, and it should be visible on the map at tick zero.
   //
   // The advertised length still DROPS here, from tier 2's 14-16.5 minutes, and
   // that is measured rather than authored: the previous pass tried raising
@@ -242,41 +308,55 @@ export const REGIONS = Object.freeze([
   // site count and battle length scale together across tiers") for why the
   // campaign-wide monotonic length claim is still NOT restored here.
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    2.06, 16, 12, [11, 5, 9], 1.75, 0.55, 11.4, 7,
+    2.34, 16, 12, [12, 5, 11], 1.80, 0.55, 11.4, 7,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    2.08, 16, 12, [12, 5, 9], 1.9, 0.58, 13.7, 7,
+    2.54, 16, 12, [12, 5, 11], 1.92, 0.58, 13.7, 7,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    2.10, 16, 12, [13, 5, 9], 2.05, 0.60, 16.4, 7,
+    2.64, 17, 13, [13, 5, 11], 2.00, 0.60, 16.4, 7,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    2.12, 17, 12, [13, 5, 9], 2.2, 0.62, 19.7, 8.5,
+    2.80, 17, 13, [13, 5, 11], 2.05, 0.62, 19.7, 8.5,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    2.14, 17, 12, [14, 6, 9], 2.35, 0.65, 23.6, 8.5,
+    2.84, 17, 13, [14, 6, 11], 2.08, 0.65, 23.6, 8.5,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.'),
 
-  // --- Tier 4 (4) -- 17x13, 33-36 sites, ~6.5-8.5 min, develop 2.35-2.95.
+  // --- Tier 4 (4) -- 17x13, 33-37 sites, ~7 min, develop 2.20-2.52.
   // The endgame: the enemy's country is built, its throne is a capital with an
   // army in it, it fields rams, a marshal and three concurrent attacks, AND its
   // castle is gated behind the deepest territory requirement in the campaign
   // (0.65-0.72). A player who reaches the throne early sees it stay sealed
   // (screens/battle-panel.js says so) until enough of the endgame map has
-  // actually changed hands. ---
+  // actually changed hands.
+  //
+  // `develop` READS LOWER here than it used to (2.20-2.52 against 2.35-2.95)
+  // and the endgame is nonetheless harder, because the number was never the
+  // point — where its rounding boundaries fall is (see DEVELOP_CLAMP above).
+  // Thanescar is where the enemy castle first reaches level 3, and that single
+  // promotion is worth more than the whole 2.52-to-2.95 stretch it replaces.
+  // `enemyMult` carries the rest, which is why it reads 3.0+ here: the dial is
+  // the advertised difficulty and it should say what the region costs.
+  //
+  // Obsidian lands with SIXTEEN starting sites, three more than ironcrown. It
+  // is the one place the enemy site count has to cross 15 (tests/campaign.test
+  // pins the last region at three times the first), and 15 is where
+  // MAPGEN.enemyStrongholdShare rounds up a fifth stronghold — a step worth
+  // ~25 points on its own. The landing force is what pays for it. ---
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    2.16, 17, 13, [14, 6, 10], 2.35, 0.65, 28.4, 6.5,
+    3.10, 17, 13, [14, 6, 13], 2.20, 0.65, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown'],
-    2.30, 17, 13, [15, 6, 11], 2.45, 0.68, 34.0, 7.5,
+    3.14, 17, 13, [14, 6, 13], 2.45, 0.68, 34.0, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.'),
   T('ironcrown', 'Ironcrown', 4, [4, 0], ['vaelstrand', 'duskfell', 'blackspire', 'obsidian'],
-    2.32, 17, 13, [16, 6, 11], 2.7, 0.70, 40.8, 7.5,
+    3.24, 17, 13, [14, 6, 13], 2.48, 0.70, 40.8, 7.5,
     'The enemy fields a Marshal. Its whole army hits 20% harder until you kill it.'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1], ['ironcrown', 'duskfell', 'thanescar'],
-    2.42, 17, 13, [17, 6, 13], 2.95, 0.72, 49.0, 8.5,
+    3.41, 17, 13, [15, 6, 16], 2.52, 0.72, 49.0, 8.5,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. The last one.'),
 ]);
 

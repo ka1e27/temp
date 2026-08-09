@@ -82,18 +82,39 @@
  * that the region description never mentions. Taking a farm off the enemy is
  * worth proportionally what it looks like it is worth.
  */
+/**
+ * `adaptComposition: boolean` became `counterShare: number` — the share of the
+ * enemy's STRONGHOLDS that retrain onto the answer to whatever the player fields
+ * most (battle/ai.js `adapt`). Same reasoning as `staging` above, and a much
+ * bigger number: measured at n=96, switching counter-training off was worth +17
+ * points of win rate on gallowmoor and +32 on karrowmere, which made it the
+ * largest single difficulty step anywhere in the campaign — and it was an
+ * unadvertised flag flipping between region 9 and region 10.
+ *
+ * That is what made the middle of the campaign unfixable from the region table.
+ * Every dial in content/regions.data.js is required to be non-decreasing, so the
+ * first tier-3 region can never be tuned EASIER than the last tier-2 one; with a
+ * ~25-point AI cliff sitting on that boundary, either tier 2 stayed a walkover
+ * (emberholt at 94%) or tier 3 fell through the harness floor. As a ladder —
+ * nothing, nothing, a fifth, two fifths — the boundary is a step the per-region
+ * dial can absorb. Tier 4 keeps exactly the 0.40 it always effectively ran at,
+ * so the endgame's counter-training behaviour is unchanged.
+ *
+ * It also, finally, makes duskfell's "the enemy counter-trains here for the
+ * first time" less of a lie: at tier 3 only a fifth of the walls answer you.
+ */
 export const AI_TIERS = [
   { reactionTicks: 45, aggression: 0.60, commitRatio: 0.45, safetyMargin: 1.60,
-    economyMult: 0.2746, concurrent: 1, retreatDiscipline: 0.10, adaptComposition: false,
+    economyMult: 0.2746, concurrent: 1, retreatDiscipline: 0.10, counterShare: 0,
     ramAppetite: 0.1, stagingRatio: 0, stagingKeep: 1.0 },
   { reactionTicks: 32, aggression: 0.75, commitRatio: 0.50, safetyMargin: 1.50,
-    economyMult: 0.5300, concurrent: 1, retreatDiscipline: 0.35, adaptComposition: false,
+    economyMult: 0.5300, concurrent: 1, retreatDiscipline: 0.35, counterShare: 0,
     ramAppetite: 0.4, stagingRatio: 0.70, stagingKeep: 0.35 },
-  { reactionTicks: 22, aggression: 1.00, commitRatio: 0.70, safetyMargin: 1.25,
-    economyMult: 0.6200, concurrent: 2, retreatDiscipline: 0.65, adaptComposition: true,
+  { reactionTicks: 26, aggression: 1.00, commitRatio: 0.70, safetyMargin: 1.25,
+    economyMult: 0.5800, concurrent: 2, retreatDiscipline: 0.65, counterShare: 0.20,
     ramAppetite: 0.8, stagingRatio: 0.70, stagingKeep: 0.05 },
-  { reactionTicks: 15, aggression: 1.20, commitRatio: 0.80, safetyMargin: 1.15,
-    economyMult: 0.7500, concurrent: 3, retreatDiscipline: 0.90, adaptComposition: true,
+  { reactionTicks: 19, aggression: 1.20, commitRatio: 0.80, safetyMargin: 1.15,
+    economyMult: 0.6600, concurrent: 3, retreatDiscipline: 0.90, counterShare: 0.40,
     ramAppetite: 1.0, stagingRatio: 0.80, stagingKeep: 0.05 },
 ];
 
@@ -113,7 +134,8 @@ export const AI = {
   // bulwark) are both far worse defenders than the spearmen (def 8 x 1.75) they
   // replace, the AI used to disarm itself over the course of a long battle.
   ramTrainShare: 0.5,       // share of strongholds that take rams while sieging
-  counterTrainShare: 0.40,  // ...and of everything else that answers your army
+  // ...and the share that answers your army is PER TIER (`counterShare` above),
+  // because it is a difficulty ladder rather than a constant of the engine.
   stagingCapMult: 2,        // how far over a garrison cap the AI will mass to strike
   thinkJitter: 0.2,
 

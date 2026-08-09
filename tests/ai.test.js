@@ -162,6 +162,134 @@ test('counter-training is OFF at tiers 1-2 and ON at 3-4', () => {
   }
 });
 
+test('counter-training is a per-tier LADDER, not a switch', () => {
+  // `adaptComposition: boolean` became `counterShare: number` because the
+  // boolean was the largest single difficulty step in the campaign and it sat
+  // on a tier boundary: at n=96, switching it off was worth +17 points of win
+  // rate on gallowmoor and +32 on karrowmere. Every dial in
+  // content/regions.data.js is required to be non-decreasing, so a step that
+  // big at the tier-2/tier-3 boundary is one no region can be tuned past —
+  // either tier 2 stays a walkover or tier 3 falls through the harness floor.
+  //
+  // This is the guard on the shape, not on the values: a share may be re-tuned,
+  // but it may not collapse back into "off at 2, fully on at 3".
+  for (const t of AI_TIERS) {
+    assert.equal(typeof t.counterShare, 'number', 'counterShare must be a share');
+    assert.ok(t.counterShare >= 0 && t.counterShare <= 1);
+    assert.equal(t.adaptComposition, undefined,
+      'the boolean is gone; two fields for one knob is how they drift apart');
+  }
+  const shares = AI_TIERS.map((t) => t.counterShare);
+  for (let i = 1; i < shares.length; i++) {
+    assert.ok(shares[i] >= shares[i - 1],
+      `tier ${i + 1} counter-trains less than tier ${i}`);
+  }
+  // A ladder has more than one rung above zero. [0, 0, 1, 1] would pass every
+  // assertion above and be exactly the boolean this replaced.
+  const rungs = new Set(shares.filter((s) => s > 0));
+  assert.ok(rungs.size >= 2,
+    `counter-training has ${rungs.size} setting(s) above zero — that is a switch`);
+});
+
+/** camp -- pf -- es1..esN -- castle: every wall reachable from both ends. */
+function wallMap(walls) {
+  const sites = [
+    { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 40 }, hp: 600, hpMax: 600 },
+    { id: 'pf', kind: 'farm', hex: [3, 0], owner: 'player', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
+    { id: 'castle', kind: 'castle', hex: [9, 0], owner: 'enemy', garrison: { militia: 20 }, hp: 600, hpMax: 600 },
+  ];
+  const adjacency = [['camp', 'pf']];
+  for (let i = 0; i < walls; i++) {
+    sites.push({
+      id: `es${i}`, kind: 'stronghold', hex: [6, i], owner: 'enemy',
+      garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen',
+    });
+    adjacency.push(['pf', `es${i}`], [`es${i}`, 'castle']);
+  }
+  return { sites, adjacency };
+}
+
+test('the enemy always keeps a spear backbone, at every tier and every wall count', () => {
+  // The ram appetite and the counter share are two passes over the SAME
+  // strongholds. Filtering the second only on the orders issued THIS think let
+  // them claim the same walls twice over: once a stronghold is ALREADY building
+  // rams the ram pass issues no order for it, so it stayed in the counter pool
+  // and got handed to the counter-pick as well. On a four-wall map that is two
+  // for rams and two for the counter — every wall in the region held by def-2
+  // rams and def-4 raiders behind no bulwark at all, which is the exact
+  // self-disarming `adapt` was rewritten to stop, one layer further down.
+  //
+  // Four walls up: that is what a tier-3 or tier-4 region actually generates
+  // (12-15 enemy sites at MAPGEN.enemyStrongholdShare), and it is the same
+  // floor tests/campaign.test.js applies. Below it the deliberate
+  // `Math.max(1, ...)` on each pass can legitimately claim the whole map.
+  for (let walls = 4; walls <= 8; walls++) {
+    for (let tier = 1; tier <= AI_TIERS.length; tier++) {
+      const { sites, adjacency } = wallMap(walls);
+      // The enemy has to actually own the units: rams for the siege pass and
+      // raiders as the answer to the camp's militia. Without the roster both
+      // passes return early and the fixture asserts nothing at all.
+      const s = build({
+        tier, sites, adjacency,
+        enemy: { unlockedUnits: ['militia', 'spearmen', 'raiders', 'rams'] },
+      });
+      // A live enemy siege, so the ram appetite is switched on: that is the
+      // pass the counter share has to share the strongholds with.
+      s.sites.find((x) => x.id === 'pf').siege = { owner: 'enemy', comp: comp({ militia: 8 }) };
+      // The steady state a real battle reaches: the yards it wanted on rams are
+      // ALREADY on rams, so this think issues no ram order for them at all.
+      const forts = s.sites.filter((x) => x.kind === 'stronghold');
+      const wantRams = Math.max(1, Math.round(forts.length * AI.ramTrainShare
+        * AI_TIERS[tier - 1].ramAppetite));
+      for (const f of forts.slice(forts.length - wantRams)) f.trainType = 'rams';
+
+      think(s);
+      const kind = Object.fromEntries(forts.map((f) => [f.id, f.trainType]));
+      for (const c of s.commands) if (c.t === 'TRAIN' && kind[c.site]) kind[c.site] = c.unit;
+      const spears = Object.values(kind).filter((u) => u === 'spearmen').length;
+      assert.ok(spears >= 1,
+        `tier ${tier} with ${walls} walls left ${spears} on spearmen`
+        + ` (${Object.values(kind).join(',')}) — the enemy disarmed itself`);
+    }
+  }
+});
+
+test('a counter-pick the player has stopped fielding is walked back', () => {
+  // `retrain` only ever walks back the ONE unit it was asked about, so when the
+  // player switches army the previous answer is orphaned and that yard keeps
+  // building it for the rest of the battle. Measured on obsidian: two captured
+  // forts sat on militia long after the spearmen they answered were gone, and
+  // between them and the ram appetite the region had no spearwall left at all.
+  const { sites, adjacency } = wallMap(4);
+  const s = build({
+    tier: 4, sites, adjacency,
+    enemy: { unlockedUnits: ['militia', 'spearmen', 'raiders', 'rams'] },
+  });
+  // Every wall is already answering a SPEARWALL (counterPick.spearmen is
+  // militia) — a long earlier phase of the battle, plus captured neutral forts
+  // that were converted while they were still the enemy's answer. This is the
+  // shape the real obsidian battle reaches, and it is more than the counter
+  // quota, which is what leaves orphans behind when the pick changes.
+  const walls = () => s.sites.filter((x) => x.kind === 'stronghold');
+  for (const w of walls()) w.trainType = 'militia';
+
+  // Now the player is all militia; the answer to that is raiders, and the
+  // militia yards are a dead counter. Give it long enough for the exponential
+  // sample to actually turn over.
+  s.sites.find((x) => x.id === 'camp').garrison = comp({ militia: 60 });
+  for (let pass = 0; pass < 8; pass++) {
+    for (const c of rethink(s)) {
+      if (c.t !== 'TRAIN') continue;
+      const site = s.sites.find((x) => x.id === c.site);
+      if (site) site.trainType = c.unit;
+    }
+    s.tick += 1;
+  }
+  assert.equal(walls().filter((x) => x.trainType === AI.counterPick.spearmen).length, 0,
+    `a wall is still building ${AI.counterPick.spearmen} against an army of militia`
+    + ` (${walls().map((x) => x.trainType).join(',')})`);
+});
+
 test('thinking is jittered, bounded, and deterministic', () => {
   const s = build({ tier: 2 });
   const knobs = AI_TIERS[1];

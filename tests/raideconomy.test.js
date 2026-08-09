@@ -230,8 +230,17 @@ test('raiding cannot bootstrap itself — the lump is not fed by lumps', () => {
     s.meta.regions.obsidian.clears += 1;
   }
   assert.equal(incomePerSec(s.meta), rate, 'crowns must not turn into income');
-  assert.equal(raidLump(s.meta, 'obsidian') / rate / RAID.lumpSeconds,
-    effectiveEnemyMult(s.meta, 'obsidian'), 'the only thing that grew was difficulty');
+  // Compared to a relative epsilon rather than bit-for-bit: the left side is a
+  // multiply followed by two divides, so whether it lands on the same double as
+  // effectiveEnemyMult depends on the region's dial to the last ULP — a balance
+  // pass that moves obsidian's enemyMult by 0.01 used to fail this on the
+  // seventeenth decimal. The property (reward per difficulty is CONSTANT) is
+  // unchanged, and 1e-12 is still tight enough to fail the 1.10-vs-1.15 decay
+  // variant this test was written against by eight orders of magnitude.
+  const perDifficulty = raidLump(s.meta, 'obsidian') / rate / RAID.lumpSeconds;
+  const mult = effectiveEnemyMult(s.meta, 'obsidian');
+  assert.ok(Math.abs(perDifficulty - mult) <= mult * 1e-12,
+    `the only thing that grew was difficulty (${perDifficulty} vs ${mult})`);
 });
 
 // ===========================================================================
