@@ -73,6 +73,18 @@
    edge: `visibility` (not just opacity) so it is not hit-testable either. */
 .hud-selection.is-adrift { opacity: 0; visibility: hidden; }
 
+/* Under a HOSTILE siege the whole plate reads danger, not just one line —
+   the leading edge, the background tint and the caret all turn, so the
+   state is legible at a glance across the room, not just on a close read of
+   the status text. */
+.hud-selection.is-siege {
+  border-left-color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 16%, var(--plate-bg));
+  box-shadow: var(--plate-sheen), var(--shadow-2),
+    0 0 0 1px color-mix(in srgb, var(--c-danger) 50%, transparent);
+}
+.hud-selection.is-siege::after { background: color-mix(in srgb, var(--c-danger) 16%, var(--plate-bg)); }
+
 /* The caret: a rotated square wearing two of the plate's own edges, parked on
    whichever side the panel ended up on. */
 .hud-selection::after {
@@ -109,8 +121,11 @@
   display: flex; flex-direction: column; gap: 3px;
   margin-top: var(--s-2); padding-top: var(--s-2); border-top: var(--hairline);
 }
-.hud-site-econ:not(:has(.hud-selection-sub:not(:empty))),
-.hud-site-context:not(:has(.hud-selection-sub:not(:empty))) {
+/* A group with nothing to show — no text line, no bubble, no open bar —
+   carries no divider either. Bars/bubbles moved out of this file into
+   panelbars.css, but the emptiness check has to know about both now. */
+.hud-site-econ:not(:has(.hud-selection-sub:not(:empty), .bubbles:not(:empty), .bar.is-open)),
+.hud-site-context:not(:has(.hud-selection-sub:not(:empty), .bubbles:not(:empty))) {
   display: none;
 }
 
@@ -118,24 +133,20 @@
   font: var(--w-bold) var(--t-md) / 1.25 var(--font); letter-spacing: 0.02em;
 }
 .hud-selection-sub { font: var(--w-normal) var(--t-xs) / 1.35 var(--font-num); color: var(--c-text-dim); }
-/* The one number this panel is FOR: what the site nets you right now. It is
-   the largest, boldest line under the title, same idea as the treasury's own
-   headline figure — a net worth reading should never share a size with the
-   caveats underneath it. */
-.hud-site-money {
-  font: var(--w-bold) var(--t-sm) / 1.35 var(--font-num); color: var(--c-gold);
-}
-.hud-site-money.is-drain { color: var(--c-danger); }
 .hud-site-train { color: var(--c-text); }
-/* Terrain reads in the water hue, so the line and the river on the board are
-   visibly the same subject. Empty on open ground, and :empty hides it. */
-.hud-site-terrain { color: color-mix(in srgb, var(--c-water) 70%, var(--c-text)); }
 .hud-site-stat { color: var(--c-text); }
-/* A site actively under siege earns the one loud line on this panel — the
-   rest is supporting detail, this is the reason to act. */
+/* A site actively under siege earns a real BANNER, not just bold red text —
+   it bleeds to the panel's own edges (negative margin cancels the panel's
+   padding) so it reads as a strip across the whole card, not one more line
+   in the stack. */
 .hud-site-stat.is-warn {
-  color: var(--c-danger); font-weight: var(--w-bold); letter-spacing: 0.03em;
+  display: block; margin: var(--s-1) calc(var(--s-4) * -1) 0;
+  padding: var(--s-2) var(--s-4);
+  background: color-mix(in srgb, var(--c-danger) 26%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--c-danger) 50%, transparent);
+  color: #ffecec; font: var(--w-bold) var(--t-sm) / 1.35 var(--font); letter-spacing: 0.03em;
 }
+.hud-site-stat.is-warn::before { content: '⚠ '; }
 .hud-selection-sub:empty { display: none; }
 
 /* "What you can do about it": the rally stepper and the Upgrade button share

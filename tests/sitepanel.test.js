@@ -97,7 +97,7 @@ const { drainCommands } = await import('../src/battle/commands.js');
 const { step } = await import('../src/battle/sim.js');
 const { makeMods, CONTRACT_VERSION } = await import('../src/battle/contract.js');
 const { emptyComp, total } = await import('../src/battle/combat.js');
-const { RALLY_KEEP } = await import('../src/content/balance.js');
+const { RALLY_KEEP, UNITS } = await import('../src/content/balance.js');
 const { createSitePanel } = await import('../src/screens/battle-panel.js');
 const { createOrders } = await import('../src/screens/battle-orders.js');
 const { createView } = await import('../src/screens/battle-input.js');
@@ -147,6 +147,13 @@ const select = (view, id) => { view.selection.length = 0; view.selection.push(id
 
 // ---------------------------------------------------------------------------
 
+/** The gold/training/net readout is a row of bubbles now (see
+ *  battle-bubbles.js) — one `.chip-name` per fact — rather than one
+ *  concatenated sentence. Read them back as a list so the assertion still
+ *  pins down the exact numbers a player would read. */
+const moneyBubbles = (panel) =>
+  panel.el.find('hud-site-money').findAll('chip-name').map((c) => c.textContent);
+
 test('the panel renders the economics of the selected site', () => {
   const s = fixture();
   const { panel, view } = mountPanel(s);
@@ -154,19 +161,18 @@ test('the panel renders the economics of the selected site', () => {
   select(view, 'camp');
   panel.update(s);
   assert.equal(panel.el.find('hud-selection-title').textContent, 'CAMP · L1');
-  assert.equal(panel.el.find('hud-site-money').textContent,
-    '+4.0/s gold · -3.8/s training · net +0.3/s');
+  assert.deepEqual(moneyBubbles(panel), ['GOLD +4.0/s', 'TRAIN -3.8/s', 'NET +0.3/s']);
   assert.equal(panel.el.find('hud-site-train').textContent,
     'militia x2 every 6.4s · 0.31/s');
 
   select(view, 'f1');
   panel.update(s);
-  assert.equal(panel.el.find('hud-site-money').textContent, '+2.0/s gold');
+  assert.deepEqual(moneyBubbles(panel), ['GOLD +2.0/s']);
   assert.equal(panel.el.find('hud-site-train').textContent, '', 'a farm trains nothing');
 
   select(view, 'hold');
   panel.update(s);
-  assert.equal(panel.el.find('hud-site-money').textContent, '-3.0/s training');
+  assert.deepEqual(moneyBubbles(panel), ['TRAIN -3.0/s']);
   assert.equal(panel.el.find('hud-site-train').textContent, 'militia x2 every 8s · 0.25/s');
 });
 
@@ -254,4 +260,90 @@ test('the Upgrade button still reaches the simulation', () => {
   panel.el.find('hud-upgrade').fire('click');
   drainCommands(s);
   assert.equal(at(s, 'f1').level, before + 1);
+});
+
+// ---------------------------------------------------------------------------
+// Bars: HP, troop composition, training progress
+// ---------------------------------------------------------------------------
+
+test('the HP bar fraction and label come straight off site.hp/hpMax', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const camp = at(s, 'camp');
+  camp.hp = 300;
+  camp.hpMax = 600;
+  select(view, 'camp');
+  panel.update(s);
+
+  const bar = panel.el.find('bar-hp');
+  assert.equal(bar.classList.contains('is-open'), true);
+  assert.equal(bar.find('bar-fill').style.width, '50%');
+  assert.equal(bar.find('bar-label').textContent, '300/600');
+});
+
+test('the troop composition bar is stacked in proportion, with the total on it', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const camp = at(s, 'camp');
+  camp.garrison = { militia: 3, spearmen: 1 };
+  select(view, 'camp');
+  panel.update(s);
+
+  const bar = panel.el.find('bar-comp');
+  const segs = bar.findAll('bar-comp-seg');
+  assert.equal(segs.length, 5, 'one fixed segment per unit type, in UNIT_IDS order');
+  assert.equal(segs[0].style.width, '75%', 'militia: 3 of 4');
+  assert.equal(segs[1].style.width, '25%', 'spearmen: 1 of 4');
+  assert.equal(segs[2].style.width, '0%', 'raiders: none present');
+  assert.equal(bar.find('bar-label').textContent, '4');
+});
+
+test('the training bar reads site.trainProgress directly, clamped to a fraction', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const hold = at(s, 'hold');
+  hold.trainProgress = 0.5;
+  select(view, 'hold');
+  panel.update(s);
+
+  const bar = panel.el.find('bar-train');
+  assert.equal(bar.classList.contains('is-open'), true);
+  assert.equal(bar.find('bar-fill').style.width, '50%');
+
+  hold.trainProgress = 1; // a finished batch waiting for room can sit at exactly 1
+  panel.update(s);
+  assert.equal(bar.find('bar-fill').style.width, '100%');
+
+  select(view, 'f1');     // a farm cannot train — the bar disappears, not stalls
+  panel.update(s);
+  assert.equal(panel.el.find('bar-train').classList.contains('is-open'), false);
+});
+
+test('the currently-training unit gets its real atk/def bubbles, from balance.js', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  select(view, 'camp'); // trains militia by default
+  panel.update(s);
+  const stats = panel.el.find('hud-site-unit-stats').findAll('chip-name').map((c) => c.textContent);
+  assert.deepEqual(stats, [`ATK ${UNITS.militia.atk}`, `TOUGH ${UNITS.militia.def}`]);
+});
+
+// ---------------------------------------------------------------------------
+// Siege escalation: the whole panel reads danger, not just one line
+// ---------------------------------------------------------------------------
+
+test('a hostile siege turns the whole panel, not just the status line', () => {
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const camp = at(s, 'camp');
+  select(view, 'camp');
+  panel.update(s);
+  assert.equal(panel.el.classList.contains('is-siege'), false);
+  assert.equal(panel.el.find('hud-site-stat').classList.contains('is-warn'), false);
+
+  camp.siege = { owner: 'enemy', comp: { militia: 5 } };
+  panel.update(s);
+  assert.equal(panel.el.classList.contains('is-siege'), true);
+  assert.equal(panel.el.find('hud-site-stat').classList.contains('is-warn'), true);
+  assert.match(panel.el.find('hud-site-stat').textContent, /UNDER SIEGE/);
 });

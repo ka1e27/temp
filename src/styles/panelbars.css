@@ -1,0 +1,83 @@
+/* The site panel's bars and bubbles.
+   Split out of screens.css purely for the line budget — these rules all
+   belong to the `.hud-selection` panel built in battle-panel.js, using the
+   bar builders in battle-bars.js and the pill builder in battle-bubbles.js.
+
+   ONE fill language for HP, troop composition and training progress: a track,
+   a coloured fill, a number centred over the whole track. ONE pill language
+   for every compact stat: `.chip` (hud.css already owns the shape and the
+   colour-dot `::before`) with a `.bubble` modifier that only trims it down
+   for a 19rem-wide panel — not a second badge component. */
+
+/* --- Fill bars -------------------------------------------------------- */
+
+.bar {
+  position: relative; display: none; height: 15px; margin-top: var(--s-2);
+  border-radius: var(--r-1); background: var(--c-surface-2);
+  overflow: hidden; box-shadow: inset 0 0 0 1px var(--c-line);
+}
+.bar.is-open { display: block; }
+
+.bar-fill {
+  position: absolute; inset: 0 auto 0 0; width: 0; height: 100%;
+  background: var(--c-player);
+  transition: width var(--d-mid) var(--ease), background var(--d-fast) var(--ease);
+}
+
+/* Centred over the WHOLE track, not the fill — a bar at 8% must still show
+   its number legibly, which a label riding inside the fill cannot promise.
+   Sized to its OWN content (not stretched via inset:0) so a background can
+   hug just the digits — militia's near-white fill (`--c-militia`) would
+   otherwise swallow plain light text with a shadow. */
+.bar-label {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max-content;
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num); color: var(--c-text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 3px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* The training bar carries no number of its own — trainLine() above it
+   already says the unit and the rate honestly; the bar is purely the
+   "when" (site.trainProgress), so it stays slimmer than the HP/comp bars. */
+.bar-train { height: 8px; margin-top: var(--s-1); }
+.bar-train .bar-fill { background: var(--c-accent); }
+
+/* --- Troop composition: a STACKED bar, one segment per unit present ---- */
+
+.bar-comp-track { position: absolute; inset: 0; display: flex; }
+.bar-comp-seg {
+  display: block; height: 100%; flex: none;
+  transition: width var(--d-mid) var(--ease);
+}
+.bar-comp-seg:hover, .bar-comp-seg:focus-visible { filter: brightness(1.3); outline: none; }
+/* The total count rides its OWN dark badge rather than bare text — the
+   segment underneath can be any of the five unit hues, including militia's
+   near-white, and plain text-shadow cannot promise contrast against all
+   five. */
+.bar-comp .bar-label {
+  background: rgba(10, 12, 16, 0.72); padding: 0 5px; border-radius: var(--r-1);
+  text-shadow: none;
+}
+
+/* --- Bubbles: `.chip`'s pill/dot language, trimmed for the panel ------- */
+
+.bubbles {
+  display: flex; flex-wrap: wrap; gap: var(--s-1); margin-top: var(--s-2);
+}
+.bubbles:empty { display: none; margin-top: 0; }
+
+.chip.bubble {
+  min-height: auto; padding: 2px var(--s-2); gap: 4px;
+  font-size: var(--t-xs); letter-spacing: 0.02em;
+}
+.chip.bubble .chip-name { font: var(--w-bold) var(--t-xs) / 1.2 var(--font-num); }
+.chip.bubble::before { width: 6px; height: 6px; }
+
+/* A draining site tints the whole econ row's background very faintly — the
+   same "the shape reads before the digits do" idea the treasury's own edge
+   already uses (hud.css `.hud-gold:has(.is-drain)`) — and its NET bubble
+   carries a matching danger ring. */
+.hud-site-money { padding: 2px; border-radius: var(--r-2); }
+.hud-site-money.is-drain { background: color-mix(in srgb, var(--c-danger) 10%, transparent); }
+.chip.bubble.is-negative { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-danger) 55%, transparent); }

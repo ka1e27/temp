@@ -85,7 +85,9 @@ export function createBattleHud(o) {
 
   const speed = createSpeedControl({ bus, onSetSpeed: o.onSetSpeed });
   // `board` is what lets the panel sit on the site it describes. Read-only.
-  const site = createSitePanel({ getState, view, input, board });
+  // `tip` (built above) is the hover card the composition bar's segments
+  // attach to.
+  const site = createSitePanel({ getState, view, input, board, tip });
   const withdraw = createWithdraw({ input });
   const alert = createAlert();
 

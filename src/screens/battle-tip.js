@@ -50,7 +50,11 @@ export function createUnitTip(o) {
     set.name(copy.name);
     set.role(copy.role);
     set.desc(copy.desc);
-    set.note(footer || '');
+    // `footer` may be a function rather than a fixed string — the composition
+    // bar's segments attach ONCE (see battle-bars.js) but the count they
+    // report changes every training tick, so it has to be read fresh at
+    // SHOW time, not baked in at attach time.
+    set.note(typeof footer === 'function' ? footer() : (footer || ''));
     // Text first, THEN measure: the card is sized by its copy, and placing it
     // on last unit's box is how a tooltip ends up half off the screen.
     set.open(true);
@@ -77,7 +81,9 @@ export function createUnitTip(o) {
     /**
      * Wire one control to the card. Pointer AND focus, so the descriptions are
      * reachable from the keyboard rather than being a mouse-only secret.
-     * @param {HTMLElement} target @param {string} unitId @param {string} [footer]
+     * @param {HTMLElement} target @param {string} unitId
+     * @param {string|(()=>string)} [footer] a fixed string, or a thunk read at
+     *   show-time for a value that changes while the card is closed.
      */
     attach(target, unitId, footer) {
       off.listen(target, 'pointerenter', () => show(target, unitId, footer));

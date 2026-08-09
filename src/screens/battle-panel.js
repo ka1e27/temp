@@ -14,96 +14,24 @@
 // HARD RULE, same as everywhere: nothing here mutates simulation state. The
 // Upgrade button and the rally stepper append commands through `input`, exactly
 // like a click on the board does.
-import { SITE_UPGRADE, CENTIGOLD, RALLY_KEEP } from '../content/balance.js';
+import { RALLY_KEEP } from '../content/balance.js';
 import { total } from '../battle/combat.js';
-import { goldOf } from '../battle/economy.js';
 import { rallyKeepOf } from '../battle/state.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
 import { createFollower } from './battle-follow.js';
+import { createFillBar, createCompBar } from './battle-bars.js';
+import { updateTerrainBubbles, updateEconBubbles, updateUnitStatBubbles, clearBubbles }
+  from './battle-bubbles.js';
 import {
-  siteIntel, goldLine, trainLine, terrainLine, gateLine, stepRallyKeep, keepLabel,
+  siteIntel, trainLine, gateLine, stepRallyKeep, keepLabel,
 } from './battle-econ.js';
+import { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
 
 export { createWithdraw, createAlert } from './battle-alert.js';
-
-/**
- * Player-facing text for every reason battle/commands.js can reject an order
- * with. A rejection the player cannot see is the same as no feedback at all —
- * that is how three boosters shipped unreachable and nobody noticed.
- * PURE DATA.
- */
-export const REJECTIONS = Object.freeze({
-  'unknown-site': 'That site is gone.',
-  'not-your-site': 'You do not hold that site.',
-  'not-adjacent': 'Sends only reach adjacent sites.',
-  'bad-fraction': 'Nothing selected to send.',
-  'empty-send': 'That garrison is empty — nothing to send.',
-  'site-cannot-train': 'Farms cannot train troops.',
-  'unknown-unit': 'No such unit.',
-  'unit-locked': 'That unit is not unlocked yet.',
-  'already-upgrading': 'That site is already building.',
-  'max-level': 'Already at level 3.',
-  'insufficient-gold': 'Not enough gold.',
-  'unknown-target': 'No such rally target.',
-  'bad-keep': 'A rally hold-back is a whole number of troops.',
-  'nowhere-to-retreat': 'Nowhere to retreat to.',
-  'nothing-to-retreat': 'Nothing there to retreat.',
-  'unknown-squad': 'That squad has already arrived.',
-  'not-your-squad': 'That is not your squad.',
-  'already-retreating': 'That squad is already retreating.',
-  'not-your-battle': 'Only you can withdraw.',
-  'boosters-are-the-players': 'Boosters are yours alone.',
-  'booster-unavailable': 'You did not bring that booster.',
-  'no-charges': 'No charges left.',
-  'unknown-booster': 'No such booster.',
-  'needs-target': 'Pick a site for that booster.',
-  'no-sources': 'No nearby garrison to rally.',
-  'nothing-in-flight': 'No squads are marching.',
-  'not-a-target': 'Bombard an enemy or neutral site.',
-  malformed: 'That order made no sense.',
-  'unknown-command': 'That order made no sense.',
-});
-
-/** @param {{reason?:string, cmd?:object}} ev @returns {string} */
-export function rejectionText(ev) {
-  const reason = ev?.reason ?? '';
-  const said = REJECTIONS[reason] || `Order refused (${reason || 'unknown'}).`;
-  const id = ev?.cmd?.id;
-  return id && reason !== 'needs-target' ? `${id.toUpperCase()}: ${said}` : said;
-}
-
-/**
- * What the Upgrade action can offer for one site right now.
- * PURE — the whole affordability gate is testable without a DOM.
- * @returns {{level:number, cost:number, sec:number, can:boolean, why:string}}
- */
-export function upgradeOffer(state, site) {
-  const out = { level: site.level, cost: 0, sec: 0, can: false, why: '' };
-  const spec = SITE_UPGRADE[site.level - 1];
-  if (!spec) { out.why = 'max-level'; return out; }
-  out.cost = spec.gold;
-  out.sec = spec.sec;
-  if (site.owner !== 'player') { out.why = 'not-your-site'; return out; }
-  if (site.upgradeTicksLeft > 0) { out.why = 'already-upgrading'; return out; }
-  if (goldOf(state.factions.player) < spec.gold * CENTIGOLD) {
-    out.why = 'insufficient-gold';
-    return out;
-  }
-  out.can = true;
-  return out;
-}
-
-/** The button's label for an offer, so the wording is testable too. The top
- *  level is READ OFF the tuning table rather than written into the string: the
- *  ladder has already been extended once, and a button that says "max" at a
- *  level you can still buy past is worse than no label. */
-export function upgradeLabel(o) {
-  if (o.why === 'max-level') return `Level ${SITE_UPGRADE.length + 1} · max`;
-  return `Upgrade → L${o.level + 1} · ${o.cost}g · ${o.sec}s`;
-}
+export { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
 
 // ---------------------------------------------------------------------------
 // DOM
@@ -113,23 +41,35 @@ export function upgradeLabel(o) {
  * The selection panel. Opens for EVERY site — farms included, which previously
  * opened nothing at all — and carries the only route to in-battle levelling.
  *
- * @param {{getState:()=>object, view:object, input:object, board?:object}} o
+ * @param {{getState:()=>object, view:object, input:object, board?:object,
+ *          tip?:object}} o
  *   `board` is the battleView, used READ-ONLY for `siteScreen` and `camera` so
  *   the panel can sit on its site. Omit it and the panel still renders and
- *   still works — it just does not move.
+ *   still works — it just does not move. `tip` is the shared unit hover card
+ *   (battle-tip.js) the troop composition bar attaches to; also optional.
  */
 export function createSitePanel(o) {
-  const { getState, view, input, board } = o;
+  const { getState, view, input, board, tip } = o;
   const targetId = () => (view.selection.length === 1 ? view.selection[0] : null);
   const title = h('div.hud-selection-title', { text: '' });
   const sub = h('div.hud-selection-sub', { text: '' });
+  // HP and troop composition as BARS rather than a plain "N troops · HP x/y"
+  // line — see battle-bars.js. Fractions come straight off site.hp/hpMax and
+  // site.garrison; nothing here re-derives them.
+  const hpBar = createFillBar('bar-hp');
+  const compBar = createCompBar(tip);
   // What the site EARNS and SPENDS, straight from the sim's own economy and
   // training functions — see battle-econ.js for why it may not be re-derived.
-  const money = h('div.hud-selection-sub.hud-site-money', { text: '' });
+  // A row of bubbles now, not a sentence — see battle-bubbles.js.
+  const money = h('div.hud-site-money.bubbles', {});
   const trains = h('div.hud-selection-sub.hud-site-train', { text: '' });
+  // The "moving bar that shows when the troop is going to be trained" —
+  // site.trainProgress read directly, never re-derived (see battle-bars.js).
+  const trainBar = createFillBar('bar-train');
+  const trainStats = h('div.hud-site-unit-stats.bubbles', {});
   // WHY a site is tough. Terrain the player cannot read is an invisible
-  // difficulty dial, and this is the line that makes it visible.
-  const terrain = h('div.hud-selection-sub.hud-site-terrain', { text: '' });
+  // difficulty dial, and this row is what makes it visible.
+  const terrain = h('div.hud-site-terrain.bubbles', {});
   const stat = h('div.hud-selection-sub.hud-site-stat', { text: '' });
   const upgrade = h('button.btn.hud-upgrade', {
     'data-interactive': true, type: 'button',
@@ -143,8 +83,8 @@ export function createSitePanel(o) {
   // the `:has()` rules in screens.css — when it would otherwise have carried
   // only empty lines, so a farm with nothing to say about terrain shows no
   // stray divider either.
-  const head = h('div.hud-site-head', {}, title, sub);
-  const econ = h('div.hud-site-econ', {}, money, trains);
+  const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
+  const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, stat);
   const actions = h('div.hud-site-actions', {}, keep.el, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
@@ -158,11 +98,12 @@ export function createSitePanel(o) {
 
   const set = {
     open: bindClass(el, 'is-open'),
+    // The WHOLE panel reads danger under a hostile siege, not just one line —
+    // see screens.css `.hud-selection.is-siege`.
+    siege: bindClass(el, 'is-siege'),
     title: bindText(title, ''),
     sub: bindText(sub, ''),
-    money: bindText(money, ''),
     trains: bindText(trains, ''),
-    terrain: bindText(terrain, ''),
     stat: bindText(stat, ''),
     drain: bindClass(money, 'is-drain'),
     // A site actively under siege is the one status worth interrupting a calm
@@ -206,6 +147,17 @@ export function createSitePanel(o) {
     follower.reset();
   }
 
+  /** Nothing to fill the bars/bubbles with — multi-select, the squad view,
+   *  and no selection at all all share this. */
+  function blankVitals() {
+    let wrote = 0;
+    wrote |= hpBar.show(false);
+    wrote |= compBar.show(false);
+    wrote |= trainBar.show(false);
+    wrote |= clearBubbles(money, terrain, trainStats) ? 1 : 0;
+    return wrote;
+  }
+
   function update(state) {
     // Nothing selected is the common case at 10Hz, so it costs one comparison.
     const squad = view.selectedSquad != null ? squadById(state, view.selectedSquad) : null;
@@ -215,7 +167,7 @@ export function createSitePanel(o) {
     const site = id ? siteOf(state, id) : null;
     setAnchor(site);
     set.open(!!site);
-    if (!site) { setShown(false); keep.show(null); return; }
+    if (!site) { setShown(false); keep.show(null); blankVitals(); set.siege(false); return; }
 
     // Every bind* returns whether it really touched the DOM, so `wrote` is a
     // free answer to "did the panel's box just change?". Bitwise, not `||`:
@@ -225,11 +177,11 @@ export function createSitePanel(o) {
     if (n > 1) {
       wrote |= set.title(`${n} sites selected`);
       wrote |= set.sub('R retreats · right-drag sets rally');
-      wrote |= set.money('');
+      wrote |= blankVitals();
       wrote |= set.trains('');
-      wrote |= set.terrain('');
       wrote |= set.stat('');
       set.statWarn(false);
+      set.siege(false);
       setShown(false);
       keep.show(null);
       if (wrote) follower.markDirty();
@@ -237,15 +189,41 @@ export function createSitePanel(o) {
     }
 
     const intel = siteIntel(state, site);
+    // The same condition statusLine() already used to say "UNDER SIEGE" —
+    // escalated here into the whole panel's chrome instead of one line.
+    const hostile = !!(site.siege || intel?.gate?.sealed);
     wrote |= set.title(`${site.kind.toUpperCase()} · L${site.level}`);
-    wrote |= set.sub(
-      `${total(site.garrison)} troops · HP ${Math.round(site.hp)}/${Math.round(site.hpMax)}`);
-    wrote |= set.money(goldLine(intel));
+    wrote |= set.sub('');
+
+    // Bar fills never change the panel's own BOX size (fixed height, content
+    // sized elsewhere), so only `.show()` — which toggles display:none — ever
+    // needs to feed `wrote`; a fill sliding does not have to re-anchor the
+    // panel.
+    const hpFrac = site.hpMax > 0 ? site.hp / site.hpMax : 0;
+    hpBar.color(hpColor(site, hpFrac));
+    hpBar.update(hpFrac, `${Math.round(site.hp)}/${Math.round(site.hpMax)}`);
+    wrote |= hpBar.show(true);
+    compBar.update(site.garrison, intel.held);
+    wrote |= compBar.show(true);
+
+    wrote |= updateEconBubbles(money, intel);
     set.drain(intel.net < 0);
     wrote |= set.trains(trainLine(intel));
-    wrote |= set.terrain(terrainLine(intel));
+    // "Currently training" for the stat bubbles below: intel.unit is set even
+    // while blocked (FULL) or halted (brownout) — the stats of what is QUEUED,
+    // not only what is actively advancing.
+    const training = intel.trains && !!intel.unit;
+    if (training) {
+      trainBar.color((site.brownout ?? 1) < 1 ? 'var(--c-warn)' : 'var(--c-accent)');
+      trainBar.update(Math.max(0, Math.min(1, site.trainProgress || 0)), '');
+    }
+    wrote |= trainBar.show(training);
+    wrote |= updateUnitStatBubbles(trainStats, training ? intel.unit : null);
+
+    wrote |= updateTerrainBubbles(terrain, intel);
     wrote |= set.stat(statusLine(site, intel));
-    set.statWarn(!!(site.siege || intel?.gate?.sealed));
+    set.statWarn(hostile);
+    set.siege(hostile);
     // A hold-back only means anything where there is a rally to hold back from.
     wrote |= keep.show(site.owner === 'player' && site.rallyTarget ? site : null);
 
@@ -268,13 +246,13 @@ export function createSitePanel(o) {
     let wrote = 0;
     wrote |= set.title(`SQUAD · ${total(squad.comp)} troops`);
     wrote |= set.sub(`${squad.from} → ${squad.to}`);
-    wrote |= set.money('');
+    wrote |= blankVitals();
     wrote |= set.trains('');
-    wrote |= set.terrain('');
     wrote |= set.stat(squad.retreating
       ? 'retreating'
       : `arrives in ${duration(Math.max(0, squad.arriveTick - state.tick) / TICK_HZ)} · R retreats`);
     set.statWarn(false);
+    set.siege(false);
     wrote |= keep.show(null);
     if (wrote) follower.markDirty();
   }
@@ -361,6 +339,18 @@ function squadById(state, id) {
     if (state.squads[i].id === id) return state.squads[i];
   }
   return null;
+}
+
+/**
+ * The HP bar's fill colour: the owning faction's own hue at full health — the
+ * same signal `p.owner[site.owner]` gives the on-canvas HP ring (siteGlyphs.js
+ * `drawHpRing`) — and, under an active siege, the SAME danger/warn split that
+ * ring already uses (`frac < 0.35 ? danger : warn`), so a wall reads as
+ * draining identically on the board and in the panel.
+ */
+function hpColor(site, frac) {
+  if (site.siege) return frac < 0.35 ? 'var(--c-danger)' : 'var(--c-warn)';
+  return `var(--c-${site.owner})`;
 }
 
 function statusLine(site, intel) {

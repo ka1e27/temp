@@ -129,22 +129,32 @@ export function gateLine(intel) {
 
 /**
  * The one unit whose multiplier this ground changes most — the actionable half
- * of the terrain line. "Bring militia" is the lesson; naming all four would
- * bury it.
+ * of the terrain line, as DATA rather than a formatted sentence. battle-panel's
+ * bubble row needs the id and the multiplier separately (its own bubble, its
+ * own colour); terrainLine() below needs them stitched into one clause. Both
+ * read this one answer rather than either re-walking UNITS on its own.
  *
  * The number comes from combat.js `groundMult`, the SAME function that resolves
  * the fight. Re-deriving `1 + (spec.ground.highland - 1) * g.highland` here is
  * three lines and would be wrong the first time anyone changes how highland is
  * graded — which is the whole reason this file exists.
+ *
+ * @returns {?{id:string, mult:number}} null under 5% swing — "bring militia" is
+ *   the lesson; naming a unit the ground barely touches would bury it.
  */
-function tellingUnit(g) {
+export function tellingUnitOf(g) {
   let best = null;
   for (const [id, spec] of Object.entries(UNITS)) {
     if (!spec.ground) continue;
     const m = groundMult(spec, g);
-    if (!best || Math.abs(m - 1) > Math.abs(best.m - 1)) best = { id, m };
+    if (!best || Math.abs(m - 1) > Math.abs(best.mult - 1)) best = { id, mult: m };
   }
-  return best && Math.abs(best.m - 1) >= 0.05 ? `${best.id} ${fixed(best.m, 2)}x` : '';
+  return best && Math.abs(best.mult - 1) >= 0.05 ? best : null;
+}
+
+function tellingUnit(g) {
+  const best = tellingUnitOf(g);
+  return best ? `${best.id} ${fixed(best.mult, 2)}x` : '';
 }
 
 /**
