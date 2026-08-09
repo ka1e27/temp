@@ -25,6 +25,7 @@ npm run sim                # headless balance harness
 node --test tests/combat.test.js          # one file
 node --test --test-name-pattern="siege"   # one test by name
 node tools/simrunner.js --region=kaldan --n=50
+node tools/simrunner.js --all --n=96 --noupgrades   # the pre-upgrade-ladder bot
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
 ```
 
@@ -125,65 +126,77 @@ highmarch/thornmoor/gallowmoor/thanescar/obsidian). A smooth `enemyMult` ramp ag
 produces a 27-point sawtooth. Check the player's `unitAtkMult × unitDefMult` step off real
 `buildBattleConfig` output before blaming a region.
 
+**The player's step includes the mechanics the harness actually plays**, which is the
+expensive lesson of the section below: for most of this project's life it did not play the
+site-upgrade ladder at all, and every region was priced against a player who ignored it.
+When a mechanic is added, check the bot exercises it *before* trusting the next table.
+
 Two related traps in the same area: `develop` is quantised on the **castle**, because
 `developLevels` promotes best-first and the best fort is the throne — one castle level is
 worth ~26 points, so where the fraction lands matters more than how big it is. And a unit
 unlock can make the landing force *smaller* (rams cost 5 slots a body: 54 → 48 into
 thornmoor), so the player's step into that region is negative.
 
-## OPEN WORK ITEM: the harness never upgrades sites, and it is worth 27–38 points
+## The harness bot upgrades sites, and the campaign is tuned against that
 
-**Every balance number in this project is measured against a player who ignores a whole
-mechanic.** Read this before trusting any win rate, and before doing another balance pass.
+**This was an open work item for a long time and it is now closed. Read it before
+trusting any balance number, because every number older than this pass is measured
+against a different player.**
 
-`tools/simplayer.js` issues no in-battle `UPGRADE` command — ever. (It *does* buy meta
-shop upgrades via `shopListing`/`buy`; those are a different system.) Confirmed
-behaviourally, not just by grep: instrumented battles across riverfen / kaldan /
-gallowmoor / obsidian, 8 seeds each, reached **level 1 in 32 of 32 runs**. `ai.js`,
-`aicore.js` and `aihome.js` never upgrade either.
+`tools/simplayer.js` used to issue no in-battle `UPGRADE` command — ever. So `SITE_LEVELS`
+(5 rungs) and all four `SITE_UPGRADE` steps were unexercised by every measurement the
+project had taken, while the enemy got that same ladder **free at mapgen** through each
+region's `develop`. Levelling was tuned in for the defender and tuned out for the attacker.
+It was never an affordability problem: the bot sat on 800–7,000 spare gold it never spent.
 
-So `SITE_LEVELS` (5 rungs) and all four `SITE_UPGRADE` steps are unexercised by every
-measurement this project has ever taken.
+`upgradeTurn` in `tools/simplayer.js` now buys it. **What an ordinary player upgrades was a
+design decision, not a flag**, and the five rules that encode it are documented at the
+function — rear sites only, one build at a time, out of a training-cost reserve, cheapest
+step first, and **stopping short of the L4→L5 step** (2200g/65s is a solver's purchase, not
+an ordinary one). Max-levelling every safe site is optimal play; pricing the campaign
+against optimal play ships an endgame nobody clears.
 
-**It is not an affordability problem.** Total gold earned across a whole battle: riverfen
-5.4k, kaldan 16.5k, gallowmoor 13.4k, obsidian 44.5k. Maxing one site L1→L5 costs 3.7k —
-8% of an obsidian battle. The bot sits on a mean **800–7,000 spare gold** it never spends.
+Turning it on moved the campaign **+9 to +25 points** and flattened it to 76–99% at n=96 —
+tier 2 played exactly as easy as tier 1. `src/content/regions.data.js` was retuned against
+it; the reasoning is in that file's third load-bearing rule. Measured at **n=240**:
 
-**Measured cost of the gap.** A forked bot with a modest policy (upgrade a safe rear site,
-cheapest step first, only with 400 gold spare), n=48:
+```
+tier 1   98 95 98 95 | kaldan 92     (regions 1-5 frozen, untouched by the pass)
+tier 2   91 87 80 79
+tier 3   77 73 73 68 68
+tier 4   70 63 63 58
+```
 
-| region | no upgrades | upgrading | Δ |
-|---|---|---|---|
-| kaldan | 73% | 100% | **+27** |
-| gallowmoor | 71% | 94% | **+23** |
-| karrowmere | 58% | 94% | **+36** |
-| ironcrown | 54% | 92% | **+38** |
-| obsidian | 65% | 92% | **+27** |
-| greywater | 92% | 98% | +6 (ceiling) |
-| saltmere | 100% | 92% | **−8** |
+`--noupgrades` reverts `npm run sim` to the old bot, so the delta stays measurable rather
+than remembered. `tests/harness.test.js` pins all of it — including a negative control, since
+the original bug was precisely a mechanic nothing ever asked about.
 
-Two things follow. Every shipped win rate is a **lower bound on real player power**, and
-the gap **widens toward the endgame** (+6 at region 7 vs +38 at region 17) — so the back
-half of the campaign is more over-tuned than the front. And that `saltmere −8` is the
-warning: a *naive* policy makes the bot worse, so a bad policy is its own distortion.
+**Three lever facts that came out of the retune**, worth more than the numbers:
 
-**Why it was deferred rather than fixed.** Turning it on flattens the whole campaign to
-92–100%. Restoring a curve from there means re-tuning the five deliberately frozen opening
-regions, and choosing *what an ordinary player upgrades* is a design decision — max-levelling
-every safe site is optimal play, not ordinary play — whose answer moves the whole table by
-27–38 points. That is a bigger call than a balance pass.
+- **`siteCounts.player` is the biggest lever in the table and it now compounds**, because
+  every extra starting site is another site to *build*. Tier 2 shipped seven and became
+  unfixable by the dial alone — solved independently, the dial tier 2 needed (emberholt
+  2.54) *overtook* the dial tier 3 wanted (gallowmoor 2.43), and `enemyMult` is required
+  non-decreasing, so that is a contradiction rather than a tuning problem. Cutting tier 2 to
+  six resolved it and bought back the battle length the ladder had eaten (emberholt
+  97%/9.8m → 81%/11.9m on that one column, against a 16.5m advertised length).
+- **`castleGateFrac` is not a difficulty knob.** Swept 0.30→0.60 on emberholt it moved the
+  win rate *one point*, because this bot already sweeps the countryside when winning. It
+  buys the guarantee against a rush strategy. That is all it buys.
+- **`enemyMult` is violently non-linear past tier 2.** Gallowmoor loses 31 points over
+  +0.26; thanescar 43 over +0.50. Move it in steps of ≤0.05 late and re-measure — never
+  extrapolate. A castle promotion via `develop` is worse: 25–40 points on one rung.
 
-**Related asymmetry, same ladder.** The enemy already gets site levels free at mapgen via
-each region's `develop`, worth ~50 win-rate points per whole level (see `mapgen.js`
-`developLevels`). So enemy levelling is tuned in and player levelling is tuned out.
-Teaching the AI to upgrade too would *double-count* the same ladder — the likely right
-shape is to price the player's ladder (`SITE_UPGRADE` gold) rather than hand the AI a
-matching button.
+**Still open, same ladder.** The enemy AI deliberately does *not* get this button —
+`ai.js`/`aicore.js`/`aihome.js` never upgrade, and `tests/harness.test.js` pins that. It
+already receives the ladder via `develop`, so teaching it to buy upgrades would double-count
+the same mechanic and silently re-tune all eighteen regions. If that is ever wanted, it is a
+balance pass, not a bug fix.
 
 **Also inert, found while measuring this:** the enemy's `marshal` unlock does nothing. No
 `MAPGEN.trainType` produces one and `counterPick` never picks one — removing marshal from
-the tier-4 roster changed thanescar's win rate by exactly 0 points. Ironcrown's flavour
-text ("The enemy fields a Marshal") is currently false.
+the tier-4 roster changed thanescar's win rate by exactly 0 points. Ironcrown's flavour text
+("The enemy fields a Marshal") is currently false.
 
 ## Gotchas that have already cost time
 

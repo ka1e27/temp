@@ -14,7 +14,9 @@ import { shopListing, buy } from '../src/meta/upgrades.js';
 import { breachSeconds, total, resolveField } from '../src/battle/combat.js';
 import { groundOf, siteDefMultOf } from '../src/battle/terrain.js';
 import { siteControlFraction } from '../src/battle/state.js';
-import { UNIT_IDS } from '../src/content/balance.js';
+import { factionTrainCostPerSec } from '../src/battle/training.js';
+import { goldOf } from '../src/battle/economy.js';
+import { UNIT_IDS, SITE_UPGRADE, CENTIGOLD } from '../src/content/balance.js';
 
 /** Farms first (economy wins fights), then the war machine, then the prize. */
 const PRIORITY = { farm: 0, stronghold: 1, castle: 2, camp: 3 };
@@ -48,12 +50,92 @@ export function frontDistance(state) {
 }
 
 /**
- * A deliberately ordinary player: expands toward soft targets, keeps a home
- * garrison, and only commits when it can actually BREACH — which is the lesson
- * the siege rules exist to teach. If a competent-but-unremarkable player cannot
- * clear a region, that region is mis-tuned.
+ * WHAT AN ORDINARY PLAYER BUILDS, AND WHEN.
+ *
+ * The harness used to issue no `UPGRADE` command at all, so `SITE_LEVELS` and
+ * every `SITE_UPGRADE` step were unexercised by every balance number this
+ * project had ever taken — while the enemy got the same ladder free at mapgen
+ * via each region's `develop`. Levelling was tuned in for the defender and
+ * tuned out for the attacker, and the gap was worth 27-38 points of win rate.
+ *
+ * Turning it on required a design decision, not just a flag, because
+ * max-levelling every safe site is OPTIMAL play and the harness is supposed to
+ * measure an ORDINARY one. These five rules are that decision. Each is a thing
+ * a real player does at the site panel, and each is a place a perfect player
+ * would do better:
+ *
+ *   1. REAR SITES ONLY. You build where you feel safe. `frontDistance` 0 means
+ *      the site borders something you do not hold, and nobody sinks 400 gold
+ *      into a wall the enemy is walking at. (It is also genuinely safe: sends
+ *      are adjacency-only, so a site whose neighbours are all yours cannot be
+ *      attacked directly at all.)
+ *   2. ONE AT A TIME. You click the button, watch the bar, come back. This is
+ *      also what keeps the spend rate honest — the empire cannot convert its
+ *      whole treasury into levels in one tick.
+ *   3. OUT OF VISIBLE SURPLUS ONLY. You upgrade when gold is piling up, never
+ *      out of the money your strongholds are about to spend. The reserve is
+ *      `RESERVE_SEC` seconds of the empire's ACTUAL training bill (read from
+ *      the sim's own `factionTrainCostPerSec`, not guessed), so it scales with
+ *      how much army is being run rather than with a magic number.
+ *   4. CHEAPEST STEP FIRST. You buy what is affordable now. The emergent shape
+ *      is the ordinary one: everything goes to L2 before anything goes to L3.
+ *   5. IT STOPS SHORT OF THE TOP STEP. L4 -> L5 costs 2200 gold and 65 seconds
+ *      — a whole-battle commitment that an ordinary player, mid-fight, does not
+ *      make. This is the single clearest line between ordinary and optimal, so
+ *      it is the one that is drawn explicitly rather than fallen into.
+ *
+ * `MAX_LEVEL` is expressed against `SITE_UPGRADE.length` rather than written as
+ * 4, because balance.js has already extended this ladder once and a hardcoded
+ * rung here would silently stop meaning "all but the last step".
  */
-export function playerTurn(state) {
+const RESERVE_SEC = 25;
+const RESERVE_FLOOR = 120;   // ...and never less than this, early on
+const MAX_LEVEL = SITE_UPGRADE.length; // every step but the last
+/** Ties are broken by role, and cheap steps tie constantly (every L1 site costs
+ *  150). Farms first: the L1->L2 gold jump is the biggest single multiplier on
+ *  the table (x1.75) and income compounds, which is the same reasoning that
+ *  puts farms at the top of PRIORITY above. */
+const BUILD_ORDER = { farm: 0, camp: 1, stronghold: 2, castle: 3 };
+
+/**
+ * Queue at most one site upgrade. `front` is `frontDistance(state)`, passed in
+ * rather than recomputed because the caller already has it.
+ */
+export function upgradeTurn(state, front) {
+  // Rule 2: one build in flight across the whole empire.
+  if (state.sites.some((s) => s.owner === 'player' && s.upgradeTicksLeft > 0)) return;
+
+  const gold = goldOf(state.factions.player) / CENTIGOLD;
+  // Rule 3: what is left after the army's running costs are covered.
+  const reserve = Math.max(RESERVE_FLOOR, factionTrainCostPerSec(state, 'player') * RESERVE_SEC);
+
+  let best = null;
+  let bestScore = Infinity;
+  for (const s of state.sites) {
+    if (s.owner !== 'player' || s.siege) continue;
+    if (s.level >= MAX_LEVEL) continue;             // rule 5
+    if (front[s.id] === 0) continue;                // rule 1 — on the line
+    const spec = SITE_UPGRADE[s.level - 1];
+    if (!spec || gold < spec.gold + reserve) continue;
+    const score = spec.gold * 10 + BUILD_ORDER[s.kind]; // rule 4, then role
+    if (score < bestScore) { bestScore = score; best = s; }
+  }
+  if (best) state.commands.push({ t: 'UPGRADE', site: best.id });
+}
+
+/**
+ * A deliberately ordinary player: expands toward soft targets, keeps a home
+ * garrison, builds up the country behind the line, and only commits when it can
+ * actually BREACH — which is the lesson the siege rules exist to teach. If a
+ * competent-but-unremarkable player cannot clear a region, that region is
+ * mis-tuned.
+ *
+ * `opts.upgrades: false` reverts to the pre-upgrade bot. That exists so the
+ * cost of the mechanic stays MEASURABLE after it is switched on — the delta in
+ * CLAUDE.md was taken with `--noupgrades`, and re-taking it is one flag rather
+ * than a fork of this file.
+ */
+export function playerTurn(state, opts = {}) {
   const mine = state.sites.filter((s) => s.owner === 'player');
   const inFlight = new Set(state.squads.filter((q) => q.owner === 'player').map((q) => q.from));
 
@@ -145,6 +227,10 @@ export function playerTurn(state) {
       ? 'rams' : 'militia';
     if (s.trainType !== want) state.commands.push({ t: 'TRAIN', site: s.id, unit: want });
   }
+
+  // Build the country behind the line. Last, so the treasury it reads has
+  // already been reasoned about by everything that spends from it.
+  if (opts.upgrades !== false) upgradeTurn(state, front);
 }
 
 /**
@@ -186,15 +272,19 @@ export function startRun(regionId, seed, conquered, idleMinutes = 0) {
 }
 
 /** Run one battle to its end with the scripted player at the wheel. */
-export function playOne(regionId, seed, conquered, idleMinutes = 0) {
+export function playOne(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
   const battle = startRun(regionId, seed, conquered, idleMinutes);
   const cap = battle.rules.hardCapTicks;
   let nextThink = 0;
   while (battle.status === 'running' && battle.tick < cap) {
-    if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
+    if (battle.tick >= nextThink) { playerTurn(battle, opts); nextThink = battle.tick + 20; }
     step(battle);
   }
-  const mineN = battle.sites.filter((x) => x.owner === 'player').length;
+  const mine = battle.sites.filter((x) => x.owner === 'player');
   const foeN = battle.sites.filter((x) => x.owner === 'enemy').length;
-  return { status: battle.status, ticks: battle.tick, cap, mineN, foeN };
+  // `topLevel` is reported so a caller can SEE the upgrade ladder being
+  // exercised rather than trust that it was — the whole reason this bot's
+  // balance numbers were wrong for so long is that nobody could.
+  const topLevel = Math.max(0, ...mine.map((x) => x.level));
+  return { status: battle.status, ticks: battle.tick, cap, mineN: mine.length, foeN, topLevel };
 }

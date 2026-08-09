@@ -42,7 +42,10 @@ for (const id of regionIds) {
 
   const runs = [];
   const idleMin = Number(args.idle ?? 10);
-  for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin));
+  // --noupgrades reverts to the bot that never touched SITE_LEVELS, so the
+  // worth of the mechanic stays measurable rather than remembered.
+  const opts = { upgrades: !args.noupgrades };
+  for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 
   const wins = runs.filter((r) => r.status === 'win');
   const losses = runs.filter((r) => r.status === 'loss').length;

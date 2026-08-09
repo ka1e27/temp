@@ -49,101 +49,74 @@
 // NON-DECREASING, not strictly increasing, and that headroom is what pays for
 // this — greywater and thornmoor ship the same grid and the same site counts.
 // ---------------------------------------------------------------------------
-
-/** Battle hard cap per tier, in minutes. A backstop, not a timer you play
- *  against — each sits well above its tier's targetLengthMin. */
-export const HARD_CAP_MIN_BY_TIER = [12, 14, 17, 20];
-/** The cap is a stall backstop, not a race: 2.2x the advertised length. */
-export const HARD_CAP_RATIO = 1.9;
+//
+// ---------------------------------------------------------------------------
+// THE THIRD LOAD-BEARING RULE, and the one this table broke for its whole life:
+// THE PLAYER'S STEP INCLUDES THE MECHANICS THE HARNESS ACTUALLY PLAYS.
+//
+// Every number in this table was once measured against a bot that never bought
+// an in-battle site upgrade. tools/simplayer.js issued no UPGRADE command at
+// all, so content/balance.js `SITE_LEVELS` and all four `SITE_UPGRADE` steps
+// were unexercised by every measurement this project had ever taken — while the
+// enemy was handed that same ladder for free at mapgen through `develop` below.
+// Levelling was tuned IN for the defender and tuned OUT for the attacker, and
+// every win rate the table was built on was a lower bound on real player power.
+//
+// Switching it on (tools/simplayer.js `upgradeTurn`) moved the campaign +9 to
+// +25 points and flattened it to 76-99% at n=96: tier 2 played exactly as easy
+// as tier 1. The dial ramp below is the retune that followed. Two things it
+// found are worth more than the numbers.
+//
+// 1. `siteCounts.player` IS A COMPOUNDING LEVER NOW, NOT A FLAT ONE. It was
+//    already the biggest entry in this table (+21 points per site, measured on
+//    gallowmoor). With the ladder live it is worth more, because every extra
+//    site is also another site to BUILD: more starting ground buys more economy,
+//    which buys levels, which buy the next site. Tier 2 shipped SEVEN and became
+//    unfixable by the dial alone — solved independently, the dial tier 2 needed
+//    (emberholt 2.54 for 83%) overtook the dial tier 3 wanted (gallowmoor 2.43
+//    for 80%), and `enemyMult` is required to be non-decreasing, so that is a
+//    contradiction rather than a tuning problem. Cutting tier 2 to SIX starting
+//    sites resolved it, and bought back the battle length the ladder had eaten
+//    at the same time: emberholt went 97% / 9.8m to 81% / 11.9m on that one
+//    column, against a 16.5m advertised length.
+//
+// 2. `castleGateFrac` IS NOT A DIFFICULTY KNOB. Swept end to end on emberholt
+//    (0.30 -> 0.60) it moved the win rate ONE point and the median half a
+//    minute, because this bot already sweeps the countryside when it is winning.
+//    It buys the guarantee against a rush strategy, which is what it was added
+//    for. It does not buy difficulty, and reaching for it as though it does is
+//    how a region ends up re-tuned by a column that was never moving.
+//
+// The dial below was solved per region by binary search at n=192 and confirmed
+// end to end at n=240. Two other levers were measured and REJECTED, which is
+// worth recording so the next pass does not re-derive them: a castle promotion
+// via `develop` is worth 25-40 points at tiers 3-4 (gallowmoor 90% -> 54% on one
+// rung), far too coarse to tune with; and `enemyMult` itself is violently
+// non-linear late — gallowmoor loses 31 points over +0.26 and thanescar 43 over
+// +0.50, so anything past tier 2 must be moved in steps of 0.05 and re-measured,
+// never extrapolated.
+//
+// Measured at n=240 with the ladder live, in campaign order:
+//     98 95 98 95 | 92 91 87 80 79 | 77 73 73 68 68 | 70 63 63 58
+// Regions 1-5 are untouched by this pass and are the first five of those.
+// ---------------------------------------------------------------------------
 
 /**
- * Conquered regions re-fight as Raids: a one-time crown lump, never permanent
- * income — one region could otherwise be farmed into an infinite economy.
+ * The campaign-wide RULES — raid economics, enemy scaling, opening garrisons —
+ * live in ./regions.rules.js and are re-exported here, so this file stays the
+ * one front door for the campaign and every existing
+ * `import { RAID } from '../content/regions.data.js'` keeps working. Same shape
+ * as content/balance.js re-exporting ./ai.data.js.
  *
- * THE RELATIONSHIP, stated here so it can be tested instead of hoped for.
- * Implemented by meta/rewards.js `raidLump`, asserted by tests/raideconomy.test.js:
- *
- *     lump  =  EMPIRE income/sec  x  lumpSeconds  x  effectiveEnemyMult
- *
- * Two properties fall out of that one line, and the test drives both off
- * REGIONS so a nineteenth region cannot ship broken.
- *
- * 1. A RAID IS WORTH THE TIME. The lump is denominated in seconds of THE
- *    EMPIRE'S income, not the region's. The old formula paid
- *    `region.rewardPerSec * 600` — ten minutes of a number that is a rounding
- *    error by the time you are allowed to raid it. Measured at full conquest
- *    (~682/s): riverfen paid 600 crowns, under ONE SECOND of idling, for an
- *    eight-minute battle; obsidian paid 29.4k, 43 seconds, for nine. Every raid
- *    in the game was dominated by leaving the tab open. Anchored to empire
- *    income the payoff is stage-INVARIANT — a raid is worth the same number of
- *    minutes of your own income at region 1 and at region 18 — and that number
- *    is `minPayoffRatio` or better for every region in the table (measured
- *    1.25x on the thinnest, 3.8x on the best). It is paid ON TOP of the idle
- *    income that keeps accruing during the battle (main.js ticks in every
- *    scene), so a raid is a rate multiplier on time spent playing, never a
- *    tax on it.
- *
- * 2. REPEAT RAIDS DO NOT DECAY. Reward is PROPORTIONAL to the difficulty the
- *    player actually faces, so reward-per-difficulty is constant by
- *    construction and cannot drift whatever `harderPerClear` becomes. The old
- *    pair — 0.15 harder against 0.10 richer — made every clear 1.10/1.15 =
- *    0.957x the value of the one before it, permanently: ten clears in, a raid
- *    was 35% worse value than the first and never recovered. `richerPerClear`
- *    is gone because proportionality leaves it nothing to do.
- *
- * WHAT BOUNDS THE LOOP is winnability, not a cap. Difficulty compounds 15% a
- * clear while the shop is finite, so a farmed region walls the player out by
- * itself and they move to the next one — which is the endgame verb the back
- * half of the campaign did not have. `lump ∝ income` is not a feedback loop
- * either: raids pay lumps, only conquest adds income, and the two income
- * multipliers (Tithe, Royal Mint) are level-capped.
+ * `HARD_CAP_MIN_BY_TIER` and `HARD_CAP_RATIO` are additionally IMPORTED below,
+ * because `T()` reads them to derive each row's `hardCapMs`.
  */
-export const RAID = Object.freeze({
-  cooldownMs: 10 * 60 * 1000,
-  harderPerClear: 0.15,   // effectiveEnemyMult = enemyMult x (1 + this) ^ clears
-  lumpSeconds: 600,       // seconds of EMPIRE income a difficulty-1.0 raid pays
-  /** Design floor: a raid pays at least this multiple of what its own
-   *  advertised battle length (`targetLengthMin`) would have idled. */
-  minPayoffRatio: 1.0,
-});
-
-/** One-off crown bounty the first time a region falls, in seconds of its income. */
-export const FIRST_CLEAR_BONUS_SECONDS = 120;
-
-/** How a region's single `enemyMult` difficulty dial is spread across the
- *  enemy's FactionMods. Exponents, so mult=1 leaves everything at baseline. */
-export const ENEMY_SCALING = Object.freeze({
-  atk: 0.45, def: 0.35, gold: 0.35, train: 0.25, garrison: 0.30,
-});
-
-/** What the enemy is allowed to field, by region tier. Rams arriving at tier 3
- *  is the moment sieges stop being one-sided. */
-export const ENEMY_UNITS_BY_TIER = Object.freeze([
-  ['militia', 'spearmen'],
-  ['militia', 'spearmen', 'raiders'],
-  ['militia', 'spearmen', 'raiders', 'rams'],
-  ['militia', 'spearmen', 'raiders', 'rams', 'marshal'],
-]);
-
-/** Starting garrisons the meta layer writes into a generated map, before
- *  enemy scaling. Battle never invents troops; the config says what is there. */
-export const BASE_GARRISON = Object.freeze({
-  castle: { spearmen: 4, militia: 4 },
-  stronghold: { spearmen: 3, militia: 2 },
-  farm: { militia: 3 },
-  camp: {},
-});
-/** Neutral sites are lightly held — they are the opening move, not a wall. */
-export const NEUTRAL_GARRISON = Object.freeze({ militia: 2 });
-/** Player-held outposts at the start of a region. */
-export const PLAYER_SITE_GARRISON = Object.freeze({ militia: 2 });
-
-/** Opening battle-gold pools. You are ~1.9x behind on paper and win on tempo. */
-export const BATTLE_START = Object.freeze({ playerGold: 300, enemyGold: 200 });
-
-/** Tuning for meta's own fallback layout, used only when battle/mapgen.js is
- *  not injected. Degree 3 keeps the site graph planar-ish with real front lines. */
-export const FALLBACK_MAP = Object.freeze({ blockedFrac: 0.08, degree: 3 });
+export {
+  HARD_CAP_MIN_BY_TIER, HARD_CAP_RATIO, RAID, FIRST_CLEAR_BONUS_SECONDS,
+  ENEMY_SCALING, ENEMY_UNITS_BY_TIER, BASE_GARRISON, NEUTRAL_GARRISON,
+  PLAYER_SITE_GARRISON, BATTLE_START, FALLBACK_MAP,
+} from './regions.rules.js';
+import { HARD_CAP_MIN_BY_TIER, HARD_CAP_RATIO } from './regions.rules.js';
 
 /**
  * HOW DEVELOPED THE ENEMY'S COUNTRY IS — the second half of "a bigger war, not
@@ -252,18 +225,18 @@ export const REGIONS = Object.freeze([
     1.85, 15, 11, [9, 4, 5], 1, 0, 4.0, 14,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    2.05, 15, 11, [9, 4, 7], 1.35, 0.15, 5.5, 15,
+    2.05, 15, 11, [9, 4, 6], 1.35, 0.15, 5.5, 15,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    2.13, 15, 12, [10, 5, 7], 1.50, 0.20, 6.6, 15.5,
+    2.17, 15, 12, [10, 5, 6], 1.50, 0.20, 6.6, 15.5,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    2.14, 15, 12, [10, 5, 7], 1.55, 0.25, 7.9, 16,
+    2.21, 15, 12, [10, 5, 6], 1.55, 0.25, 7.9, 16,
     'Bramble country: five neutral farms make the opening land grab the whole battle.'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    2.15, 16, 12, [12, 5, 7], 1.70, 0.30, 9.5, 16.5,
+    2.25, 16, 12, [12, 5, 6], 1.70, 0.30, 9.5, 16.5,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
   // --- Tier 3 (5) -- 16x12 to 17x13, ~7.5-8 min. Sieges are the conversation. ---
@@ -308,21 +281,21 @@ export const REGIONS = Object.freeze([
   // site count and battle length scale together across tiers") for why the
   // campaign-wide monotonic length claim is still NOT restored here.
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    2.34, 16, 12, [12, 5, 11], 1.80, 0.55, 11.4, 7,
+    2.43, 16, 12, [12, 5, 11], 1.80, 0.55, 11.4, 7,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    2.54, 16, 12, [12, 5, 11], 1.92, 0.58, 13.7, 7,
+    2.63, 16, 12, [12, 5, 11], 1.92, 0.58, 13.7, 7,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    2.64, 17, 13, [13, 5, 11], 2.00, 0.60, 16.4, 7,
+    2.82, 17, 13, [13, 5, 11], 2.00, 0.60, 16.4, 7,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    2.80, 17, 13, [13, 5, 11], 2.05, 0.62, 19.7, 8.5,
+    3.00, 17, 13, [13, 5, 11], 2.05, 0.62, 19.7, 8.5,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    2.84, 17, 13, [14, 6, 11], 2.08, 0.65, 23.6, 8.5,
+    3.02, 17, 13, [14, 6, 11], 2.08, 0.65, 23.6, 8.5,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.'),
 
   // --- Tier 4 (4) -- 17x13, 33-37 sites, ~7 min, develop 2.20-2.52.
@@ -347,16 +320,16 @@ export const REGIONS = Object.freeze([
   // MAPGEN.enemyStrongholdShare rounds up a fifth stronghold — a step worth
   // ~25 points on its own. The landing force is what pays for it. ---
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    3.10, 17, 13, [14, 6, 13], 2.20, 0.65, 28.4, 6.5,
+    3.20, 17, 13, [14, 6, 13], 2.20, 0.65, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown'],
-    3.14, 17, 13, [14, 6, 13], 2.45, 0.68, 34.0, 7.5,
+    3.33, 17, 13, [14, 6, 13], 2.45, 0.68, 34.0, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.'),
   T('ironcrown', 'Ironcrown', 4, [4, 0], ['vaelstrand', 'duskfell', 'blackspire', 'obsidian'],
-    3.24, 17, 13, [14, 6, 13], 2.48, 0.70, 40.8, 7.5,
+    3.45, 17, 13, [14, 6, 13], 2.48, 0.70, 40.8, 7.5,
     'The enemy fields a Marshal. Its whole army hits 20% harder until you kill it.'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1], ['ironcrown', 'duskfell', 'thanescar'],
-    3.41, 17, 13, [15, 6, 16], 2.52, 0.72, 49.0, 8.5,
+    3.52, 17, 13, [15, 6, 16], 2.52, 0.72, 49.0, 8.5,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. The last one.'),
 ]);
 
