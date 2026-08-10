@@ -9,6 +9,7 @@
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
 import { REGIONS, REGION_BY_ID, REGION_IDS } from '../src/content/regions.data.js';
+import { DEFAULT_COMPOSITION_WEIGHTS } from '../src/content/upgrades.data.js';
 import { TICK_HZ } from '../src/core/loop.js';
 
 const args = Object.fromEntries(
@@ -30,6 +31,33 @@ const regionIds = args.region ? String(args.region).split(',')
  * had therefore never actually been balance-tested.
  */
 const conqueredBefore = (id) => REGION_IDS.slice(0, REGIONS.findIndex((r) => r.id === id));
+
+/**
+ * `--weights=outriders:0.3` — field a specialist, at a weight added to the
+ * default spread. Omitted, the bot lands `DEFAULT_COMPOSITION_WEIGHTS`, which is
+ * the army every number in regions.data.js is measured against.
+ *
+ * This exists because the specialists could not previously be MEASURED at all:
+ * they have no default weight by design, so the only army the harness could
+ * field was one that contained none of them, and the three "they make the bot
+ * worse" columns in CLAUDE.md had to be taken with a throwaway script. A number
+ * you cannot re-take is a number nobody will re-take.
+ *
+ * The weights are ratios, not counts — `buildBattleConfig` runs them through
+ * `fitComposition` against whatever budget the empire granted — so the same flag
+ * means the same army at every tier.
+ */
+function loadoutWeights(spec) {
+  if (!spec || spec === true) return null;
+  const out = { ...DEFAULT_COMPOSITION_WEIGHTS };
+  for (const pair of String(spec).split(',')) {
+    const [unit, w] = pair.split(':');
+    if (!(unit in out)) throw new RangeError(`--weights: unknown unit "${unit}"`);
+    out[unit] = Number(w ?? 0.3);
+  }
+  return out;
+}
+const WEIGHTS = loadoutWeights(args.weights);
 
 /**
  * The win-rate band each TIER is aiming at, as [floor, ceiling] percentages.
@@ -64,7 +92,7 @@ for (const id of regionIds) {
   const idleMin = Number(args.idle ?? 10);
   // --noupgrades reverts to the bot that never touched SITE_LEVELS, so the
   // worth of the mechanic stays measurable rather than remembered.
-  const opts = { upgrades: !args.noupgrades };
+  const opts = { upgrades: !args.noupgrades, weights: WEIGHTS };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 
   const wins = runs.filter((r) => r.status === 'win');

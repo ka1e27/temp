@@ -17,6 +17,7 @@ import { siteControlFraction } from '../src/battle/state.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { goldOf } from '../src/battle/economy.js';
 import { UNIT_IDS, SITE_UPGRADE, CENTIGOLD } from '../src/content/balance.js';
+import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
 
 /** Farms first (economy wins fights), then the war machine, then the prize. */
 const PRIORITY = { farm: 0, stronghold: 1, castle: 2, camp: 3 };
@@ -138,6 +139,21 @@ export function upgradeTurn(state, front) {
 export function playerTurn(state, opts = {}) {
   const mine = state.sites.filter((s) => s.owner === 'player');
   const inFlight = new Set(state.squads.filter((q) => q.owner === 'player').map((q) => q.from));
+  const front = frontDistance(state);
+
+  // THE RIDERS GET FIRST REFUSAL, and the ordering is the whole tactic.
+  //
+  // `movement.js slowestSpeed` is a MIN over the stack, so one militia drops a
+  // 165-speed outrider to 55 and the unit's reason to exist is gone before it
+  // leaves the gate — the old bot sent `filter: UNIT_IDS` every time and so
+  // never once moved an outrider at outrider speed. Going first is what lets a
+  // detachment that CAN act alone do so; whatever this pass turns down is picked
+  // up by the column below rather than left standing, because a benched body is
+  // worth nothing at any exchange rate.
+  //
+  // Queues nothing whatsoever when no garrison holds a rider, which is every
+  // default run and therefore every tuned number in regions.data.js.
+  for (const src of mine) riderTurn(state, src, front);
 
   for (const src of mine) {
     const garrison = total(src.garrison);
@@ -149,8 +165,15 @@ export function playerTurn(state, opts = {}) {
 
     // Commit only what we can spare above the floor.
     const fraction = Math.min(0.75, (garrison - floor) / garrison);
+    // Everyone but the riders, who are making their own way at three times this
+    // pace. The send is built from the filter it will actually be dispatched
+    // with — evaluating one army and marching a different one is how a harness
+    // reports a number about a battle it never fought.
+    const filter = assaultFilter(state, src);
     const send = {};
-    for (const u of UNIT_IDS) send[u] = Math.floor((src.garrison[u] || 0) * fraction);
+    for (const u of UNIT_IDS) {
+      send[u] = filter.includes(u) ? Math.floor((src.garrison[u] || 0) * fraction) : 0;
+    }
     if (total(send) < 5) continue;
 
     let best = null;
@@ -186,9 +209,7 @@ export function playerTurn(state, opts = {}) {
       if (score < bestScore) { bestScore = score; best = t; }
     }
 
-    if (best) {
-      state.commands.push({ t: 'SEND', from: src.id, to: best.id, fraction, filter: UNIT_IDS });
-    }
+    if (best) state.commands.push({ t: 'SEND', from: src.id, to: best.id, fraction, filter });
   }
 
   // Push the rear army forward.
@@ -197,7 +218,6 @@ export function playerTurn(state, opts = {}) {
   // army it can never use — 80 units sitting at cap while the front line holds
   // with 4. This is what rally points automate for a human player, and it is
   // the single biggest difference between a stalled game and a won one.
-  const front = frontDistance(state);
   for (const src of mine) {
     const d = front[src.id];
     if (d === undefined || d === 0) continue; // already on the line
@@ -210,9 +230,13 @@ export function playerTurn(state, opts = {}) {
       .filter((n) => n && n.owner === 'player' && front[n.id] < d)
       .sort((a, b) => total(a.garrison) - total(b.garrison))[0];
     if (!forward) continue;
+    // The column carries everyone, riders included. A specialist that never
+    // reaches the line is worth exactly as much as one you did not buy, and
+    // adding a FASTER unit to a slow stack cannot slow it — `slowestSpeed` is a
+    // MIN, so this is free.
     state.commands.push({
       t: 'SEND', from: src.id, to: forward.id,
-      fraction: Math.min(0.75, (garrison - floor) / garrison), filter: UNIT_IDS,
+      fraction: Math.min(0.75, (garrison - floor) / garrison), filter: COLUMN_FILTER,
     });
   }
 
@@ -238,12 +262,30 @@ export function playerTurn(state, opts = {}) {
  * first. Without this the harness tests an unupgraded player against later
  * regions, which is not a case the design claims is winnable.
  */
-export function spendCrowns(meta, crowns) {
+export function spendCrowns(meta, crowns, fielded = null) {
   meta.crowns += crowns;
+  const useless = pointlessUnlocks(fielded);
+
+  // A unit you have DECIDED to field is bought before the generic power, and
+  // that ordering is load-bearing rather than cosmetic. Cheapest-affordable-first
+  // drains the treasury into the six endless lines, and an unlock only ever gets
+  // taken on the tick it happens to be the cheapest thing left — so at gallowmoor
+  // the 400-crown outriders and 1200-crown halberds were bought while the
+  // 1800-crown sappers never were, and a `--weights=sappers` run silently landed
+  // ZERO sappers and reported the default army's win rate under their name.
+  // Nobody decides to bring a siege-repair detachment and then spends the money
+  // on a treasury level instead.
+  for (const unit of fielded ?? []) {
+    const id = UNLOCK_FOR[unit];
+    if (!id) continue;
+    const item = shopListing(meta).flatMap((g) => g.items).find((i) => i.id === id);
+    if (item && item.affordable && item.level < item.maxLevel) buy(meta, id, null);
+  }
+
   for (let guard = 0; guard < 400; guard++) {
     const affordable = shopListing(meta)
       .flatMap((g) => g.items)
-      .filter((i) => i.affordable && i.level < i.maxLevel && !buysNothingFor(i.id))
+      .filter((i) => i.affordable && i.level < i.maxLevel && !useless.has(i.id))
       .sort((a, b) => a.cost - b.cost);
     if (!affordable.length) break;
     buy(meta, affordable[0].id, null);
@@ -252,48 +294,73 @@ export function spendCrowns(meta, crowns) {
 }
 
 /**
- * Unlocks this bot cannot use, and therefore must not buy.
+ * Unlocks that buy this run nothing, and therefore must not be bought.
  *
- * It shops CHEAPEST-AFFORDABLE-FIRST, so a cheap unlock is bought almost
- * immediately — and `distributeExpedition` only fields units with a
- * DEFAULT_COMPOSITION_WEIGHT, which the three specialists deliberately do not
- * have (they are a loadout decision, not a default). The bot was therefore
- * spending 3,400 crowns on troops it would never field, and that money used to
- * be Arms and Treasury levels: measured at n=64 the moment they were added to
- * the shop, obsidian fell 47% -> 33% and ironcrown 52% -> 38% with no change to
- * any region, any unit stat, or the default army.
+ * The bot shops CHEAPEST-AFFORDABLE-FIRST, so a cheap unlock is taken almost
+ * immediately — and a specialist it does not field is 3,400 crowns that would
+ * otherwise have been Arms and Treasury levels. Measured at n=64 the moment the
+ * three were added to the shop, obsidian fell 47% -> 33% and ironcrown 52% ->
+ * 38% with no change to any region, any unit stat, or the army actually landed.
+ * That is a MEASUREMENT ARTEFACT, not a difficulty change, so the fix belongs
+ * here rather than in the balance table.
  *
- * That is a MEASUREMENT ARTEFACT, not a difficulty change — a real player who
- * buys outriders goes on to use them — so the fix is here rather than in the
- * balance table. The rule is simply "buy what you can use": if the harness ever
- * learns to field a specialist, delete its id from this set and re-measure.
+ * The rule is "buy what you can use", and `fielded` is what makes it a rule
+ * rather than a hardcoded list. A `--weights` run that names outriders MUST buy
+ * their unlock: `fitComposition` drops any unit missing from `unlocked`, so
+ * without this the loadout would be silently discarded and the run would report
+ * the default army's win rate under a specialist's name — the exact class of
+ * false measurement this whole pass exists to close.
  */
-const UNUSED_BY_THIS_BOT = new Set(['unlockOutriders', 'unlockHalberds', 'unlockSappers']);
-const buysNothingFor = (id) => UNUSED_BY_THIS_BOT.has(id);
+const UNLOCK_FOR = Object.freeze({
+  outriders: 'unlockOutriders', halberds: 'unlockHalberds', sappers: 'unlockSappers',
+});
+
+function pointlessUnlocks(fielded) {
+  const out = new Set(Object.values(UNLOCK_FOR));
+  for (const u of fielded ?? []) out.delete(UNLOCK_FOR[u]);
+  return out;
+}
+
+/** The units a loadout actually asks for — the shop's reason to unlock them. */
+export const fieldedUnits = (weights) =>
+  (weights ? UNIT_IDS.filter((u) => (weights[u] ?? 0) > 0) : []);
 
 /** A meta state for a player who has taken `conquered` and idled `idleMinutes`. */
-export function metaFor(conquered, idleMinutes = 0, seed = 1) {
+export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null) {
   const state = createState({ seed, now: 0 });
   for (const id of conquered) markConquered(state.meta, id, { now: 0, durationMs: 0 });
   refreshUnlocks(state.meta, null);
   recalcIncome(state.meta, null);
   if (idleMinutes > 0) {
-    spendCrowns(state.meta, incomePerSec(state.meta) * idleMinutes * 60);
+    spendCrowns(state.meta, incomePerSec(state.meta) * idleMinutes * 60, fielded);
   }
   return state;
 }
 
-/** Start one battle for that player. Exposed so a test can drive it tick by
- *  tick and watch what the AI does, rather than only reading the verdict. */
-export function startRun(regionId, seed, conquered, idleMinutes = 0) {
-  const state = metaFor(conquered, idleMinutes, seed);
-  const config = buildBattleConfig(state.meta, regionId, [], generateBattleMap, { seed });
+/**
+ * Start one battle for that player. Exposed so a test can drive it tick by
+ * tick and watch what the AI does, rather than only reading the verdict.
+ *
+ * `opts.weights` is a LOADOUT, and until it existed the harness could only ever
+ * field one army. `buildBattleConfig` runs `options.composition` through
+ * `fitComposition`, which reads the counts as RATIOS against whatever budget the
+ * empire granted — so a weights object is a legitimate composition here, and
+ * passing one exercises the same seam the pre-battle screen does rather than a
+ * parallel path. Omitted, `distributeExpedition` spreads by
+ * DEFAULT_COMPOSITION_WEIGHTS exactly as before: every balance number in
+ * regions.data.js is measured on that branch and must stay on it.
+ */
+export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
+  const state = metaFor(conquered, idleMinutes, seed, fieldedUnits(opts.weights));
+  const config = buildBattleConfig(state.meta, regionId, [], generateBattleMap, {
+    seed, composition: opts.weights ?? null,
+  });
   return startBattle(config);
 }
 
 /** Run one battle to its end with the scripted player at the wheel. */
 export function playOne(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
-  const battle = startRun(regionId, seed, conquered, idleMinutes);
+  const battle = startRun(regionId, seed, conquered, idleMinutes, opts);
   const cap = battle.rules.hardCapTicks;
   let nextThink = 0;
   while (battle.status === 'running' && battle.tick < cap) {

@@ -26,6 +26,7 @@ node --test tests/combat.test.js          # one file
 node --test --test-name-pattern="siege"   # one test by name
 node tools/simrunner.js --region=kaldan --n=50
 node tools/simrunner.js --all --n=96 --noupgrades   # the pre-upgrade-ladder bot
+node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a specialist
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
 ```
 
@@ -422,7 +423,7 @@ produced (emberholt, 2.556) when tier 4 was the end; tier 5 opens at 2.60–2.68
 measurably still convertible there. It is still a hard ceiling per tier, still required to
 be non-decreasing, and still capped at 3× globally.
 
-## Three specialists, and a harness that cannot play them
+## Three specialists, each owning a verb
 
 The roster was five units: a rock-paper-scissors of stats plus a siege engine. A sixth set
 of stats would only have moved which column of the same table you read, so the three added
@@ -431,12 +432,20 @@ one.
 
 | Unit | Slots | Verb | Why it matters |
 |---|---|---|---|
-| **Outriders** | 2 | `skirmish`, speed 165 | 3× a militia's march. Maps are 30–50% unclaimed at tick 0, so the race for neutral ground *is* the opening |
+| **Outriders** | 2 | `skirmish`, speed 165 | 3× a militia's march, over legs that are 0.9–1.7s to begin with — see the speed note below before pricing this as the opening |
 | **Halberds** | 4 | `sunder` 0.50 | Halves the defender's `siteDefMult` — the one term no amount of militia answers (a castle defends at ×1.60 before walls) |
 | **Sappers** | 3 | `repair` 1.9 | `breachSeconds()` returns `Infinity` the moment repair out-paces siege damage, so a wall they garrison is *arithmetically* uncrackable without engines |
 
 All three are share-scaled like `counters`: a token escort strips nothing, so committing to
 the answer is what buys the answer.
+
+**Speed is a much weaker stat than the roster implies, and this was measured.**
+`MOVEMENT.hexSecondsPerSpeed` is 38, so a leg between adjacent sites is a **median 1.7s on
+riverfen and 0.9s on nightharrow** for a militia column, against 0.6s and 0.3s for
+outriders. The bot re-thinks every 2s, which is longer than either. Handing the player
+*infinite* march speed — the absolute ceiling on what the stat can ever be worth — buys 13
+to 15 points; 3× buys 7 to 10, and only for the squads that actually get it. Any claim that
+begins "outriders win the race for neutral ground" has to clear that ceiling first.
 
 **They are opt-in, and that is what let three ship at once.** None has a
 `DEFAULT_COMPOSITION_WEIGHT` and none is in `ENEMY_UNITS_BY_TIER`, so
@@ -452,24 +461,84 @@ instead: `emptyComp()` itself (so `{...emptyComp(), ...x}` silently omitted the 
 the formation block map (positional — every assertion meant "index 3" rather than "rams"),
 and the loadout and preview fixtures.
 
-**THE HARNESS CANNOT DEMONSTRATE THEM, and this is the honest state.** Measured at n=48,
-substituting 25–35% of the budget onto a specialist makes `simplayer.js` *worse* everywhere:
+## The harness can play the specialists now, and they still lose
+
+This section used to say the harness could not demonstrate the three, that the numbers
+below measured the bot rather than the units, and that teaching it to field them was a
+balance pass waiting to happen. **The first claim was true and is now fixed. The second was
+half true at most, and knowing which half is worth more than the fix.**
+
+`tools/simtactics.js` is the new file; `tools/simrunner.js --weights=sappers:0.3` is the new
+flag. Before it, `playOne` could only ever field `distributeExpedition`'s default spread, so
+a specialist could not be measured *at all* and the table below had to be taken with a
+throwaway script. A number nobody can re-take is a number nobody will re-take.
+
+**Two real bugs turned up on the way, and both failed silently.**
+
+- **Riders were welded to the baggage train.** `movement.js slowestSpeed` is a MIN over the
+  stack, so one militia drops a 165-speed outrider to 55. The bot sent `filter: UNIT_IDS`
+  every time, so it never once moved an outrider at outrider speed — the entire verb was
+  cancelled before the squad left the gate, and the old `+outriders` column measured that
+  and nothing else.
+- **A named loadout was silently discarded.** `fitComposition` drops any unit missing from
+  `unlocked`, and the bot shops cheapest-affordable-first — so it bought the 400-crown
+  outriders and the 1200-crown halberds but never the 1800-crown sappers. A sapper run
+  landed **zero sappers** and reported the default army's win rate under their name. Named
+  unlocks are now bought first, which is also what a player who decided to bring them does.
+
+**The intuitive fix for the other two is a sunk-cost error worth ~50 points.** Per slot a
+halberd really is a worse line unit than militia (atk 12 over 4 slots against 4 over 1) and
+a sapper really does nothing in a field, so the first version of `simtactics.js` held
+halberds back from unfortified targets and kept sappers out of assaults entirely. Measured:
 
 ```
-region        default   +outriders   +halberds   +sappers
-gallowmoor      60%        44%         27%         33%
-thanescar       52%        25%         25%         27%
-nightharrow     40%        27%         19%         29%
+region        default   +halberds   +sappers     (hold-back rules — WRONG)
+gallowmoor      58%         6%         17%
+thanescar       50%         8%         13%
 ```
 
-That measures the BOT, not the units. It does not send outriders at distant neutrals, mass
-halberds against a castle, or garrison sappers in a threatened wall — it plays one
-undifferentiated army. The levers themselves are proven in `tests/units.test.js` against the
-real sim paths with negative controls (3× march, exact half-bonus strip, `breachSeconds`
-→ `Infinity`). **This is the same shape as the site-upgrade gap that went unnoticed for
-years**: a mechanic the harness does not exercise is a mechanic no balance number covers.
-Teaching the bot to field them is a balance pass, not a bug fix — and until it happens, no
-specialist should be given a default weight on the strength of harness numbers.
+On thanescar the halberds did not join a single assault in a whole battle. **The slots are
+already spent.** At the site panel the question is never "halberd or four militia" — that
+was decided at the loadout screen and cannot be unwound — it is "does this body march", and
+standing still is worth nothing at any exchange rate. Benching a third of the army also
+drags every remaining assault under `ATTACK_MARGIN` until the bot stops attacking at all.
+That is the 6%.
+
+**So only one verb was ever unexercised.** `sunder` lives inside `resolveField` and `repair`
+inside `breachSeconds` — both of which the bot's own target scan already calls on every
+candidate — so a halberd-carrying army sees fortified targets get cheaper and takes them,
+with no special case. Speed was the only one the game itself threw away. What survives in
+`simtactics.js` is one rule: **riders get first refusal, then ride along.** A detachment
+that can take something alone goes alone at 165; what it turns down joins the column, which
+is free, because a MIN cannot be raised by adding a faster unit.
+
+**With the bot's real defects fixed, all three are still a net cost** (n=48, gallowmoor,
+default 58%):
+
+```
+unit          w=0.08         w=0.15         w=0.30
+outriders   58% (7% bud)   44% (13% bud)  48% (23% bud)
+halberds    42% (14% bud)  33% (23% bud)  33% (37% bud)
+sappers     50% (11% bud)  38% (18% bud)  29% (31% bud)
+```
+
+A token outrider detachment is free and everything else costs, monotonically in share. That
+is **not** a verdict that the units are bad, and it is important not to read it as one: this
+bot wins by sweeping adjacent sites with overwhelming force, and it *avoids* by construction
+every situation the specialists answer — `breachSeconds > 90` makes it walk away from the
+wall a sapper would hold or a halberd would crack. It never gets into the trouble they
+solve. The levers themselves stay proven in `tests/units.test.js` against the real sim paths
+with negative controls (3× march, exact half-bonus strip, `breachSeconds` → `Infinity`).
+
+**What this licenses, and what it does not.** No specialist should get a
+`DEFAULT_COMPOSITION_WEIGHT` on the strength of these numbers — that much is unchanged, and
+now measured rather than assumed. What is retired is the excuse: the harness *can* field
+them, so any future claim about a specialist is a `--weights` run away from being checked.
+
+**The default army is byte-identical, and that is verified rather than argued.** 80 runs
+across five regions produce the same status, tick count, site counts and top level as the
+pre-tactics bot; `tests/tactics.test.js` pins it per-send with a negative control, since the
+inertness test would otherwise pass just as happily if every filter were dead code.
 
 ### Gestures and controls
 
