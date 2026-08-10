@@ -18,9 +18,10 @@ import assert from 'node:assert/strict';
 import { generateBattleMap } from '../src/battle/mapgen.js';
 import { buildBattleConfig, expeditionSlots } from '../src/meta/modifiers.js';
 import {
-  abdicate, abdicationValue, canAbdicate, endgameOpen, legacyPoints, legacyResets,
+  abdicationValue, canAbdicate, endgameOpen, legacyPoints, legacyResets,
   legacyEffects, legacyView, LEGACY,
 } from '../src/meta/legacy.js';
+import { abdicate, headStartFor } from '../src/meta/prestige.js';
 import { upgradeEffects } from '../src/meta/upgrades.js';
 import { incomePerSec, baseIncomePerSec } from '../src/meta/idle.js';
 import { completeIncursion, incursionRecord } from '../src/meta/incursion.js';
@@ -86,16 +87,28 @@ test('legacy: abdication takes the empire and keeps the record of it', () => {
 
   // Gone.
   assert.equal(meta.crowns, 0);
-  assert.equal(meta.incomePerSec, 0, 'the cached income must go with the regions');
-  assert.equal(incomePerSec(meta), 0, '...and the computed one must agree');
   assert.deepEqual(meta.upgrades, {});
   assert.deepEqual(meta.boosters, {});
   assert.equal(meta.loadout, null);
-  assert.equal(regionsConquered(meta), 0);
-  assert.equal(meta.regions.riverfen.status, 'available', 'the seed region must reopen');
-  for (const r of REGIONS.slice(1)) {
-    assert.equal(meta.regions[r.id].status, 'locked', `${r.id} did not re-lock`);
+
+  // Handed back: the head start, and NOTHING past it. The cap is the load-bearing
+  // half — tiers 5 and 6 must be earned on every run the player ever plays, or the
+  // reward for finishing the game is never having to play the end of it again.
+  const skip = headStartFor(1);
+  assert.equal(regionsConquered(meta), skip, `a second run should open on ${skip} regions`);
+  for (const r of REGIONS.slice(0, skip)) {
+    assert.equal(meta.regions[r.id].status, 'conquered', `${r.id} is not part of the head start`);
   }
+  assert.ok(REGIONS.slice(skip).every((r) => r.tier < 5) === false,
+    'the head start must stop short of the last tiers');
+  for (const r of REGIONS.filter((x) => x.tier >= 5)) {
+    assert.notEqual(meta.regions[r.id].status, 'conquered',
+      `${r.id} is tier ${r.tier} and was handed over rather than earned`);
+  }
+  // The cached income is the head start's, recomputed rather than left stale —
+  // which is the whole reason the reset lives in meta/prestige.js.
+  assert.ok(meta.incomePerSec > 0, 'the head start pays and the cache does not know');
+  assert.equal(meta.incomePerSec, incomePerSec(meta), 'the cache disagrees with the truth');
 
   // Kept.
   assert.equal(legacyPoints(meta), result.points);
@@ -154,7 +167,10 @@ test('legacy: a point reaches the battle, down the same channels the shop uses',
   assert.ok(Math.abs(after.player.unitAtkMult - expectAtk) < 1e-9,
     `attack landed at ${after.player.unitAtkMult}, expected ${expectAtk}`);
   assert.ok(Math.abs(after.player.unitDefMult - (before.player.unitDefMult + g.def * points)) < 1e-9);
-  assert.equal(expeditionSlots(meta), slotsBefore + g.expedition * points);
+  // A SHARE, not slots — and asserted as the exact product, because the flat
+  // version of this grant passed a "bigger than before" assertion while being worth
+  // +675% on region 1. See content/legacy.data.js.
+  assert.equal(expeditionSlots(meta), Math.round(slotsBefore * (1 + g.expeditionMult * points)));
   assert.ok(total(after.player.expedition) > total(before.player.expedition),
     'more slots must land more bodies');
 
@@ -179,11 +195,29 @@ test('legacy: the endgame stays open across a reset, or nobody would ever reset'
   const meta = finished();
   assert.equal(endgameOpen(meta), true, 'a finished campaign opens the endgame');
   abdicate(meta);
-  assert.equal(regionsConquered(meta), 0, 'the campaign really was wound back');
+  assert.ok(regionsConquered(meta) < REGIONS.length, 'the campaign really was wound back');
   assert.equal(endgameOpen(meta), true,
     'abdicating closed the endgame — the ladder and the Crown shop would vanish');
   // ...and a player who has never finished it is still outside.
   assert.equal(endgameOpen(midCampaign()), false);
+});
+
+test('legacy: the head start grows but never hands over the end of the game', () => {
+  // The cap is the load-bearing half. Without it a fourth abdication would open on
+  // the last region, which means the reward for finishing the game is never having
+  // to play it — and the incursion ladder, which is what the endgame is FOR, would
+  // be reachable from a standing start.
+  assert.equal(headStartFor(0), 0, 'a first run starts at the beginning');
+  assert.ok(headStartFor(1) > 0, 'a second run must skip something');
+  assert.ok(headStartFor(2) > headStartFor(1), 'the head start grows with resets');
+  assert.equal(headStartFor(50), headStartFor(500), 'it must be capped');
+  const capped = headStartFor(50);
+  assert.ok(capped <= REGIONS.length - 6,
+    `the cap hands over ${capped} of ${REGIONS.length} regions — the last two tiers`
+    + ' must always be earned');
+  // ...and what it leaves is specifically the hard end of the campaign.
+  assert.ok(REGIONS.slice(capped).every((r) => r.tier >= 4),
+    'everything past the cap should be tier 4 or later — the part still worth playing');
 });
 
 test('legacy: the view a screen renders matches what the button will actually pay', () => {

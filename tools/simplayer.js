@@ -325,10 +325,23 @@ function pointlessUnlocks(fielded) {
 export const fieldedUnits = (weights) =>
   (weights ? UNIT_IDS.filter((u) => (weights[u] ?? 0) > 0) : []);
 
-/** A meta state for a player who has taken `conquered` and idled `idleMinutes`. */
-export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null) {
+/**
+ * A meta state for a player who has taken `conquered` and idled `idleMinutes`.
+ *
+ * `legacy` IS A SECOND RUN, and it exists because the claim "abdicating makes the
+ * next campaign a victory lap for ten regions and an ordinary fight by the last
+ * three" was otherwise unmeasurable: every number this project has ever taken is
+ * for a player with zero points, since `metaFor` never abdicates. A design claim
+ * nobody can re-take is a design claim nobody will re-take.
+ *
+ * It is applied BEFORE the crowns are spent, deliberately — a legacy point raises
+ * income, so a second-run player has more to spend as well as better troops, and
+ * spending first would measure only half the effect.
+ */
+export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null, legacy = 0) {
   const state = createState({ seed, now: 0 });
   for (const id of conquered) markConquered(state.meta, id, { now: 0, durationMs: 0 });
+  if (legacy > 0) state.meta.legacy = { points: Math.floor(legacy), resets: 1 };
   refreshUnlocks(state.meta, null);
   recalcIncome(state.meta, null);
   if (idleMinutes > 0) {
@@ -351,7 +364,8 @@ export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null) {
  * regions.data.js is measured on that branch and must stay on it.
  */
 export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
-  const state = metaFor(conquered, idleMinutes, seed, fieldedUnits(opts.weights));
+  const state = metaFor(conquered, idleMinutes, seed, fieldedUnits(opts.weights),
+    opts.legacy ?? 0);
   const config = buildBattleConfig(state.meta, regionId, [], generateBattleMap, {
     seed,
     composition: opts.weights ?? null,

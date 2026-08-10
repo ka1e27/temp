@@ -13,7 +13,8 @@
 import { h, clear, mount } from '../ui/dom.js';
 import { compact } from '../ui/format.js';
 import { ENDGAME } from '../content/strings.js';
-import { legacyView, abdicate } from '../meta/legacy.js';
+import { legacyView } from '../meta/legacy.js';
+import { abdicate, headStartFor } from '../meta/prestige.js';
 import { markDirty } from '../core/store.js';
 import { clearBattle } from '../meta/resume.js';
 
@@ -37,7 +38,7 @@ export function renderAbdicate(drawer, ctx, { onDone, onCancel }) {
     ? h('p.set-hint', {
       text: `You hold ${ENDGAME.legacyHeld(view.points)}: +${Math.round(view.bonus.income * 100)}%`
         + ` income, +${Math.round(view.bonus.atk * 100)}% attack and defence,`
-        + ` +${view.bonus.expedition} expedition slots.`,
+        + ` +${Math.round(view.bonus.expedition * 100)}% expedition.`,
     })
     : h('p.set-hint.dim', { text: ENDGAME.legacyNone });
 
@@ -63,7 +64,10 @@ export function renderAbdicate(drawer, ctx, { onDone, onCancel }) {
       ...row('Regions held', `${payout.regions} → ${payout.fromRegions} legacy`),
       ...row('Deepest rung', `${payout.rungs} → ${payout.fromDepth} legacy`),
       ...row('This abdication pays', `${payout.points} legacy`),
-      ...row('Crowns given up', compact(meta.crowns))),
+      ...row('Crowns given up', compact(meta.crowns)),
+      // The head start is the bigger half of the reward and it has to be on the
+      // table the player reads before pressing, not a surprise on the world map.
+      ...row('Next run opens with', `${headStartFor(view.resets + 1)} regions`)),
     held,
     h('p.set-note.dim', { text: ENDGAME.legacyWorth }),
     h('div.row', {},

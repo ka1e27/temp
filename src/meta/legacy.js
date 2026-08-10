@@ -5,10 +5,13 @@
 // with the comment "reserved so prestige can land later with no migration". It
 // did: nothing about the persisted shape changed to ship this.
 //
-// PURE: `now` is injected, no storage, no DOM, no randomness. The reset is a
-// plain rewrite of the meta slice — the caller owns telling the world about it
-// (screens/mainmenu-settings.js also drops any mid-battle resume blob, which is
-// storage and therefore not this file's business).
+// THE RESET LIVES IN ./prestige.js, not here. It has to call `recalcIncome`, and
+// this file may not import idle.js: `idle -> modifiers -> upgrades -> legacy` is a
+// real chain, so the import back would close a cycle. So the division is
+// arithmetic here, act there — what a run is worth and what a point does versus
+// throwing the empire away.
+//
+// PURE: no clock, no storage, no DOM, no randomness.
 //
 // WHY THE EFFECTS LIVE HERE AND ARE FOLDED INTO `upgradeEffects`: a legacy point
 // has to reach idle income, offline caps and both battle multipliers, and all
@@ -17,15 +20,9 @@
 // meta/upgrades.js calls `legacyEffects` as the last step of its own aggregation
 // and every consumer gets legacy for free, in the right order, forever.
 //
-// THIS FILE MUST NOT IMPORT ./idle.js. idle -> modifiers -> upgrades -> legacy is
-// a real chain, so an import back to idle would close a cycle. It does not need
-// one: after a reset nothing is conquered, so income is exactly 0 by
-// construction rather than by recomputation.
-
 import { LEGACY } from '../content/legacy.data.js';
-import { createRegionTable, createStats, metaOf } from '../core/store.js';
+import { metaOf } from '../core/store.js';
 import { campaignComplete, incursionRecord } from './incursion.js';
-import { META_EVENTS, emit } from './events.js';
 
 export { LEGACY, campaignComplete };
 
@@ -96,63 +93,11 @@ export function legacyEffects(metaState, fx) {
   fx.add.income = (fx.add.income ?? 0) + g.income * points;
   fx.add.atk = (fx.add.atk ?? 0) + g.atk * points;
   fx.add.def = (fx.add.def ?? 0) + g.def * points;
-  fx.flat.expedition = (fx.flat.expedition ?? 0) + g.expedition * points;
+  // A SHARE of the expedition, not slots — `expeditionSlots` multiplies by this
+  // rather than adding it. The flat version was worth +675% on region 1 and +9% on
+  // region 24 for the same grant; see content/legacy.data.js for the measurement.
+  fx.add.expeditionMult = (fx.add.expeditionMult ?? 0) + g.expeditionMult * points;
   return fx;
-}
-
-/**
- * END THE RUN. Everything the empire owns goes; everything the PLAYER has done
- * stays.
- *
- * Gone: crowns, the whole upgrade ladder, booster stock, the carried loadout, and
- * every region back to its starting status.
- * Kept: legacy (plus this run's payout), lifetime stats, preferences, the
- * incursion ladder, and the fact that the tutorial has been seen — a player on
- * their second empire does not need to be taught to drag a squad.
- *
- * Refuses and returns `{ok:false}` unless the campaign is finished, so a stale
- * screen or a hand-called API cannot cash out a half-run.
- *
- * @returns {{ok:boolean, reason:string, points:number, total:number, resets:number}}
- */
-export function abdicate(metaState, { bus } = {}) {
-  const meta = metaOf(metaState);
-  if (!canAbdicate(meta)) {
-    return {
-      ok: false, reason: 'campaign-incomplete', points: 0,
-      total: legacyPoints(meta), resets: legacyResets(meta),
-    };
-  }
-  const { points } = abdicationValue(meta);
-  const kept = {
-    legacy: { points: legacyPoints(meta) + points, resets: legacyResets(meta) + 1 },
-    incursion: { ...incursionRecord(meta) },
-    stats: { ...createStats(), ...(meta.stats ?? {}) },
-    settings: meta.settings,
-    tutorialSeen: meta.tutorialSeen,
-  };
-
-  meta.crowns = 0;
-  // Exactly 0 rather than a recalculation: `baseIncomePerSec` sums the regions
-  // that are conquered, and after the line below none are. See the note at the
-  // top of this file for why this cannot just call recalcIncome.
-  meta.incomePerSec = 0;
-  meta.upgrades = {};
-  meta.boosters = {};
-  meta.loadout = null;
-  meta.regions = createRegionTable();
-  meta.legacy = kept.legacy;
-  meta.incursion = kept.incursion;
-  meta.stats = kept.stats;
-  meta.settings = kept.settings;
-  meta.tutorialSeen = kept.tutorialSeen;
-
-  const result = {
-    ok: true, reason: 'ok', points,
-    total: kept.legacy.points, resets: kept.legacy.resets,
-  };
-  emit(bus, META_EVENTS.ABDICATED, result);
-  return result;
 }
 
 /** Everything a screen needs to describe the decision, with no DOM. */
@@ -172,7 +117,7 @@ export function legacyView(metaState) {
       income: g.income * points,
       atk: g.atk * points,
       def: g.def * points,
-      expedition: g.expedition * points,
+      expedition: g.expeditionMult * points,
     },
     /** ...and what one more point would add, which is the number a player is
      *  actually deciding about when they choose to push another rung first. */

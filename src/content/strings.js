@@ -145,8 +145,9 @@ export const ENDGAME = Object.freeze({
   mutatorsTitle: 'Complications',
   abdicateTitle: 'Abdicate',
   abdicateLocked: 'Available once you have taken every region.',
-  abdicateHint: 'End this empire. Crowns, upgrades, boosters and every region go back'
-    + ' to nothing — you keep your legacy, your records and the ladder you have climbed.',
+  abdicateHint: 'End this empire. Crowns, upgrades and boosters go back to nothing — you'
+    + ' keep your legacy, your records and the ladder you have climbed, and the next'
+    + ' campaign opens with ground you no longer have to take twice.',
   abdicateGo: 'Abdicate and begin again',
   abdicateConfirm: 'This cannot be undone. Abdicate?',
   legacyTitle: 'Legacy',

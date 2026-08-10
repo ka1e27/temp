@@ -34,6 +34,7 @@ node tools/simrunner.js --all --n=96 --noupgrades   # the pre-upgrade-ladder bot
 node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a specialist
 node tools/simrunner.js --incursion=1-14 --n=32     # the endless ladder, by rung
 node tools/simrunner.js --incursion=40,55 --idle=600  # ...for a player who has idled
+node tools/simrunner.js --all --n=32 --legacy=27    # the campaign on a SECOND run
 npm run mobile             # phone-width layout audit — needs `npm start` running
 node tools/mobile.mjs --w=844 --h=390                # a phone in landscape
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
@@ -574,6 +575,22 @@ with no migration" — and it did: nothing about the persisted shape changed.
   last step of `upgradeEffects`), so a point reaches idle income, the offline cap and both
   battle multipliers down exactly the channels an upgrade does. There is no second
   stacking order to drift.
+- **The reward is mostly a HEAD START, and that came out of a measurement.** `--legacy=N`
+  was added to the harness to check the claim "a second run is a victory lap early and an
+  ordinary fight late", and the claim was false: at 27 points (a first payout) the whole
+  campaign measured 94–100%, the last region included, won in 4.3 minutes. A flat `+3
+  expedition slots a point` was the worst offender — +9% on region 24's 862-slot budget
+  and **+675%** on region 1's twelve — so it became a percentage; halving every grant on
+  top of that moved the tail by four points. Any multiplier worth pressing the button for
+  makes a replayed region trivial, because win rates at the tail are that sensitive.
+  So the fix was to make the replay **shorter, not harder**: `headStartPerReset: 8`,
+  `headStartMax: 15`. Run 2 opens on 8 regions and plays 16; run 3+ opens on 15 and plays
+  9; tiers 5–6 are earned on every run forever. Measured, a replayed region takes 2–5
+  minutes against 7–16 on the first run, and widowsgate (81%) is the only one that can
+  still take it off you.
+- **`meta/prestige.js` exists for one reason**: the reset has to call `recalcIncome`
+  (`meta.incomePerSec` has exactly one writer), and `legacy.js` may not import `idle.js`.
+  Arithmetic in `legacy.js`, the act in `prestige.js`.
 - **It is a no-op at zero points**, which is every battle the balance table was measured
   with. `tests/legacy.test.js` asserts that as an identity, not as "small".
 - **What survives**: legacy, lifetime stats, preferences, the tutorial flag, and the

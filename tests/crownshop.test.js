@@ -16,7 +16,7 @@ import {
   shopListing, buy, canBuy, levelOf, isAvailable, isEndless, upgradeEffects,
 } from '../src/meta/upgrades.js';
 import { UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS } from '../src/content/upgrades.data.js';
-import { abdicate } from '../src/meta/legacy.js';
+import { abdicate } from '../src/meta/prestige.js';
 import { incomePerSec } from '../src/meta/idle.js';
 import { REGION_IDS } from '../src/content/regions.data.js';
 import { metaFor, spendCrowns } from '../tools/simplayer.js';

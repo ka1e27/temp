@@ -141,7 +141,13 @@ export function expeditionSlots(metaState) {
     + (late > 0 || last > 0 ? (EXPEDITION.surgeBonus ?? 0) : 0)
     + (last > 0 ? (EXPEDITION.finalBonus ?? 0) : 0)
     + flatBonus(fx, 'expedition');
-  return Math.max(0, Math.round(stack(base)));
+  // `expeditionMult` is the additive SHARE bucket, and only meta/legacy.js writes
+  // it. A prestige grant has to be a proportion rather than a slot count: the
+  // budget runs 12 slots at region 1 and 862 at region 24, so one flat number
+  // cannot be right at both ends — measured, +3 slots a point was +675% on the
+  // opening and +9% on the finale. Shop lines stay FLAT (`grandArmy` adds 18),
+  // because they are bought late and priced for where they are bought.
+  return Math.max(0, Math.round(stack(base, { additive: addBonus(fx, 'expeditionMult') })));
 }
 
 // --- FactionMods -----------------------------------------------------------

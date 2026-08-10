@@ -108,7 +108,11 @@ for (const id of regionIds) {
   const idleMin = Number(args.idle ?? 10);
   // --noupgrades reverts to the bot that never touched SITE_LEVELS, so the
   // worth of the mechanic stays measurable rather than remembered.
-  const opts = { upgrades: !args.noupgrades, weights: WEIGHTS };
+  // `--legacy=30` measures a SECOND RUN — the same campaign for a player who has
+  // abdicated once. Zero, and therefore absent from the table, unless asked for.
+  const opts = {
+    upgrades: !args.noupgrades, weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
+  };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 
   const wins = runs.filter((r) => r.status === 'win');

@@ -48,25 +48,53 @@ export const LEGACY = Object.freeze({
   rungsPerPoint: 2,
 
   /**
+   * HOW MANY REGIONS A SECOND RUN STARTS HOLDING, per abdication, and the ceiling
+   * on it. The reasoning is measured and is written out at meta/prestige.js
+   * `headStartFor`: a permanent multiplier big enough to be worth pressing the
+   * button for makes the replayed campaign a formality no matter how small the
+   * grants are cut, so the reward has to make the replay SHORTER rather than
+   * easier. Eight regions a reset, and never past fifteen — so tiers 5 and 6 are
+   * earned on every run the player ever plays.
+   */
+  headStartPerReset: 8,
+  headStartMax: 15,
+
+  /**
    * WHAT ONE POINT GRANTS. Every entry rides a bucket that already exists
    * (meta/upgrades.js `upgradeEffects`), so legacy reaches a battle down exactly
    * the channels the shop does and there is no second stacking order to get wrong.
    *
-   * Sized against a first payout of roughly 30 points: +150% income, +45% attack
-   * and defence, +90 expedition slots. That is about what the shop's whole first
-   * campaign is worth, which is the intent — the second run is a different game
-   * for the first ten regions and an ordinary one by the last three.
+   * THE EXPEDITION GRANT IS A PERCENTAGE, AND THE FIRST VERSION WAS FLAT. That is
+   * the whole lesson of this block. `+3 slots a point` reads modest against the
+   * 862-slot budget of the last region — it is +9% there — but the OPENING budget
+   * is twelve, so the same grant was +675% on riverfen. Measured with the harness's
+   * `--legacy` flag at 27 points (what a first abdication pays), it did not make
+   * the second run faster, it deleted it:
    *
-   * NOTE `atk` and `def` are deliberately the smallest numbers here. They are the
-   * two channels the campaign's difficulty curve is measured against
+   *     riverfen kaldan gallowmoor thanescar widowsgate
+   *        100%    100%      100%       97%      100%     n=32, legacy 27
+   *
+   * — the last region of the game won every time in 4.3 minutes. Twenty-four
+   * battles nobody can lose is not a victory lap, it is a chore with no decisions
+   * in it. A percentage is worth the same PROPORTION at both ends of the campaign,
+   * which is the only way one number can be right for a 12-slot landing and an
+   * 862-slot one.
+   *
+   * `atk` and `def` are deliberately the smallest numbers here. They are the two
+   * channels the campaign's difficulty curve is measured against
    * (content/regions.data.js, second load-bearing rule), so a generous legacy on
-   * those would not make a second run faster, it would make every measured region
-   * a walkover — including the three the tier-6 dial was solved against.
+   * those does not make a second run faster either — it makes every measured
+   * region a walkover, including the three the tier-6 dial was solved against.
+   *
+   * `income` is the one number that can be generous without touching a battle: it
+   * is the idle half, it buys shop levels rather than troops, and the shop's own
+   * curve is logarithmic in crowns. At 27 points it is +135%.
    */
   grant: Object.freeze({
-    income: 0.05,
-    atk: 0.015,
-    def: 0.015,
-    expedition: 3,
+    income: 0.035,
+    atk: 0.004,
+    def: 0.004,
+    /** A FRACTION of the expedition budget, not a slot count. See above. */
+    expeditionMult: 0.006,
   }),
 });
