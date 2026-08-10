@@ -4,7 +4,9 @@
 import { createLoop } from './core/loop.js';
 import { createBus } from './core/bus.js';
 import { createSceneStack } from './core/scenes.js';
-import { createStorageAdapter, bootstrapGame, createAutosaver } from './meta/save.js';
+import {
+  createStorageAdapter, bootstrapGame, createAutosaver, loadBackup,
+} from './meta/save.js';
 import { tick as tickIdle } from './meta/idle.js';
 import { loadBattle } from './meta/resume.js';
 import { createScreens } from './screens/index.js';
@@ -92,6 +94,11 @@ if (interrupted.ok) {
     offline: boot.offline,
     blocked: boot.blocked,
     reason: boot.reason,
+    // Read HERE rather than in the screen, so the menu never touches storage
+    // itself — the same reason `offline` and `blocked` are passed in. Only
+    // attempted when the main file was refused, because that is the only time
+    // anybody wants the older one.
+    backup: boot.blocked ? loadBackup(storage, { now: Date.now() }) : null,
   });
 }
 loop.start();

@@ -87,6 +87,17 @@
 }
 .hud-alert:empty { display: none; }
 .hud-alert.is-open { opacity: 1; transform: none; }
+/* Losing ground and taking it must not look like a rejected click. */
+.hud-alert.is-danger {
+  background: color-mix(in srgb, var(--c-danger) 20%, var(--plate-bg));
+  border-color: color-mix(in srgb, var(--c-danger) 55%, transparent);
+  color: var(--c-danger);
+}
+.hud-alert.is-good {
+  background: color-mix(in srgb, var(--c-player) 18%, var(--plate-bg));
+  border-color: color-mix(in srgb, var(--c-player) 50%, transparent);
+  color: var(--c-player);
+}
 
 /* Withdraw is destructive, so it is quiet until it is armed — then it is the
    loudest thing in the corner. */
@@ -235,7 +246,14 @@
   background: var(--chip); box-shadow: inset 0 0 0 1px var(--chip);
 }
 .chip.is-on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chip) 60%, transparent); }
-.chip.is-off { opacity: 0.34; }
+/* THE STATE IS ALREADY IN THREE OTHER CHANNELS — a hollow swatch, a changed
+   outline, and the chip's own colour — so the blanket opacity was redundant to
+   the design and cost only contrast: it took the label to 2.59:1 and the key
+   letter to 1.65:1 on a control that still responds to clicks. Dim the swatch,
+   keep the text legible. */
+.chip.is-off { opacity: 1; }
+.chip.is-off .chip-name, .chip.is-off .chip-key { color: var(--c-text-dim); }
+.chip.is-off .chip-swatch, .chip.is-off::before { opacity: 0.35; }
 .chip.is-off::before { background: transparent; }
 .chip.is-locked { opacity: 0.18; pointer-events: none; }
 .chip-key { font-family: var(--font-num); color: var(--c-text-dim); }
@@ -266,7 +284,13 @@
   background: conic-gradient(from 0deg, transparent 0 calc(var(--cd, 0) * 360deg),
     rgba(0, 0, 0, 0.68) calc(var(--cd, 0) * 360deg) 360deg);
 }
-.booster.is-empty { opacity: 0.4; }
+/* Same again, and it matters more: a fresh save owns no charges, so this was
+   the DEFAULT appearance of the booster rail for every new player — key 3.27:1,
+   count 2.06:1, name 1.88:1, all still clickable. */
+.booster.is-empty { opacity: 1; }
+.booster.is-empty .booster-key,
+.booster.is-empty .booster-name { color: var(--c-text-dim); }
+.booster.is-empty .booster-charges { color: var(--c-text-dim); opacity: 0.8; }
 .booster.is-empty .booster-charges { color: var(--c-text-dim); }
 /* Armed: the next click on the board targets this booster. Ring plus lift, so
    "the cursor means something different now" is unmistakable. */

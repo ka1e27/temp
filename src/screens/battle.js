@@ -185,7 +185,7 @@ export function createBattleScene(ctx) {
       // at any battle speed. Without this call every effect froze at frame 0,
       // never faded and never freed its pool slot.
       fx?.update(Math.min(frameMs ?? 16, 100) / 1000);
-      if (battle && board) board.draw(battle, alpha, view);
+      if (battle && board) board.draw(battle, alpha, view, frameMs);
       hud?.update();
     },
   };

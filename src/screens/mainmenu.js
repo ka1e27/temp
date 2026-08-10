@@ -20,6 +20,7 @@ import { compact, rate } from '../ui/format.js';
 import { UI, SAVE, ENDGAME } from '../content/strings.js';
 import { renderSettings } from './mainmenu-settings.js';
 import { renderAbdicate } from './mainmenu-legacy.js';
+import { renderRefusal } from './mainmenu-recovery.js';
 import { canAbdicate, legacyPoints } from '../meta/legacy.js';
 import { createMeta, markDirty, metaOf } from '../core/store.js';
 import { exportSave, importSave } from '../meta/save.js';
@@ -112,7 +113,9 @@ export function createMainMenuScene(ctx) {
       ctx.state.session.booted = true;
 
       // Nothing to continue: do not make a new player read a menu.
-      if (!overlay && isFreshCampaign(meta())) {
+      // A REFUSED SAVE IS NOT A FRESH CAMPAIGN even though it looks exactly like
+      // one — see mainmenu-recovery.js for what that cost.
+      if (!overlay && isFreshCampaign(meta()) && !params?.blocked) {
         pending = () => launchFirstRegion(ctx);
         return [];
       }
@@ -143,7 +146,18 @@ export function createMainMenuScene(ctx) {
       mount(ctx.root, root);
       renderActions();
       stats.update();
-      if (params?.blocked) say(`${SAVE.refusedTitle}. ${SAVE.reasons[params.reason] ?? ''}`);
+      if (params?.blocked) {
+        renderRefusal({
+          drawer, say, reason: params.reason, backup: params.backup,
+          onRestore: (backup) => {
+            adoptCampaign(ctx, backup.state, Date.now());
+            clear(drawer);
+            renderActions();
+            stats.update();
+            say(SAVE.restored);
+          },
+        });
+      }
 
       const onKey = (e) => {
         if (e.key === 'Escape' && overlay) { e.preventDefault(); close(); }
@@ -204,6 +218,7 @@ export function createMainMenuScene(ctx) {
   function say(text) {
     if (status) status.textContent = text;
   }
+
 
   // --- actions -------------------------------------------------------------
 

@@ -259,6 +259,17 @@ export function createBattleHud(o) {
       if (i >= 0) { shaken = i; shakeUntil = t + 420; boostShake[i](true); }
     }));
     off(bus.on('ui:armed-booster', (id) => alert.hold(id ? AIMING(id) : '')));
+
+    // GROUND CHANGING HANDS, IN WORDS. The HUD listened to one of seventeen
+    // event types, so the enemy could take a stronghold off you and leave no
+    // trace but a ring in their colour on a 41px glyph.
+    off(bus.on('battle:site-captured', (ev) => {
+      if (ev.from === 'player') alert.show(`LOST — ${ev.kind} taken`, now(), 'danger');
+      else if (ev.to === 'player') alert.show(`TAKEN — ${ev.kind}`, now(), 'good');
+    }));
+    off(bus.on('battle:siege-begun', (ev) => {
+      if (ev.owner === 'enemy') alert.show(`UNDER SIEGE — ${ev.kind}`, now(), 'danger');
+    }));
   }
 
   /**

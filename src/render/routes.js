@@ -235,7 +235,11 @@ export function drawSquadRoutes(ctx, state, px, g) {
   ctx.lineWidth = px * 1.5;
   for (let i = 0; i < state.squads.length; i++) {
     const sq = state.squads[i];
-    if (!sq.route) continue;
+    // NO EARLY BAIL. `sq.route` is only set for CHAINED sends, so every
+    // ordinary one-hop squad — which is nearly all of them — drew no line
+    // between where it left and where it is going. `loadStops` already handles
+    // the two-stop case; this was one line standing between the board and its
+    // cheapest piece of legibility.
     const stops = loadStops(sq, g);
     if (!stops) continue;
     tracePolyline(ctx, stops, squadBow(sq));

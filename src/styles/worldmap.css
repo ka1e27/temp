@@ -191,6 +191,20 @@
 .wm-hex.is-selected::before,
 .wm-hex.is-selected::after { inset: 7px; }
 
+/* KEYBOARD FOCUS, DRAWN INSIDE THE CLIP.
+   `clip-path` clips `outline` and `box-shadow` both, so base.css's focus ring
+   was painted and then discarded on every one of these — proven by pixel diff:
+   a real Tab press computed `outline: rgb(90,169,255) solid 2px` plus the 4px
+   glow and changed 0 of 67,344 pixels. The world map is the meta game's primary
+   navigation and it had 24 tab stops with no visible focus at all.
+   The fix is the same three-layer trick `.is-selected` above uses: widen the
+   element's own background into a hex-shaped ring by insetting the two
+   pseudo-elements. Lighter than --c-accent and one pixel narrower than the
+   selection frame, so "focused" and "selected" stay tellable apart. */
+.wm-hex:focus-visible { outline: none; background: #8fd0ff; z-index: 2; }
+.wm-hex:focus-visible::before,
+.wm-hex:focus-visible::after { inset: 6px; }
+
 /* --- the decision panel -------------------------------------------------- */
 
 .wm-detail { display: flex; flex-direction: column; padding: var(--s-5); overflow-y: auto; }

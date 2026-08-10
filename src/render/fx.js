@@ -8,8 +8,8 @@
 // Effects are pure decoration and are driven by events the SIM already emits,
 // so nothing here can influence what actually happens.
 
-const RING = 0, BURST = 1, FLOAT = 2, SHOCK = 3;
-const TYPES = { ring: RING, burst: BURST, float: FLOAT, shock: SHOCK };
+const RING = 0, BURST = 1, FLOAT = 2, SHOCK = 3, WASH = 4;
+const TYPES = { ring: RING, burst: BURST, float: FLOAT, shock: SHOCK, wash: WASH };
 const TAU = Math.PI * 2;
 
 /**
@@ -24,7 +24,7 @@ export function createFx(opts = {}) {
   let cursor = 0;
 
   /**
-   * @param {'ring'|'burst'|'float'|'shock'} kind
+   * @param {'ring'|'burst'|'float'|'shock'|'wash'} kind
    * @param {number} x world x @param {number} y world y
    * @param {{color?:string, life?:number, r0?:number, r1?:number, text?:string, n?:number}} [o]
    */
@@ -63,15 +63,44 @@ export function createFx(opts = {}) {
     }
   }
 
+  /**
+   * The UNDER-SITES pass: effects that are ground rather than overlay.
+   *
+   * `draw` below paints on top of everything, which is right for a ring and
+   * wrong for a colour arriving — a wash over the sites reads as a filter laid
+   * on the board, and the same wash under them reads as the ground changing
+   * hands. Ownership is the one thing in this game worth that distinction: the
+   * cached background canvas repaints the instant `signature(state)` changes, so
+   * the flood HARD-CUTS and always will. This is what makes that cut land.
+   */
+  function drawGround(ctx, p, px) {
+    for (let i = 0; i < max; i++) {
+      const e = pool[i];
+      if (!e.on || e.kind !== WASH) continue;
+      const f = e.t / e.life;
+      const r = e.r0 + (e.r1 - e.r0) * easeOut(f);
+      ctx.globalAlpha = 0.45 * (1 - f);
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r, 0, TAU);
+      ctx.fillStyle = e.color || p.text;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   /** Shapes only. Called inside the camera transform; `px` is 1/zoom. */
   function draw(ctx, p, px) {
     ctx.lineCap = 'round';
     for (let i = 0; i < max; i++) {
       const e = pool[i];
-      if (!e.on || e.kind === FLOAT) continue;
+      if (!e.on || e.kind === FLOAT || e.kind === WASH) continue;
       const f = e.t / e.life;
       const fade = 1 - f;
-      ctx.globalAlpha = fade * fade;
+      // Linear for a SHOCK: `fade*fade` put the perceptible life of a capture
+      // ring at roughly 300ms of its 800, which is why the loudest moment in the
+      // game could not be caught on a 1.5s screenshot interval. A short hard
+      // ring beats a long soft one.
+      ctx.globalAlpha = e.kind === SHOCK ? fade : fade * fade;
       const col = e.color || p.text;
       if (e.kind === RING || e.kind === SHOCK) {
         const r = e.r0 + (e.r1 - e.r0) * easeOut(f);
@@ -119,7 +148,7 @@ export function createFx(opts = {}) {
   /** Count of live effects — used by tests and the dev overlay. */
   const live = () => pool.reduce((n, e) => n + (e.on ? 1 : 0), 0);
 
-  return { spawn, update, draw, drawText, clear, live, max };
+  return { spawn, update, draw, drawGround, drawText, clear, live, max };
 }
 
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
@@ -151,8 +180,16 @@ export function fxFromEvent(fx, ev, p, hexSize = 34, locate = null) {
   const color = p.owner[ev.to ?? ev.owner] || p.accent;
   switch (ev.type) {
     case 'site-captured':
-      fx.spawn('shock', ev.x, ev.y, { color, life: 0.8, r0: hexSize * 0.4, r1: hexSize * 2.4 });
+      // THE VERB OF THE GAME, and it used to be a 300ms translucent ring over an
+      // instant repaint — you did not win a site, you observed that the number
+      // changed. Three layers now: the colour arriving as ground (under the
+      // sites, see drawGround), a hard short ring, and a word.
+      fx.spawn('wash', ev.x, ev.y, { color, life: 0.42, r0: hexSize * 0.5, r1: hexSize * 3 });
+      fx.spawn('shock', ev.x, ev.y, { color, life: 0.5, r0: hexSize * 0.4, r1: hexSize * 2.4 });
       fx.spawn('burst', ev.x, ev.y, { color, life: 0.5, r0: hexSize * 0.5, r1: hexSize * 1.3, n: 10 });
+      fx.spawn('float', ev.x, ev.y, {
+        color, life: 1.0, text: ev.to === 'player' ? 'TAKEN' : 'LOST',
+      });
       break;
     case 'field-battle':
       fx.spawn('burst', ev.x, ev.y, { color: p.warn, life: 0.45, r0: hexSize * 0.3, r1: hexSize, n: 12 });

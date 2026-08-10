@@ -137,13 +137,17 @@ export function createBattleView(opts) {
      * @param {number} alpha loop interpolation factor in [0,1)
      * @param {object} view  presentation state owned by battle-input.js
      */
-    draw(state, alpha, view) {
+    draw(state, alpha, view, frameMs) {
       state0 = state;
       if (autoFit && bgDirty) api.fitTo(state);
       const sig = signature(state);
       if (sig !== lastSig) { lastSig = sig; bgDirty = true; }
       if (bgDirty) { redrawBg(state); bgDirty = false; }
-      spin += 0.016;
+      // WALL-CLOCK, not per-frame. This was a flat `+= 0.016` every frame, so
+      // on a 120Hz display every siege ring rotated and every selection pulsed
+      // at exactly double speed — the animation ran at whatever rate the
+      // monitor happened to be. The caller already has the real delta.
+      spin += (Number.isFinite(frameMs) ? frameMs : 16) / 1000;
       drawFrame(state, alpha, view);
     },
 
@@ -216,6 +220,10 @@ export function createBattleView(opts) {
     const t = state.tick + (alpha > 0 ? (alpha < 1 ? alpha : 1) : 0);
     const pulse = 0.5 + 0.5 * Math.sin(spin * 3);
 
+    // UNDER the sites and the squads, unlike the pass at the end of this
+    // function. A capture wash drawn on top reads as a filter over the board;
+    // drawn underneath it reads as the ground itself changing hands.
+    opts.fxLayer?.drawGround(ctx, p, px);
     drawRallies(ctx, state, px, geo);
     drawSquadRoutes(ctx, state, px, geo);
     drawHighlights(ctx, state, view, px, pulse);

@@ -61,9 +61,14 @@ export function createWorldMapScene(ctx) {
       const setCrowns = bindText(crowns);
       const setIncome = bindText(income);
       const header = h('div.wm-header.panel', {},
-        // Read constantly and changing constantly, so it is announced politely
-        // and written only when the string actually differs.
-        h('div.wm-treasury', { 'aria-live': 'polite' },
+        // NOT a live region. It was `polite` and refreshes every 250ms, and
+        // `compact` renders values under 1000 as whole numbers — measured at
+        // 3.0 announcements a second in the early game, which is a polite queue
+        // that never drains and a screen reader that says nothing else about
+        // this screen ever again. The countdown twelve elements below already
+        // learned this ("a countdown announced once a second is a denial of
+        // service"); the treasury had not.
+        h('div.wm-treasury', { 'aria-live': 'off' },
           h('span.label', { text: UI.treasury }), crowns,
           h('span.label', { text: UI.income }), income),
         h('div.wm-actions', {},

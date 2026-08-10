@@ -54,16 +54,31 @@ export function createWithdraw(o) {
 export function createAlert(o = {}) {
   const ttl = o.ttlMs ?? 2600;
   const el = h('div.hud-alert', { role: 'status', 'aria-live': 'polite', text: '' });
-  const set = { text: bindText(el, ''), open: bindClass(el, 'is-open') };
+  const set = {
+    text: bindText(el, ''),
+    open: bindClass(el, 'is-open'),
+    danger: bindClass(el, 'is-danger'),
+    good: bindClass(el, 'is-good'),
+  };
   let until = 0;
   let sticky = '';
 
   return {
     el,
-    /** Transient message; replaces whatever is showing. */
-    show(text, now) {
-      until = now + ttl;
+    /**
+     * Transient message; replaces whatever is showing.
+     *
+     * `tone` exists because this line now carries losing a stronghold as well
+     * as a rejected click, and those must not look the same. A threat also
+     * holds twice as long: the whole point is that it reaches a player who is
+     * looking at another part of the map.
+     * @param {'info'|'danger'|'good'} [tone]
+     */
+    show(text, now, tone = 'info') {
+      until = now + (tone === 'danger' ? ttl * 1.6 : ttl);
       set.text(text);
+      set.danger(tone === 'danger');
+      set.good(tone === 'good');
       set.open(true);
     },
     /** Persistent message (armed booster). Restored when a flash expires. */

@@ -282,8 +282,18 @@ try {
 
     if (!second) note('no second neighbour to rally at');
     else {
-      const before = await page.eval((id) => window.__game.state.battle.squads
-        .filter((q) => q.from === id).length, rally.fromId);
+      // ISOLATE THE SOURCE FIRST. The rally set in the step above is a STANDING
+      // ORDER and it fires on its own schedule, so counting squads leaving the
+      // camp measures that rally, not this drag — the assertion below passed or
+      // failed on timing alone. Clearing the targets and parking the hold-back
+      // above the garrison means nothing can leave this site except because of
+      // the gesture under test.
+      const before = await page.eval((id) => {
+        const s = window.__game.state.battle.sites.find((x) => x.id === id);
+        s.rallyTargets = [];
+        s.rallyKeep = 999;
+        return window.__game.state.battle.squads.filter((q) => q.from === id).length;
+      }, rally.fromId);
       await page.drag(rally.from, second.to, 12);       // LEFT button
       await page.sleep(600);
       const got2 = await page.eval((id) => window.__game.state.battle.sites

@@ -242,8 +242,25 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* Capture. A conquered hex floods from its centre outward — the campaign's
    core feedback, and the reason --d-flood is allowed to be slow.
    hd-fill has only a `from`: the missing 100% keyframe resolves to the
-   element's OWN background, so one rule works for any faction hue. */
-@keyframes hd-fill { from { background-color: var(--c-surface-2); } }
+   element's OWN background, so one rule works for any faction hue.
+
+   THE `from` COLOUR MUST BE THE SAME KIND OF COLOUR AS THE `to`, and that is
+   not a style preference. The implicit `to` on every consumer is a
+   `color-mix()`, which resolves to a `color(srgb …)`; a legacy hex on the other
+   end makes Chromium interpolate the pair in oklab and the result leaves the
+   gamut entirely. Measured mid-animation on a live conquered hex:
+   `oklab(1 1.14855 1.66415)` — which paints PURE #ffff00. Every conquered
+   region strobed fluorescent yellow for ~200ms on every entry to the world map,
+   staggered by tier, so the campaign's own hero screen flashed yellow and
+   scarlet for half a second each time it opened.
+
+   Wrapping the endpoint in its own `color-mix` makes both ends the same colour
+   type and the interpolation behaves. RULE: never let a keyframe endpoint mix a
+   hex or rgb() with a color-mix() result. Transitions are safe; implicit
+   keyframe endpoints are not. */
+@keyframes hd-fill {
+  from { background-color: color-mix(in srgb, var(--c-surface-2) 100%, transparent); }
+}
 @keyframes hd-flood {
   from { opacity: 0; transform: scale(0.15); }
   60% { opacity: 1; }

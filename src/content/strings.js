@@ -191,6 +191,10 @@ export const SAVE = Object.freeze({
     'write-failed': 'Storage refused the write — it may be full or disabled.',
   }),
   restoreBackup: 'Restore the previous save',
+  restored: 'Previous save restored.',
+  noBackup: 'There is no previous save to fall back to.',
+  exportFirst: 'Export save copies the unreadable file out as text. Keep a copy'
+    + ' before starting a new campaign — a new campaign overwrites it.',
   autosaveOff: 'Autosave is off so your existing file is not overwritten.',
 });
 

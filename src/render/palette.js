@@ -48,11 +48,11 @@ const NUM_VARS = {
 
 /** Used headlessly (tests, node) and as the answer if a property is missing. */
 export const FALLBACK = Object.freeze({
-  bg: '#0b0d12', surface: '#12151d', surface2: '#1a1f2b', line: '#263041',
+  bg: '#0b0d12', surface: '#262e3a', surface2: '#2e3849', line: '#3b475c',
   text: '#e7ebf3', textDim: '#93a0b8',
   player: '#3ddc97', enemy: '#ff5c5c', neutral: '#6b7688',
   gold: '#ffc857', rank: '#ffdd8f', accent: '#5aa9ff',
-  water: '#6cc7f2', warn: '#ffc857', danger: '#ff5c5c',
+  water: '#6cc7f2', warn: '#f5a524', danger: '#f0463e',
   militia: '#e8e8ec', spearmen: '#5bd6a6', raiders: '#ffc857',
   rams: '#b07cff', marshal: '#ff8a3d',
   outriders: '#7fd8ff', halberds: '#ff6fa5', sappers: '#c9a227',

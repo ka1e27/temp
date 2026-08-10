@@ -10,9 +10,20 @@
      Near-black, low chroma, so the three faction hues are the only strong
      colour on screen. That is what makes the territory flood read instantly. */
   --c-bg: #0b0d12;
-  --c-surface: #12151d;
-  --c-surface-2: #1a1f2b;
-  --c-line: #263041;
+  /* THE PLATE HAS TO BE VISIBLE. These were #12151d / #1a1f2b / #263041, and
+     composited through `--plate-bg` every panel in the game measured 1.05:1
+     against the board behind it — a modal dialog measured DARKER than the scrim
+     it covered, because a translucent plate over a 76%-black scrim can only
+     subtract. `--shadow-1` is pure black on a near-black ground so it added
+     nothing, and the sheen sat below the threshold of a lit edge, which left a
+     1px hairline as the only thing defining a panel anywhere in the product.
+     That single fact is most of why a carefully specified design system
+     rendered as a wireframe. These composite to ~1.35:1, where a surface starts
+     reading as a surface, and `--c-line` moves with them or the hairline
+     inverts. */
+  --c-surface: #262e3a;
+  --c-surface-2: #2e3849;
+  --c-line: #3b475c;
   --c-text: #e7ebf3;
   --c-text-dim: #93a0b8;
 
@@ -37,8 +48,13 @@
      direct player feedback was to strip the shading back to one translucent
      colour and leave the rest of the tile alone. */
   --c-water: #6cc7f2;
-  --c-warn: #ffc857;
-  --c-danger: #ff5c5c;
+  /* WARN AND DANGER ARE THEIR OWN COLOURS. They were byte-identical to
+     --c-gold and --c-enemy, so four semantic names resolved to two values and
+     the results card's "WITHDRAWN" eyebrow was the exact colour of the crowns
+     you had just earned. A warning is amber, money is gold, and the enemy's red
+     is not the same red as a destructive action. */
+  --c-warn: #f5a524;
+  --c-danger: #f0463e;
 
   /* --- Unit identity ------------------------------------------------------
      One hue per unit, appearing in the garrison composition bar, the filter
@@ -136,10 +152,14 @@
   /* --- Panel language: ONE plate, declared once in base.css ---------------
      Frosted, hairline-lit along the top edge, floating over the board. Every
      surface in the game is this plate or a variant of it. */
-  --plate-bg: color-mix(in srgb, var(--c-surface) 84%, transparent);
+  --plate-bg: color-mix(in srgb, var(--c-surface) 92%, transparent);
   --plate-bg-2: color-mix(in srgb, var(--c-surface-2) 88%, transparent);
   --plate-blur: 10px;
-  --plate-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --plate-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  /* A MODAL MUST BE THE BRIGHTEST SURFACE ON SCREEN, so it is opaque rather
+     than frosted — a translucent plate over the scrim can only ever be darker
+     than the screen it is covering. */
+  --plate-solid: #1e2532;
   --plate-edge: 3px; /* the signal-hue rule a stateful plate carries */
   --scrim: color-mix(in srgb, #06080c 76%, transparent);
   --hairline: 1px solid var(--c-line);
@@ -162,7 +182,12 @@
      an upgrade you cannot afford is a gold one. The treatment never changes,
      so the player learns it once. */
   --state: var(--c-neutral);
-  --c-locked: color-mix(in srgb, var(--c-neutral) 40%, var(--c-bg));
+  /* 4.6:1 on the locked plate. This was `--c-neutral 40%`, which measured
+     1.62:1 — and these are live <button>s with click handlers, not disabled
+     controls, so no contrast exemption applies to the fourteen of twenty-four
+     regions wearing it. Still the dimmest thing on the map, because everything
+     else got brighter with the plate. */
+  --c-locked: color-mix(in srgb, var(--c-neutral) 78%, var(--c-text));
 
   /* --- Fixed control metrics --------------------------------------------- */
   --hit: 44px; /* minimum touch target, also the training-picker chip size */
