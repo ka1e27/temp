@@ -34,7 +34,7 @@ import {
 } from '../content/regions.data.js';
 import {
   zeroComposition, distributeExpedition, fitComposition, carryComposition,
-  compositionSlots, compositionTotal, overBudget, slotCost,
+  compositionSlots, compositionTotal, overBudget, slotCost, typeCount, canAddType,
 } from './composition.js';
 import { metaOf } from '../core/store.js';
 import { createRng, deriveSeed } from '../core/rng.js';
@@ -50,7 +50,7 @@ export { hashBattleConfig };
 // one front door and callers never have to know which file split from which.
 export {
   distributeExpedition, fitComposition, carryComposition,
-  compositionSlots, compositionTotal, overBudget, slotCost,
+  compositionSlots, compositionTotal, overBudget, slotCost, typeCount, canAddType,
 };
 
 /** The one true order. Asserted in tests; never reorder without a test change. */

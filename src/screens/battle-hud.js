@@ -20,7 +20,8 @@ import { goldFlow, flowLine } from './battle-econ.js';
 import { createSitePanel, createWithdraw, createAlert, rejectionText } from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
-import { TRAIN_FAN_R } from './battle-anchor.js';
+import { TRAIN_FAN_R, TRAIN_FAN_DEG } from './battle-anchor.js';
+import { TRAINABLE_UNITS } from '../battle/training.js';
 import { createSpeedControl } from './battle-speed.js';
 
 export {
@@ -291,9 +292,12 @@ export function createBattleHud(o) {
     set.trainOpen(open);
     if (!open) return;
     const unlocked = state.mods?.player?.unlockedUnits ?? UNIT_IDS;
+    // Indexed against the SAME list the chips were built from. It was UNIT_IDS
+    // while the chips came from UNIT_IDS too, so it read as correct and would
+    // have silently mislabelled every chip the moment the two diverged.
     for (let i = 0; i < trainChips.length; i++) {
-      trainChips[i].on(s.trainType === UNIT_IDS[i]);
-      trainChips[i].locked(!unlocked.includes(UNIT_IDS[i]));
+      trainChips[i].on(s.trainType === TRAINABLE_UNITS[i]);
+      trainChips[i].locked(!unlocked.includes(TRAINABLE_UNITS[i]));
     }
   }
 
@@ -306,17 +310,24 @@ export function createBattleHud(o) {
 
 const _p = { x: 0, y: 0 };
 
-/** Five 44px chips fanned in an arc around the selected site: the highest
- *  frequency decision in the game, sitting at the point of attention instead
- *  of in a sidebar. A 44px circle cannot hold "Spearmen", so the glyph stays
- *  short and the hover card carries the name and the job. */
+/** One 44px chip per trainable unit, fanned in an arc around the selected site:
+ *  the highest frequency decision in the game, sitting at the point of attention
+ *  instead of in a sidebar. A 44px circle cannot hold "Spearmen", so the glyph
+ *  stays short and the hover card carries the name and the job.
+ *
+ *  TRAINABLE_UNITS, not UNIT_IDS: the marshal is commissioned with RECRUIT and
+ *  is not a thing a stronghold can be set to build. Offering him here cost a
+ *  wall's whole output for forty seconds to duplicate a body every landing
+ *  already grants, and then quietly kept building them. */
 function buildTrainPicker(host, input, view, tip) {
-  // Radius chosen so five 44px chips across a 170-degree fan do not touch:
-  // 170/360 * 2*pi*94 ~= 279px of arc for 220px of chip. TRAIN_FAN_R in
-  // battle-anchor.js mirrors it, so the site panel keeps clear of the fan.
+  // Radius chosen so the chips across a 170-degree fan do not touch, and the fan
+  // GROWS with the roster — this was fixed at a five-chip radius and the three
+  // specialists landed on top of each other. TRAIN_FAN_R in battle-anchor.js
+  // mirrors the same formula, so the site panel keeps clear of the fan.
   const a0 = -175;
-  return UNIT_IDS.map((u, i) => {
-    const a = (a0 + (170 / (UNIT_IDS.length - 1)) * i) * (Math.PI / 180);
+  const units = TRAINABLE_UNITS;
+  return units.map((u, i) => {
+    const a = (a0 + (TRAIN_FAN_DEG / Math.max(1, units.length - 1)) * i) * (Math.PI / 180);
     const chip = h('button.train-chip', {
       'data-interactive': true, type: 'button',
       'aria-label': `Train ${UNITS_UI[u].name} here — ${UNITS_UI[u].role}`,

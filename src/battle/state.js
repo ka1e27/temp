@@ -190,6 +190,21 @@ export function createBattleState(config) {
       // `castleSealed` below and sim.js `siegePhase`. 0 (the default) means
       // "no gate", which is exactly today's behaviour.
       castleGateFrac: config.rules.castleGateFrac ?? 0,
+      /**
+       * The player's standing hold-back, carried so that CAPTURED sites get it
+       * too — `sim.js capture()` reads it from here.
+       *
+       * It was missing, and the bug it caused is the reason this object is worth
+       * a comment: `state.rules` is a hand-picked subset of `config.rules`, not
+       * a copy, so a field that both ends use only works if someone remembers to
+       * list it. Site creation above reads `config.rules` directly and was
+       * correct; capture reads `state.rules` and silently fell back to
+       * RALLY_KEEP.default. A player who set "leave nothing behind" got it on
+       * the three sites they landed with and 8 on every site they took, which is
+       * exactly backwards — the ones you take are the ones you have not had time
+       * to configure.
+       */
+      rallyKeepDefault: clampRallyKeep(config.rules.rallyKeepDefault ?? RALLY_KEEP.default),
     },
 
     meta: { lastFlipTick: 0, attritionStage: 0 },

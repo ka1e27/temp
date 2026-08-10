@@ -264,6 +264,34 @@
   .wm-go { min-height: var(--hit); }
 }
 
+/* Phones: the Attack button stops being the last thing in a scrolling column.
+   `.wm-detail` scrolls and `.wm-go` has `margin-top: auto`, which on a desktop
+   sidebar pins the primary action to the bottom of a panel you can see all of.
+   At 390x844 the same rule put it at y=883 — below the fold, reachable only by
+   scrolling the panel first, which is a poor place for the one button the whole
+   screen exists to offer. Sticky keeps it in view without changing the order. */
+@media (max-width: 720px), (max-height: 560px) {
+  .wm-detail { max-height: 46vh; padding: var(--s-3); }
+  .wm-go {
+    position: sticky; bottom: 0; z-index: 1;
+    margin-top: var(--s-3); font-size: var(--t-md);
+  }
+  .wm-flavour { margin-bottom: var(--s-3); }
+  .wm-stats { margin-bottom: var(--s-3); }
+}
+
+/* A PHONE IN LANDSCAPE IS WIDE AND SHORT, so none of the width rules above fire
+   and every one of the problems is still there — at 844x390 the Attack button
+   landed at y=596, two hundred pixels below the fold. Height is the axis that
+   is scarce here, so the sidebar comes back (there is width for it) and the
+   panel simply gets shorter. */
+@media (max-height: 560px) and (min-width: 721px) {
+  .wm-body { grid-template-columns: minmax(0, 1fr) var(--sidebar); grid-template-rows: 1fr; }
+  .wm-detail { max-height: none; }
+  .wm-header { margin: var(--s-2) var(--s-3) 0; padding: var(--s-2) var(--s-3); }
+  .wm-body { padding: var(--s-2); gap: var(--s-2); }
+}
+
 /* Touch: compact desktop metrics grow to a real thumb target. */
 @media (pointer: coarse) {
   .wm-recentre { min-height: var(--hit); }

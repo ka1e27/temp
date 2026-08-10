@@ -290,55 +290,7 @@
 }
 .pv-comp span { display: block; height: 100%; }
 
-/* --- Fluid from 1024px up -------------------------------------------------
-   The dock wraps rather than overflowing, and the preview stops fighting it
-   for the same corner. */
-
-@media (max-width: 1320px) {
-  .hud-gold { padding: var(--s-2) var(--s-4); }
-  .hud-gold .hud-value { font-size: var(--t-xl); }
-  .hud-dock { gap: var(--s-4) var(--s-4); }
-  .hud-group { padding: var(--s-2) var(--s-3); }
-  .seg { min-width: 38px; }
-  .chip { padding: var(--s-1) var(--s-2); }
-  .hud-preview { max-width: min(520px, 58vw); }
-}
-
-/* Two dock rows below this, so everything floating above it moves up.
-   The threshold moved 1080 -> 1180 when the filter chips started carrying the
-   units' real names: `Spearmen` is three times the width of `SPE`, so the dock
-   now runs out of room a full viewport step earlier. Everything that floats
-   measures off --dock-h, and a --dock-h that still claims one row is a preview
-   panel sitting on top of the boosters. (The site panel measures the dock
-   directly — see battle-insets.js — so it is not affected either way.) */
-@media (max-width: 1180px) {
-  :root { --dock-h: calc(var(--dock-row-h) * 2 + var(--s-5)); }
-}
-
-@media (max-width: 1080px) {
-  .hud-preview { min-width: min(320px, 46vw); max-width: 62vw; }
-  .hud-corner { max-width: 60vw; }
-  .booster-name { display: none; }
-}
-
-/* Touch: compact desktop metrics grow to a real thumb target. */
-@media (pointer: coarse) {
-  .seg, .chip { min-height: var(--hit); }
-  .seg { min-width: var(--hit); }
-  .hud-withdraw { min-height: var(--hit); }
-}
-
-/* The speed slider. Wider than the other HUD segments because it carries
-   sixteen stops (0.25x to 4x in quarters) and the label above it is the
-   readout, so the track only has to be draggable, not legible. */
-/* nowrap: `.hud-group-row` wraps by default (it used to hold three buttons),
-   and a wrapped slider drops onto its own line under the pause button. */
-.hud-speeds .hud-group-row { flex-wrap: nowrap; align-items: center; gap: var(--s-2); }
-.hud-speed-slider { width: auto; min-width: 96px; }
-/* Without the Tactician the track simply stops at 2x — the slider's own `max`
-   carries the gate, so a locked speed is unreachable rather than reachable and
-   then refused. This only marks the card so the cap is visible. */
-.hud-speeds.is-capped .hud-group-label::after {
-  content: " · capped";
-  color: var(--c-text-dim); font-weight: var(--w-normal);
-}
+/* --- Responsive ----------------------------------------------------------
+   Every viewport rule for the HUD lives in ./hud.responsive.css, split out
+   when this file hit the 400-line cap. Same arrangement as balance.js and
+   ai.data.js: one <link> more in index.html, nothing else changes. */

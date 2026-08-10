@@ -27,6 +27,8 @@ node --test --test-name-pattern="siege"   # one test by name
 node tools/simrunner.js --region=kaldan --n=50
 node tools/simrunner.js --all --n=96 --noupgrades   # the pre-upgrade-ladder bot
 node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a specialist
+npm run mobile             # phone-width layout audit — needs `npm start` running
+node tools/mobile.mjs --w=844 --h=390                # a phone in landscape
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
 ```
 
@@ -540,6 +542,43 @@ across five regions produce the same status, tick count, site counts and top lev
 pre-tactics bot; `tests/tactics.test.js` pins it per-send with a negative control, since the
 inertness test would otherwise pass just as happily if every filter were dead code.
 
+## You bring five troop types, and only five
+
+`LOADOUT_TYPES_MAX` in `content/balance.js` is **5**. The roster reached eight and the
+loadout screen became a spreadsheet: with everything available at once the interesting
+question — *which answers am I bringing to this map* — collapses into "a bit of
+everything", which is both the dullest army and, because the specialists are share-scaled
+like `counters`, the weakest one. A token halberd escort strips almost nothing.
+
+**Five and not four**, because the default spread is already four (militia, spearmen,
+raiders, rams). A cap of four would mean any specialist at all required dropping a staple
+before you could even try one; five leaves exactly one discretionary slot on top of the
+default, which is the decision the cap exists to create.
+
+The rule lives in `meta/composition.js`, not in the screen, so `distributeExpedition` /
+`fitComposition` / `carryComposition` / `nudgeComposition` all land on the same ceiling —
+a hand-edited params object, a save written before the cap, and a `--weights` harness run
+included. Two properties are load-bearing and neither is obvious:
+
+- **The default spread does not move.** It is four types and every win rate in
+  `regions.data.js` is measured against it. A cap that trimmed it would silently re-tune
+  all twenty-one regions.
+- **The budget stays spendable.** Leftovers normally go to militia, and an army at the cap
+  that has no militia cannot take any without minting a sixth type — so `ballastFor` falls
+  back to the cheapest type already present. A cap that quietly ate your spare slots would
+  be worse than no cap.
+
+Only the FIRST of a troop you do not already field is refused; more of one you do is always
+allowed. Trimming a carried loadout keeps the types with the most SLOTS committed, not the
+most bodies — 30 militia and 6 rams are both 30 slots, and the rams are obviously a choice.
+
+**The Marshal is not a train option any more.** `TRAINABLE_UNITS` in `battle/training.js`
+is derived from `maxPerSite`, because the two halves are one rule: a unit you may only have
+one of is commissioned with `RECRUIT`, and a unit you may have any number of is trained.
+Offering him on the fan cost a wall's whole output for forty seconds to duplicate a body
+every landing already grants free, and then kept building them until you noticed.
+`cmdTrain` rejects it with `unit-not-trainable` rather than trusting the picker.
+
 ### Gestures and controls
 
 - **A tap never sends.** Tap-then-tap used to issue a send and fired by accident constantly
@@ -558,10 +597,63 @@ inertness test would otherwise pass just as happily if every filter were dead co
   live inside `meta`, so `fromPersisted` heals them and no migration was needed; and they
   survive a new campaign and a save import, because they are the player's, not the save's.
 
+## The phone pass, and the audit that missed the only thing wrong
+
+`npm run mobile` drives the real game at real device metrics and reports four things.
+Three of them — horizontal overflow, off-screen controls, tap targets under 44px — it had
+from the start, and **at 390x844 it reported a clean bill of health on a layout that was
+unplayable.** `.hud-dock` is `flex-wrap: wrap`, which is right on a desktop; at phone width
+every group is wider than the viewport on its own, so the dock folded to five stacked rows,
+the HUD took ~85% of the screen and the board was a 200px band. Nothing overflowed, nothing
+errored, every tap target was a comfortable 44px. A screenshot found it in one look.
+
+So the tool now measures **how much of the screen the board actually gets**, by hit-testing
+a grid of points and asking what the player would see there. Element geometry cannot answer
+it: the plates are absolutely positioned and overlap, so summing areas double-counts and
+summing heights ignores that two may sit side by side. Below `MIN_BOARD_PCT` (55) it fails.
+Battle only — "how much of a shop is not shop" is not a question, and asking it produced a
+0% and a false alarm.
+
+The fix is one rule: below 720px the dock stops wrapping and becomes **one horizontally
+scrollable row**, with the unit names dropped from the chips (the colour and the key letter
+are what you read mid-battle; the name is still in the tooltip and the `aria-label`). Board
+share went 15% → 95%.
+
+**Three more things only a real device size showed:**
+
+- **The world map opened with the one region you can attack half off the bottom edge.**
+  `worldmap.js` centres exactly once, on first render — and on a phone the detail panel's
+  `max-height: 46vh` has not applied yet, so the porthole then shrank under it. `refit()`
+  re-clamped the stale pan instead of re-centring. There is now an `onAutoRefit` callback,
+  gated on a `moved` flag that is the sibling of `chosen`: recentre on every resize until
+  the player pans or pinches, then never again.
+- **A phone in landscape is wide and short**, so not one width-based rule fired and every
+  problem was still there — at 844x390 the Attack button sat at y=596. The world map rules
+  are `(max-width: 720px), (max-height: 560px)` for that reason.
+- **Dropping the chip labels made them 34px wide.** Tall enough, too narrow, and a
+  height-only minimum would have called it fine.
+
+Two audit rules exist so the tool does not argue its own fixes back out: content inside a
+**scroll container** (the dock) or a **pannable porthole** (`overflow: hidden` +
+`touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
+by signature rather than by class name.
+
 ## Gotchas that have already cost time
 
 - **`h(tag, props, ...children)`** — the second argument is *always* props. Passing an
   element there silently drops it. Pass `{}` when there are no props.
+- **`state.rules` is a hand-picked SUBSET of `config.rules`, not a copy.** A field both
+  ends use only works if someone remembers to list it in `battle/state.js`. `rallyKeepDefault`
+  was missing: site creation reads `config.rules` and was right, `capture()` reads
+  `state.rules` and fell back to the content default — so a player who set "leave nothing
+  behind" got it on the three sites they landed with and 8 on every site they took, which
+  is exactly backwards.
+- **A unit colour is declared TWICE** — `--c-<unit>` in `styles/tokens.css` and `FALLBACK`
+  in `render/palette.js` — and the canvas silently falls back to the JS table when the
+  variable is missing. The three specialists shipped with a JS hue and no CSS variable, so
+  they drew correctly on the board and as plain grey text in every DOM surface that reads
+  `var(--c-<unit>)`: the train chip, the loadout row. `tests/traincolour.test.js` pins the
+  two tables against each other, and that every unit has a `.pb-unit[data-unit=…]` rule.
 - **`#screen-root` is `pointer-events: none`.** Every scene must opt back in
   (`.screen { pointer-events: auto }`). A whole release once shipped completely
   unclickable because `tools/smoke.mjs` used synthetic `el.click()`, which bypasses hit

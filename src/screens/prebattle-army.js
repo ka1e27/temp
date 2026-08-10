@@ -7,7 +7,7 @@
 import { h, clear, mount } from '../ui/dom.js';
 import { UI, UNITS_UI } from '../content/strings.js';
 import { UNIT_IDS, UNITS } from '../content/balance.js';
-import { canNudge } from '../meta/composition.js';
+import { canNudge, canAddType } from '../meta/composition.js';
 import { maxCount, parseCount } from './prebattle-count.js';
 import {
   UNIT_LABEL, BOOSTER_LABEL, BOOSTER_NOTE, budgetSummary, describeComposition, slotCost,
@@ -40,6 +40,19 @@ export function renderArmy(body, view) {
         text: sum.free > 0 ? `${plural(sum.free, 'slot')} unspent` : 'fully committed',
       })));
 
+  // The SECOND budget. Slots say how big the army is; this says how many
+  // different answers it carries. Stated as its own line rather than tucked into
+  // a disabled tooltip, because a + that stops working with no visible reason is
+  // read as a bug — and the whole point of the cap is that choosing is the game.
+  mount(body, h('p.pb-types', { class: sum.typesFull ? 'is-full' : null },
+    h('span.num.pb-types-n', { text: `${sum.types} / ${sum.typesMax}` }),
+    h('span.label', { text: ' troop types' }),
+    h('span.pb-types-note.dim', {
+      text: sum.typesFull
+        ? 'at the limit — drop one to the last body to swap it out'
+        : `room for ${sum.typesMax - sum.types} more`,
+    })));
+
   const list = h('ul.pb-units', { role: 'list' });
   for (const id of UNIT_IDS) {
     if (!unlocked.includes(id)) continue;
@@ -59,7 +72,8 @@ export function renderArmy(body, view) {
 
   restoreFocus(body, view.focusKey);
   return `Expedition: ${describeComposition(chosen, unlocked)}. `
-    + `${sum.spent} of ${sum.budget} slots spent.`
+    + `${sum.spent} of ${sum.budget} slots spent, `
+    + `${sum.types} of ${sum.typesMax} troop types.`
     + (view.notice ? ` ${view.notice}` : '');
 }
 
@@ -104,19 +118,26 @@ function unitRow(id, view) {
   const cost = slotCost(id);
   const stat = UNITS[id];
   const capped = (UNITS[id].maxPerSite ?? Infinity) !== Infinity;
+  // A troop you are NOT fielding, on an army that already carries the most types
+  // it may. The row is dimmed rather than hidden: what you chose not to bring is
+  // part of the decision, and a list that reshuffles as you edit it is unusable.
+  const shut = count === 0 && !canAddType(chosen);
 
   const step = (delta, symbol, word) => {
     const ok = canNudge(chosen, id, delta, unlocked, budget);
     return h('button.btn.pb-step', {
       type: 'button', text: symbol, disabled: !ok,
       'aria-disabled': ok ? null : 'true',
-      'aria-label': `${word} ${UNIT_LABEL[id]}, ${plural(cost, 'slot')} each`,
+      'aria-label': shut && delta > 0
+        ? `${UNIT_LABEL[id]} unavailable: the expedition already carries the most`
+          + ' troop types it may'
+        : `${word} ${UNIT_LABEL[id]}, ${plural(cost, 'slot')} each`,
       'data-step': `${id}:${delta}`,
       on: { click: () => onStep(id, delta) },
     });
   };
 
-  return h('li.pb-unit', { 'data-unit': id },
+  return h('li.pb-unit', { 'data-unit': id, class: shut ? 'is-shut' : null },
     h('div.pb-unit-main', {},
       h('span.pb-unit-name', {},
         h('span', { text: UNIT_LABEL[id], title: UNITS_UI[id]?.desc ?? '' }),

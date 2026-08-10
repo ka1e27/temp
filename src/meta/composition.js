@@ -20,10 +20,37 @@
 // PURE: no clock, no DOM, no randomness.
 // ===========================================================================
 
-import { UNIT_IDS, UNIT_SLOTS, UNITS } from '../content/balance.js';
+import { UNIT_IDS, UNIT_SLOTS, UNITS, LOADOUT_TYPES_MAX } from '../content/balance.js';
 import { DEFAULT_COMPOSITION_WEIGHTS } from '../content/upgrades.data.js';
 
 const clampInt = (n) => Math.max(0, Math.floor(Number(n) || 0));
+
+/** How many different troops this army contains. THE number the cap is about. */
+export const typeCount = (comp) => UNIT_IDS.reduce(
+  (a, u) => a + (clampInt(comp?.[u]) > 0 ? 1 : 0), 0,
+);
+
+/** Is there room for a troop type this army does not already have? */
+export const canAddType = (comp) => typeCount(comp) < LOADOUT_TYPES_MAX;
+
+/**
+ * The `n` best-supported types out of `pool`, by weight.
+ *
+ * Ties break by SLOT COST and then by roster order, which matters more than it
+ * looks: the default weights put rams (0.10) below raiders (0.17), so a naive
+ * tie-break could silently drop the siege train and turn every fortified region
+ * unwinnable without anyone editing a balance number.
+ */
+function topTypes(pool, weights, n) {
+  if (pool.length <= n) return pool;
+  return pool
+    .slice()
+    .sort((a, b) => (weights[b] ?? 0) - (weights[a] ?? 0)
+      || slotCost(b) - slotCost(a)
+      || UNIT_IDS.indexOf(a) - UNIT_IDS.indexOf(b))
+    .slice(0, n)
+    .sort((a, b) => UNIT_IDS.indexOf(a) - UNIT_IDS.indexOf(b));
+}
 
 export const zeroComposition = () => Object.fromEntries(UNIT_IDS.map((u) => [u, 0]));
 
@@ -65,6 +92,25 @@ export function ballastUnit(unlocked) {
   return legal.reduce((a, b) => (slotCost(b) < slotCost(a) ? b : a));
 }
 
+/**
+ * The ballast to use for THIS army, which is not always the cheapest unit.
+ *
+ * Leftover slots normally go to militia. But an army already at
+ * `LOADOUT_TYPES_MAX` that does not happen to contain militia cannot take any —
+ * that would be a sixth type, minted by the rounding rather than chosen. In that
+ * case the remainder goes to the cheapest type ALREADY PRESENT, so the budget is
+ * still spent to the last slot and the cap still holds. Both properties matter:
+ * a cap that silently ate the player's spare slots would be worse than no cap.
+ */
+function ballastFor(comp, unlocked) {
+  const cheapest = ballastUnit(unlocked);
+  if (!cheapest) return null;
+  if (clampInt(comp[cheapest]) > 0 || canAddType(comp)) return cheapest;
+  const present = UNIT_IDS.filter((u) => clampInt(comp[u]) > 0 && maxOf(u) === Infinity);
+  if (!present.length) return null;
+  return present.reduce((a, b) => (slotCost(b) < slotCost(a) ? b : a));
+}
+
 /** Copy, integerize, drop anything locked, and honour maxPerSite. */
 export function sanitizeComposition(comp, unlocked) {
   const out = zeroComposition();
@@ -94,6 +140,13 @@ function fill(out, unit, slots) {
  * the old head-count spread exactly at the budgets it was tuned against.
  * Whatever the ratios cannot spend goes to the ballast, so the budget is always
  * spent to the last slot.
+ *
+ * At most `LOADOUT_TYPES_MAX` types come out, because this is also the function
+ * every OTHER entry point funnels through — `fitComposition` and therefore the
+ * seam itself. Enforcing the cap here rather than only in the screen is what
+ * makes it a rule instead of a suggestion: a hand-edited params object, a
+ * carried-over loadout from before the cap, and a `--weights` harness run all
+ * land on the same ceiling.
  */
 export function distributeExpedition(slots, unlocked, weights = DEFAULT_COMPOSITION_WEIGHTS) {
   const out = zeroComposition();
@@ -101,13 +154,13 @@ export function distributeExpedition(slots, unlocked, weights = DEFAULT_COMPOSIT
   if (left <= 0) return out;
 
   const legal = UNIT_IDS.filter((u) => unlocked.includes(u));
-  const ballast = ballastUnit(unlocked);
   if (!legal.length) return out;
 
   // No marshal branch: `maxOf('marshal')` is 0, because one is granted free
   // outside the budget and the budget's job is troops.
-  const pool = legal.filter((u) => maxOf(u) === Infinity && (weights[u] ?? 0) > 0);
-  if (!pool.length) { fill(out, ballast, left); return out; }
+  const asked = legal.filter((u) => maxOf(u) === Infinity && (weights[u] ?? 0) > 0);
+  const pool = topTypes(asked, weights, LOADOUT_TYPES_MAX);
+  if (!pool.length) { fill(out, ballastUnit(unlocked), left); return out; }
 
   const denom = pool.reduce((a, u) => a + weights[u] * slotCost(u), 0);
   const scale = left / denom;
@@ -124,7 +177,10 @@ export function distributeExpedition(slots, unlocked, weights = DEFAULT_COMPOSIT
   for (const p of parts) {
     if (left >= slotCost(p.u)) { out[p.u] += 1; left -= slotCost(p.u); }
   }
-  fill(out, ballast, left);
+  // `ballastFor`, not `ballastUnit`: the remainder must not mint a type the cap
+  // has no room for. With militia in the pool — every default spread — these are
+  // the same unit and this is the same line it always was.
+  fill(out, ballastFor(out, unlocked), left);
   return out;
 }
 
@@ -152,13 +208,22 @@ export function fitComposition(slots, unlocked, chosen) {
  * the same reason — militia is the ballast, the specialists were the decision.
  *
  * `prev` is trusted only as far as it is legal: locked units drop out, so a unit
- * refunded or removed from the roster cannot ride along in a stale save.
+ * refunded or removed from the roster cannot ride along in a stale save. That
+ * now includes the type cap — a loadout saved before `LOADOUT_TYPES_MAX` existed
+ * can name more troops than the rule allows, and it is trimmed on the way in
+ * rather than rejected, keeping the types the player committed the most SLOTS
+ * to. Slots, not bodies: 30 militia is 30 slots and 6 rams is 30, and the rams
+ * are far more obviously a decision.
  */
 export function carryComposition(slots, unlocked, prev) {
   const budget = clampInt(slots);
   if (!prev) return distributeExpedition(budget, unlocked);
 
   const out = sanitizeComposition(prev, unlocked);
+  const present = UNIT_IDS.filter((u) => out[u] > 0);
+  for (const u of present) {
+    if (!topTypes(present, spentOn(out), LOADOUT_TYPES_MAX).includes(u)) out[u] = 0;
+  }
   let spent = compositionSlots(out);
 
   const cheapestFirst = UNIT_IDS
@@ -168,10 +233,14 @@ export function carryComposition(slots, unlocked, prev) {
     while (spent > budget && out[u] > 0) { out[u] -= 1; spent -= slotCost(u); }
   }
 
-  const ballast = ballastUnit(unlocked);
-  if (spent < budget) fill(out, ballast, budget - spent);
+  if (spent < budget) fill(out, ballastFor(out, unlocked), budget - spent);
   return out;
 }
+
+/** Slots committed to each type — the weight `carryComposition` trims by. */
+const spentOn = (comp) => Object.fromEntries(
+  UNIT_IDS.map((u) => [u, clampInt(comp[u]) * slotCost(u)]),
+);
 
 /**
  * Move the loadout by exactly one unit of `unitId`, inside the budget.
@@ -182,21 +251,27 @@ export function carryComposition(slots, unlocked, prev) {
  * the freed slots straight back to the ballast. Both directions land exactly on
  * the budget, so the control cannot produce an over-budget army at all; the
  * Launch gate exists on top of that, not instead of it.
+ *
+ * The FIRST of a troop you do not already field is additionally refused once the
+ * army holds `LOADOUT_TYPES_MAX` types. Only the first: every later `+` on a
+ * troop already in the army is unaffected, which is what keeps the cap a
+ * decision about breadth rather than a limit on how many of anything you bring.
  */
 export function nudgeComposition(chosen, unitId, delta, unlocked, budget) {
   const out = sanitizeComposition(chosen, unlocked);
   if (!delta || !unlocked.includes(unitId)) return out;
   const cost = slotCost(unitId);
-  const ballast = ballastUnit(unlocked);
 
   if (delta < 0) {
     if (out[unitId] <= 0) return out;
     out[unitId] -= 1;
+    const ballast = ballastFor(out, unlocked);
     if (ballast !== unitId) fill(out, ballast, cost);
     return out;
   }
 
   if (out[unitId] >= maxOf(unitId)) return out;
+  if (out[unitId] === 0 && !canAddType(out)) return out;   // the cap
   let free = clampInt(budget) - compositionSlots(out);
   while (free < cost) {
     const donor = UNIT_IDS
@@ -207,7 +282,7 @@ export function nudgeComposition(chosen, unitId, delta, unlocked, budget) {
     free += slotCost(donor);
   }
   out[unitId] += 1;
-  fill(out, ballast, free - cost);
+  fill(out, ballastFor(out, unlocked), free - cost);
   return out;
 }
 

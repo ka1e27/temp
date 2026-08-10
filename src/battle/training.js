@@ -9,7 +9,9 @@
 // Switching trainType KEEPS trainProgress, so reacting to the enemy's
 // composition is never punished.
 // PURE.
-import { SITES, SITE_LEVELS, UNITS, BOOSTERS, CENTIGOLD } from '../content/balance.js';
+import {
+  SITES, SITE_LEVELS, UNIT_IDS, UNITS, BOOSTERS, CENTIGOLD,
+} from '../content/balance.js';
 import { TICK_HZ } from '../core/loop.js';
 import { effectiveLevel } from './state.js';
 import { total } from './combat.js';
@@ -47,9 +49,32 @@ export function trainMultiplier(state, site) {
   return m;
 }
 
+/**
+ * Units a stronghold may be SET TO BUILD.
+ *
+ * Derived from `maxPerSite`, not listed, because the two halves of that rule are
+ * the same rule: a unit you may only ever have one of is commissioned with
+ * `RECRUIT` — paid for in gold and delivered at once — and a unit you may have
+ * any number of is trained. The marshal is the only one with a cap today.
+ *
+ * Offering him as a train type was a trap dressed as a choice. It cost the whole
+ * site's output for forty seconds to produce a body you are already given free
+ * on every landing, left the stronghold building marshals afterwards until you
+ * noticed, and the RECRUIT verb exists precisely so that wanting a second one
+ * costs gold instead of a wall's production. `cmdTrain` enforces this rather
+ * than trusting the picker, so a stale keybinding or a replayed command log
+ * cannot set a site to a type the UI no longer offers.
+ */
+export const TRAINABLE_UNITS = Object.freeze(
+  UNIT_IDS.filter((u) => (UNITS[u].maxPerSite ?? Infinity) === Infinity),
+);
+
+/** @param {string} unit @returns {boolean} */
+export const isTrainable = (unit) => TRAINABLE_UNITS.includes(unit);
+
 function blockedFor(state, site, unit) {
-  if (unit === 'marshal') {
-    return (site.garrison.marshal || 0) >= (UNITS.marshal.maxPerSite ?? 1);
+  if (!isTrainable(unit)) {
+    return (site.garrison[unit] || 0) >= (UNITS[unit].maxPerSite ?? 1);
   }
   return total(site.garrison) >= garrisonCap(state, site);
 }

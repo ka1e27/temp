@@ -139,6 +139,18 @@ export function createMapPanner(o) {
   let pinched = false;
   /** The player has pinched or ctrl-wheeled, so the scale is theirs to keep. */
   let chosen = false;
+  /**
+   * The player has moved the map themselves, so where it sits is theirs to keep.
+   *
+   * The sibling of `chosen`, and it exists for a phone-shaped bug: worldmap.js
+   * centres on the actionable region exactly once, on first render, and at that
+   * moment the porthole has not settled — the detail panel's `max-height: 46vh`
+   * applies afterwards and shrinks it. `refit()` then re-clamped the OLD pan
+   * instead of re-centring, so the map opened with the one region you can attack
+   * half off the bottom edge. Recentring on every refit until the player takes
+   * hold fixes that without ever yanking the map out from under a real gesture.
+   */
+  let moved = false;
   /** The gesture that just ended travelled far enough to be a drag, so the
    *  click the browser is about to synthesise is NOT a selection. Panning and
    *  selecting share the left button; this flag is the entire difference. */
@@ -178,7 +190,10 @@ export function createMapPanner(o) {
   function refit() {
     measure();
     if (!chosen) zoom = fitZoom(content, view);
-    setPan(pan.x, pan.y);
+    // Untouched map: put the thing worth looking at back in the middle of
+    // whatever the window has just become. Touched: re-clamp and nothing else.
+    if (!moved && !chosen && o.onAutoRefit) o.onAutoRefit();
+    else setPan(pan.x, pan.y);
   }
 
   /** The last finger left. Anything that moved the map — a drag past the slop
@@ -229,6 +244,7 @@ export function createMapPanner(o) {
     const dy = p.y - press.sy;
     if (!press.moved && Math.hypot(dx, dy) > TAP_SLOP) {
       press.moved = true;
+      moved = true;   // where the map sits is now the player's decision
       viewport.classList.add('is-panning');
     }
     if (press.moved) setPan(press.px + dx, press.py + dy);

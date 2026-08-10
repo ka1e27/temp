@@ -12,12 +12,18 @@
 //      are drag targets — covering one makes an order unissuable), the training
 //      fan, or the HUD's own plates.
 //
+// The one import is the trainable roster, and only for its LENGTH: the fan's
+// radius has to grow with the number of chips hung on it, and the alternative —
+// threading a count through two unrelated call sites — buys nothing.
+//
 // So the maths lives here, as pure functions over plain rectangles, and
 // tests/sitepanelpos.test.js drives it with no DOM at all. Everything is in
 // CSS pixels in the coordinate space shared by the camera projection and #hud
 // (both are inset:0 over the same box, which is what lets battle-hud.js hand
 // `board.siteScreen()` output straight to a transform).
 // PURE: no DOM, no clock.
+
+import { TRAINABLE_UNITS } from '../battle/training.js';
 
 /**
  * Candidate placements, in preference order. Sideways first: the panel is
@@ -36,9 +42,23 @@ export const CARET_EDGE = Object.freeze({
   'above-right': 'left', 'above-left': 'right',
 });
 
-/** Radius of the training fan (battle-hud.js hangs five chips at this radius),
- *  so a selected stronghold keeps a much wider berth than a plain site. */
-export const TRAIN_FAN_R = 94;
+/**
+ * The training fan's geometry, DERIVED FROM THE ROSTER rather than fixed.
+ *
+ * It was a literal 94, chosen when five chips hung on it: 170/360 * 2*pi*94 is
+ * about 279px of arc for 220px of chip. The roster has grown twice since, and a
+ * fixed radius means every new unit is another chip crammed into the same arc —
+ * at seven they overlap and the fan stops being clickable at all. Both the
+ * placement (battle-hud.js) and the site panel's clearance (this file) read
+ * these, so the panel cannot end up under a fan that outgrew it.
+ */
+const TRAIN_CHIP_PX = 44;   // the tap target; matches .train-chip in hud.css
+const TRAIN_CHIP_GAP = 6;
+export const TRAIN_FAN_DEG = 170;
+export const TRAIN_FAN_R = Math.round(
+  (TRAINABLE_UNITS.length * (TRAIN_CHIP_PX + TRAIN_CHIP_GAP))
+  / ((TRAIN_FAN_DEG / 360) * 2 * Math.PI),
+);
 
 /** Area, in px², by which a NEW side has to beat the current one before the
  *  panel is allowed to jump. Without it a slow pan makes the panel flap

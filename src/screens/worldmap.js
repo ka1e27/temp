@@ -114,7 +114,14 @@ export function createWorldMapScene(ctx) {
       mount(root, header, h('div.wm-body', {}, map, detail));
       mount(ctx.root, root);
 
-      panner = createMapPanner({ viewport: map, board });
+      // `onAutoRefit` re-centres whenever the porthole changes size, until the
+      // player pans or pinches. `centred` below only fires once, on first
+      // render — and on a phone the panel below the map has not settled to its
+      // `max-height` by then, so the map opened with the one region you can
+      // attack half off the bottom edge.
+      panner = createMapPanner({
+        viewport: map, board, onAutoRefit: () => centreOnSelected(),
+      });
       // Tabbing to a region that is off-screen has to bring it on-screen, or
       // keyboard navigation walks into a map it cannot see.
       const onFocus = (ev) => {

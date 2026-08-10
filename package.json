@@ -10,6 +10,7 @@
     "watch": "node --test --watch \"tests/**/*.test.js\"",
     "check": "node tools/checksize.js && node tools/checkpure.js",
     "verify": "npm run check && npm test",
-    "sim": "node tools/simrunner.js"
+    "sim": "node tools/simrunner.js",
+    "mobile": "node tools/mobile.mjs"
   }
 }

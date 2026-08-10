@@ -125,9 +125,29 @@
   color: var(--c-warn); min-height: 1.2em;
 }
 .pb-clamp:empty { display: none; }
+
+/* The troop-type budget, mirroring .pb-budget above it. */
+.pb-types {
+  display: flex; align-items: baseline; gap: var(--s-2);
+  margin: 0 0 var(--s-2); font-size: var(--t-sm);
+}
+.pb-types-n { font-weight: var(--w-bold); }
+.pb-types.is-full .pb-types-n { color: var(--c-warn); }
+.pb-types-note { margin-left: auto; font-size: var(--t-xs); }
+/* A troop the type cap has shut out. Dimmed, never hidden — what you chose not
+   to bring is part of the decision, and a list that reshuffles while you edit
+   it is unusable. */
+.pb-unit.is-shut { opacity: 0.45; }
+.pb-unit.is-shut .pb-unit-name { color: var(--c-text-dim, var(--c-textDim)); }
+/* One rule per unit, and the list has to grow with the roster — the three
+   specialists shipped without theirs and read as plain body text in a list
+   where every other name was colour-coded. */
 .pb-unit[data-unit='militia'] .pb-unit-name { color: var(--c-militia); }
 .pb-unit[data-unit='spearmen'] .pb-unit-name { color: var(--c-spearmen); }
+.pb-unit[data-unit='outriders'] .pb-unit-name { color: var(--c-outriders); }
 .pb-unit[data-unit='raiders'] .pb-unit-name { color: var(--c-raiders); }
+.pb-unit[data-unit='halberds'] .pb-unit-name { color: var(--c-halberds); }
+.pb-unit[data-unit='sappers'] .pb-unit-name { color: var(--c-sappers); }
 .pb-unit[data-unit='rams'] .pb-unit-name { color: var(--c-rams); }
 .pb-unit[data-unit='marshal'] .pb-unit-name { color: var(--c-marshal); }
 
@@ -158,6 +178,24 @@
 @media (max-width: 860px) {
   .pb-body { grid-template-columns: minmax(0, 1fr); }
   .pb-brief { grid-column: auto; }
+}
+
+/* Phones. The keyboard legends go — there is no keyboard, and they were the
+   only thing on this screen painting past the right edge. */
+@media (max-width: 720px) {
+  .pb-wrap { width: 100%; }
+  .pb-actions .keys, .pb-unit .keys { display: none; }
+  .pb-header, .pb-actions { padding: var(--s-3); }
+  .pb-types-note { display: none; }
+}
+
+/* Touch: the +/- pair and the count field are 32px on a desktop, which is fine
+   for a mouse and under the 44px minimum for a thumb. Width matters as much as
+   height — a control tall enough and too narrow is just as easy to miss. */
+@media (pointer: coarse) {
+  .pb-step { min-width: var(--hit); min-height: var(--hit); }
+  .pb-unit-count { min-height: var(--hit); }
+  .pb-booster { min-height: var(--hit); }
 }
 
 /* The Marshal line. He is not a budget row — one rides free with every

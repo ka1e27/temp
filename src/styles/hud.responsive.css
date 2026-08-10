@@ -1,0 +1,119 @@
+/* HUD viewport rules, split out of hud.css at the 400-line cap.
+   Loaded straight after it in index.html, so ORDER IS PRESERVED and these
+   still override the base rules by cascade rather than by specificity.
+
+   Read desktop-first: the dock folds from one row to two, then stops folding
+   altogether and becomes a scrolling strip on a phone. The last of those is
+   the one that mattered — see the 720px block. */
+
+/* --- Fluid from 1024px up -------------------------------------------------
+   The dock wraps rather than overflowing, and the preview stops fighting it
+   for the same corner. */
+
+@media (max-width: 1320px) {
+  .hud-gold { padding: var(--s-2) var(--s-4); }
+  .hud-gold .hud-value { font-size: var(--t-xl); }
+  .hud-dock { gap: var(--s-4) var(--s-4); }
+  .hud-group { padding: var(--s-2) var(--s-3); }
+  .seg { min-width: 38px; }
+  .chip { padding: var(--s-1) var(--s-2); }
+  .hud-preview { max-width: min(520px, 58vw); }
+}
+
+/* Two dock rows below this, so everything floating above it moves up.
+   The threshold moved 1080 -> 1180 when the filter chips started carrying the
+   units' real names: `Spearmen` is three times the width of `SPE`, so the dock
+   now runs out of room a full viewport step earlier. Everything that floats
+   measures off --dock-h, and a --dock-h that still claims one row is a preview
+   panel sitting on top of the boosters. (The site panel measures the dock
+   directly — see battle-insets.js — so it is not affected either way.) */
+@media (max-width: 1180px) {
+  :root { --dock-h: calc(var(--dock-row-h) * 2 + var(--s-5)); }
+}
+
+@media (max-width: 1080px) {
+  .hud-preview { min-width: min(320px, 46vw); max-width: 62vw; }
+  .hud-corner { max-width: 60vw; }
+  .booster-name { display: none; }
+}
+
+/* --- Phones ---------------------------------------------------------------
+   THE DOCK WRAPS, AND ON A PHONE THAT IS THE WHOLE PROBLEM.
+
+   `.hud-dock` is `flex-wrap: wrap` with `max-width: 100vw`, which is right on a
+   desktop — it folds from one row to two and everything measures off --dock-h.
+   At 390px every `.hud-group` is wider than the viewport on its own, so the
+   dock folds to FIVE rows and stacks them: strength, troop types (eight named
+   chips at three per row), boosters, speed. Measured on a 390x844 phone the HUD
+   took roughly 85% of the screen and the board was a 200px band in the middle.
+   Nothing overflowed, nothing errored, every tap target was a comfortable 44px
+   — the layout was simply unplayable, which is why the automated audit passed
+   it and a screenshot did not.
+
+   So below this width the dock stops wrapping and becomes ONE horizontally
+   scrollable row. Every control stays reachable with a thumb swipe, the row is
+   a known height, and the board gets the rest of the screen back. Scroll
+   snapping makes the groups land squarely rather than half-shown.
+
+   720px rather than a phone-exact number: this is the width at which the dock
+   can no longer hold two groups side by side, and a small tablet in portrait
+   has the same problem as a phone. */
+@media (max-width: 720px) {
+  :root { --dock-h: calc(var(--hit) + var(--s-6) + var(--s-5)); }
+
+  .hud-dock {
+    left: 0; right: 0; transform: none;
+    width: 100%; max-width: 100%;
+    flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain;
+    justify-content: flex-start; align-items: stretch;
+    gap: var(--s-3); padding: 0 var(--s-3) 2px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .hud-dock::-webkit-scrollbar { display: none; }
+  .hud-group { flex: 0 0 auto; scroll-snap-align: start; padding: var(--s-2) var(--s-3); }
+  .hud-group-row { flex-wrap: nowrap; }
+
+  /* The chips carry the units' full names, which is what made the troop-type
+     group three rows tall. The colour swatch and the key letter are the two
+     things you actually read mid-battle; the name lives in the tooltip and in
+     the aria-label, so nothing is lost to a screen reader. */
+  .chip-name { display: none; }
+  /* Still a full thumb target in BOTH axes. Dropping the name shrank these to
+     34px wide, which is under the 44px minimum — a control that is tall enough
+     and too narrow is just as hard to hit, and only measuring height would have
+     called it fine. */
+  .chip {
+    padding: var(--s-1) var(--s-2); gap: var(--s-1);
+    min-width: var(--hit); justify-content: center;
+  }
+
+  /* Corners shrink so the objective line and the coach mark stop colliding
+     with the clock. */
+  .hud-corner { max-width: 52vw; padding: var(--s-2); gap: var(--s-2); }
+  .hud-gold { padding: var(--s-2) var(--s-3); }
+  .hud-gold .hud-value { font-size: var(--t-lg); }
+  .hud-preview { max-width: 92vw; min-width: 0; }
+}
+
+/* Touch: compact desktop metrics grow to a real thumb target. */
+@media (pointer: coarse) {
+  .seg, .chip { min-height: var(--hit); }
+  .seg { min-width: var(--hit); }
+  .hud-withdraw { min-height: var(--hit); }
+}
+
+/* The speed slider. Wider than the other HUD segments because it carries
+   sixteen stops (0.25x to 4x in quarters) and the label above it is the
+   readout, so the track only has to be draggable, not legible. */
+/* nowrap: `.hud-group-row` wraps by default (it used to hold three buttons),
+   and a wrapped slider drops onto its own line under the pause button. */
+.hud-speeds .hud-group-row { flex-wrap: nowrap; align-items: center; gap: var(--s-2); }
+.hud-speed-slider { width: auto; min-width: 96px; }
+/* Without the Tactician the track simply stops at 2x — the slider's own `max`
+   carries the gate, so a locked speed is unreachable rather than reachable and
+   then refused. This only marks the card so the cap is visible. */
+.hud-speeds.is-capped .hud-group-label::after {
+  content: " · capped";
+  color: var(--c-text-dim); font-weight: var(--w-normal);
+}

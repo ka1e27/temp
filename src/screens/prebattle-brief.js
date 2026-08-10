@@ -5,17 +5,17 @@
 // lines against a 400 cap, and these are the parts worth testing directly.
 
 import { compact, rate, duration } from '../ui/format.js';
-import { UNIT_IDS } from '../content/balance.js';
+import { UNIT_IDS, LOADOUT_TYPES_MAX } from '../content/balance.js';
 import { UNITS_UI } from '../content/strings.js';
 import {
   expeditionSlots, carryComposition, distributeExpedition,
-  compositionSlots, compositionTotal, overBudget, slotCost,
+  compositionSlots, compositionTotal, overBudget, slotCost, typeCount,
 } from '../meta/modifiers.js';
 import { unlockedUnits } from '../meta/upgrades.js';
 import { regionById, effectiveEnemyMult, isConquered } from '../meta/world.js';
 import { previewReward } from '../meta/rewards.js';
 
-export { compositionSlots, compositionTotal, overBudget, slotCost };
+export { compositionSlots, compositionTotal, overBudget, slotCost, typeCount };
 
 /** Derived from content/strings.js rather than listed, so the loadout screen
  *  and the unit tooltip can never disagree about what a troop is called — and a
@@ -62,12 +62,20 @@ export function defaultComposition(meta) {
 /** Everything the budget line renders, in one place so the test can read it. */
 export function budgetSummary(chosen, budget) {
   const spent = compositionSlots(chosen);
+  const types = typeCount(chosen);
   return {
     spent,
     budget,
     free: budget - spent,
     troops: compositionTotal(chosen),
     over: overBudget(chosen, budget),
+    // The second budget on this screen. Slots say how big the army is; types say
+    // how many different answers it carries, and the cap is what stops "a bit of
+    // everything" — which is both the dullest loadout and, because the
+    // specialists are share-scaled, the weakest.
+    types,
+    typesMax: LOADOUT_TYPES_MAX,
+    typesFull: types >= LOADOUT_TYPES_MAX,
   };
 }
 

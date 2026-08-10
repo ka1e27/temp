@@ -264,6 +264,20 @@
 }
 .hint.is-on { opacity: 1; transform: translate(-50%, 0); }
 
+/* On a phone the top of the screen belongs to the corner plates, and a hint
+   centred up there lands squarely on the elapsed clock — measured at 390px,
+   "Drag from your camp to the grey farm" covered the readout completely. Down
+   at the bottom it sits in the empty band above the dock, which is also nearer
+   the thumb that has to act on it. It slides UP into place from there, so the
+   "arriving" cue survives the move. */
+@media (max-width: 720px) {
+  .hint {
+    top: auto; bottom: calc(var(--dock-h) + var(--s-4));
+    max-width: 92vw; transform: translate(-50%, 8px);
+  }
+  .hint.is-on { transform: translate(-50%, 0); }
+}
+
 /* --- Generic overlay + dialog shell --------------------------------------- */
 
 .overlay {

@@ -41,12 +41,22 @@
   --c-danger: #ff5c5c;
 
   /* --- Unit identity ------------------------------------------------------
-     The same five hues appear in the garrison composition bar, the filter
-     chips and the training picker, so "that's a spearwall" is one colour,
-     learned once, recognised everywhere. */
+     One hue per unit, appearing in the garrison composition bar, the filter
+     chips, the loadout rows and the training picker, so "that's a spearwall"
+     is one colour, learned once, recognised everywhere.
+
+     MUST MATCH `FALLBACK` in render/palette.js, which is what the canvas uses
+     headlessly and what any missing var here falls back to. The three
+     specialists shipped with hues in that JS table and no var here at all, so
+     every DOM surface that reads `var(--c-<unit>)` — the train chip, the
+     loadout row — drew them uncoloured while the canvas drew them correctly.
+     tests/palette.test.js now pins the two tables against each other. */
   --c-militia: #e8e8ec;
   --c-spearmen: #5bd6a6;
+  --c-outriders: #7fd8ff;
   --c-raiders: #ffc857;
+  --c-halberds: #ff6fa5;
+  --c-sappers: #c9a227;
   --c-rams: #b07cff;
   --c-marshal: #ff8a3d;
 

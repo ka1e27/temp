@@ -15,6 +15,7 @@ import {
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
 import { siteById, clampRallyKeep, rallyTargetsOf, ralliesTo } from './state.js';
 import { spawnSquad, retreatTarget, reverseSquad } from './movement.js';
+import { isTrainable } from './training.js';
 import { applyGold, goldOf } from './economy.js';
 import { pushEvent, EVENTS } from './events.js';
 import { BOOST } from './boosters.js';
@@ -105,6 +106,10 @@ function cmdTrain(state, cmd, by) {
   if (site.owner !== by) return 'not-your-site';
   if (!SITES[site.kind].train) return 'site-cannot-train';
   if (!UNIT_IDS.includes(cmd.unit)) return 'unknown-unit';
+  // A capped unit is COMMISSIONED, not built — see training.js TRAINABLE_UNITS.
+  // Enforced here and not only in the picker, so a stale keybinding or a
+  // replayed command log cannot park a stronghold on a type it can never finish.
+  if (!isTrainable(cmd.unit)) return 'unit-not-trainable';
   if (!state.mods[by].unlockedUnits.includes(cmd.unit)) return 'unit-locked';
   site.trainType = cmd.unit; // progress deliberately kept
   return null;
