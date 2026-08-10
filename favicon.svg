@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img"
+     aria-label="Hex Dominion">
+  <!-- The mark: a pointy-top hex (the board's own geometry) with a smaller hex
+       held inside it — one region inside a dominion. Colours are the tokens from
+       src/styles/tokens.css by value, because an SVG favicon cannot read CSS
+       custom properties from the document: --c-bg #0b0d12, --c-player #3ddc97,
+       --c-line #263041. If those tokens move, this file moves with them
+       (tests/shell.test.js pins them against each other).
+
+       An SVG favicon rather than an .ico: it is 700 bytes, scales to every
+       platform size, and needs no build step to produce — which is the same
+       constraint every other asset decision in this project answers to. -->
+  <rect width="32" height="32" rx="6" fill="#0b0d12"/>
+  <path d="M16 4.6 26 10.3v11.4L16 27.4 6 21.7V10.3Z"
+        fill="none" stroke="#263041" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M16 4.6 26 10.3v11.4L16 27.4 6 21.7V10.3Z"
+        fill="#3ddc97" fill-opacity="0.16"/>
+  <path d="M16 11 21 13.9v5.7L16 22.5 11 19.6v-5.7Z"
+        fill="#3ddc97"/>
+</svg>

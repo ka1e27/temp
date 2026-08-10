@@ -5,7 +5,29 @@
 // screen. Widths are kept stable (see the tabular-nums rule in tokens.css) —
 // in an idle game a digit that changes width reads as a bug.
 
+/**
+ * The suffix ladder, largest first.
+ *
+ * IT USED TO STOP AT `T`, AND THE GAME REACHES PAST IT. The Crown tier
+ * (content/upgrades.data.js) bases at 350,000 and compounds at 1.60, so a level
+ * in the fifties costs about 4e18 — which rendered as "4100000T": eight
+ * characters, in a column sized for five, in a game whose whole formatting rule
+ * is that a number must not change width. At 1e30 it was twenty characters.
+ *
+ * Past `T` the suffixes are the short-scale abbreviations the incremental genre
+ * has settled on (Qa, Qi, Sx, Sp, Oc, No, Dc), which is worth more than being
+ * clever: a player who has seen one idle game already knows them. `Dc` is 1e33,
+ * comfortably past `SAFE_MAX_LEVEL` on every line in the shop, and anything
+ * beyond it falls through to exponential rather than growing without bound.
+ */
 const UNITS = [
+  [1e33, 'Dc'],
+  [1e30, 'No'],
+  [1e27, 'Oc'],
+  [1e24, 'Sp'],
+  [1e21, 'Sx'],
+  [1e18, 'Qi'],
+  [1e15, 'Qa'],
   [1e12, 'T'],
   [1e9, 'B'],
   [1e6, 'M'],
@@ -13,8 +35,12 @@ const UNITS = [
 ];
 
 /**
- * Compact magnitude: 1.2K, 12K, 3.4M. Values under 1000 render whole.
- * One decimal only below 10 of a unit, so the string never exceeds 5 chars.
+ * Compact magnitude: 1.2K, 12K, 3.4M, 4.1Qi. Values under 1000 render whole.
+ * One decimal only below 10 of a unit, so the string never exceeds 6 characters
+ * — five for the single-letter suffixes, six for the two-letter ones — and never
+ * grows with the magnitude. tests/format.test.js pins that bound across the
+ * whole reachable range, because the old five-character promise was a comment
+ * rather than a check and stopped being true somewhere nobody was looking.
  * @param {number} n
  * @returns {string}
  */
@@ -25,6 +51,11 @@ export function compact(n) {
   let out;
   if (v < 1000) {
     out = String(Math.round(v));
+  } else if (v >= 1e36) {
+    // Past the ladder, say so in exponential rather than inventing suffixes: two
+    // significant figures, still short, and unambiguous. Unreachable in normal
+    // play — it is here so a hand-edited save cannot produce a 30-character cell.
+    out = v.toExponential(1).replace('e+', 'e');
   } else {
     out = '';
     for (const [scale, suffix] of UNITS) {
@@ -66,10 +97,13 @@ export function duration(sec) {
   if (!Number.isFinite(sec)) return '∞';
   if (sec < 0) return '0s';
   if (sec < 10) return trimZero(sec.toFixed(1)) + 's';
-  if (sec < 60) return Math.round(sec) + 's';
   // Round to whole seconds BEFORE splitting: float siege maths lands on
   // 249.99999999999977, and truncating that to 4:09 is a visible lie.
   const whole = Math.round(sec);
+  // ...and round before choosing the FORMAT as well, which is the same rule one
+  // step earlier. `sec < 60` on the raw value printed 59.6 as "60s" — a reading
+  // the m:ss band can never produce, so the display jumped 59s, 60s, 1:00.
+  if (whole < 60) return whole + 's';
   const m = Math.floor(whole / 60);
   const s = whole % 60;
   if (m < 60) return `${m}:${String(s).padStart(2, '0')}`;

@@ -164,6 +164,11 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   align-items: center;
   justify-content: center;
   gap: var(--s-2);
+  /* Per-control, so the document can keep pinch-zoom. `manipulation` drops the
+     double-tap-to-zoom gesture (and the ~300ms click delay it implies) on the
+     controls only — which is what the viewport's old `user-scalable=no` was
+     really for, at the cost of forbidding zoom everywhere. See index.html. */
+  touch-action: manipulation;
   min-height: var(--hit);
   padding: 0 var(--s-4);
   border: var(--hairline);

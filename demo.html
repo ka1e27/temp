@@ -9,12 +9,22 @@
 <!-- EXACTLY what index.html loads, in EXACTLY the same order. The harness was
      missing scenes.css, which redeclared .panel and .btn and therefore changed
      how every plate and every button rendered — so this page was showing a
-     different game to the one that ships. Keep these five lines in sync. -->
+     different game to the one that ships.
+     IT DRIFTED AGAIN, and the comment saying "keep these five lines in sync" is
+     why: index.html grew to nine stylesheets and this list stayed at five, so
+     the harness was missing hud.responsive.css, panelbars.css, prebattle.css and
+     worldmap.css — every responsive rule and every bar in the game. A comment
+     asking to be kept in sync is not a mechanism. tests/shell.test.js now
+     compares the two lists and fails on any difference. -->
 <link rel="stylesheet" href="./src/styles/tokens.css">
 <link rel="stylesheet" href="./src/styles/base.css">
 <link rel="stylesheet" href="./src/styles/hud.css">
+<link rel="stylesheet" href="./src/styles/hud.responsive.css">
 <link rel="stylesheet" href="./src/styles/screens.css">
+<link rel="stylesheet" href="./src/styles/panelbars.css">
+<link rel="stylesheet" href="./src/styles/prebattle.css">
 <link rel="stylesheet" href="./src/styles/scenes.css">
+<link rel="stylesheet" href="./src/styles/worldmap.css">
 <script>
 if (location.protocol === 'file:') {
   document.documentElement.innerHTML =

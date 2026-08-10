@@ -11,7 +11,7 @@
 // rather than repaired, which is the opposite of how save.js treats progress.
 //
 // PURE: storage is injected, never reached for.
-import { CONTRACT_VERSION } from '../battle/contract.js';
+import { CONTRACT_VERSION, assertBattleConfig } from '../battle/contract.js';
 
 export const RESUME_KEY = 'hexdominion.battle';
 
@@ -61,8 +61,43 @@ export function loadBattle(storage, now) {
 
   const ageMs = Math.max(0, (now ?? 0) - (blob.savedAt ?? 0));
   if (ageMs > RESUME_MAX_AGE_MS) return discard(storage, 'too-old');
+  if (!steppable(blob)) return discard(storage, 'unsteppable');
 
   return { ok: true, battle: blob.battle, config: blob.config, ageMs };
+}
+
+/**
+ * IS THIS BLOB SOMETHING THE ENGINE CAN ACTUALLY STEP?
+ *
+ * The version check above only proves the blob was written by this build. It says
+ * nothing about SHAPE, and the checks either side of it were `!blob.battle` —
+ * truthiness. So `{contractVersion: 6, battle: {status: 'running'}, config: {}}`
+ * was accepted, and screens/battle.js assigned it to `ctx.state.battle` before
+ * throwing inside `enter()`. The scene stack catches an `enter` throw and pushes
+ * the half-built scene anyway, so `update()` then stepped a battle with no sites
+ * ten times a second, forever, on a blank screen — and because `clearBattle` is
+ * only reached from a FINISHED battle, the same blob crashed the next reload, and
+ * the next. Permanently bricked short of clearing storage by hand.
+ *
+ * The comment in screens/battle.js said "the state was validated on the way out of
+ * storage". It is true now.
+ *
+ * A blob is explicitly ephemeral and never precious, so anything that fails here
+ * is thrown away rather than repaired — which is the policy this whole file
+ * already states, applied to the shape as well as the age.
+ */
+function steppable(blob) {
+  const b = blob.battle;
+  if (!b || typeof b !== 'object') return false;
+  if (!Array.isArray(b.sites) || b.sites.length < 2) return false;
+  if (!b.grid || typeof b.grid !== 'object') return false;
+  if (!Array.isArray(b.commands) || !Array.isArray(b.events)) return false;
+  if (!Number.isFinite(b.tick) || b.tick < 0) return false;
+  if (!b.factions || !b.rules) return false;
+  // The config goes through the SAME assertion the fresh path uses, so a resumed
+  // battle cannot be built on a config a new battle would have refused.
+  try { assertBattleConfig(blob.config); } catch { return false; }
+  return true;
 }
 
 function discard(storage, reason) {

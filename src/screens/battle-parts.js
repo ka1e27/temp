@@ -6,6 +6,11 @@
 // element" function over a host node it is handed.
 
 import { h, mount, clear, bindClass } from '../ui/dom.js';
+// `percent` was used by renderCaveats and never imported, so the "walls 62% on
+// arrival" caveat threw a ReferenceError on every assault against a damaged wall
+// — the one preview line that only appears mid-siege, which is why no screenshot
+// ever caught it. tests/battleui.test.js now calls that branch directly.
+import { percent } from '../ui/format.js';
 import { UNIT_IDS } from '../content/balance.js';
 import { UNITS_UI } from '../content/strings.js';
 import { TRAINABLE_UNITS } from '../battle/training.js';

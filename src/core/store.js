@@ -15,7 +15,26 @@
 
 import { REGIONS } from '../content/regions.data.js';
 import { UNIT_IDS } from '../content/balance.js';
-import { RETIRED_UPGRADES } from '../content/upgrades.data.js';
+import {
+  RETIRED_UPGRADES, UPGRADE_BY_ID, BOOSTER_SHOP, SAFE_MAX_LEVEL,
+} from '../content/upgrades.data.js';
+
+/** The ids a save is allowed to carry a level for. Anything else is dropped on
+ *  load — see `sanitizeLevels`. Retired ids are included because
+ *  `refundRetired` still has to find them in order to pay them back. */
+const KNOWN_UPGRADES = new Set([
+  ...Object.keys(UPGRADE_BY_ID), ...Object.keys(RETIRED_UPGRADES),
+]);
+const KNOWN_BOOSTERS = new Set(Object.keys(BOOSTER_SHOP));
+
+/** Ceilings for the two counters that feed exponentials. Both are far past
+ *  anything reachable: a raid is unwinnable long before 500 clears, and the
+ *  incursion ladder walls out in the tens. */
+const MAX_CLEARS = 500;
+const MAX_DEPTH = 100000;
+/** ...and for a saved loadout, which is a slot budget the screen re-fits anyway.
+ *  Uncapped, `carryComposition` had to walk a count down one body at a time. */
+const MAX_LOADOUT = 100000;
 
 /**
  * Version of the PERSISTED SHAPE. It lives here rather than in meta/save.js
@@ -189,12 +208,19 @@ export function fromPersisted(data, { now = 0 } = {}) {
   const meta = base.meta;
   meta.crowns = Math.max(0, num(m.crowns, 0));
   meta.incomePerSec = Math.max(0, num(m.incomePerSec, 0));
-  meta.upgrades = sanitizeLevels(m.upgrades);
+  meta.upgrades = sanitizeLevels(m.upgrades, KNOWN_UPGRADES);
   // ...and hand back the crowns for anything that no longer exists.
   meta.crowns += refundRetired(meta.upgrades);
-  meta.boosters = sanitizeLevels(m.boosters);
+  meta.boosters = sanitizeLevels(m.boosters, KNOWN_BOOSTERS);
   meta.loadout = sanitizeComposition(m.loadout);
-  meta.stats = { ...createStats(), ...(m.stats ?? {}) };
+  // STATS WERE THE ONE FIELD WITH NO HEALING — a bare spread. `{"playMs":"0"}`
+  // turned `stats.playMs += dtMs` into string concatenation at 10 Hz, growing the
+  // save without bound until the write failed (silently, see meta/save.js). Every
+  // counter is a number or it is the default.
+  meta.stats = createStats();
+  for (const [k, v] of Object.entries(m.stats ?? {})) {
+    if (k in meta.stats) meta.stats[k] = Math.max(0, num(v, 0));
+  }
   // Absent on saves written before onboarding existed: those players have
   // already learned the game, so defaulting to "seen" would be wrong only for
   // a brand-new save, which gets this from createMeta() instead.
@@ -204,19 +230,27 @@ export function fromPersisted(data, { now = 0 } = {}) {
   // multipliers and ladder rungs, and a hand-edited save that made either
   // fractional or negative would produce a permanent negative bonus.
   meta.legacy = {
-    points: Math.max(0, Math.floor(num(m.legacy?.points, 0))),
-    resets: Math.max(0, Math.floor(num(m.legacy?.resets, 0))),
+    points: counter(m.legacy?.points, MAX_DEPTH),
+    resets: counter(m.legacy?.resets, MAX_DEPTH),
   };
   meta.incursion = {
-    cleared: Math.max(0, Math.floor(num(m.incursion?.cleared, 0))),
-    attempts: Math.max(0, Math.floor(num(m.incursion?.attempts, 0))),
+    cleared: counter(m.incursion?.cleared, MAX_DEPTH),
+    attempts: counter(m.incursion?.attempts, MAX_DEPTH),
   };
 
   for (const [id, rec] of Object.entries(m.regions ?? {})) {
-    if (!meta.regions[id]) continue; // region deleted from content: drop, don't crash
+    // `Object.hasOwn`, NOT truthiness. `meta.regions` is a plain object, so
+    // `meta.regions.constructor` is `Object` — truthy — and eleven
+    // Object.prototype names therefore walked straight past this guard and became
+    // real, fully-validated region records. Nothing downstream crashed, but
+    // `abdicationValue` counts `Object.values(meta.regions)` while
+    // `regionsConquered` counts REGION_IDS, so a save carrying
+    // `{"constructor":{"status":"conquered"}}` paid legacy for regions that do
+    // not exist — permanently, because legacy is never spent.
+    if (!Object.hasOwn(meta.regions, id)) continue;
     meta.regions[id] = {
       status: ['locked', 'available', 'conquered'].includes(rec?.status) ? rec.status : 'locked',
-      clears: Math.max(0, Math.floor(num(rec?.clears, 0))),
+      clears: counter(rec?.clears, MAX_CLEARS),
       bestMs: Math.max(0, num(rec?.bestMs, 0)),
       raidReadyAt: Math.max(0, num(rec?.raidReadyAt, 0)),
     };
@@ -238,7 +272,9 @@ function sanitizeComposition(comp) {
   const out = {};
   let any = 0;
   for (const u of UNIT_IDS) {
-    out[u] = Math.max(0, Math.floor(num(comp[u], 0)));
+    // Capped: `carryComposition` trims an over-budget loadout by decrementing one
+    // body at a time, so an uncapped count froze the tab on the first Attack.
+    out[u] = counter(comp[u], MAX_LOADOUT);
     any += out[u];
   }
   return any > 0 ? out : null;
@@ -280,20 +316,53 @@ function refundRetired(upgrades) {
   for (const [id, spec] of Object.entries(RETIRED_UPGRADES)) {
     const level = upgrades[id];
     if (!(level > 0)) continue;
-    for (let l = 0; l < level; l++) owed += Math.round(spec.base * spec.rate ** l);
+    // `sanitizeLevels` clamps to SAFE_MAX_LEVEL, so this loop is bounded at 64.
+    // It is bounded here as well, deliberately: this ran at boot before the page
+    // painted, so an unbounded count was an unrecoverable hang on every reload,
+    // and one clamp two functions away is a thin guarantee for that. `rate > 1`
+    // also drives `owed` to Infinity in about 900 iterations, which then became
+    // 0 crowns on the next write — `toPersisted` JSON-round-trips, and Infinity
+    // serialises to null.
+    const levels = Math.min(level, SAFE_MAX_LEVEL);
+    for (let l = 0; l < levels && Number.isFinite(owed); l++) {
+      owed += Math.round(spec.base * spec.rate ** l);
+    }
     delete upgrades[id];
   }
-  return owed;
+  return Number.isFinite(owed) ? owed : 0;
 }
 
-function sanitizeLevels(obj) {
+/**
+ * Levels and charges, healed — and CLAMPED, which is the half that was missing.
+ *
+ * Nothing on the read path consulted `SAFE_MAX_LEVEL`, so a hand-edited save
+ * could carry `{fieldManual: 1e15}` and `refundRetired` below would loop 10^15
+ * times inside `fromPersisted`. That runs at module scope on boot, before the
+ * page paints and before `load()` can delete anything — so the tab hung on every
+ * reload, permanently, with no way out but clearing storage by hand. A ceiling
+ * here fixes it for every consumer at once rather than at each loop.
+ *
+ * Unknown ids are DROPPED rather than kept-and-ignored. They were inert (every
+ * consumer iterates the content table, never the save), but an import could carry
+ * megabytes of junk keys that persisted forever and counted against the origin's
+ * storage quota — which is the cheapest way to make a save unwritable.
+ */
+function sanitizeLevels(obj, known = null) {
   const out = {};
   for (const [k, v] of Object.entries(obj ?? {})) {
+    if (known && !known.has(k)) continue;
     const n = Math.floor(num(v, 0));
-    if (n > 0) out[k] = n;
+    if (n > 0) out[k] = Math.min(n, SAFE_MAX_LEVEL);
   }
   return out;
 }
+
+/** Non-negative integer, with a ceiling. Every counter that feeds an exponential
+ *  goes through this: `clears` drives `enemyMult x 1.15^clears` and `cleared`
+ *  drives the incursion dial, so an unbounded value produces an `Infinity`
+ *  difficulty that `assertBattleConfig` then rejects — making the region
+ *  permanently unattackable while the map cheerfully renders its dial as `∞`. */
+const counter = (v, max) => Math.min(max, Math.max(0, Math.floor(num(v, 0))));
 
 /**
  * Accept either the root state or the `meta` slice. Every meta/** entry point

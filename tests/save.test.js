@@ -98,7 +98,13 @@ test('garbage field values are healed rather than trusted', () => {
   assert.equal(healed.meta.crowns, 0, 'negative crowns are impossible');
   assert.equal(healed.meta.incomePerSec, 0);
   assert.equal(healed.meta.upgrades.tithe, undefined);
-  assert.equal(healed.meta.upgrades.ghost, 2);
+  // `ghost` is not an upgrade this build sells, and it is now DROPPED rather than
+  // floored-and-kept. It was always inert — `upgradeEffects` iterates the content
+  // table, never the save — but a kept key persists forever and costs storage
+  // quota, and an import is attacker-controlled: megabytes of junk ids is the
+  // cheapest way to push a victim's origin over quota, at which point every
+  // future write fails (silently, until this pass).
+  assert.equal(healed.meta.upgrades.ghost, undefined, 'unknown ids must not persist');
   assert.equal(healed.meta.boosters.rally, undefined);
   assert.equal(healed.meta.regions.riverfen.status, 'locked');
   assert.equal(healed.meta.regions.riverfen.clears, 0);

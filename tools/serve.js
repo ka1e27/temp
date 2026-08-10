@@ -14,6 +14,11 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  // A manifest served as application/octet-stream is a manifest the browser
+  // ignores: no install prompt, no theme colour, no splash screen — and nothing
+  // in the page reports it. tests/shell.test.js checks the file and its contents;
+  // this line is what makes the file mean anything when served.
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',

@@ -50,7 +50,8 @@
      specialists shipped with hues in that JS table and no var here at all, so
      every DOM surface that reads `var(--c-<unit>)` — the train chip, the
      loadout row — drew them uncoloured while the canvas drew them correctly.
-     tests/palette.test.js now pins the two tables against each other. */
+     tests/traincolour.test.js now pins the two tables against each other, and
+     that every unit has a `.pb-unit[data-unit=…]` rule to be coloured by. */
   --c-militia: #e8e8ec;
   --c-spearmen: #5bd6a6;
   --c-outriders: #7fd8ff;
