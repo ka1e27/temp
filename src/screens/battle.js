@@ -17,6 +17,7 @@ import { createBattleInput, createView } from '../screens/battle-input.js';
 import { createBattleHud, travelSecondsFor } from '../screens/battle-hud.js';
 import { saveBattle, clearBattle } from '../meta/resume.js';
 import { qs } from '../ui/dom.js';
+import { createSound } from '../ui/sound.js';
 
 /** Checkpoint cadence. A refresh should cost seconds, not the whole fight. */
 const RESUME_EVERY_MS = 4000;
@@ -31,6 +32,7 @@ export function createBattleScene(ctx) {
   let board = null;
   let fx = null;
   let coach = null;
+  let sound = null;
   let config = null;
   let finished = false;
   let lastResumeAt = 0;
@@ -106,6 +108,13 @@ export function createBattleScene(ctx) {
       // fought on — and the two can never disagree.
       setRiverLayer(ctx.state.battle.grid.rivers);
 
+      // Feeds off the same event drain the effects layer does — the sim has no
+      // idea it exists. Settings are read per cue, not captured, so a change
+      // takes effect without rebuilding anything.
+      sound = createSound({
+        enabled: () => ctx.state?.meta?.settings?.sound !== false,
+        volume: () => ctx.state?.meta?.settings?.volume ?? 0.7,
+      });
       fx = createFx();
       board = createBattleView({ bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx });
       const presentation = createView();
@@ -144,6 +153,7 @@ export function createBattleScene(ctx) {
         () => hud?.dispose(),
         () => board?.dispose(),
         () => coach?.dispose(),
+        () => sound?.dispose(),
       ];
     },
 
@@ -164,6 +174,7 @@ export function createBattleScene(ctx) {
       // never mutate state the simulation is mid-way through iterating.
       for (const ev of drainEvents(battle)) {
         fxFromEvent(fx, ev, board.palette, board.hexSize, locate);
+        sound?.onEvent(ev);
         ctx.bus.emit(`battle:${ev.type}`, ev);
       }
 

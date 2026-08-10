@@ -11,7 +11,7 @@
 // better take them somewhere they can.
 import { h, mount } from '../ui/dom.js';
 import { compact, rate, duration, integer } from '../ui/format.js';
-import { UI, RESULTS } from '../content/strings.js';
+import { UI, RESULTS, COACH } from '../content/strings.js';
 import { applyOutcome } from '../meta/rewards.js';
 import { regionById, isAttackable, canRaid, raidCooldownRemaining } from '../meta/world.js';
 import { nextDepth, planFor } from '../meta/incursion.js';
@@ -37,9 +37,19 @@ export function resultCopy(outcome, applied, region) {
         body: 'The ladder goes on. The next rung is harder, and pays more for it.',
       };
     }
-    return applied?.raided
-      ? { title: `${name} raided`, body: 'A one-time lump. The region was already yours.' }
-      : { title: `${name} is yours`, body: 'Your empire grows, and so does its income.' };
+    if (applied?.raided) {
+      return { title: `${name} raided`, body: 'A one-time lump. The region was already yours.' };
+    }
+    // THE FIRST CONQUEST IS WHERE THE TWO HALVES OF THE GAME CONNECT, and the
+    // game had never once said so. `COACH.firstIncome` was written for exactly
+    // this moment and wired to nothing; the screen said "so does its income" and
+    // stopped, so a first-timer played this as a small RTS with a confusing shop
+    // attached and never learned the idle half existed until they happened to
+    // leave for a minute and come back.
+    if (applied?.firstConquest) {
+      return { title: `${name} is yours`, body: COACH.firstIncome };
+    }
+    return { title: `${name} is yours`, body: 'Your empire grows, and so does its income.' };
   }
   if (outcome.result === 'retreat') {
     return { title: RESULTS.retreat, body: RESULTS.retreatBody };

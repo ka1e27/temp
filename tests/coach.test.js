@@ -19,6 +19,7 @@ import {
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { generateBattleMap } from '../src/battle/mapgen.js';
 import { startBattle } from '../src/battle/sim.js';
+import { COACH } from '../src/content/strings.js';
 import { createMeta } from '../src/core/store.js';
 
 // --- a battle-shaped stub, only the fields the machine reads ---------------
@@ -56,8 +57,18 @@ function drain(machine, world, pump, limit = 40) {
 // --- the shape of the beat table -------------------------------------------
 
 test('every beat has copy, a predicate, and a unique id', () => {
-  assert.equal(BEATS.length, 5);
-  assert.deepEqual(BEAT_IDS, ['drag', 'fieldWon', 'captured', 'gold100', 'takeCastle']);
+  // DERIVED, not a literal. This asserted a five-name list, which is exactly
+  // why four beats could sit in strings.js unwired for the project's whole life
+  // without a single test noticing: the suite iterated BEATS and so could only
+  // ever check the beats that were already in it. What it must pin is that every
+  // line of COACH copy reaches the script — the property that was violated.
+  assert.equal(new Set(BEAT_IDS).size, BEAT_IDS.length);
+  const scripted = new Set(BEATS.map((b) => b.text));
+  for (const [key, line] of Object.entries(COACH)) {
+    assert.ok(scripted.has(line),
+      `COACH.${key} is written and never shown — no beat in coach.data.js uses it`);
+  }
+  assert.equal(BEAT_IDS[0], 'drag', 'the first thing a player is told must be the gesture');
   assert.equal(new Set(BEAT_IDS).size, BEAT_IDS.length);
   for (const b of BEATS) {
     assert.equal(typeof b.text, 'string', `${b.id} has no copy`);
@@ -84,9 +95,11 @@ test('the whole tutorial fires, each beat exactly once, in order', () => {
     if (i === 5) world.battle.sites[1].owner = 'player';
   });
 
+  // The five beats this world actually satisfies, in order. The other four need
+  // signals this fixture never produces (a stronghold taken, a stalled siege, a
+  // site lost, rams affordable), so they stay pending — which is the point of
+  // `after`/`when` and is asserted directly below.
   assert.deepEqual(fired, ['drag', 'fieldWon', 'captured', 'gold100', 'takeCastle']);
-  assert.equal(m.complete, true);
-  assert.deepEqual(m.pending, []);
 
   // Nothing replays: keep stepping with every condition still true.
   for (let i = 0; i < 10; i++) assert.equal(m.step(world.battle, world.meta), null);
@@ -102,7 +115,12 @@ test('a beat never fires twice even if its condition keeps re-arriving', () => {
   m.note('siege-begun', { owner: 'player' });
   m.note('siege-begun', { owner: 'player' });
   assert.equal(m.step(b, null), null);
-  assert.deepEqual(m.pending, ['captured', 'gold100', 'takeCastle']);
+  // `notReached` is derived so a beat added later cannot silently break a test
+  // that was never about it — the fixture below produces no stronghold capture,
+  // no stalled siege, no lost site and no ram money.
+  const notReached = ['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'];
+  assert.deepEqual(m.pending.filter((id) => !notReached.includes(id)),
+    ['captured', 'gold100', 'takeCastle']);
 });
 
 test('ordering: a later beat waits for its prerequisite, not for a timer', () => {
@@ -137,7 +155,10 @@ test('a prerequisite that never arrives blocks only its own dependants', () => {
   assert.equal(m.step(b, null).id, 'drag');
   // The player is losing: no siege of theirs, no capture. Only beat 1 shows.
   for (let i = 0; i < 5; i++) assert.equal(m.step(b, null), null);
-  assert.deepEqual(m.pending, ['fieldWon', 'captured', 'gold100', 'takeCastle']);
+  assert.deepEqual(
+    m.pending.filter((id) => !['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'].includes(id)),
+    ['fieldWon', 'captured', 'gold100', 'takeCastle'],
+  );
 });
 
 // --- only the enemy's events, only the player's beats ----------------------
@@ -340,7 +361,10 @@ test('a REAL region-1 battle: gold starts at 300, so gold100 must not jump the q
   // player having captured something, not on the number alone.
   assert.equal(m.step(live, meta), null);
   assert.equal(m.signals(live, meta).gold > 100, true);
-  assert.deepEqual(m.pending, ['fieldWon', 'captured', 'gold100', 'takeCastle']);
+  assert.deepEqual(
+    m.pending.filter((id) => !['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'].includes(id)),
+    ['fieldWon', 'captured', 'gold100', 'takeCastle'],
+  );
 });
 
 test('the coach reads a real battle through the same fields the sim writes', () => {

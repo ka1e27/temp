@@ -16,8 +16,7 @@ import { assertBattleOutcome } from '../battle/contract.js';
 import { REGION_BY_ID, FIRST_CLEAR_BONUS_SECONDS, RAID } from '../content/regions.data.js';
 import { metaOf, markDirty } from '../core/store.js';
 import {
-  markConquered, completeRaid, refreshUnlocks, effectiveEnemyMult, record, isConquered,
-} from './world.js';
+  markConquered, completeRaid, refreshUnlocks, effectiveEnemyMult, record, isConquered, regionsConquered } from './world.js';
 import { recalcIncome, incomePerSec } from './idle.js';
 import { consume as consumeBoosters } from './boosters.js';
 import { planFor, completeIncursion, INCURSION } from './incursion.js';
@@ -134,6 +133,10 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
     newBest: false,
     /** `{depth, cleared, mutators}` when this was a rung, else null. */
     incursion: null,
+    /** The FIRST region this empire has ever taken. The results screen says the
+     *  quiet part out loud on exactly this one — that the region now pays while
+     *  you are not playing — because nothing else in the game ever states it. */
+    firstConquest: false,
   };
 
   if (!won) {
@@ -180,6 +183,7 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
     markConquered(meta, regionId, { now, durationMs });
     summary.conquered = true;
     summary.newBest = true;
+    summary.firstConquest = regionsConquered(meta) === 1;
     summary.crowns = firstClearBonus(region);
     summary.incomeAdded = region.rewardPerSec;
     summary.opened = refreshUnlocks(meta, bus);

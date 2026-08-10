@@ -100,6 +100,12 @@ export function createSettings() {
     rallyKeepDefault: null,
     /** Battle speed a new battle opens at. null means 1x. */
     defaultSpeed: null,
+    /** Sound. `null` reads as on; `false` is a deliberate mute. Lives in meta
+     *  with the other preferences, so `fromPersisted` heals it and no migration
+     *  was needed — and it survives a new campaign, because it is the player's
+     *  and not the save's. */
+    sound: null,
+    volume: null,
   };
 }
 
@@ -293,6 +299,11 @@ function sanitizeSettings(raw) {
   if (Number.isFinite(keep) && keep >= 0) out.rallyKeepDefault = keep;
   const speed = num(raw.defaultSpeed, NaN);
   if (Number.isFinite(speed) && speed > 0) out.defaultSpeed = speed;
+  // Tri-state on purpose: `null` means "never chosen" and reads as ON, so a
+  // save written before sound existed is not silently muted by its own absence.
+  if (typeof raw.sound === 'boolean') out.sound = raw.sound;
+  const vol = num(raw.volume, NaN);
+  if (Number.isFinite(vol) && vol >= 0 && vol <= 1) out.volume = vol;
   return out;
 }
 

@@ -207,7 +207,15 @@ export const COACH = Object.freeze({
   buildRams: 'Build rams, then take the castle.',
   siegeStalled: 'Walls repair faster than you break them. Send more, or pull out.',
   retreat: 'Retreat pulls a force home. It cannot be intercepted — you only lose the ground.',
-  firstIncome: 'That region now pays you whether or not you are playing.',
+  firstIncome: 'That region now pays you crowns every second — whether or not the'
+    + ' tab is open. Crowns buy permanent upgrades, and upgrades take the next one.',
+  // Moved out of coach.js COACH_EXTRA, where it was parked with a comment saying
+  // it belonged here. It also gained the half that mattered: the old line said
+  // "Take the castle to win the region" and never mentioned the gate, so the
+  // assault it told the player to make bounced off a SEALED castle they had
+  // never heard of.
+  takeCastle: 'The castle wins the region — but its gate holds until you own most'
+    + ' of the map. Take the countryside first, then the throne.',
 });
 
 export const RESULTS = Object.freeze({

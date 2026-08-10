@@ -24,67 +24,8 @@ import { h, mount, unmount } from './dom.js';
  *  else — a hint on your fifth region is noise. */
 export const COACH_REGION = 'riverfen';
 
-/**
- * The one line the design lists that `COACH` in strings.js has no entry for.
- * It belongs next to the rest of the copy; it lives here only until the owner
- * of strings.js lands `COACH.takeCastle`, at which point this drops out and
- * the beat below reads `COACH.takeCastle` like every other.
- */
-export const COACH_EXTRA = Object.freeze({
-  takeCastle: 'Take the castle to win the region.',
-});
-
-/** How long a line stays up. The siege beat is the one that teaches the whole
- *  game — it gets the longest read. */
-const HOLD = { normal: 6000, teaching: 9000 };
-
-/**
- * The beats, IN ORDER. `when` is a pure predicate over signals; `after` names a
- * beat that must already have fired, which is what stops "Strongholds turn gold
- * into soldiers" arriving before the player has captured anything (the player
- * starts a battle holding 300 gold, so the raw `gold > 100` test is true on
- * tick 0 and would otherwise jump the queue). `until` retires a line early once
- * the player has visibly done the thing it asks for.
- */
-export const BEATS = Object.freeze([
-  {
-    id: 'drag',
-    text: COACH.drag,
-    hold: HOLD.normal,
-    when: (s) => s.started,
-    until: (s) => s.sentSquad,
-  },
-  {
-    // The two-stage field-then-siege capture is the core mechanic and nothing
-    // else in the game explains it. This is the beat that earns the feature.
-    id: 'fieldWon',
-    text: COACH.fieldWon,
-    hold: HOLD.teaching,
-    after: 'drag',
-    when: (s) => s.siegeBegun,
-  },
-  {
-    id: 'captured',
-    text: COACH.captured,
-    hold: HOLD.normal,
-    after: 'drag',
-    when: (s) => s.captured,
-  },
-  {
-    id: 'gold100',
-    text: COACH.gold100,
-    hold: HOLD.normal,
-    after: 'captured',
-    when: (s) => s.gold > 100,
-  },
-  {
-    id: 'takeCastle',
-    text: COACH_EXTRA.takeCastle,
-    hold: HOLD.normal,
-    after: 'captured',
-    when: (s) => s.castleAdjacent,
-  },
-].map(Object.freeze));
+export { BEATS, HOLD } from './coach.data.js';
+import { BEATS, HOLD } from './coach.data.js';
 
 export const BEAT_IDS = Object.freeze(BEATS.map((b) => b.id));
 
@@ -102,6 +43,12 @@ export function emptyLatch() {
     captured: false,
     gold: 0,
     castleAdjacent: false,
+    // The three signals the four newly-wired beats need. Latched like the rest:
+    // a thing that happened once still counts, because the line teaching it is
+    // worth showing even a little after the moment.
+    tookStronghold: false,
+    siegeStalled: false,
+    lostSite: false,
   };
 }
 
@@ -128,6 +75,13 @@ export function observeState(latch, battle) {
     latch.sentSquad = true;
   }
   if (!latch.castleAdjacent && castleTouchesPlayer(battle)) latch.castleAdjacent = true;
+  // A siege the player is running that cannot finish. The sim already knows —
+  // it is the same `Infinity` the preview shows as INSUFFICIENT — so this reads
+  // the state rather than adding an event for it.
+  if (!latch.siegeStalled) {
+    latch.siegeStalled = !!battle.sites?.some((s) => s.siege?.owner === 'player'
+      && s.siege.ticks > 60 && s.hp >= s.hpMax * 0.99);
+  }
   return latch;
 }
 
@@ -135,7 +89,10 @@ export function observeState(latch, battle) {
  *  name — `screens/battle.js` re-emits it on the bus as `battle:<type>`. */
 export function noteEvent(latch, type, ev) {
   if (type === 'siege-begun' && ev?.owner === 'player') latch.siegeBegun = true;
-  else if (type === 'site-captured' && ev?.to === 'player') latch.captured = true;
+  else if (type === 'site-captured' && ev?.to === 'player') {
+    latch.captured = true;
+    if (ev.kind === 'stronghold') latch.tookStronghold = true;
+  } else if (type === 'site-captured' && ev?.from === 'player') latch.lostSite = true;
   else if (type === 'squad-sent' && ev?.owner === 'player') latch.sentSquad = true;
   return latch;
 }
@@ -347,9 +304,18 @@ export function createCoach(o = {}) {
     const t = now();
     const battle = getState?.() ?? null;
 
-    if (showing && (t >= hideAt || machine.retired(showing, battle, getMeta?.() ?? null))) {
-      hide(t);
-    }
+    // AN INSTRUCTION STAYS UNTIL IT IS OBEYED. Every beat retired on a timer,
+    // so the one line a new player gets — "drag from your camp" — vanished after
+    // six seconds and could never come back: no help button, no replay, nothing
+    // else on screen. A player who did not work out the gesture in six seconds
+    // was then left in silence for the remaining nineteen minutes of the battle,
+    // and that is the single biggest quit point in the product.
+    //
+    // A timer is the right retirement for a STATEMENT ("Farms fund your army")
+    // and exactly the wrong one for an instruction. A beat carrying `until`
+    // knows what doing-the-thing looks like, so it waits for it.
+    const overtaken = machine.retired(showing, battle, getMeta?.() ?? null);
+    if (showing && (overtaken || (!showing.until && t >= hideAt))) hide(t);
     if (t - lastPoll < POLL_MS) return;
     lastPoll = t;
 

@@ -92,10 +92,31 @@ export function renderSettings(drawer, ctx) {
     },
   });
 
+  // Volume doubles as the mute: 0 is off, and one control is easier to reach
+  // than a checkbox plus a slider. `settings.sound` stays a separate tri-state
+  // so a save written before sound existed is not muted by its own absence.
+  const volume = sliderRow({
+    id: 'set-volume',
+    label: 'Sound',
+    hint: 'Every cue is synthesised in the browser — there are no audio files to'
+      + ' download. Slide to zero to play in silence.',
+    min: 0,
+    max: 100,
+    step: 5,
+    value: Math.round((settings.sound === false ? 0 : settings.volume ?? 0.7) * 100),
+    format: (n) => (n <= 0 ? 'off' : `${Math.round(n)}%`),
+    onInput: (n) => {
+      settings.volume = Math.max(0, Math.min(1, n / 100));
+      settings.sound = settings.volume > 0;
+      markDirty(ctx.state);
+    },
+  });
+
   mount(drawer, h('div.menu-drawer.menu-settings', {},
     h('h3.menu-drawer-title', { text: 'Settings' }),
     keep,
     speed,
+    volume,
     h('p.set-note.dim', {
       text: 'Preferences are kept across campaigns — starting a new one does not reset them.',
     })));

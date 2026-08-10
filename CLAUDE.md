@@ -929,6 +929,82 @@ by signature rather than by class name.
   after a reset nothing is conquered, so income is exactly 0 by construction rather than
   by recomputation.
 
+## The ten-specialist review, and what it found
+
+Ten specialists were run over the whole product — UI design, game feel, onboarding,
+accessibility, architecture, tests, performance, game design, save integrity and
+release/PWA — each driving a real browser rather than reading source. Most of what
+follows is a MEASURED bug rather than an opinion, and the measurements are worth more
+than the fixes.
+
+**A refused save silently started a new game.** `bootstrapGame` hands back a blank state
+when it cannot read the file, a blank state IS a fresh campaign, so `mainmenu.js` took
+its early return twenty lines above the refusal message. The file was safe and autosave
+was already off — but nothing said so, and the whole recovery path (`SAVE.restoreBackup`,
+`SAVE.autosaveOff`, `loadBackup()`) had **zero consumers**. Now `mainmenu-recovery.js`.
+
+**Three rendering bugs nobody could have found by reading.** The world map strobed
+**pure #ffff00** on entry, because `hd-fill`'s implicit `to` is a `color-mix()` and its
+`from` was a hex, so Chromium interpolated the pair in oklab and left the gamut. Every
+panel in the game composited at **1.05:1** — a modal measured *darker* than the scrim it
+covered — so a 1px hairline was the only thing defining a surface anywhere. And
+`spin += 0.016` **per frame** ran every siege ring at double speed on a 120Hz display.
+
+**The background canvas repainted every frame during any camera gesture.** ~54ms a
+repaint, `markBgDirty` called on every pointermove: 295 repaints in a 10s pan, main
+thread pinned at 994ms/s, **60fps → 31 on a desktop and 36 → 17 on a throttled phone**.
+Gated to 8/s it measures 53fps. Everything else about performance is genuinely fine —
+59.6fps with one dropped frame in 3,576 on the biggest board, the sim at 0.3–0.7% of a
+core — so this was the only real defect in the renderer.
+
+**Half the tutorial was written and never shown.** Five `COACH` lines had no entry in
+the beat table, including the three that teach what people actually lose to (a stalled
+siege, rams, pulling out). `tests/coach.test.js` could not notice: all 22 assertions
+iterate `BEATS`, so it proved the wired beats worked and could never ask about the rest.
+The test now derives from `COACH` itself and fails if a line reaches no player. Worse,
+the one instruction a new player *did* get expired on a 6s timer and could never return —
+an instruction now stays until the player does the thing.
+
+**Accessibility: the DOM layer is good and the canvas has nothing.** Every control is
+named, focus is moved into every dialog, `prefers-reduced-motion` collapses at the token,
+targets pass 2.5.8 everywhere. The board is a canvas with no name, no role, no keyboard
+path and one visual channel — and player-green vs enemy-red measures **ΔE 1.8 at 1.03:1
+under protanopia**, i.e. one continuous field of ground. Fixed here: locked regions at
+1.62:1, filter chips at 1.65:1, empty boosters at 1.88:1 (the *default* look of a fresh
+save), a world-map focus ring that `clip-path` painted and discarded (0 of 67,344 pixels
+changed on a real Tab), a treasury live region announcing 3× a second, and Space not
+activating focused buttons.
+
+### Still open, and why
+
+- **The loadout has a dominant answer: bring only militia.** Measured at n=48 on matched
+  seeds — gallowmoor 58% → **98%**, widowsgate 25% → **94%** — which is wider than the
+  entire difficulty range of the campaign, and four clicks away on the loadout screen.
+  A per-type slot-share cap was built and measured (it takes the exploit to 69%/56% and
+  leaves the default spread byte-identical) and then **reverted**, because it contradicts
+  the documented carry contract: `carryComposition` promises that growth becomes militia
+  and a pick is never rescaled, and ten tests encode that. Reconciling the two is a real
+  balance pass with a re-measure, not a bolt-on. The cause underneath is that militia is
+  best-in-class on both currencies at once — 4.00 atk/slot AND 3.00 def/slot AND 1.50
+  gold per point of attack — and counters the one unit the enemy always fields.
+- **Ownership needs a second channel.** The proposal that fits this renderer: a
+  per-faction hatch under the flood (`terrain.js makeHatch` already builds one and
+  `battleView` already keeps it screen-stable), plus a per-owner `setLineDash` on the
+  site stroke — player solid, enemy dashed, neutral dotted. Both batch by owner, both
+  survive greyscale.
+- **`breachSeconds` stopped binding around region 8.** 33 militia out-pace a level-5
+  castle's repair, and landing budgets reach 703 slots, so the mechanism the whole design
+  rests on no longer gates anything late. This is why rams measure as a straight loss.
+- **The harness player is poorer than any real one.** `metaFor` grants one region's worth
+  of idle income and never raids; a player who simply plays back-to-back banks 2.29M
+  crowns by region 24 against the harness's 464k. At `--idle=50` the last region goes
+  from 25% to **85%**, so tiers 4–6 may be walkovers the table cannot see.
+- Dead seam fields with no reader: `ramImpactHp`, `rules.isRaid`, `rules.targetLengthMs`.
+- `tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 515 lines against a
+  400-line cap and `npm run check` reports ok.
+- Neither `tools/smoke.mjs` nor `tools/mobile.mjs` is in CI, and both exist because a
+  release once shipped completely unclickable.
+
 ## Deployment
 
 `.github/workflows/pages.yml` deploys to GitHub Pages on every push to `main`, gated on
