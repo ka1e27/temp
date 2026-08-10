@@ -48,6 +48,9 @@ export function createStats() {
     wins: 0,
     losses: 0,
     raids: 0,
+    /** Rungs of the endless ladder cleared, ever — including across abdications,
+     *  which is why it lives in stats rather than in `incursion` below. */
+    incursions: 0,
     unitsLost: 0,
     unitsKilled: 0,
     crownsEarned: 0,
@@ -104,8 +107,25 @@ export function createMeta() {
     tutorialSeen: false,
     /** Preferences, not progress. See createSettings above. */
     settings: createSettings(),
-    /** Reserved so prestige can land later with no migration. */
+    /**
+     * PRESTIGE. This was reserved here, unread, "so prestige can land later with
+     * no migration" — and that is exactly what happened: meta/legacy.js writes
+     * both fields and nothing about the persisted shape had to change.
+     *
+     * `points` are permanent and are never spent (they are a multiplier, not a
+     * currency — see meta/legacy.js); `resets` is how many runs have been ended.
+     */
     legacy: { points: 0, resets: 0 },
+    /**
+     * THE ENDLESS LADDER. `cleared` is the deepest rung won and the only source
+     * of truth — the rung in front of the player is `cleared + 1`, derived rather
+     * than stored, so the two can never disagree (meta/incursion.js).
+     *
+     * SURVIVES ABDICATION, deliberately: the ladder is a record of what the
+     * player has beaten, not a possession of one run. It is also what makes a
+     * second run worth starting, because `legacy.points` are paid partly for it.
+     */
+    incursion: { cleared: 0, attempts: 0 },
   };
 }
 
@@ -180,7 +200,17 @@ export function fromPersisted(data, { now = 0 } = {}) {
   // a brand-new save, which gets this from createMeta() instead.
   meta.tutorialSeen = m.tutorialSeen === true;
   meta.settings = sanitizeSettings(m.settings);
-  meta.legacy = { points: 0, resets: 0, ...(m.legacy ?? {}) };
+  // Both healed rather than trusted, and both non-negative integers: they are
+  // multipliers and ladder rungs, and a hand-edited save that made either
+  // fractional or negative would produce a permanent negative bonus.
+  meta.legacy = {
+    points: Math.max(0, Math.floor(num(m.legacy?.points, 0))),
+    resets: Math.max(0, Math.floor(num(m.legacy?.resets, 0))),
+  };
+  meta.incursion = {
+    cleared: Math.max(0, Math.floor(num(m.incursion?.cleared, 0))),
+    attempts: Math.max(0, Math.floor(num(m.incursion?.attempts, 0))),
+  };
 
   for (const [id, rec] of Object.entries(m.regions ?? {})) {
     if (!meta.regions[id]) continue; // region deleted from content: drop, don't crash

@@ -17,8 +17,10 @@
 
 import { h, clear, mount, bindText } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
-import { UI, SAVE } from '../content/strings.js';
+import { UI, SAVE, ENDGAME } from '../content/strings.js';
 import { renderSettings } from './mainmenu-settings.js';
+import { renderAbdicate } from './mainmenu-legacy.js';
+import { canAbdicate, legacyPoints } from '../meta/legacy.js';
 import { createMeta, markDirty, metaOf } from '../core/store.js';
 import { exportSave, importSave } from '../meta/save.js';
 import { incomePerSec, recalcIncome } from '../meta/idle.js';
@@ -184,6 +186,12 @@ export function createMainMenuScene(ctx) {
       [UI.treasury, () => compact(meta().crowns)],
       [UI.income, () => rate(incomePerSec(meta()))],
     ];
+    // Legacy joins the readout only once there is some. A row reading "0 legacy"
+    // on every save in the game would advertise a mechanic most players have not
+    // reached yet and teach them nothing about it.
+    if (legacyPoints(meta()) > 0) {
+      rows.push([ENDGAME.legacyTitle, () => `${legacyPoints(meta())}`]);
+    }
     const el = h('dl.menu-empire', { 'aria-live': 'polite' });
     const binds = rows.map(([label, read]) => {
       const dd = h('dd.num');
@@ -222,7 +230,33 @@ export function createMainMenuScene(ctx) {
       h('button.btn.ghost.menu-settings-btn', {
         type: 'button', text: 'Settings', on: { click: showSettings },
       }));
+    // Offered only when it can actually be taken (every region held), so it is
+    // never a button whose whole job is to explain why it is disabled. The drawer
+    // still handles the locked case, because a menu left open across a battle is
+    // a stale menu.
+    if (canAbdicate(meta())) {
+      mount(actions, h('button.btn.menu-abdicate', {
+        type: 'button', text: ENDGAME.abdicateTitle, on: { click: showAbdicate },
+      }));
+    }
     actions.firstChild?.focus?.();
+  }
+
+  /** The prestige decision. Destructive, so it lives behind the same second
+   *  click "New Campaign" does — see ./mainmenu-legacy.js. */
+  function showAbdicate() {
+    renderAbdicate(drawer, ctx, {
+      onCancel: () => { clear(drawer); renderActions(); },
+      onDone: (result) => {
+        say(`Abdicated. You hold ${result.total} legacy.`);
+        // Same stack reasoning as newCampaign(): as an overlay there is a world
+        // map underneath, so drop the overlay first and then replace what it was
+        // covering — which re-enters the map and rebuilds a board where nothing
+        // but Riverfen is open again.
+        if (overlay) ctx.scenes.pop();
+        ctx.scenes.replace(ctx.screens.worldmap);
+      },
+    })?.focus?.();
   }
 
   /** Wiping is destructive and irreversible from in here, so it always costs

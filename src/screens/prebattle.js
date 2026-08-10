@@ -45,6 +45,7 @@ export function createPreBattleScene(ctx) {
   let boosterBody = null;
   let announce = null;
   let regionId = null;
+  let depth = null;
   let chosen = null;
   let carried = null;
   let pending = null;
@@ -62,7 +63,11 @@ export function createPreBattleScene(ctx) {
 
     enter(params) {
       regionId = params?.regionId;
-      const brief = regionBrief(meta(), regionId);
+      // The rung, when this loadout is for one. Carried as a param the whole way
+      // to buildBattleConfig rather than re-read from meta at each stop: the
+      // depth the player pressed the button for is the depth they fight.
+      depth = params?.incursion ?? null;
+      const brief = regionBrief(meta(), regionId, depth);
       // A scene may not replace itself from enter(); the stack has not finished
       // pushing it yet. update() runs one frame later, which is safe.
       if (!brief) { pending = toMap; return []; }
@@ -125,7 +130,7 @@ export function createPreBattleScene(ctx) {
 
     exit() {
       root = armyBody = boosterBody = announce = null;
-      chosen = carried = regionId = pending = null;
+      chosen = carried = regionId = depth = pending = null;
       notice = '';
       delete document.body.dataset.scene;
     },
@@ -143,7 +148,8 @@ export function createPreBattleScene(ctx) {
   function header(brief) {
     return h('header.pb-header.panel', {},
       h('div.pb-title', {},
-        h('h1#pb-title', { text: `${brief.raid ? UI.raid : UI.attack} ${brief.name}` }),
+        h('h1#pb-title', { text: brief.incursion ? `${brief.incursion.label}: ${brief.name}`
+          : `${brief.raid ? UI.raid : UI.attack} ${brief.name}` }),
         h('p.pb-flavour', { text: brief.flavour ?? '' })),
       h('div.pb-header-actions', {},
         h('button.btn.ghost.pb-shop', {
@@ -160,17 +166,29 @@ export function createPreBattleScene(ctx) {
 
   function briefPanel(brief) {
     return h('section.pb-brief.panel', { 'aria-labelledby': 'pb-brief-h' },
-      h('h2#pb-brief-h', { text: `Tier ${brief.tier} briefing` }),
+      h('h2#pb-brief-h', {
+        text: brief.incursion ? brief.incursion.label : `Tier ${brief.tier} briefing`,
+      }),
       h('dl.pb-stats', {}, ...brief.rows.flatMap(([k, v]) => [
         h('dt.label', { text: k }), h('dd.num', { text: v }),
-      ])));
+      ])),
+      // The complications are the reason this screen matters on a rung: `thinned`
+      // lands a smaller army and `ironwall` makes engines the difference between
+      // a siege and a stalemate, so they are shown WHERE the army is chosen and
+      // not only on the briefing overlay the player has already closed.
+      ...(brief.incursion?.mutators?.length
+        ? [h('ul.pb-mutators', {}, ...brief.incursion.mutators.map((m) => h('li.pb-mutator', {
+          'data-mutator': m.id,
+        }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
+        : []));
   }
 
   function footer(brief) {
     return h('footer.pb-actions.panel', {},
       h('button.btn.primary.pb-go', {
         type: 'button',
-        text: brief.raid ? `Launch raid on ${brief.name}` : `Invade ${brief.name}`,
+        text: brief.incursion ? `Launch ${brief.incursion.label.toLowerCase()}`
+          : brief.raid ? `Launch raid on ${brief.name}` : `Invade ${brief.name}`,
         on: { click: launch },
       }),
       h('button.btn.pb-reset', {
@@ -282,6 +300,7 @@ export function createPreBattleScene(ctx) {
       regionId,
       boosters: [...carried],
       composition: { ...chosen },
+      ...(depth ? { incursion: depth } : {}),
     });
   }
 }

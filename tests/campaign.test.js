@@ -124,24 +124,20 @@ test('campaign: the expedition grows with the empire, in every region', () => {
 });
 
 test('campaign: the expedition segments start where the war changes shape', () => {
-  // This asserted that regions 1-5 spend exactly `base + perRegion * i`, because
-  // `taperAfter` was 4 and regions 1-5 were "balance-frozen". Both halves of
-  // that have since gone: nothing is frozen (the expedition re-base changed
-  // regions 1-5 by construction), and `taperAfter` moved 4 -> 3 because KALDAN
-  // WAS SITTING ON THE BOUNDARY AND GETTING NOTHING. It is a tier-2 region that
-  // was still being paid at the tier-1 rate — 52 slots against highmarch's 76 —
-  // which is why it measured 56% against its band's 66% floor while every other
-  // region in its tier cleared. Moving the boundary one region earlier took it
-  // to 81% and touched nothing else, because `early` is `min(conquered, 3)` and
-  // regions 1-4 are attacked with 0-3 conquests.
-  //
-  // What is worth asserting is the SHAPE: each segment is a rate that applies
-  // over a range, the ranges tile the campaign without gaps, and the opening
-  // regions are on the first rate. Recomputed independently rather than by
-  // calling the same helper back.
-  const { base, perRegion, taperAfter, perRegionLate, surgeAfter, perRegionSurge, surgeBonus }
-    = EXPEDITION;
-  assert.ok(taperAfter < surgeAfter, 'the segment boundaries are out of order');
+  // This asserted that regions 1-5 spend exactly `base + perRegion * i` because
+  // they were "balance-frozen", and both halves of that have gone: nothing is
+  // frozen, and `taperAfter` moved 4 -> 3 because kaldan sat on the boundary
+  // being paid at the tier-1 rate (52 slots against highmarch's 76, and 56%
+  // against a 66% floor). What is worth asserting is the SHAPE: each segment is a
+  // rate over a range, the ranges tile the campaign without gaps, and the opening
+  // is on the first rate. Recomputed independently rather than by calling the same
+  // helper back.
+  const {
+    base, perRegion, taperAfter, perRegionLate, surgeAfter, perRegionSurge, surgeBonus,
+    finalAfter, perRegionFinal, finalBonus,
+  } = EXPEDITION;
+  assert.ok(taperAfter < surgeAfter && surgeAfter < finalAfter,
+    'the segment boundaries are out of order');
   for (let i = 0; i <= taperAfter; i++) {
     assert.equal(expeditionSlots(metaFor(before(i), 0).meta), base + perRegion * i,
       `region ${i + 1} (${REGIONS[i].id}) must land the opening rate exactly`);
@@ -155,6 +151,31 @@ test('campaign: the expedition segments start where the war changes shape', () =
     + surgeBonus + perRegionSurge);
   assert.equal(at(surgeAfter + 2) - at(surgeAfter + 1), perRegionSurge,
     'the surge step is a one-off; past the boundary only the rate applies');
+  assert.equal(at(finalAfter + 1) - at(finalAfter), finalBonus + perRegionFinal,
+    'the tier-6 boundary is a one-time step plus that segment\'s rate');
+  assert.equal(at(finalAfter + 2) - at(finalAfter + 1), perRegionFinal,
+    'the final step is a one-off too; past the boundary only the rate applies');
+
+  // AND THE FOURTH SEGMENT CANNOT REACH BACKWARDS, which is the entire reason it
+  // exists as a fourth segment instead of a bigger `perRegionSurge`. Sixteen
+  // measured regions sit on the surge rate; `finalAfter` is set to the conquest
+  // count region 21 is attacked with, so every one of them is arithmetically out
+  // of reach. Asserted as the property rather than the number: a future pass that
+  // moves the boundary earlier has to come through here.
+  // Region index i is attacked with exactly i conquests, so the last region
+  // BEFORE tier 6 is attacked with `firstLate - 1` and the tier-6 opener with
+  // `firstLate`. Both halves are asserted: the segment must miss every earlier
+  // region, and it must actually land on the opener — a boundary set one too high
+  // would be just as wrong, silently handing tier 6 nothing and leaving the three
+  // rows tuned against a step they never get.
+  const firstLate = REGIONS.findIndex((r) => r.tier === 6);
+  assert.ok(firstLate > 0, 'tier 6 must exist for this to mean anything');
+  assert.ok(finalAfter >= firstLate - 1,
+    `the final segment starts at ${finalAfter} conquests, so region ${firstLate}`
+    + ` (attacked with ${firstLate - 1}) already feels it — it re-tunes measured regions`);
+  assert.ok(finalAfter < firstLate,
+    `the final segment starts at ${finalAfter} conquests but the tier-6 opener is`
+    + ` attacked with ${firstLate} — the tier it pays for never receives it`);
 });
 
 /**
@@ -164,12 +185,10 @@ test('campaign: the expedition segments start where the war changes shape', () =
  * of the campaign without one test noticing. `siteCounts.player` is the biggest
  * difficulty lever in the table, so every pass that needed a region easier
  * reached for it — and the campaign's own premise is that you are RAIDING ground
- * the enemy holds outright. Measured before this was pinned:
- *
- *     tier 1   player 25-29%   enemy 45-50%     reads as a raid
- *     tier 3   player 38-39%   enemy 43-45%
- *     tier 4   player 39-43%   enemy 41-42%     parity
- *     tier 5   player 44-48%   enemy 38-41%     you own more than they do
+ * the enemy holds outright. Measured before this was pinned, player share against
+ * enemy share: tier 1 25-29% / 45-50% (which reads as a raid), tier 3 38% / 44%,
+ * tier 4 39-43% / 41-42% (parity), tier 5 44-48% / 38-41% — the player owning more
+ * of the enemy's homeland than the enemy did.
  *
  * On the deepest region of the enemy's own homeland the player started holding
  * twenty-three sites to the enemy's eighteen. The raid stopped being a raid
@@ -177,11 +196,9 @@ test('campaign: the expedition segments start where the war changes shape', () =
  * because difficulty was measured and ownership never was.
  *
  * The replacement for the sites is the EXPEDITION, not a lower dial: the empire
- * buys you an ARMY, not a province. `EXPEDITION.perRegionLate` went 5 -> 11,
- * which by construction leaves regions 1-5 untouched (they are attacked with
- * 0-4 conquests, below `taperAfter`) and pays for the ground taken away from
- * tiers 2-5. The land the player used to start owning is NEUTRAL now, so it is
- * still on the map and still takeable — it just has to be taken.
+ * buys you an ARMY, not a province, and each segment of it is scoped so it cannot
+ * reach the regions already measured. The land the player used to start owning is
+ * NEUTRAL now — still there, still takeable, just no longer free.
  */
 const MAX_PLAYER_SHARE = 0.33;
 
@@ -253,26 +270,15 @@ test('campaign: a player who has taken everything before region N can field enou
     const neutral = config.sites.filter((s) => s.owner === 'neutral')
       .reduce((a, s) => a + total(s.garrison), 0);
     const foe = enemyTroops(config);
-    // You are RAIDING a region the enemy holds outright, and the landing force
-    // was re-based down (content/balance.js EXPEDITION) precisely so that being
-    // outnumbered is the starting position rather than a late surprise. It also
-    // pairs with the enemy's warm-up (content/ai.data.js AI.warmup) — landing
-    // outnumbered against an opponent that presses from tick 0 would be a coin
-    // flip, not a fight. See MAX_CONTESTED_RATIO for why the ceiling counts the
-    // neutral pool and the floor does not.
     // THE "YOU ARE OUTNUMBERED" CLAIM IS MEASURED ON PRODUCTION, NOT ON THE
-    // TICK-0 HEADCOUNT, and that is the second time the denominator here has
-    // been wrong for the same structural reason.
-    //
-    // The player's footprint is a BEACHHEAD now — three or four sites against
-    // eleven to seventeen — so their whole opening force is a landing stack
-    // that arrives once, while the enemy's is standing country that keeps
-    // producing. Counting bodies at tick 0 therefore flatters the player badly:
+    // TICK-0 HEADCOUNT, and that is the second time the denominator here has been
+    // wrong for the same structural reason. The player's footprint is a BEACHHEAD
+    // — three to five sites against eleven to eighteen — so their whole opening
+    // force is a landing stack that arrives once, while the enemy's is standing
+    // country that keeps producing. Counting bodies flatters the player badly:
     // measured, gallowmoor opens at 0.98x on garrison and 7.3x on TRAINING
-    // THROUGHPUT, thanescar at 1.16x and 9.0x. A landing force that matches the
-    // enemy's opening garrison and is out-produced nine to one is the most
-    // uphill this campaign has ever been, and the old floor called it a
-    // walkover.
+    // THROUGHPUT, thanescar at 1.16x and 9.0x. See MAX_CONTESTED_RATIO for why the
+    // ceiling counts the neutral pool and the floor does not.
     const rate = (owner) => battleFor(i).sites.filter((s) => s.owner === owner)
       .reduce((a, s) => a + siteTrainRate(battleFor(i), s), 0);
     assert.ok(rate('enemy') / Math.max(1e-6, rate('player')) >= MIN_OUTPRODUCED,
@@ -289,25 +295,22 @@ test('campaign: the endgame is a bigger war, and the empire is what answers it',
   // THIS TEST USED TO ASSERT A HEADCOUNT PROXY AND THE PROXY IS NOW WRONG, which
   // is worth stating plainly because it had already been half-retired once. It
   // compared mean `enemyTroops / playerForce` per tier and required the endgame's
-  // to exceed the opening's. Measured now, that number FALLS after tier 2:
-  //
-  //     tier 1  1.94    tier 3  1.79    tier 5  1.73
-  //     tier 2  2.20    tier 4  1.70
-  //
-  // and the campaign is nonetheless correctly ordered — tools/simrunner.js at
-  // n=240 reports ~85 / ~78 / ~63 / ~50 / ~34 per tier against `WIN_BAND`. The
-  // ratio fell because the player's footprint was cut to a raider's share and
-  // the EXPEDITION was surged to pay for it, so more of the same force arrives in
-  // the landing stack instead of standing on the map. Opening headcount stopped
-  // tracking difficulty; what carries it now is map size, `develop`, the AI tier,
-  // the enemy's economy and the dial, none of which a headcount can see.
-  //
-  // Asserting it anyway would force the table to satisfy a number nobody plays —
-  // the exact failure this file's older comment warned about. So the two claims
-  // that are still TRUE, still load-bearing, and cheap to check are asserted
-  // instead, and the win-rate curve stays where it can actually be measured.
+  // to exceed the opening's. Measured now, that number FALLS after tier 2 (1.94 /
+  // 2.20 / 1.79 / 1.70 / 1.73) and the campaign is nonetheless correctly ordered:
+  // tools/simrunner.js at n=240 reports ~85 / ~78 / ~63 / ~50 / ~34 / ~22 per tier
+  // against `WIN_BAND`. The ratio fell because the player's footprint was cut to a
+  // raider's share and the EXPEDITION was surged to pay for it, so more of the same
+  // force arrives in the landing stack instead of standing on the map. What carries
+  // difficulty now is map size, `develop`, the AI tier, the enemy's economy and the
+  // dial, none of which a headcount can see. Asserting it anyway would force the
+  // table to satisfy a number nobody plays, so the two claims that are still TRUE
+  // and cheap to check are asserted instead.
   const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-  const perTier = (fn) => [1, 2, 3, 4, 5].map((t) => mean(
+  // Driven off the tiers that EXIST rather than a literal ladder: a sixth tier
+  // was added and a hardcoded [1..5] would have gone on grading the campaign as
+  // though its last three regions were not in it.
+  const tiers = [...new Set(REGIONS.map((r) => r.tier))].sort((a, b) => a - b);
+  const perTier = (fn) => tiers.map((t) => mean(
     REGIONS.map((r, i) => ({ t: r.tier, v: fn(i) })).filter((x) => x.t === t).map((x) => x.v),
   ));
 
@@ -318,7 +321,7 @@ test('campaign: the endgame is a bigger war, and the empire is what answers it',
       `tier ${t + 1} fields ${army[t].toFixed(0)} against tier ${t}'s ${army[t - 1].toFixed(0)}`
       + ' — the endgame must be a bigger war, not the same one re-priced');
   }
-  assert.ok(army[4] > army[0] * 4,
+  assert.ok(army.at(-1) > army[0] * 4,
     'the last tier should face multiples of the first, not a fraction more');
 
   // 2. AND THE EMPIRE, NOT THE MAP, IS WHAT ANSWERS IT. The share of the
@@ -336,10 +339,10 @@ test('campaign: the endgame is a bigger war, and the empire is what answers it',
   });
   assert.ok(fromEmpire[0] > 0.5,
     'even region one should be mostly the force you brought');
-  assert.ok(fromEmpire[4] > fromEmpire[0],
+  assert.ok(fromEmpire.at(-1) > fromEmpire[0],
     'the endgame must lean MORE on what you earned and less on what the map gave you');
-  assert.ok(fromEmpire[4] > 0.75,
-    `the endgame landing is only ${(fromEmpire[4] * 100).toFixed(0)}% expedition —`
+  assert.ok(fromEmpire.at(-1) > 0.75,
+    `the endgame landing is only ${(fromEmpire.at(-1) * 100).toFixed(0)}% expedition —`
     + ' the map is handing the player a province again');
 });
 

@@ -34,6 +34,10 @@ export const UPGRADE_GROUPS = Object.freeze([
   { id: 'empire', name: 'Empire', blurb: 'Six lines, no ceiling. Every level costs more than the last.' },
   { id: 'unlocks', name: 'Unlocks', blurb: 'Bought once. Militia and spearmen are free from the start.' },
   { id: 'boosters', name: 'Boosters', blurb: 'Unlock a booster once; buy its charges per use.' },
+  {
+    id: 'crown', name: 'The Crown', requires: 'endgame',
+    blurb: 'What an empire that has already won builds. Opens when the campaign is finished.',
+  },
 ]);
 
 /** Offline accrual. Base cap 8h, +2h per Treasury level, to a 24h ceiling. */
@@ -47,6 +51,22 @@ const H2 = 2 * 60 * 60 * 1000;
 const U = (id, group, name, maxLevel, base, rate, effects, desc) =>
   ({ id, group, name, maxLevel, cost: { base, rate }, effects, desc });
 
+/**
+ * The same builder, plus a GATE. `requires: 'endgame'` is checked by
+ * meta/upgrades.js `isAvailable` and means "the campaign has been finished at
+ * least once" (meta/legacy.js `endgameOpen`).
+ *
+ * The gate is not decoration and it is not anti-spoiler: it is what lets these
+ * lines exist without re-tuning a single region. tools/simplayer.js shops
+ * cheapest-affordable-first out of `shopListing`, and the harness plays region N
+ * with N-1 conquests and no abdications — so for every battle in
+ * content/regions.data.js this gate is SHUT, and the twenty-four measured win
+ * rates describe the same player they always did. tests/crownshop.test.js pins
+ * that, negative control included.
+ */
+const G = (id, name, base, rate, effects, desc) =>
+  ({ ...U(id, 'crown', name, ENDLESS_LATE, base, rate, effects, desc), requires: 'endgame' });
+
 const add = (key, value) => ({ bucket: 'add', key, value });
 const mult = (key, value) => ({ bucket: 'mult', key, value });
 const flat = (key, value) => ({ bucket: 'flat', key, value });
@@ -54,6 +74,11 @@ const unlock = (key, value) => ({ bucket: 'unlock', key, value });
 
 /** No cap. Read it as "the price is the limit", which it is. */
 const ENDLESS = Infinity;
+/** ...and the same for the four Crown lines. A separate name only so the reason
+ *  the endgame tier is endless — it is the sink for an endless LADDER, so a
+ *  ceiling would put the incursion economy back where it started — is stated
+ *  where the tier is defined rather than inferred from a shared constant. */
+const ENDLESS_LATE = Infinity;
 
 /** @type {ReadonlyArray<object>} */
 export const UPGRADES = Object.freeze([
@@ -109,7 +134,37 @@ export const UPGRADES = Object.freeze([
   U('boosterTithe', 'boosters', 'War Tithe', 1, 700, 1, [unlock('booster', 'tithe')],
     'Instant battle gold plus 15s of +50% training throughput.'),
   U('boosterBombard', 'boosters', 'Bombardment', 1, 900, 1, [unlock('booster', 'bombard')],
-    'Kills a quarter of a garrison and 60 structure HP. Never captures.'),
+    'Kills a quarter of a garrison and 60 structure HP. Never captures.',
+  ),
+
+  // --- The Crown: four more endless lines, for a treasury the campaign cannot
+  // --- spend. Gated on `endgame` — see G() above for why that gate is what makes
+  // --- them safe rather than what makes them special.
+  //
+  // PRICED FOR AN INCURSION ECONOMY, NOT A CAMPAIGN ONE. A finished empire earns
+  // ~950 crowns/sec before Treasury multiplies it, and one rung of the ladder pays
+  // hundreds of times that in a lump (meta/rewards.js `incursionLump`), while a
+  // level-25 Treasury already costs about four million. Basing these at 200-350k
+  // puts a first Crown level at roughly one rung — cheap against the six lines at
+  // that stage, which is deliberate: a new line SHOULD be the best value per crown
+  // for a while, or the endgame is just the same six buttons at bigger numbers.
+  //
+  // Every effect rides a channel that already exists and is already consumed. The
+  // four retired upgrades this project refunded were sold and did NOTHING
+  // (`ramImpactHp` crossed the seam and no battle file read it), so a new line
+  // asserting a new field would be the same mistake with a bigger price tag.
+  G('exchequer', 'Exchequer', 200000, 1.55,
+    [add('income', 0.25), flat('offlineCapMs', H2)],
+    '+25% crowns per second, and +2h of offline income (to the same 24h ceiling).'),
+  G('grandArmy', 'Grand Army', 250000, 1.55,
+    [flat('expedition', 18), add('march', 0.06)],
+    '+18 expedition slots and +6% march speed. The landing force, not the ground.'),
+  G('warCollege', 'War College', 300000, 1.58,
+    [add('atk', 0.05), add('def', 0.05), add('trainSpeed', 0.06)],
+    '+5% attack, +5% defence and +6% training. Quality, where Arms buys quantity.'),
+  G('citadels', 'Citadels', 350000, 1.60,
+    [add('siegeDmg', 0.20), add('structureRegen', 0.25), flat('garrisonCap', 25)],
+    '+20% siege damage, +25% repair on walls you hold, +25 garrison everywhere.'),
 ]);
 
 /**

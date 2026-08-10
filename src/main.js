@@ -111,4 +111,8 @@ if (new URLSearchParams(location.search).has('dev')) {
     .catch(() => { /* overlay is optional; never block the game on it */ });
 }
 
-Object.assign(window, { __game: { state, bus, scenes, loop } });
+// `screens` joins the handle so tools/smoke.mjs can put the game into a state a
+// fresh save cannot reach in the seconds a smoke test has — a finished campaign,
+// which is the gate on both endgame surfaces. It drives them with real pointer
+// events from there; this only replaces the twenty-four battles in between.
+Object.assign(window, { __game: { state, bus, scenes, loop, screens: ctx.screens } });

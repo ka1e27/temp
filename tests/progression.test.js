@@ -181,7 +181,12 @@ test('the shop cannot run out, because none of the six lines has an end', () => 
   // nothing left to buy at all. That is a strange thing for an idle game to do
   // to a player who idles.
   const endless = UPGRADES.filter(isEndless);
-  assert.equal(endless.length, 6, 'six lines carry the whole late game');
+  // Six carry the CAMPAIGN; the four gated Crown lines carry what comes after it
+  // and are not on sale until it is finished (meta/legacy.js `endgameOpen`).
+  assert.equal(endless.filter((u) => !u.requires).length, 6,
+    'six lines carry the whole late game');
+  assert.equal(endless.filter((u) => u.requires === 'endgame').length, 4,
+    'four Crown lines carry the endless ladder past it');
   for (const u of endless) assert.equal(costToMax(richMeta(0), u.id), Infinity);
 
   // The real test of "it runs out": a player who owns the entire world, has
@@ -241,11 +246,21 @@ test('every line is reachable in the campaign, and none of them early', () => {
   // be trivially affordable at Kaldan.
   const early = metaFor(REGION_IDS.slice(0, 4), 10).meta;   // the Kaldan player
   const late = metaFor(REGION_IDS.slice(0, REGIONS.length - 1), 60).meta;
-  for (const u of UPGRADES.filter(isEndless)) {
+  for (const u of UPGRADES.filter((x) => isEndless(x) && !x.requires)) {
     assert.ok(levelOf(late, u.id) > 0, `${u.id} is never reachable`);
   }
   assert.equal(levelOf(early, 'unlockMarshal'), 0,
     'the marshal is cheap enough to disturb the early game');
+
+  // AND THE GATED HALF IS NOT REACHABLE — the same claim from the other side, and
+  // the one that protects every measured region. `metaFor` is the harness's own
+  // player, so this is a statement about what the balance table was measured
+  // against rather than about a fixture: a Crown line bought here would mean
+  // tools/simplayer.js had been spending the campaign's treasury on the endgame.
+  for (const u of UPGRADES.filter((x) => x.requires === 'endgame')) {
+    assert.equal(levelOf(late, u.id), 0,
+      `${u.id} was bought by a player who has not finished the campaign`);
+  }
 });
 
 // ===========================================================================
@@ -369,10 +384,11 @@ test('Treasury and Siegeworks reach the idle economy and the walls', () => {
 
 test('the contract did not have to change: every line rides a field that already existed', () => {
   // The number tracks bumps this test is NOT about: v4 was rules.castleGateFrac,
-  // v5 the rally target list and rules.rallyKeepDefault. The point of THIS test
-  // is that the six endless lines needed no field of their own — they all ride
-  // fields the contract already had.
-  assert.equal(CONTRACT_VERSION, 5);
+  // v5 the rally target list and rules.rallyKeepDefault, v6 the incursion rung.
+  // The point of THIS test is that the endless lines needed no field of their
+  // own — they all ride fields the contract already had, and that is still true
+  // of the four Crown lines added on top of them.
+  assert.equal(CONTRACT_VERSION, 6);
   const cfg = configWith({ arms: 3, warChest: 3, drill: 3, standingArmy: 2, siegeworks: 3 });
   for (const k of ['unitAtkMult', 'unitDefMult', 'goldRateMult', 'trainCostMult',
     'siegeDmgMult', 'structureRegenMult', 'marchSpeedMult', 'farmYieldMult']) {

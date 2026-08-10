@@ -50,7 +50,7 @@ function instrumented(regionId, seed, opts = {}) {
 // One region per tier: the gap was measured at +6 points in tier 2 and +38 in
 // tier 4, so "the bot upgrades" has to be true at the END of the campaign too,
 // not just where gold is easy.
-const PER_TIER = ['riverfen', 'kaldan', 'karrowmere', 'obsidian', 'nightharrow'];
+const PER_TIER = ['riverfen', 'kaldan', 'karrowmere', 'obsidian', 'nightharrow', 'widowsgate'];
 
 test('harness: the scripted player actually exercises the site-upgrade ladder', () => {
   // Behavioural, not a grep. The original investigation confirmed the gap by

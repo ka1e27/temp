@@ -48,7 +48,7 @@
 // DEFAULT_COMPOSITION_WEIGHT and the bot only ever trains militia and rams, so
 // on a default run every filter below is a no-op over a garrison that holds none
 // of them, and `riderTurn` returns without queueing anything. That is what keeps
-// all twenty-one tuned regions measuring the same player they were tuned
+// all twenty-four tuned regions measuring the same player they were tuned
 // against. `tests/harness.test.js` pins it with a negative control rather than
 // leaving it to inspection.
 

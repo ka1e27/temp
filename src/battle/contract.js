@@ -37,7 +37,20 @@ import { fnv1a, stableStringify } from '../core/hash.js';
 //     troops a rallied site holds back. Meta owns the preference and battle owns
 //     the per-site field it seeds, so it has to cross. OPTIONAL, like the two
 //     before it: absent means the RALLY_KEEP default.
-export const CONTRACT_VERSION = 5;
+//
+// v6: `rules.incursion` — `{depth, mutators[]}`, the identity of one rung of the
+// endless ladder (content/incursion.data.js). OPTIONAL, like the three fields
+// before it: absent means an ordinary battle.
+//
+// It carries the rung's IDENTITY and not its effects, which is the whole reason
+// the ladder needed no other contract change. Every mutator is applied on the
+// meta side through a field that already crosses this seam — a FactionMods
+// multiplier, a generation input, or `castleGateFrac` — so the engine steps an
+// incursion with no knowledge that one exists. What the field is FOR is the three
+// consumers that must tell one rung from another: meta/rewards.js (an incursion
+// pays a depth-scaled lump and must never be mistaken for a raid on the same
+// region), the results screen, and the HUD.
+export const CONTRACT_VERSION = 6;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
@@ -279,6 +292,22 @@ export function assertBattleConfig(c) {
       const k = c.rules.rallyKeepDefault;
       if (!Number.isInteger(k) || k < 0) {
         e.push(`rules.rallyKeepDefault: expected a non-negative integer, got ${k}`);
+      }
+    }
+    // v6. Validated at the seam because it is the field meta/rewards.js branches
+    // the whole endless economy on: a depth of 0, or a `mutators` that is a
+    // string rather than a list of them, would pay a lump for a battle that was
+    // never on the ladder.
+    if (c.rules.incursion !== undefined) {
+      const inc = c.rules.incursion;
+      if (!inc || typeof inc !== 'object') e.push('rules.incursion: must be an object');
+      else {
+        if (!Number.isInteger(inc.depth) || inc.depth < 1) {
+          e.push(`rules.incursion.depth: expected an integer >= 1, got ${inc.depth}`);
+        }
+        if (!Array.isArray(inc.mutators) || inc.mutators.some((m) => typeof m !== 'string')) {
+          e.push('rules.incursion.mutators: must be an array of mutator ids');
+        }
       }
     }
   }

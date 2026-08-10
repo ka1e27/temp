@@ -290,6 +290,13 @@
   width: min(460px, 92vw); padding: var(--s-6);
   display: flex; flex-direction: column; gap: var(--s-4);
   animation: hd-rise var(--d-slow) var(--ease-out) both;
+  /* A DIALOG THAT OUTGROWS THE WINDOW SCROLLS INSTEAD OF SPILLING OFF IT. The
+     menu grew a fifth action and a drawer that itemises a payout, and past that
+     point the top of the card — the title and Continue — was simply above the
+     viewport with no way to reach it. `place-items: center` on the overlay
+     centres the overflow in BOTH directions, so nothing is clipped on one side
+     only. */
+  max-height: 92vh; overflow-y: auto; overscroll-behavior: contain;
 }
 .dialog h1 {
   margin: 0; font: var(--w-bold) var(--t-2xl) / 1.1 var(--font); letter-spacing: -0.02em;

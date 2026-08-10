@@ -353,7 +353,14 @@ export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null) {
 export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
   const state = metaFor(conquered, idleMinutes, seed, fieldedUnits(opts.weights));
   const config = buildBattleConfig(state.meta, regionId, [], generateBattleMap, {
-    seed, composition: opts.weights ?? null,
+    seed,
+    composition: opts.weights ?? null,
+    // `opts.incursion` is a DEPTH on the endless ladder, and the bot plays a rung
+    // exactly as it plays a region — the mutators arrive as multipliers, a gate
+    // and a smaller landing force, all of which `playerTurn` already reads off the
+    // state. Nothing here special-cases them, which is the point: a mechanic the
+    // harness cannot play is a mechanic nobody has measured.
+    ...(opts.incursion ? { incursion: opts.incursion } : {}),
   });
   return startBattle(config);
 }

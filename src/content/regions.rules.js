@@ -1,4 +1,4 @@
-// The campaign's RULES, as opposed to its twenty-one rows.
+// The campaign's RULES, as opposed to its twenty-four rows.
 //
 // Split out of ./regions.data.js purely for the line budget, the same way
 // ./ai.data.js was, and re-exported from there — so
@@ -7,13 +7,129 @@
 //
 // The division of labour: THIS file is everything true of every region (how a
 // raid pays, how one difficulty dial spreads across the enemy's mods, what the
-// enemy may field per tier, what a site starts garrisoned with). ./regions.data.js
-// is the table itself and the reasoning behind the shape of its columns.
+// enemy may field per tier, what a site starts garrisoned with, and the two rules
+// the whole table obeys). ./regions.data.js is the table itself and the reasoning
+// behind each tier's own columns.
 // PURE DATA. No logic reads a number that is not defined here or in balance.js.
+
+// ---------------------------------------------------------------------------
+// THE TWO LOAD-BEARING RULES THE TABLE OBEYS.
+//
+// Moved here from ./regions.data.js when tier 6 needed that file's line budget,
+// verbatim. They belong here for the same reason DEVELOP_CLAMP and GATE_CLAMP do:
+// each is a claim about EVERY row, not about any one of them, and each is the
+// reasoning a future pass has to read before it moves a column. The table's own
+// header points back at this block.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// THE SECOND LOAD-BEARING RULE, and the one this table used to break: A
+// REGION'S STEP MUST BE THE SIZE OF THE PLAYER'S STEP INTO IT.
+//
+// The columns rose smoothly — `enemyMult` moved +0.02 a region for thirteen
+// regions straight — but the player does not rise smoothly. Crowns compound at
+// roughly 1.3x a region and meta/upgrades.js buys cheapest-affordable-first, so
+// the two flat combat multipliers (Veterancy on attack, Bulwark on defence)
+// arrive in LUMPS about every second region and nothing at all arrives in
+// between. Measured off real BattleConfigs, the player's atk x def stepped
+// +15.4% into greywater, +14.3% into emberholt, +11.6% into blackspire and
+// EXACTLY 0% into highmarch, thornmoor, gallowmoor, thanescar and obsidian.
+//
+// Those are, one for one, the regions the win-rate curve zigzagged on: at n=96
+// greywater won 92% against highmarch's 84%, emberholt 94% against thornmoor's
+// 74%, vaelstrand 84% against sunder's 70%. Nothing was wrong with those three
+// regions. They were the regions the player walked into holding a freshly
+// bought multiplier, and the table handed them +0.02 on the dial like everyone
+// else. A +0.02 answer to a +15% player is a region that plays easier than the
+// one before it, and a difficulty curve that goes down is a lie on the map.
+//
+// So the steps below are UNEVEN ON PURPOSE. greywater, emberholt, sunder,
+// vaelstrand and blackspire take big ones (a map row, an enemy site, a whole
+// castle level); thornmoor, gallowmoor, thanescar and ironcrown take almost
+// none. thornmoor's is deliberately the smallest in tier 2 because the player's
+// step into it is NEGATIVE: unlocking rams re-spends the expedition at 5 slots
+// a body, so the landing force drops from 54 to 48 and the region is harder at
+// an unchanged dial. Two of the five columns are only required to be
+// NON-DECREASING, not strictly increasing, and that headroom is what pays for
+// this — greywater and thornmoor ship the same grid and the same site counts.
+// ---------------------------------------------------------------------------
+//
+// ---------------------------------------------------------------------------
+// THE THIRD LOAD-BEARING RULE, and the one this table broke for its whole life:
+// THE PLAYER'S STEP INCLUDES THE MECHANICS THE HARNESS ACTUALLY PLAYS.
+//
+// Every number in this table was once measured against a bot that never bought
+// an in-battle site upgrade. tools/simplayer.js issued no UPGRADE command at
+// all, so content/balance.js `SITE_LEVELS` and all four `SITE_UPGRADE` steps
+// were unexercised by every measurement this project had ever taken — while the
+// enemy was handed that same ladder for free at mapgen through `develop` below.
+// Levelling was tuned IN for the defender and tuned OUT for the attacker, and
+// every win rate the table was built on was a lower bound on real player power.
+//
+// Switching it on (tools/simplayer.js `upgradeTurn`) moved the campaign +9 to
+// +25 points and flattened it to 76-99% at n=96: tier 2 played exactly as easy
+// as tier 1. The dial ramp below is the retune that followed. Two things it
+// found are worth more than the numbers.
+//
+// 1. `siteCounts.player` IS A COMPOUNDING LEVER NOW, NOT A FLAT ONE. It was
+//    already the biggest entry in this table (+21 points per site, measured on
+//    gallowmoor). With the ladder live it is worth more, because every extra
+//    site is also another site to BUILD: more starting ground buys more economy,
+//    which buys levels, which buy the next site. Tier 2 shipped SEVEN and became
+//    unfixable by the dial alone — solved independently, the dial tier 2 needed
+//    (emberholt 2.54 for 83%) overtook the dial tier 3 wanted (gallowmoor 2.43
+//    for 80%), and `enemyMult` is required to be non-decreasing, so that is a
+//    contradiction rather than a tuning problem. Cutting tier 2 to SIX starting
+//    sites resolved it, and bought back the battle length the ladder had eaten
+//    at the same time: emberholt went 97% / 9.8m to 81% / 11.9m on that one
+//    column, against a 16.5m advertised length.
+//
+// 2. `castleGateFrac` IS NOT A DIFFICULTY KNOB. Swept end to end on emberholt
+//    (0.30 -> 0.60) it moved the win rate ONE point and the median half a
+//    minute, because this bot already sweeps the countryside when it is winning.
+//    It buys the guarantee against a rush strategy, which is what it was added
+//    for. It does not buy difficulty, and reaching for it as though it does is
+//    how a region ends up re-tuned by a column that was never moving.
+//
+// The dial below was solved per region by binary search at n=192 and confirmed
+// end to end at n=240. Two other levers were measured and REJECTED, which is
+// worth recording so the next pass does not re-derive them: a castle promotion
+// via `develop` is worth 25-40 points at tiers 3-4 (gallowmoor 90% -> 54% on one
+// rung), far too coarse to tune with; and `enemyMult` itself is violently
+// non-linear late — gallowmoor loses 31 points over +0.26 and thanescar 43 over
+// +0.50, so anything past tier 2 must be moved in steps of 0.05 and re-measured,
+// never extrapolated.
+//
+// THE CURRENT MEASURED CURVE, in campaign order, at n=64 with the band edges
+// confirmed at n=240:
+//
+//     tier 1   89 84 84 84        tier 4   52 34 52 47
+//     tier 2   80 70 72 78 72     tier 5   22 23 36    (34 on nightharrow at n=240)
+//     tier 3   55 69 53 59 69     tier 6   36 27 19    (21 25 21 at n=240)
+//
+// TIERS 1-5 ARE BYTE-FOR-BYTE WHAT THEY WERE BEFORE TIER 6 SHIPPED, and that is
+// the property the fourth expedition segment exists to guarantee rather than a
+// happy result: `EXPEDITION.finalAfter` is 20, which is the conquest count region
+// 21 is attacked with, so nothing tier 6 was paid for can reach backwards. The
+// tier-6 rows were solved against that.
+//
+// Every one of the twenty-four reports `ok` against its tier's WIN_BAND and its
+// advertised length. Nothing is balance-frozen any more — the expedition re-base
+// changed regions 1-5 by construction, so they are solved with the rest.
+//
+// NOTE THE DIAL RAMP STEEPENED AT TIER 3 (+0.21 a region against tier 4's
+// +0.08), and that is the second load-bearing rule doing its job rather than an
+// inconsistency. `EXPEDITION.perRegionSurge` hands the player +23 slots a region
+// from region 10 on, which is a far bigger step than the +11 before it, so the
+// dial has to climb faster there simply to stand still. Measured before the
+// ramp was re-cut, tier 3 ran 23 / 29 / 42 / 60 / 79 across five regions on a
+// +0.16 ramp — a 56-point slope inside a 22-point band, entirely because the
+// player outgrew it region by region.
+// ---------------------------------------------------------------------------
 
 /** Battle hard cap per tier, in minutes. A backstop, not a timer you play
  *  against — each sits well above its tier's targetLengthMin. */
-export const HARD_CAP_MIN_BY_TIER = [12, 14, 17, 20, 24];
+export const HARD_CAP_MIN_BY_TIER = [12, 14, 17, 20, 24, 28];
 /** The cap is a stall backstop, not a race: 2.2x the advertised length. */
 export const HARD_CAP_RATIO = 1.9;
 
@@ -90,6 +206,10 @@ export const ENEMY_SCALING = Object.freeze({
  * `marshal` at tier 4 is now a real grant — see meta/modifiers.js
  * `withEnemyMarshal`. It listed here for this project's whole life and did
  * nothing at all.
+ *
+ * TIER 6 REPEATS IT AGAIN, for the same reason tier 5 did. What separates tier 6
+ * is the commander (content/ai.data.js `AI_TIERS[5]`), the ground, and the
+ * SECOND BANNER below — none of which is a cliff.
  */
 export const ENEMY_UNITS_BY_TIER = Object.freeze([
   ['militia', 'spearmen'],
@@ -97,7 +217,31 @@ export const ENEMY_UNITS_BY_TIER = Object.freeze([
   ['militia', 'spearmen', 'raiders', 'rams'],
   ['militia', 'spearmen', 'raiders', 'rams', 'marshal'],
   ['militia', 'spearmen', 'raiders', 'rams', 'marshal'],
+  ['militia', 'spearmen', 'raiders', 'rams', 'marshal'],
 ]);
+
+/**
+ * HOW MANY MARSHALS THE ENEMY IS GRANTED, by tier — the throne first, then its
+ * best-defended stronghold (meta/modifiers.js `withEnemyMarshal`).
+ *
+ * Tiers 4 and 5 read 1, which is exactly what they already shipped, so this
+ * table changes nothing about a region that was measured before it existed
+ * (tests/enemymarshal.js pins that as a negative control).
+ *
+ * Tier 6 gets TWO, and the second one is the tier's step rather than a new unit.
+ * `banner` is stack-local (battle/combat.js), so a marshal is worth +25% to the
+ * comp he is standing in and nothing to any other — one in the throne defends
+ * the win condition, and a second in a wall makes one line of the countryside
+ * genuinely expensive instead of making everything slightly harder. That is a
+ * step the per-region dial can absorb (measured: it costs 4-9 points, the same
+ * order as granting the first one cost tier 4) and it lands where the flavour
+ * has always said it does: their surviving warlords take the field.
+ *
+ * `maxPerSite` (battle/training.js) is 1 and still binds, so a count larger than
+ * the number of eligible sites simply grants fewer — never two in one garrison,
+ * where the second would be worth literally nothing.
+ */
+export const ENEMY_MARSHALS_BY_TIER = Object.freeze([0, 0, 0, 1, 1, 2]);
 
 /** Starting garrisons the meta layer writes into a generated map, before
  *  enemy scaling. Battle never invents troops; the config says what is there. */
@@ -196,3 +340,26 @@ export const DEVELOP_CLAMP = (n) => Math.max(1, Math.min(5, Number(n) || 1));
  * battle unwinnable at any skill.
  */
 export const GATE_CLAMP = (n) => Math.max(0, Math.min(0.85, Number(n) || 0));
+
+/**
+ * THE ROW BUILDER. Lives here rather than in ./regions.data.js because every
+ * line of it is a statement about EVERY region — the two clamps above, and the
+ * hard cap being derived rather than authored — which is this file's job, and
+ * because that file needs its budget for the table.
+ *
+ * id, name, tier, hex, adjacentTo, enemyMult, cols, rows, [enemy,neutral,player],
+ * develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour
+ */
+export const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
+  develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour) => ({
+  id, name, tier, hex, adjacentTo, enemyMult,
+  grid: { cols, rows },
+  siteCounts: { enemy: siteCounts[0], neutral: siteCounts[1], player: siteCounts[2] },
+  develop: DEVELOP_CLAMP(develop),
+  castleGateFrac: GATE_CLAMP(castleGateFrac),
+  rewardPerSec, targetLengthMin, flavour,
+  hardCapMs: Math.round(
+    Math.max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
+  ),
+  startsUnlocked: false,
+});

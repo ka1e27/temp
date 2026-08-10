@@ -215,3 +215,56 @@
 .set-slider { margin-top: var(--s-1); }
 .set-hint, .set-note { margin: var(--s-1) 0 0; font-size: var(--t-xs); line-height: 1.45; }
 .set-note { margin-top: var(--s-4); }
+
+/* --- The endgame tier, and the endless ladder -----------------------------
+   A locked Crown line reads like every other locked thing in the game: dashed
+   edge, dimmed, price still legible. It is shown rather than hidden because what
+   finishing the campaign buys is worth knowing before you have finished it. */
+.shop-group[data-locked='1'] > h3::after {
+  content: ' \25CF'; color: var(--c-text-dim); font-size: 0.6em; vertical-align: middle;
+}
+.shop-row[data-locked='1'] { opacity: 0.62; border-left: 2px dashed var(--c-line); }
+.shop-locked {
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
+  color: var(--c-text-dim); letter-spacing: var(--track-tag);
+  min-width: 6.5em; text-align: right;
+}
+
+/* The incursion briefing reuses the shop overlay's plate wholesale — same
+   dialog, same header, same list column — so only the rung's own parts are
+   styled here. */
+.inc-body { display: flex; flex-direction: column; gap: var(--s-4); }
+.inc-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.inc-depth { margin: 0; font: var(--w-bold) var(--t-xl) / 1.1 var(--font); }
+.inc-cleared { font: var(--w-normal) var(--t-xs) / 1 var(--font-num); letter-spacing: var(--track-label); }
+.inc-hint { margin: 0; font-size: var(--t-sm); color: var(--c-text-dim); }
+.inc-locked { margin: 0; font-size: var(--t-sm); color: var(--c-warn); }
+.inc-mutators { display: flex; flex-direction: column; gap: var(--s-2); }
+.inc-mutators h4 { margin: 0 0 var(--s-1); }
+/* One complication per row, marked on the leading edge in the warning hue: these
+   are the things that decide what army to bring. */
+.inc-mutator {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--s-2) var(--s-3); border-radius: var(--r-2);
+  background: var(--plate-bg-2); box-shadow: inset 2px 0 0 var(--c-warn);
+}
+.inc-mutator-name { font-weight: var(--w-bold); font-size: var(--t-sm); }
+.inc-mutator-note { font-size: var(--t-xs); color: var(--c-text-dim); }
+.inc-go { align-self: flex-start; }
+
+/* ...and the same list on the loadout screen, where the army is actually chosen. */
+.pb-mutators { margin: var(--s-3) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--s-1); }
+.pb-mutator {
+  padding: var(--s-1) var(--s-2); border-radius: var(--r-2);
+  background: var(--plate-bg-2); box-shadow: inset 2px 0 0 var(--c-warn);
+  font-size: var(--t-xs); color: var(--c-text-dim);
+}
+.pb-mutator strong { color: var(--c-text); }
+
+/* Abdication is destructive, so its drawer wears the same danger edge the
+   new-campaign confirmation does — and its payout table wears the gold. */
+.menu-legacy { padding: var(--s-4); border-left-width: var(--plate-edge); border-left-color: var(--c-gold); }
+.menu-legacy p { font-size: var(--t-sm); }
+.legacy-payout dd:last-of-type { color: var(--c-gold); }
+.menu-abdicate { background: color-mix(in srgb, var(--c-gold) 16%, var(--c-surface-2)); }
+.menu-abdicate:hover { background: color-mix(in srgb, var(--c-gold) 28%, var(--c-surface-2)); }

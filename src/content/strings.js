@@ -128,6 +128,33 @@ export const WORLD = Object.freeze({
   firstRegion: 'Riverfen is the only region you can reach with an empire of zero.',
 });
 
+/**
+ * The endless ladder and the reset. Same rule as everything else here: state the
+ * RULE. A player deciding whether to abdicate is deciding about numbers, so the
+ * copy says what is kept and what is lost rather than dressing it up as a story.
+ */
+export const ENDGAME = Object.freeze({
+  incursionTitle: 'Incursions',
+  incursionLocked: 'Take every region to open the endless ladder.',
+  incursionHint: 'One battle per rung, on ground you already hold. Win and the next'
+    + ' rung is harder; lose and nothing changes but the boosters you fired.',
+  incursionDepth: (n) => `Depth ${n}`,
+  incursionCleared: (n) => (n > 0 ? `Deepest cleared: ${n}` : 'Nothing cleared yet'),
+  incursionGo: 'Begin incursion',
+  mutatorsNone: 'No complications at this depth.',
+  mutatorsTitle: 'Complications',
+  abdicateTitle: 'Abdicate',
+  abdicateLocked: 'Available once you have taken every region.',
+  abdicateHint: 'End this empire. Crowns, upgrades, boosters and every region go back'
+    + ' to nothing — you keep your legacy, your records and the ladder you have climbed.',
+  abdicateGo: 'Abdicate and begin again',
+  abdicateConfirm: 'This cannot be undone. Abdicate?',
+  legacyTitle: 'Legacy',
+  legacyNone: 'No legacy yet. Finish a campaign and abdicate to earn some.',
+  legacyHeld: (n) => `${n} legacy`,
+  legacyWorth: 'Every point is permanent, applies to every run, and is never spent.',
+});
+
 export const SHOP = Object.freeze({
   header: 'Spend crowns on things you will feel next battle.',
   economyFirst: 'Economy-first starves the enemy and wins slowly.',

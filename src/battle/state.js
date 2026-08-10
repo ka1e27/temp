@@ -205,6 +205,21 @@ export function createBattleState(config) {
        * to configure.
        */
       rallyKeepDefault: clampRallyKeep(config.rules.rallyKeepDefault ?? RALLY_KEEP.default),
+      /**
+       * WHICH RUNG OF THE ENDLESS LADDER THIS IS, or null for an ordinary battle
+       * — `{depth, mutators[]}`, straight off the config (contract v6).
+       *
+       * The sim does not read it and must not: every mutator's EFFECT is already
+       * baked into the mods, the sites and the gate by meta/incursion.js, so an
+       * engine branch on `incursion` would be a second place that decides what a
+       * mutator does. It is listed here — rather than left off the subset above,
+       * which is the trap this object's other comment is about — because the HUD
+       * and the dev overlay have to be able to NAME the fight they are drawing,
+       * and they only ever see `state`.
+       */
+      incursion: config.rules.incursion
+        ? { depth: config.rules.incursion.depth, mutators: [...config.rules.incursion.mutators] }
+        : null,
     },
 
     meta: { lastFlipTick: 0, attritionStage: 0 },

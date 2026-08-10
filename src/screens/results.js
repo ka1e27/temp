@@ -14,7 +14,12 @@ import { compact, rate, duration, integer } from '../ui/format.js';
 import { UI, RESULTS } from '../content/strings.js';
 import { applyOutcome } from '../meta/rewards.js';
 import { regionById, isAttackable, canRaid, raidCooldownRemaining } from '../meta/world.js';
+import { nextDepth, planFor } from '../meta/incursion.js';
 import { incomePerSec } from '../meta/idle.js';
+
+/** Where the rung after this one is fought. Derived, never remembered: the ring
+ *  rotates, so the next depth is usually different ground. */
+const nextRungRegion = (meta) => planFor(nextDepth(meta)).regionId;
 
 /**
  * Title and body for an outcome. Pure, so the four branches are testable and
@@ -26,6 +31,12 @@ import { incomePerSec } from '../meta/idle.js';
 export function resultCopy(outcome, applied, region) {
   const name = region?.name ?? 'The region';
   if (outcome.result === 'win') {
+    if (applied?.incursion) {
+      return {
+        title: `Depth ${applied.incursion.depth} cleared`,
+        body: 'The ladder goes on. The next rung is harder, and pays more for it.',
+      };
+    }
     return applied?.raided
       ? { title: `${name} raided`, body: 'A one-time lump. The region was already yours.' }
       : { title: `${name} is yours`, body: 'Your empire grows, and so does its income.' };
@@ -55,6 +66,7 @@ export function statRows(outcome, applied, before, after) {
     if (applied?.crowns) rows.push(['Crowns', `+${compact(applied.crowns)}`]);
     if (after > before) rows.push([UI.income, `${rate(before)} → ${rate(after)}`]);
   }
+  if (applied?.incursion) rows.push(['Depth', `${applied.incursion.depth}`]);
   return rows;
 }
 
@@ -113,23 +125,36 @@ export function createResultsScene(ctx) {
     const meta = ctx.state.meta;
     const now = Date.now();
     const id = outcome.regionId;
+    const rung = config?.rules?.incursion?.depth ?? 0;
 
     const out = [h('button.btn.primary.results-map', {
       text: 'To the map', type: 'button',
       on: { click: () => ctx.scenes.replace(ctx.screens.worldmap) },
     })];
 
-    const again = (text, label) => h('button.btn.results-again', {
+    const again = (text, label, depth = 0) => h('button.btn.results-again', {
       text, type: 'button', 'aria-label': label,
       on: {
         click: () => ctx.scenes.replace(ctx.screens.prebattle, {
-          regionId: id,
+          regionId: depth ? nextRungRegion(meta) : id,
+          ...(depth ? { incursion: depth } : {}),
           // Re-open on the army that just fought, so "change your expedition"
           // starts from the one that failed rather than from the default.
           composition: config?.player?.expedition,
         }),
       },
     });
+
+    // THE LADDER IS THE ONE THING WORTH A STRAIGHT-BACK-IN BUTTON, win or lose,
+    // and the two cases are different fights: a win advances the rung (and can
+    // move to different ground, so the region is re-derived rather than reused),
+    // a loss re-offers the same one. There is no cooldown to respect either way —
+    // what bounds the ladder is winnability.
+    if (rung) {
+      const next = nextDepth(meta);
+      out.push(again(`Depth ${next}`, `Plan incursion depth ${next}`, next));
+      return out;
+    }
 
     if (outcome.result === 'win') {
       if (canRaid(meta, id, now)) out.push(again(UI.raid, `Plan another raid on ${id}`));

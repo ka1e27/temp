@@ -38,14 +38,24 @@ test('every upgrade sits in a declared group and has a sane cost curve', () => {
   }
 });
 
-test('the six endless lines exist, and they are the only endless ones', () => {
+test('the endless lines are the six Empire ones plus the four gated Crown ones', () => {
   const endless = UPGRADES.filter(isEndless).map((u) => u.id).sort();
-  assert.deepEqual(endless,
-    ['arms', 'drill', 'siegeworks', 'standingArmy', 'treasury', 'warChest']);
+  assert.deepEqual(endless, [
+    'arms', 'citadels', 'drill', 'exchequer', 'grandArmy', 'siegeworks',
+    'standingArmy', 'treasury', 'warChest', 'warCollege',
+  ]);
   for (const id of endless) {
-    assert.equal(UPGRADE_BY_ID[id].group, 'empire', `${id} belongs in the empire group`);
-    assert.ok(UPGRADE_BY_ID[id].cost.rate > 1,
+    const u = UPGRADE_BY_ID[id];
+    assert.ok(u.group === 'empire' || u.group === 'crown',
+      `${id} is endless but sits in the ${u.group} group`);
+    assert.ok(u.cost.rate > 1,
       `${id} must actually get more expensive, or it is free money forever`);
+    // THE HALF THAT MATTERS: an endless line outside the Empire group must be
+    // GATED. An ungated one would be on sale during the campaign, and the harness
+    // buys cheapest-affordable-first — so it would re-tune all twenty-four
+    // measured regions the moment it shipped.
+    assert.equal(u.group === 'crown', u.requires === 'endgame',
+      `${id}: the Crown group and the endgame gate must be the same set`);
   }
   // Everything else is bought exactly once.
   for (const u of UPGRADES) {
@@ -61,13 +71,29 @@ test('the shop is small enough to read at a glance', () => {
   // an unlock has `max: 1`, so it leaves the shop the moment it is bought and
   // the list a returning player scans is only ever the repeatable half. Capping
   // the total is what made adding a unit look like making the shop worse.
-  const endless = UPGRADES.filter((u) => u.max > 1);
-  const oneOff = UPGRADES.filter((u) => u.max <= 1);
-  assert.ok(endless.length <= 8,
-    `${endless.length} permanent lines is too many to scan every visit`);
+  //
+  // THIS TEST READ `u.max` AND THE FIELD IS `u.maxLevel`, so both filters were
+  // measuring nothing: `endless` was always empty and `oneOff` was always every
+  // upgrade in the game, which made the second assertion a cap on the TOTAL —
+  // exactly the thing the comment above says is the wrong instrument. It passed
+  // for as long as the total happened to be under twelve. Fixed rather than
+  // relaxed, and the claim is now the one a player experiences: what is ON SCREEN
+  // this visit.
+  const repeatable = UPGRADES.filter(isEndless);
+  const oneOff = UPGRADES.filter((u) => !isEndless(u));
+  // Gated lines are not on screen until the campaign is finished, so the list a
+  // player scans mid-campaign is the ungated half — and that half is the number
+  // the original complaint was about.
+  const onScreenNow = repeatable.filter((u) => !u.requires);
+  assert.ok(onScreenNow.length <= 8,
+    `${onScreenNow.length} permanent lines is too many to scan every visit`);
+  assert.ok(repeatable.length <= 12,
+    `${repeatable.length} permanent lines even at the endgame is too many`);
   assert.ok(oneOff.length <= 12,
     `${oneOff.length} one-off unlocks is too long a shopping list to start with`);
-  assert.ok(UPGRADE_GROUPS.length <= 3, 'three headings at most');
+  const openGroups = UPGRADE_GROUPS.filter((g) => !g.requires);
+  assert.ok(openGroups.length <= 3, 'three headings at most before the endgame');
+  assert.ok(UPGRADE_GROUPS.length <= 4, 'four headings at most, ever');
   for (const u of UPGRADES) {
     assert.ok(u.desc.length <= 100, `${u.id} description is ${u.desc.length} chars — too long`);
   }

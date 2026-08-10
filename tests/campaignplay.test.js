@@ -61,7 +61,11 @@ test('campaign: every region is winnable by an ordinary player, at every tier', 
   // brings it to 1.7%. The seeds are fixed, so this is not flakiness in the
   // usual sense; it is a sample too small to distinguish "hard" from "broken",
   // which is precisely the distinction the assertion message claims to make.
-  const SEEDS = 16;
+  // ...AND IT GREW AGAIN AT TIER 6, for exactly the same arithmetic. `WIN_BAND[5]`
+  // floors at 18%, where a sixteen-seed sample is empty 5% of the time and a
+  // twenty-four-seed one 1%. The floor is a claim about the region; a sample that
+  // fails one time in twenty is a claim about the dice.
+  const SEEDS = 24;
   for (let i = 0; i < REGIONS.length; i++) {
     const wins = Array.from({ length: SEEDS }, (_, k) => playOnce(i, 1000 + (k + 1) * 7919))
       .filter((b) => b.status === 'win').length;

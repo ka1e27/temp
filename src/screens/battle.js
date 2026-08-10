@@ -75,7 +75,7 @@ export function createBattleScene(ctx) {
     id: 'battle',
 
     enter(params) {
-      const { regionId, boosters, composition, resume } = params;
+      const { regionId, boosters, composition, resume, incursion } = params;
       finished = false;
 
       if (resume) {
@@ -88,9 +88,13 @@ export function createBattleScene(ctx) {
         // `composition` comes from the pre-battle loadout screen. modifiers.js
         // treats it as ratios and refits it to the expedition budget, so the
         // screen can never mint troops.
+        // `incursion` is a DEPTH on the endless ladder, carried from the briefing
+        // through the loadout screen. modifiers.js checks the region against the
+        // rung's own plan, so a stale param cannot pick an easy map for a deep
+        // rung — it throws at the seam instead.
         config = buildBattleConfig(
           ctx.state.meta, regionId, boosters, generateBattleMap,
-          composition ? { composition } : undefined,
+          { ...(composition ? { composition } : {}), ...(incursion ? { incursion } : {}) },
         );
         assertBattleConfig(config);
         ctx.state.battle = startBattle(config);

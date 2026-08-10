@@ -6,13 +6,14 @@
 
 import { compact, rate, duration } from '../ui/format.js';
 import { UNIT_IDS, LOADOUT_TYPES_MAX } from '../content/balance.js';
-import { UNITS_UI } from '../content/strings.js';
+import { UNITS_UI, ENDGAME } from '../content/strings.js';
 import {
   expeditionSlots, carryComposition, distributeExpedition,
   compositionSlots, compositionTotal, overBudget, slotCost, typeCount,
 } from '../meta/modifiers.js';
 import { unlockedUnits } from '../meta/upgrades.js';
 import { regionById, effectiveEnemyMult, isConquered } from '../meta/world.js';
+import { planFor, MUTATOR_BY_ID } from '../meta/incursion.js';
 import { previewReward } from '../meta/rewards.js';
 
 export { compositionSlots, compositionTotal, overBudget, slotCost, typeCount };
@@ -90,22 +91,34 @@ export function describeComposition(comp, unlocked) {
  * Everything the briefing panel shows, with no DOM and no clock. Difficulty,
  * map size, target length and reward all come off the region record.
  */
-export function regionBrief(meta, regionId) {
+export function regionBrief(meta, regionId, depth = null) {
   const region = regionById(regionId);
   if (!region) return null;
   const raid = isConquered(meta, regionId);
-  const reward = previewReward(meta, regionId);
-  const mult = effectiveEnemyMult(meta, regionId);
+  const reward = previewReward(meta, regionId, depth ?? 0);
+  // A RUNG'S DIFFICULTY IS THE RUNG'S, NOT THE GROUND'S. `effectiveEnemyMult` is
+  // the raid ladder's dial for this region and has nothing to do with the depth,
+  // so showing it on an incursion would advertise a fight the player is not about
+  // to have — off by a factor that grows with every rung.
+  const plan = depth ? planFor(depth) : null;
+  const mult = plan ? plan.enemyMult : effectiveEnemyMult(meta, regionId);
   return {
     id: region.id, name: region.name, tier: region.tier, flavour: region.flavour,
     raid, reward, enemyMult: mult,
+    incursion: plan ? {
+      depth: plan.depth,
+      label: ENDGAME.incursionDepth(plan.depth),
+      mutators: plan.mutators.map((id) => ({
+        id, name: MUTATOR_BY_ID[id].name, note: MUTATOR_BY_ID[id].note,
+      })),
+    } : null,
     rows: [
       ['Difficulty', `x${mult.toFixed(2)}`],
       ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
       ['Enemy sites', `${region.siteCounts.enemy}`],
       ['Typical length', `~${region.targetLengthMin} min`],
       ['Hard cap', duration(region.hardCapMs / 1000)],
-      [raid ? 'Raid pays' : 'Conquest pays', raid
+      [plan ? 'Clearing pays' : raid ? 'Raid pays' : 'Conquest pays', plan || raid
         ? `${compact(reward.crowns)} crowns, once`
         : `${compact(reward.crowns)} crowns and ${rate(reward.incomeAdded)} forever`],
     ],

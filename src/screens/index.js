@@ -5,6 +5,7 @@ import { createWorldMapScene } from './worldmap.js';
 import { createPreBattleScene } from './prebattle.js';
 import { createBattleScene } from './battle.js';
 import { createShopScene } from './shop.js';
+import { createIncursionScene } from './incursion.js';
 import { createResultsScene } from './results.js';
 
 /**
@@ -18,6 +19,10 @@ import { createResultsScene } from './results.js';
  * reachable again from the map's Menu button. main.js may open with EITHER
  * `mainmenu` or `worldmap`; whichever it is, exactly one of them takes the boot
  * decision (see mainmenu.bootRoute) and the other stands down.
+ *
+ * `incursion` is the endless ladder's briefing and joins the flow at the same
+ * place the shop does — an overlay pushed from the map, which then hands off to
+ * `prebattle` carrying a depth. It is only offered once every region has fallen.
  */
 export function createScreens(ctx) {
   const screens = {};
@@ -27,6 +32,7 @@ export function createScreens(ctx) {
   screens.prebattle = createPreBattleScene(ctx);
   screens.battle = createBattleScene(ctx);
   screens.shop = createShopScene(ctx);
+  screens.incursion = createIncursionScene(ctx);
   screens.results = createResultsScene(ctx);
   return screens;
 }

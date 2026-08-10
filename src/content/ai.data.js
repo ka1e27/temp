@@ -192,6 +192,32 @@ export const AI_TIERS = [
   { reactionTicks: 15, commitRatio: 0.85, safetyMargin: 1.08,
     economyMult: 0.3800, concurrent: 4, retreatDiscipline: 0.95, counterShare: 0.50,
     ramAppetite: 1.0, stagingRatio: 0.85, stagingKeep: 0.05, warmupSec: 225 },
+  // Tier 6 — the coast behind the homeland, and an enemy that has already lost.
+  //
+  // FIVE CONCURRENT ATTACKS is the whole commander, and it is the only knob on
+  // this row that is a genuine step rather than a nudge. The player's answer to
+  // two threats is to shuttle one relief force; at four there is no reserve; at
+  // five a front they are already winning gets taken back behind them while they
+  // are somewhere else. It is also the one knob whose cost SCALES WITH THE MAP —
+  // tier 6 ships the two biggest boards in the game, so a fifth front has
+  // somewhere to come from.
+  //
+  // Everything else here is a nudge on purpose. `safetyMargin` 1.02 is the
+  // thinnest in the game and is nearly at its floor: an AI that commits BELOW
+  // 1.0 is launching attacks it expects to lose, which spends its own army to no
+  // end and measured WEAKER, not harder. `counterShare` deliberately stays at
+  // 0.50 — battle/ai.js `adapt` reserves a spear backbone before either share
+  // spends anything, and a share that eats the rest is how the enemy disarmed
+  // itself the first time (tests/campaignplay.test.js, "never disarms itself").
+  // `ramAppetite` and the staging ratios were already at their ceilings at tiers
+  // 4-5; there is no 1.1.
+  //
+  // `warmupSec` 255 continues the ramp for the reason the tier-3 entry documents:
+  // the warm-up is the window the landing force converts neutral ground in, and
+  // tier 6 has the largest neutral pool in the campaign (28-32 sites) to convert.
+  { reactionTicks: 12, commitRatio: 0.90, safetyMargin: 1.02,
+    economyMult: 0.4000, concurrent: 5, retreatDiscipline: 0.98, counterShare: 0.50,
+    ramAppetite: 1.0, stagingRatio: 0.90, stagingKeep: 0.05, warmupSec: 255 },
 ];
 
 /** AI knobs that are the SAME at every tier. Per-tier knobs live in AI_TIERS. */

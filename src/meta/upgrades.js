@@ -14,9 +14,32 @@ import {
   UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS, STARTING_UNITS, OFFLINE, SAFE_MAX_LEVEL,
   upgradeCost,
 } from '../content/upgrades.data.js';
+import { legacyEffects, endgameOpen } from './legacy.js';
 import { META_EVENTS, emit } from './events.js';
 
 export { UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS };
+
+/**
+ * IS THIS LINE ON SALE YET?
+ *
+ * `requires: 'endgame'` is the only gate there is, and it means what
+ * meta/legacy.js `endgameOpen` means: the campaign has been finished at least
+ * once. Everything else is available from the first battle, exactly as before.
+ *
+ * IT IS CHECKED HERE, IN `canBuy`, AND NOT ONLY IN THE SHOP SCREEN, and that is
+ * the whole reason the endgame lines could ship without re-tuning anything. The
+ * harness buys cheapest-affordable-first straight off `shopListing`
+ * (tools/simplayer.js), so a gate the LISTING respected but a purchase did not
+ * would be worth nothing — and a gate in the screen alone would be worth less
+ * than nothing, since the screen is not what measures the campaign.
+ */
+export function isAvailable(meta, u) {
+  if (!u?.requires) return true;
+  if (u.requires === 'endgame') return endgameOpen(meta);
+  // An unknown requirement is treated as UNMET rather than ignored: content that
+  // asks for a gate this file does not implement must not silently go on sale.
+  return false;
+}
 
 /** Levels already owned. Absent === 0. */
 export function levelOf(meta, id) {
@@ -76,6 +99,11 @@ export function canBuy(meta, id) {
   const u = UPGRADE_BY_ID[id];
   if (!u) return { ok: false, reason: 'unknown', cost: Infinity, level: 0, maxLevel: 0 };
   const level = levelOf(meta, id);
+  if (!isAvailable(meta, u)) {
+    // `cost` is still the real price rather than Infinity: the shop shows a
+    // locked line WITH what it will cost, which is the point of showing it.
+    return { ok: false, reason: 'locked', cost: upgradeCost(u, level), level, maxLevel: u.maxLevel };
+  }
   if (isMaxed(u, level)) {
     return { ok: false, reason: 'maxed', cost: Infinity, level, maxLevel: u.maxLevel };
   }
@@ -141,7 +169,12 @@ export function upgradeEffects(meta) {
       }
     }
   }
-  return out;
+  // LEGACY IS THE LAST THING FOLDED IN, through the same buckets, so a prestige
+  // point reaches idle income, the offline cap and both battle multipliers down
+  // exactly the channels the shop does — and there is no second stacking order
+  // for the two to drift apart in. A NO-OP at zero points, which is every battle
+  // the balance table was ever measured with.
+  return legacyEffects(meta, out);
 }
 
 /** Convenience readers used by idle.js and modifiers.js. */
@@ -168,6 +201,11 @@ export function hasFeature(meta, feature) {
 export function shopListing(meta) {
   return UPGRADE_GROUPS.map((g) => ({
     ...g,
+    // A gated GROUP is still listed, with `open: false` — the shop shows the
+    // Crown tier locked so a player can see what finishing the campaign buys.
+    // `affordable` on its items is false regardless, so nothing can be bought
+    // through it: the gate is enforced in canBuy, not here.
+    open: g.requires ? isAvailable(meta, g) : true,
     items: UPGRADES.filter((u) => u.group === g.id).map((u) => {
       const check = canBuy(meta, u.id);
       return {
@@ -181,6 +219,8 @@ export function shopListing(meta) {
         cost: check.cost,
         affordable: check.ok,
         reason: check.reason,
+        locked: !isAvailable(meta, u),
+        requires: u.requires ?? null,
       };
     }),
   }));

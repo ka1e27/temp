@@ -252,10 +252,26 @@ export const BOOSTERS = {
  * SHORTER the further you get. Adding sites does not fix it, because sites off
  * that road are never fought over — obsidian at 26 enemy sites on a 21x15 grid
  * still resolved in 6.6m.
+ *
+ * THE FOURTH SEGMENT (`finalAfter` / `finalBonus` / `perRegionFinal`) IS TIER 6,
+ * AND IT COULD NOT HAVE BEEN THE THIRD ONE RAISED. Tier 6 measured 16 / 6 / 16
+ * against an 18-36 band on the segments above, and the obvious fix — a bigger
+ * `perRegionSurge` — is the one thing that is not available: that rate applies
+ * from the ninth conquest, so every region from gallowmoor on would be re-tuned
+ * by it, and all sixteen of them are measured. `finalAfter: 20` cannot touch a
+ * region before the twenty-second BY CONSTRUCTION, because region 21 is attacked
+ * with twenty conquests. That is the same argument `taperAfter` makes for the
+ * frozen opening, one end of the campaign later.
+ *
+ * The split into a STEP and a RATE is the lesson the surge already paid for: a
+ * landing force needs a LEVEL (enough to contest a 55-site board the player
+ * starts on five sites of) and a SLOPE (how fast it grows region to region), and
+ * one number cannot set both.
  */
 export const EXPEDITION = {
   base: 12, perRegion: 10, taperAfter: 3, perRegionLate: 24,
   surgeAfter: 8, surgeBonus: 232, perRegionSurge: 14,
+  finalAfter: 20, finalBonus: 52, perRegionFinal: 8,
 };
 
 /**

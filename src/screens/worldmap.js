@@ -1,7 +1,7 @@
-// World map — 21 regions as hexes on one grid. Conquered hexes flood with your
+// World map — 24 regions as hexes on one grid. Conquered hexes flood with your
 // colour, so the campaign literally looks like a spreading empire.
 //
-// DOM rather than canvas: 21 static, clickable, labelled things are exactly
+// DOM rather than canvas: 24 static, clickable, labelled things are exactly
 // what the browser is already good at, and it gets focus, keyboard nav and
 // accessibility for free. Canvas would mean reimplementing all of it.
 //
@@ -14,10 +14,11 @@
 // and it is the only route to the loadout, the shop and the menu.
 import { h, clear, mount, bindText } from '../ui/dom.js';
 import { compact, rate, duration } from '../ui/format.js';
-import { UI, WORLD } from '../content/strings.js';
+import { UI, WORLD, ENDGAME } from '../content/strings.js';
 import {
   worldView, regionById, isAttackable, raidCooldownRemaining, modeOf,
 } from '../meta/world.js';
+import { incursionView } from '../meta/incursion.js';
 import { incomePerSec } from '../meta/idle.js';
 import { previewReward } from '../meta/rewards.js';
 import { bootRoute, launchFirstRegion } from './mainmenu.js';
@@ -66,7 +67,22 @@ export function createWorldMapScene(ctx) {
           h('span.label', { text: UI.treasury }), crowns,
           h('span.label', { text: UI.income }), income),
         h('div.wm-actions', {},
-          h('button.btn', {
+          // The endless ladder, and only once there is one. Built here rather
+          // than in the detail panel because a rung has no hex of its own: it is
+          // fought on ground the player already holds. Absent until the campaign
+          // is finished, so it can never be a button that explains why it is
+          // disabled — see meta/incursion.js `campaignComplete`.
+          ...(incursionView(meta()).open ? [h('button.btn.wm-incursion', {
+            text: ENDGAME.incursionTitle, type: 'button',
+            'aria-label': 'Open the incursion briefing',
+            on: { click: () => ctx.scenes.push(ctx.screens.incursion) },
+          })] : []),
+          // `.wm-shop` on the control itself, not "the first button in the
+          // header": tools/smoke.mjs used to select `.wm-actions button`, and the
+          // moment a second button joined that row the smoke test would have been
+          // hit-testing whichever one came first in the DOM while still reporting
+          // that it had checked the shop.
+          h('button.btn.wm-shop', {
             text: UI.shop, type: 'button',
             'aria-label': 'Open the upgrade shop',
             on: { click: () => ctx.scenes.push(ctx.screens.shop) },

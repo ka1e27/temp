@@ -94,9 +94,10 @@ test('assertBattleConfig rejects unknown ids and bad charge counts', () => {
 // --- features: the seam that five purchased upgrades needed ---------------
 
 test('the contract carries shop features, and validates them', () => {
-  assert.equal(CONTRACT_VERSION, 5,
+  assert.equal(CONTRACT_VERSION, 6,
     'features + booster validation landed in v2, the terrain layer in v3,'
-    + ' the castle gate in v4, the rally target list and hold-back default in v5');
+    + ' the castle gate in v4, the rally target list and hold-back default in v5,'
+    + ' the incursion rung in v6');
   const mods = makeMods({ features: ['doubleSpeed'] });
   assert.ok(hasMod(mods, 'doubleSpeed'));
   assert.ok(!hasMod(mods, 'standingOrders'));

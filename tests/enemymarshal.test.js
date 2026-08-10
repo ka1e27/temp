@@ -30,7 +30,9 @@ import { buildBattleConfig, withEnemyMarshal } from '../src/meta/modifiers.js';
 import { startBattle } from '../src/battle/sim.js';
 import { power, total } from '../src/battle/combat.js';
 import { trainMultiplier } from '../src/battle/training.js';
-import { REGIONS, REGION_IDS, ENEMY_UNITS_BY_TIER } from '../src/content/regions.data.js';
+import {
+  REGIONS, REGION_IDS, ENEMY_UNITS_BY_TIER, ENEMY_MARSHALS_BY_TIER,
+} from '../src/content/regions.data.js';
 import { UNITS } from '../src/content/balance.js';
 import { metaFor } from '../tools/simplayer.js';
 
@@ -49,15 +51,30 @@ const enemyMarshals = (config) => config.sites
 // 1. He turns up, exactly once, exactly where the tier says
 // ===========================================================================
 
-test('marshal: the enemy fields one from tier 4 on, and none before it', () => {
-  // Every region, not a sample: the roster is per tier and the grant reads the
-  // roster, so this is the assertion that keeps the two from drifting apart.
+test('marshal: the enemy fields exactly what its tier says, and none before tier 4', () => {
+  // Every region, not a sample: the count is per tier and the grant reads the
+  // roster as well, so this is the assertion that keeps the two from drifting
+  // apart. A tier listing `marshal` with a count of 0 — or the reverse — would be
+  // the original bug in a new costume.
   for (const r of REGIONS) {
-    const expected = ENEMY_UNITS_BY_TIER[
+    const inRoster = ENEMY_UNITS_BY_TIER[
       Math.min(ENEMY_UNITS_BY_TIER.length, Math.max(1, r.tier)) - 1].includes('marshal');
+    const expected = inRoster ? (ENEMY_MARSHALS_BY_TIER[r.tier - 1] ?? 1) : 0;
     const got = enemyMarshals(configFor(r.id));
-    assert.equal(got, expected ? 1 : 0,
-      `${r.id} (tier ${r.tier}) fielded ${got} enemy marshal(s), expected ${expected ? 1 : 0}`);
+    assert.equal(got, expected,
+      `${r.id} (tier ${r.tier}) fielded ${got} enemy marshal(s), expected ${expected}`);
+  }
+});
+
+test('marshal: tiers 4 and 5 still field exactly one — the count table changed nothing', () => {
+  // THE NEGATIVE CONTROL ON THE PER-TIER COUNT. Every win rate in tiers 4 and 5
+  // was measured with one marshal in the throne and nothing else, and
+  // `ENEMY_MARSHALS_BY_TIER` reads 1 there precisely so those numbers still
+  // describe what ships. A table that quietly handed tier 4 a second banner would
+  // re-tune eight measured regions and nothing else in the suite would notice.
+  for (const r of REGIONS.filter((x) => x.tier === 4 || x.tier === 5)) {
+    assert.equal(enemyMarshals(configFor(r.id)), 1,
+      `${r.id} is tier ${r.tier} and must field one marshal, as it was tuned with`);
   }
 });
 
@@ -73,6 +90,29 @@ test('marshal: he stands in the throne, not in the countryside', () => {
       assert.equal(s.owner, 'enemy', `${id}: a ${s.owner} site started with a marshal`);
       assert.equal(s.kind, 'castle', `${id}: the marshal is standing in a ${s.kind}`);
     }
+  }
+});
+
+test('marshal: tier 6 fields two — the throne first, then one wall', () => {
+  // The tier's step, and the reason it is a step rather than a cliff: `banner` is
+  // stack-local, so the second marshal makes ONE line of the countryside
+  // expensive instead of making the whole map slightly harder. Both halves matter
+  // — the throne must still get the first one (it defends the win condition), and
+  // the second must never end up in the same garrison, where `maxPerSite` would
+  // reject it and the grant would silently be worth nothing.
+  for (const r of REGIONS.filter((x) => x.tier === 6)) {
+    const config = configFor(r.id);
+    const held = config.sites.filter((s) => (s.garrison.marshal || 0) > 0);
+    assert.equal(held.length, 2, `${r.id} fielded ${held.length} marshal-bearing sites`);
+    for (const s of held) {
+      assert.equal(s.owner, 'enemy', `${r.id}: a ${s.owner} site started with a marshal`);
+      assert.equal(s.garrison.marshal, 1, `${r.id}: two marshals in one garrison (${s.id})`);
+    }
+    assert.equal(held.filter((s) => s.kind === 'castle').length, 1,
+      `${r.id}: the throne is not one of the two — the win condition comes first`);
+    const wall = held.find((s) => s.kind !== 'castle');
+    assert.ok(wall.kind === 'stronghold' || wall.kind === 'camp',
+      `${r.id}: the second banner is standing in a ${wall.kind}, not on a wall`);
   }
 });
 

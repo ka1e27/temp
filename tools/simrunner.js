@@ -11,6 +11,7 @@ import { playOne } from './simplayer.js';
 import { REGIONS, REGION_BY_ID, REGION_IDS } from '../src/content/regions.data.js';
 import { DEFAULT_COMPOSITION_WEIGHTS } from '../src/content/upgrades.data.js';
 import { TICK_HZ } from '../src/core/loop.js';
+import { runLadder } from './simladder.js';
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')).map(([k, v]) => [k, v ?? true]),
@@ -74,7 +75,22 @@ const WEIGHTS = loadoutWeights(args.weights);
  * You are raiding regions the enemy owns outright, so the campaign descends:
  * the opening teaches, the endgame is meant to cost you attempts.
  */
-const WIN_BAND = [[78, 92], [66, 84], [50, 72], [34, 56], [22, 42]];
+// Tier 6's floor is 18 and NOT lower, and the constraint is a sample size rather
+// than taste: tests/campaignplay.test.js proves each region is winnable by
+// playing fixed seeds, and at an 18% true rate a 24-seed sample comes up empty
+// 1% of the time. A band that floors at 12 would need 40 seeds a region to tell
+// "hard" from "broken", which is the distinction that assertion exists to make.
+const WIN_BAND = [[78, 92], [66, 84], [50, 72], [34, 56], [22, 42], [18, 36]];
+
+// `--incursion=1-12` measures the ENDLESS LADDER instead of the campaign: rungs
+// rather than regions, and a shape rather than a per-tier band. tools/simladder.js
+// says why a rung has no WIN_BAND.
+if (args.incursion) {
+  runLadder(args.incursion, {
+    n: N, idleMin: Number(args.idle ?? 30), weights: WEIGHTS, upgrades: !args.noupgrades,
+  });
+  process.exit(0);
+}
 
 // `win-med` is the gated one — how long it takes to TAKE the region. `all-med`
 // is every run including the losses, reported so a fast-loss profile stays

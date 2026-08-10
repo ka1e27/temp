@@ -20,6 +20,7 @@ import {
 } from './world.js';
 import { recalcIncome, incomePerSec } from './idle.js';
 import { consume as consumeBoosters } from './boosters.js';
+import { planFor, completeIncursion, INCURSION } from './incursion.js';
 import { META_EVENTS, emit } from './events.js';
 
 /** One-off bounty the first time a region falls: 2 minutes of its own income. */
@@ -52,6 +53,29 @@ export function raidLump(metaState, regionId) {
 }
 
 /**
+ * What one rung of the endless ladder pays, in crowns.
+ *
+ * DELIBERATELY THE SAME SHAPE AS `raidLump`, because the property that shape buys
+ * is the one an endless ladder needs most:
+ *
+ *     lump = EMPIRE income/sec x INCURSION.lumpSeconds x difficulty(depth)
+ *
+ * `difficulty` (meta/incursion.js `planFor`) is the rung's dial times a premium
+ * per mutator, so reward-per-difficulty is CONSTANT BY CONSTRUCTION at every
+ * depth — there is no second per-depth dial that can fall behind the first, which
+ * is the exact decay the raid economy shipped with and had to have removed.
+ *
+ * `lumpSeconds` is half a raid's, and that is the honest price of having no
+ * cooldown: a raid is paid once per ten minutes of waiting and a rung is paid per
+ * battle. What makes depth worth pushing is the dial, not the base.
+ */
+export function incursionLump(metaState, depth) {
+  const meta = metaOf(metaState);
+  const plan = planFor(depth);
+  return incomePerSec(meta) * INCURSION.lumpSeconds * plan.difficulty;
+}
+
+/**
  * @param {object} metaState  root state or the meta slice
  * @param {object} config     the BattleConfig this outcome answers
  * @param {object} outcome    BattleOutcome from battle/outcome.js
@@ -78,6 +102,11 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
   const durationMs = Math.max(0, outcome.durationMs ?? 0);
   const won = outcome.result === 'win';
   const wasConquered = isConquered(meta, regionId);
+  // Which rung of the endless ladder this was, straight off the config the
+  // battle actually ran (contract v6) rather than off meta — a screen that
+  // launched depth 9 and a `cleared` that has since moved on cannot disagree.
+  const inc = config.rules?.incursion ?? null;
+  const depth = inc ? Math.max(1, Math.floor(inc.depth)) : 0;
 
   stats.battles += 1;
   if (won) stats.wins += 1;
@@ -103,15 +132,49 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
     opened: [],
     boostersConsumed,
     newBest: false,
+    /** `{depth, cleared, mutators}` when this was a rung, else null. */
+    incursion: null,
   };
 
   if (!won) {
+    // A LOST RUNG STILL COUNTS AS AN ATTEMPT AND COSTS NOTHING ELSE. The attempt
+    // count is the one thing a defeat moves anywhere in this file, and it exists
+    // so "depth 14, eleven tries" can be shown; `cleared` is untouched, so the
+    // same rung is waiting, unchanged, when the player comes back with a
+    // different army.
+    if (depth) completeIncursion(meta, depth, { won: false });
     markDirty(state ?? metaState);
     emit(bus, META_EVENTS.OUTCOME_APPLIED, { outcome, summary });
     return summary;
   }
 
   const rec = record(meta, regionId);
+  // ---- An incursion is NOT a raid on the same ground, and this branch is what
+  //      keeps the two ladders from paying each other. A rung must not touch the
+  //      region record at all: `clears` is the raid ladder's difficulty AND its
+  //      price (world.js `effectiveEnemyMult`), so advancing it here would make
+  //      every future raid on that region harder because of a fight that was
+  //      never a raid. Depth is the incursion's own counter and the only thing
+  //      that moves. -----------------------------------------------------------
+  if (depth) {
+    summary.incursion = { depth, cleared: depth, mutators: [...(inc.mutators ?? [])] };
+    summary.crowns = incursionLump(meta, depth);
+    completeIncursion(meta, depth, { won: true });
+    stats.incursions = (stats.incursions ?? 0) + 1;
+    meta.crowns += summary.crowns;
+    stats.crownsEarned += summary.crowns;
+    summary.incomePerSec = recalcIncome(meta, bus);
+    emit(bus, META_EVENTS.CROWNS_CHANGED, {
+      crowns: meta.crowns, delta: summary.crowns, reason: 'incursion',
+    });
+    emit(bus, META_EVENTS.INCURSION_CLEARED, {
+      depth, crowns: summary.crowns, mutators: summary.incursion.mutators,
+    });
+    emit(bus, META_EVENTS.OUTCOME_APPLIED, { outcome, summary });
+    markDirty(state ?? metaState);
+    return summary;
+  }
+
   if (!wasConquered) {
     // ---- First conquest: PERMANENT income plus a one-off bounty. -----------
     markConquered(meta, regionId, { now, durationMs });
@@ -150,10 +213,15 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
  * What a win here would be worth right now. The world map shows this on the
  * region card so the player can see whether a raid is worth the ten minutes.
  */
-export function previewReward(metaState, regionId) {
+export function previewReward(metaState, regionId, depth = 0) {
   const meta = metaOf(metaState);
   const region = REGION_BY_ID[regionId];
   if (!region) return { crowns: 0, incomeAdded: 0, kind: 'none' };
+  // A rung is worth what its DEPTH says, not what the ground under it is worth,
+  // so the incursion case has to be asked about before the region's own status.
+  if (depth > 0) {
+    return { crowns: incursionLump(meta, depth), incomeAdded: 0, kind: 'incursion' };
+  }
   if (!isConquered(meta, regionId)) {
     return { crowns: firstClearBonus(region), incomeAdded: region.rewardPerSec, kind: 'conquest' };
   }

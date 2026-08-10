@@ -118,9 +118,15 @@ export function createShopScene(ctx) {
     for (const group of shopListing(meta())) {
       if (!group.items.length) continue;
       const id = `shop-grp-${group.id}`;
-      const section = h('section.shop-group', { 'aria-labelledby': id },
-        h(`h3#${id}`, { text: group.name }),
-        h('p.shop-group-note', { text: group.blurb ?? '' }));
+      // A gated group is SHOWN, not hidden, and marked shut. What finishing the
+      // campaign buys is worth knowing about before you have finished it; what is
+      // not worth doing is offering a button that cannot be pressed, so the rows
+      // inside render without one (see upgradeRow).
+      const section = h('section.shop-group', {
+        'aria-labelledby': id, 'data-locked': group.open === false ? '1' : null,
+      },
+      h(`h3#${id}`, { text: group.name }),
+      h('p.shop-group-note', { text: group.blurb ?? '' }));
 
       for (const item of group.items) mount(section, upgradeRow(item));
       mount(listRoot, section);
@@ -147,21 +153,33 @@ export function createShopScene(ctx) {
       : item.maxLevel > 1 ? `${item.level}/${item.maxLevel}`
         : (item.level ? 'owned' : '');
 
-    return h('div.shop-row', { 'data-maxed': maxed ? '1' : null },
+    return h('div.shop-row', {
+      'data-maxed': maxed ? '1' : null,
+      'data-locked': item.locked ? '1' : null,
+    },
       h('div.shop-row-main', {},
         h('span.shop-name', { text: item.name }),
         h('span.shop-desc', { text: item.desc })),
       h('div.shop-row-side', {},
         h('span.shop-level.num', { text: owned }),
-        maxed
-          ? h('span.shop-maxed', { text: UI.maxed, 'aria-label': `${item.name} is fully upgraded` })
-          : buyButton({
-            label: item.name,
-            cost: item.cost,
-            check: () => meta().crowns >= item.cost,
-            wait: () => `${SHOP.affordIn} ~${Math.ceil(timeToAfford(meta(), item.cost))}s`,
-            onBuy: () => buy(meta(), item.id, ctx.bus),
-          })));
+        item.locked
+          // The PRICE is still shown — that is what makes a locked line worth
+          // looking at — but there is no control, because a disabled button that
+          // can never enable this session is just a worse label.
+          ? h('span.shop-locked', {
+            text: `${compact(item.cost)} · ${UI.locked}`,
+            'aria-label': `${item.name} costs ${Math.round(item.cost)} crowns and is locked`
+              + ' until the campaign is finished',
+          })
+          : maxed
+            ? h('span.shop-maxed', { text: UI.maxed, 'aria-label': `${item.name} is fully upgraded` })
+            : buyButton({
+              label: item.name,
+              cost: item.cost,
+              check: () => meta().crowns >= item.cost,
+              wait: () => `${SHOP.affordIn} ~${Math.ceil(timeToAfford(meta(), item.cost))}s`,
+              onBuy: () => buy(meta(), item.id, ctx.bus),
+            })));
   }
 
   function boosterRow(b) {

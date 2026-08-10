@@ -30,7 +30,8 @@ import {
 import { EXPEDITION, SITES, SITE_LEVELS, RALLY_KEEP } from '../content/balance.js';
 import {
   REGION_BY_ID, ENEMY_SCALING, BASE_GARRISON, NEUTRAL_GARRISON,
-  PLAYER_SITE_GARRISON, BATTLE_START, ENEMY_UNITS_BY_TIER, FALLBACK_MAP,
+  PLAYER_SITE_GARRISON, BATTLE_START, ENEMY_UNITS_BY_TIER,
+  ENEMY_MARSHALS_BY_TIER, FALLBACK_MAP,
 } from '../content/regions.data.js';
 import {
   zeroComposition, distributeExpedition, fitComposition, carryComposition,
@@ -44,6 +45,10 @@ import {
 import { upgradeEffects, addBonus, multBonus, flatBonus } from './upgrades.js';
 import { regionsConquered, effectiveEnemyMult, record, isConquered } from './world.js';
 import { toConfigBoosters } from './boosters.js';
+import { withFreeMarshal, withEnemyMarshal } from './marshals.js';
+import {
+  planFor, incursionRegionInputs, incursionMods, incursionRules,
+} from './incursion.js';
 
 export { hashBattleConfig };
 // The composition math lives in ./composition.js; re-exported so the seam has
@@ -104,11 +109,18 @@ export function expeditionSlots(metaState) {
   // hands tier 2 a walkover. Measured at n=48 on one uniform rate, raising it
   // until thanescar cleared its band (14% -> 46%) pushed emberholt to 85%,
   // one point past its ceiling.
+  //
+  // The FOURTH segment is tier 6 and starts at `finalAfter` (20), which region 21
+  // is attacked with — so the twenty-one regions measured before it cannot feel it
+  // at all. See content/balance.js EXPEDITION for why raising `perRegionSurge` was
+  // not available as the answer instead.
   const taperAfter = EXPEDITION.taperAfter ?? Infinity;
   const surgeAfter = EXPEDITION.surgeAfter ?? Infinity;
+  const finalAfter = EXPEDITION.finalAfter ?? Infinity;
   const early = Math.min(conquered, taperAfter);
   const mid = Math.max(0, Math.min(conquered, surgeAfter) - taperAfter);
-  const late = Math.max(0, conquered - surgeAfter);
+  const late = Math.max(0, Math.min(conquered, finalAfter) - surgeAfter);
+  const last = Math.max(0, conquered - finalAfter);
   // `surgeBonus` is a ONE-TIME step at the boundary, not a rate, and separating
   // it from `perRegionSurge` is what makes the late campaign tunable at all.
   // The two things a landing force needs are a LEVEL (enough to contest a map
@@ -120,11 +132,14 @@ export function expeditionSlots(metaState) {
   // with it. Measured at n=48 on the rate-only version, every tier sloped
   // UPWARD inside itself: tier 3 ran 42 / 67 / 81 / 77 / 79 against a 22-point
   // band. The step buys the level once; the rate stays gentle enough to tune.
+  const surgeRate = EXPEDITION.perRegionSurge ?? EXPEDITION.perRegionLate ?? EXPEDITION.perRegion;
   const base = EXPEDITION.base
     + EXPEDITION.perRegion * early
     + (EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * mid
-    + (EXPEDITION.perRegionSurge ?? EXPEDITION.perRegionLate ?? EXPEDITION.perRegion) * late
-    + (late > 0 ? (EXPEDITION.surgeBonus ?? 0) : 0)
+    + surgeRate * late
+    + (EXPEDITION.perRegionFinal ?? surgeRate) * last
+    + (late > 0 || last > 0 ? (EXPEDITION.surgeBonus ?? 0) : 0)
+    + (last > 0 ? (EXPEDITION.finalBonus ?? 0) : 0)
     + flatBonus(fx, 'expedition');
   return Math.max(0, Math.round(stack(base)));
 }
@@ -201,80 +216,9 @@ export function enemyMods(region, mult) {
   });
 }
 
-/**
- * THE MARSHAL YOU BOUGHT TURNS UP, and it does not cost you eight militia.
- *
- * Unlocking the marshal used to buy the RIGHT to spend 8 of your expedition
- * slots on one body — 42% of a region-1 budget, 11% of a region-6 one — or to
- * retask a stronghold for forty seconds mid-battle. Both are a bill rather than
- * a reward, which is how a 4,000-crown purchase ended up being something players
- * simply never fielded.
- *
- * So the unlock grants exactly one, OUTSIDE the slot budget, on every landing.
- * `maxPerSite` still binds, so this cannot stack: it is one commander, free,
- * because that is what the price already paid for. More than one is still a
- * decision — buy it in the loadout, or commission it in battle (RECRUIT).
- *
- * Deliberately applied AFTER the budget is fitted, so the free one never
- * displaces a paid unit and never makes the loadout screen's arithmetic wrong.
- */
-export function withFreeMarshal(fx, expedition) {
-  if (!fx.units.includes('marshal')) return expedition;
-  // EXACTLY one, not one more. `banner` is presence-based, so a second marshal
-  // in the same camp buys literally nothing, and the loadout screen no longer
-  // sells them at all (screens/prebattle-army.js) — which means the 8 slots stay
-  // available for troops instead of being a trap for the player who paid 4,000
-  // crowns and then paid again.
-  return { ...expedition, marshal: Math.max(expedition.marshal ?? 0, 1) };
-}
-
-/**
- * ...AND SO DOES THEIRS. The mirror of `withFreeMarshal`, and the fix for a
- * unit that was in the enemy's roster for this project's whole life without
- * ever existing.
- *
- * `ENEMY_UNITS_BY_TIER` has listed `marshal` at tier 4 since tier 4 shipped,
- * and it did nothing: no `MAPGEN.trainType` produces one, `AI.counterPick` maps
- * marshal -> spearmen (what to build AGAINST one, not one to build), and
- * `BASE_GARRISON` never held one. Removing marshal from the tier-4 roster
- * changed thanescar's win rate by exactly 0 points, which is how the gap was
- * found. Ironcrown's flavour text has advertised an enemy Marshal the whole
- * time and it was simply false.
- *
- * Granted the same way the player's is — one commander, free, at the start —
- * because the alternative is worse in both directions. Training one costs a
- * yard forty seconds for a single body, so an AI that bought one would be
- * making the same solver's purchase `tools/simplayer.js` deliberately declines;
- * and a marshal that arrives at minute six is a difficulty spike nobody can
- * see coming.
- *
- * IT STANDS IN THE THRONE, which is the whole design of it:
- *   - `banner` is stack-local (battle/combat.js), so it buys +25% to whatever
- *     comp he is IN. In the castle that is the garrison defending the win
- *     condition — the fight the region is actually about.
- *   - `trainBuff` (battle/training.js) makes the throne produce 40% faster, so
- *     a siege that stalls is refilling the wall it is hitting.
- *   - "until you kill it" is then literally true: the marshal dies with the
- *     garrison, and battle/ai.js never sources an attack from the castle
- *     (`kind === 'castle'` is filtered out of the launch pool), so he cannot
- *     wander off and be picked up cheaply in a field.
- *
- * EXACTLY ONE, and deliberately applied AFTER `normalizeSites` rather than
- * through `MAPGEN.garrison`: that table is multiplied by `enemyMult ^
- * ENEMY_SCALING.garrison` and by the throne bonus, so a marshal placed there
- * would be scaled into two or three of them on the late regions. `maxPerSite`
- * is enforced in battle/training.js, which never sees a garrison mapgen wrote.
- * `banner` is presence-based, so a second is worth nothing anyway — it would
- * only be an invisible difficulty step that rides the difficulty dial.
- */
-export function withEnemyMarshal(sites, unlockedUnits) {
-  if (!unlockedUnits.includes('marshal')) return sites;
-  const throne = sites.find((s) => s.owner === 'enemy' && s.kind === 'castle');
-  if (!throne || (throne.garrison.marshal ?? 0) > 0) return sites;
-  return sites.map((s) => (s === throne
-    ? { ...s, garrison: { ...s.garrison, marshal: 1 } }
-    : s));
-}
+// The two free commanders — the player's and the enemy's — live in ./marshals.js
+// and are re-exported here, so the seam keeps one front door.
+export { withFreeMarshal, withEnemyMarshal };
 
 // --- The entry point -------------------------------------------------------
 
@@ -283,7 +227,14 @@ export function withEnemyMarshal(sites, unlockedUnits) {
  * @param {string} regionId
  * @param {Array<string|{id:string,charges:number}>} [selectedBoosters]
  * @param {null|((ctx:object)=>object)} [mapGen] injected battle/mapgen.js
- * @param {{seed?:number, attempt?:number, composition?:object}} [options]
+ * `options.incursion` is a DEPTH on the endless ladder (meta/incursion.js). It
+ * replaces the region's dial with the rung's, mutates the generation inputs, the
+ * two FactionMods and the rules, and stamps `rules.incursion` so rewards.js can
+ * tell one from a raid on the same ground. A rung is a pure function of its
+ * depth, so the region is CHECKED rather than trusted: a hand-edited params
+ * object cannot fight depth 40 on a tier-4 map.
+ *
+ * @param {{seed?:number, attempt?:number, composition?:object, incursion?:number}} [options]
  * @returns {object} a BattleConfig that has passed assertBattleConfig
  */
 export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen, options = {}) {
@@ -291,12 +242,22 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   const region = REGION_BY_ID[regionId];
   if (!region) throw new RangeError(`buildBattleConfig: unknown region "${regionId}"`);
 
+  const plan = options.incursion != null ? planFor(options.incursion) : null;
+  if (plan && plan.regionId !== regionId) {
+    throw new RangeError(`buildBattleConfig: incursion depth ${plan.depth} is fought on`
+      + ` "${plan.regionId}", not "${regionId}"`);
+  }
+
   const rec = record(meta, regionId);
   const isRaid = isConquered(meta, regionId);
   const worldSeed = (options.seed ?? metaState?.seed ?? 1) >>> 0;
   const attempt = options.attempt ?? 0;
-  const seed = deriveSeed(worldSeed, `${regionId}:${rec.clears}:${attempt}`);
-  const mult = effectiveEnemyMult(meta, regionId);
+  // The depth is part of the seed for an incursion: the same rung retried is the
+  // same battle, and the rung after it is a different map on the same ground.
+  const seed = deriveSeed(worldSeed,
+    `${regionId}:${rec.clears}:${attempt}${plan ? `:i${plan.depth}` : ''}`);
+  const mult = plan ? plan.enemyMult : effectiveEnemyMult(meta, regionId);
+  const genRegion = plan ? incursionRegionInputs(region, plan) : region;
 
   const fx = upgradeEffects(meta);
   // The screen hands over a composition that already fits; re-fitting it is an
@@ -314,9 +275,12 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   // Hoisted above the map because the enemy's roster decides what stands on it:
   // `withEnemyMarshal` reads `unlockedUnits`, the same field the AI's training
   // reads, so the commander and the units he commands can never disagree.
-  const enemy = enemyMods(region, mult);
-  const gen = callMapGen(mapGen, { region, seed, mult, isRaid });
-  const sites = withEnemyMarshal(normalizeSites(gen.sites, mult), enemy.unlockedUnits);
+  const enemy = plan
+    ? incursionMods(enemyMods(genRegion, mult), plan, 'enemy')
+    : enemyMods(region, mult);
+  const gen = callMapGen(mapGen, { region: genRegion, seed, mult, isRaid });
+  const sites = withEnemyMarshal(normalizeSites(gen.sites, mult), enemy.unlockedUnits,
+    ENEMY_MARSHALS_BY_TIER[Math.max(1, region.tier) - 1] ?? 1);
   const ids = new Set(sites.map((s) => s.id));
   const blockedOnSites = new Set(sites.map((s) => `${s.hex[0]},${s.hex[1]}`));
 
@@ -339,7 +303,9 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
     },
     sites,
     adjacency: (gen.adjacency ?? []).filter(([a, b]) => a !== b && ids.has(a) && ids.has(b)),
-    player: playerMods(meta, expedition),
+    player: plan
+      ? incursionMods(playerMods(meta, expedition), plan, 'player')
+      : playerMods(meta, expedition),
     enemy,
     boosters: toConfigBoosters(meta, selectedBoosters),
     rules: {
@@ -355,6 +321,7 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
       rallyKeepDefault: meta.settings?.rallyKeepDefault ?? RALLY_KEEP.default,
     },
   };
+  if (plan) config.rules = incursionRules(config.rules, plan);
 
   // NOTE: `configHash` is deliberately NOT a field on the config. hashBattleConfig
   // hashes the whole object, so storing the hash inside it would change the hash

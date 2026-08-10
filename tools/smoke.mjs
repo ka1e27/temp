@@ -424,7 +424,7 @@ try {
     await page.screenshot(`${OUT}/03-worldmap.png`);
 
     // Shop opens, its buy buttons are hittable, and it closes.
-    const shopBtn = '.wm-actions button';
+    const shopBtn = '.btn.wm-shop';
     if (await has(shopBtn)) {
       await click(shopBtn, 'Upgrades button');
       const rows = await page.eval(() => document.querySelectorAll('.shop-row').length);
@@ -435,6 +435,71 @@ try {
       if (await has('.shop-close')) await click('.shop-close', 'shop Close');
       else await page.eval(() => window.__game.scenes.pop());
     }
+
+    // ---- the endgame: the ladder and the reset ----------------------------
+    //
+    // Both are gated on a FINISHED campaign, which a smoke test cannot play in
+    // the time it has, so the twenty-four battles are replaced by marking the
+    // region records conquered and re-entering the map. Everything after that is
+    // the real thing: real pointer events, real hit tests, real scene
+    // transitions. The reason it is worth doing at all is this project's own
+    // history — a whole release once shipped with every screen unclickable, and
+    // the surfaces added last are exactly the ones nothing else covers.
+    await page.eval(() => {
+      const g = window.__game;
+      for (const rec of Object.values(g.state.meta.regions)) rec.status = 'conquered';
+      g.state.meta.crowns = 5e6;
+      g.scenes.replace(g.screens.worldmap);
+    });
+    await page.sleep(400);
+
+    await click('.btn.wm-incursion', 'the Incursions button');
+    const rung = await page.eval(() => ({
+      depth: document.querySelector('.inc-depth')?.textContent ?? '',
+      stats: document.querySelectorAll('.inc-stats dd').length,
+      go: !!document.querySelector('.inc-go'),
+    }));
+    if (!/depth\s*1/i.test(rung.depth) || rung.stats < 4 || !rung.go) {
+      throw new Error(`incursion briefing did not render (${JSON.stringify(rung)})`);
+    }
+    await hitPoint('.inc-go', 'the Begin incursion button');
+    step(`incursion: "${rung.depth}", ${rung.stats} stats, Begin hittable`);
+    await page.screenshot(`${OUT}/05-incursion.png`);
+
+    // ...and it really leads to a loadout for that rung, carrying the depth.
+    await click('.inc-go', 'Begin incursion');
+    const loadout = await page.eval(() => ({
+      scene: document.body.dataset.scene,
+      title: document.querySelector('#pb-title')?.textContent ?? '',
+      go: document.querySelector('.pb-go')?.textContent ?? '',
+    }));
+    if (loadout.scene !== 'prebattle' || !/depth\s*1/i.test(loadout.title)) {
+      throw new Error(`incursion did not reach its loadout (${JSON.stringify(loadout)})`);
+    }
+    step(`incursion loadout: "${loadout.title}", launch reads "${loadout.go}"`);
+    await page.eval(() => {
+      const g = window.__game;
+      g.scenes.replace(g.screens.worldmap);
+    });
+    await page.sleep(300);
+
+    // Abdication: offered, and its drawer states the payout before anything is
+    // destroyed. The button is NOT pressed — the whole point of it is that it
+    // wipes the save, and a smoke test that took that branch would be testing the
+    // reset with no way back for the steps after it.
+    await click('.btn.wm-menu', 'the Menu button');
+    await click('.btn.menu-abdicate', 'the Abdicate button');
+    const drawer = await page.eval(() => ({
+      rows: document.querySelectorAll('.legacy-payout dd').length,
+      pays: document.querySelector('.legacy-payout dd:last-of-type')?.textContent ?? '',
+      go: !!document.querySelector('.menu-abdicate-go'),
+    }));
+    if (!drawer.rows || !drawer.go) {
+      throw new Error(`abdication drawer did not render (${JSON.stringify(drawer)})`);
+    }
+    await hitPoint('.menu-abdicate-go', 'the Abdicate confirmation');
+    step(`abdication: ${drawer.rows} payout rows, gives up ${drawer.pays}, confirm hittable`);
+    await page.screenshot(`${OUT}/06-abdicate.png`);
   }
 
   if (errors.length) throw new Error(`console errors:\n    ${errors.join('\n    ')}`);

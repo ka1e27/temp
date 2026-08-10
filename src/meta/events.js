@@ -12,7 +12,8 @@
 // PURE: this module owns names, not a bus instance.
 
 export const META_EVENTS = Object.freeze({
-  /** { crowns, delta, reason } — reason is 'idle' | 'offline' | 'reward' | 'raid' | 'spend' */
+  /** { crowns, delta, reason } — reason is 'idle' | 'offline' | 'reward' | 'raid'
+   *  | 'incursion' | 'legacy' | 'spend' */
   CROWNS_CHANGED: 'meta:crowns',
   /** { incomePerSec, previous } */
   INCOME_CHANGED: 'meta:income',
@@ -24,6 +25,13 @@ export const META_EVENTS = Object.freeze({
   RAID_COMPLETED: 'meta:raid-completed',
   /** { regionId, readyAt } */
   RAID_READY: 'meta:raid-ready',
+  /** { depth, crowns, mutators } — a rung of the endless ladder was cleared.
+   *  There is deliberately no INCURSION_FAILED: a lost rung changes nothing but
+   *  an attempt counter, and an event nobody can act on is the third state this
+   *  project has been burned by (see the note at the foot of meta/world.js). */
+  INCURSION_CLEARED: 'meta:incursion-cleared',
+  /** { points, total, resets } — a run was ended and converted to legacy */
+  ABDICATED: 'meta:abdicated',
   /** { id, level, cost } */
   UPGRADE_PURCHASED: 'meta:upgrade-purchased',
   /** { id, count, cost } */

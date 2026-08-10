@@ -46,9 +46,11 @@ test('adjacentTo is real, symmetric hex adjacency between shipped regions', () =
   }
 });
 
-test('tier counts are 4 / 5 / 5 / 4 / 3 and difficulty only ever goes up', () => {
-  const counts = [1, 2, 3, 4, 5].map((t) => REGIONS.filter((r) => r.tier === t).length);
-  assert.deepEqual(counts, [4, 5, 5, 4, 3]);
+test('tier counts are 4 / 5 / 5 / 4 / 3 / 3 and difficulty only ever goes up', () => {
+  const tiers = [...new Set(REGIONS.map((r) => r.tier))].sort((a, b) => a - b);
+  assert.deepEqual(tiers, [1, 2, 3, 4, 5, 6], 'the tiers must be contiguous from 1');
+  const counts = tiers.map((t) => REGIONS.filter((r) => r.tier === t).length);
+  assert.deepEqual(counts, [4, 5, 5, 4, 3, 3]);
   for (let i = 1; i < REGIONS.length; i++) {
     assert.ok(REGIONS[i].enemyMult > REGIONS[i - 1].enemyMult, `${REGIONS[i].id} is not harder`);
     assert.ok(REGIONS[i].rewardPerSec >= REGIONS[i - 1].rewardPerSec);

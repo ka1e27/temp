@@ -8,6 +8,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 conquest. You take hex regions one at a time; conquered regions pay crowns per second
 whether or not you are playing; crowns buy upgrades that crack the next, harder region.
 
+Twenty-four regions in six tiers, and then three endgame loops that do not end: an
+**incursion ladder** (one battle per rung, escalating forever), the **Crown** shop tier
+that pays for it, and **abdication**, which trades a finished empire for a permanent
+multiplier and starts the campaign again.
+
 **Zero dependencies, no build step, no `node_modules`.** Vanilla ES modules served
 straight to the browser. Adding a dependency breaks the core promise of the project —
 don't, without asking.
@@ -27,6 +32,8 @@ node --test --test-name-pattern="siege"   # one test by name
 node tools/simrunner.js --region=kaldan --n=50
 node tools/simrunner.js --all --n=96 --noupgrades   # the pre-upgrade-ladder bot
 node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a specialist
+node tools/simrunner.js --incursion=1-14 --n=32     # the endless ladder, by rung
+node tools/simrunner.js --incursion=40,55 --idle=600  # ...for a player who has idled
 npm run mobile             # phone-width layout audit — needs `npm start` running
 node tools/mobile.mjs --w=844 --h=390                # a phone in landscape
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
@@ -57,7 +64,18 @@ Several files are split purely for the 400-line cap and re-exported from their o
 home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data.js`←
 `regions.rules.js`, `sim.js`←`rally.js`, `commands.js`←`boosters.js`,
 `battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`, `mainmenu.js`←
-`mainmenu-settings.js`.
+`mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
+`simrunner.js`←`simladder.js`.
+
+**`regions.rules.js` now also holds the two load-bearing rules of the region table**
+(a region's step must be the size of the player's step into it; the player's step
+includes the mechanics the harness actually plays). They moved out of the table's own
+header when tier 6 needed the budget, and they belong there: both are claims about
+every row.
+
+The endgame layer is `content/incursion.data.js` + `meta/incursion.js` (the ladder),
+`content/legacy.data.js` + `meta/legacy.js` (abdication), and `screens/incursion.js` +
+`screens/mainmenu-legacy.js` for the two surfaces.
 
 ### The four invariants
 
@@ -74,8 +92,16 @@ simulation run headless with zero mocking.
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **5**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **6**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly.
+
+**v6 is `rules.incursion` — `{depth, mutators[]}` — and it carries a rung's IDENTITY,
+not its effects.** Every incursion mutator is applied on the meta side through a field
+that already crossed the seam (a FactionMods multiplier, a generation input,
+`castleGateFrac`), so the engine steps a rung with no knowledge that the ladder exists.
+The field is there for the three consumers that must tell one rung from another:
+`meta/rewards.js` (a rung must never be paid as a raid on the same ground), the results
+screen, and the HUD.
 
 **3. Zero randomness in combat.** The pre-commit outcome preview calls the *same function*
 the simulation runs, so it is a guarantee, not an estimate. Map generation uses seeded RNG
@@ -123,7 +149,8 @@ All of it lives in `src/content/balance.js`. A balance pass should be a one-file
 presentation change must leave those numbers **identical**.
 
 **The verdict gate is PER TIER, and it has a ceiling as well as a floor** —
-`WIN_BAND` in `tools/simrunner.js`: `[[78,92], [66,84], [50,72], [34,56], [22,42]]`. It used
+`WIN_BAND` in `tools/simrunner.js`:
+`[[78,92], [66,84], [50,72], [34,56], [22,42], [18,36]]`. It used
 to be a single 55% floor, which stopped being usable once the endgame was meant to be a
 genuine wall: a region designed to cost you two or three attempts reads as TOO HARD against
 a number chosen when every region was a probable win. The ceiling is the half that never
@@ -203,14 +230,17 @@ force, an enemy warm-up, and a shop with no ceiling). **The current measured cur
 
 ```
 tier 1   89 84 84 84        tier 4   52 34 52 47
-tier 2   80 70 72 78 72     tier 5   22 23 36
-tier 3   55 64 53 59 69
+tier 2   80 70 72 78 72     tier 5   22 23 36    (34 on nightharrow at n=240)
+tier 3   55 69 53 59 69     tier 6   36 27 19    (21 25 21 at n=240)
 ```
 
-n=64 with the band edges confirmed at n=240. All twenty-one report `ok` against their
+n=64 with the band edges confirmed at n=240. All twenty-four report `ok` against their
 tier's band *and* their advertised length. Nothing is frozen any more: the expedition
 re-base changed regions 1–5 by construction, so they were solved with the rest. What
 replaced the freeze is the per-tier `WIN_BAND`.
+
+**Tiers 1–5 are byte-for-byte what they were before tier 6 shipped**, which is a
+guarantee rather than a happy result — see the fourth expedition segment below.
 
 ## A raid stays a raid: the starting-footprint pass
 
@@ -424,6 +454,154 @@ castle.
 produced (emberholt, 2.556) when tier 4 was the end; tier 5 opens at 2.60–2.68 and is
 measurably still convertible there. It is still a hard ceiling per tier, still required to
 be non-decreasing, and still capped at 3× globally.
+
+## Tier 6, and the fourth expedition segment that paid for it
+
+Three regions east of the homeland — **Stormhalt**, **Cinderwatch**, **The Widow's Gate**
+at hexes `[6,-1]`, `[6,0]`, `[6,1]`. The premise is the one thing the campaign had never
+shown: an enemy that has already lost, digging into ground it has burned itself.
+
+**Nothing about the tier is a new unit**, for the reason tier 5 documents — a unit is a
+cliff and the dial is a slope, and `ENEMY_UNITS_BY_TIER` simply repeats itself again.
+Three things carry it: `AI_TIERS[5]` (five concurrent attacks, the thinnest
+`safetyMargin` in the game at 1.02, `warmupSec` 255); the ground (20×15 and 21×16, the
+biggest boards, `develop` 2.9–3.3); and a **second enemy Marshal**.
+
+**`ENEMY_MARSHALS_BY_TIER` is `[0,0,0,1,1,2]`.** Tiers 4–5 read 1, which is exactly what
+they shipped, so the count table cannot move a measured region — pinned as a negative
+control in `tests/enemymarshal.test.js`. Tier 6's second banner goes into the
+best-defended stronghold, chosen deterministically (level, then garrison, then id),
+because `banner` is stack-local: it makes ONE line of the countryside expensive instead
+of making the whole map slightly harder.
+
+**The fourth expedition segment is the interesting part, and it exists because the
+obvious lever was unavailable.** Tier 6 first measured 16 / 6 / 16 against an 18–36 band.
+The documented answer to a hard tier is `EXPEDITION.perRegionSurge` — but that rate
+applies from the ninth conquest, so raising it would re-tune all sixteen regions from
+gallowmoor on. `finalAfter: 20` cannot reach a region before the twenty-second **by
+construction**, because region 21 is attacked with twenty conquests. That is the same
+argument `taperAfter` makes for the opening, one end of the campaign later.
+`tests/campaign.test.js` asserts both halves: the segment must miss every earlier region
+*and* must actually land on the tier-6 opener.
+
+It is violently non-linear, as the surge was: `finalBonus 210 / perRegionFinal 30`
+(+240 slots) took stormhalt from 16% to **66%**; `52 / 8` (+60) put it at 23%.
+
+**Three measured facts from the tune:**
+
+- **The castle rung is worth ~20 points here.** stormhalt read 46% at develop 2.9 / dial
+  4.41 and 26% at develop 3.1 / dial 4.37. It is spent on the tier OPENER, which is also
+  where the player takes the biggest step they ever take (+60 slots) — rule 2 of the
+  region table.
+- **The dial has almost nowhere to go inside the tier**: 4.37 → 4.48 across three
+  regions, boxed in by nightharrow's 4.36 below. The ground carries tier 6, not the dial.
+- **n=32 and n=96 disagreed by 10 points on stormhalt, and n=96 and n=240 by 5.** Every
+  tier-6 number in the table is an n=240 number, including the advertised lengths:
+  widowsgate read a 16.0m win median at n=48 and 9.6m at n=240, so a table tuned on the
+  small sample would have told the player a region takes half again as long as it does.
+
+## The endless ladder: incursions
+
+`content/incursion.data.js` + `meta/incursion.js`. One battle per **rung**: a fixed
+arena, a dial that compounds with depth, and one to three **mutators** that change which
+answer is correct. Win and the ladder advances; lose and nothing happens at all except
+the boosters you fired. There is no cooldown and there does not need to be one — you
+cannot re-fight a rung you have cleared, so what bounds the loop is winnability, exactly
+as it is for raids.
+
+**`cleared` is the only stored number.** The rung in front of the player is `cleared + 1`,
+derived, so the two cannot disagree. A rung is otherwise a **pure function of its depth**
+— the mutator draw is seeded off the depth alone — which is what makes a retry the same
+battle, and lets a plan be shown before it is fought without being stored.
+
+**The ladder used to rotate through the nine late regions and that could not work.**
+Measured at n=16: depth 15 on ravensmarch (dial 5.05, two mutators) won 63% while depth
+10 on widowsgate (dial 5.08, two mutators) won **6%**. Fifty-seven points at the same
+dial — the ground was the difficulty, not the depth. On a ladder that is fatal in a way
+it is not for a campaign, because **rungs cannot be skipped**: a player who cleared depth
+9 would meet an unwinnable depth 10 and stop there, at a rung that is not even the hard
+one. So the arena is fixed (`widowsgate`) and depth is the only thing that moves; variety
+comes from the layout, since `seed` includes the depth. Rotation is not impossible, it is
+*uncalibrated* — it needs a measured per-region ladder dial, which is a balance pass with
+nine binary searches in it.
+
+**The curve, `--incursion=... --n=16`, for a player who has just taken the last region
+and idled half an hour:**
+
+```
+depth      1    5   10   20   30   40   55
+win%      94   88   75   38   19    0    0
+win-med  2.7  4.6  5.8  9.7 11.0    —    —
+```
+
+**...and the same player after ten hours of idling — the only table that justifies the
+word "endless":**
+
+```
+depth     40   55
+win%      75   44
+```
+
+The wall RECEDES rather than moving. If a future pass makes the ladder feel finite, that
+second table is the one to re-take: a `perDepth` that outruns the shop's own curve turns
+the ladder back into a wall with extra steps.
+
+**The mutators own verbs where they can** (`ironwall` is the first thing in the game that
+makes sappers-versus-engines a question on the attacking side; `sealed` makes the
+countryside mandatory; `thinned` makes the loadout matter more than the budget), and two
+of the eight are plain multipliers on purpose — three mutators drawn from six verbs would
+collide constantly. Each is applied through a field that **already** crossed the seam,
+which is why the whole ladder needed one optional `rules` field and no engine change.
+
+**A rung must never touch the region record.** `clears` is the raid ladder's difficulty
+*and* its price, so advancing it from an incursion would make every future raid on the
+arena harder because of a fight that was never a raid. `tests/incursion.test.js` pins it.
+
+## Abdication: the prestige loop
+
+`content/legacy.data.js` + `meta/legacy.js`. `meta.legacy` had been sitting in
+`core/store.js` unread since long before, commented "reserved so prestige can land later
+with no migration" — and it did: nothing about the persisted shape changed.
+
+- **You may only abdicate from a finished campaign.** That single rule is what removes
+  the farm-a-cheap-reset exploit without a cooldown or a diminishing return: the price of
+  a payout is the whole campaign.
+- **Legacy is never spent.** It is a multiplier, not a currency — a prestige shop would be
+  a second economy to balance and a second place for a number to be wrong. `points = 1
+  per region + 1 per 2 rungs cleared`, so pushing the ladder before ending a run is worth
+  something.
+- **The bonus rides the shop's own four buckets** (`legacyEffects` is folded in as the
+  last step of `upgradeEffects`), so a point reaches idle income, the offline cap and both
+  battle multipliers down exactly the channels an upgrade does. There is no second
+  stacking order to drift.
+- **It is a no-op at zero points**, which is every battle the balance table was measured
+  with. `tests/legacy.test.js` asserts that as an identity, not as "small".
+- **What survives**: legacy, lifetime stats, preferences, the tutorial flag, and the
+  incursion ladder — the ladder is a record of what the player has beaten, not something
+  they own, and it is half of what a run pays.
+- `atk`/`def` are deliberately the *smallest* grants (1.5% a point). They are the two
+  channels the campaign's curve is measured against, so a generous legacy there would not
+  make a second run faster, it would make every measured region a walkover.
+
+## The Crown tier: four more endless lines, gated
+
+`exchequer`, `grandArmy`, `warCollege`, `citadels` — endless, based at 200–350k, priced
+for an incursion economy where one rung pays millions. They exist because the six Empire
+lines are the campaign's sink and the ladder needed its own.
+
+**The gate is the whole reason they could ship without re-tuning anything.**
+`requires: 'endgame'` means `endgameOpen`: the campaign has been finished at least once
+(the "at least once" half matters — a gate that only asked "is the campaign complete"
+would take the tier away from a player the moment they abdicated, on the run where they
+were relying on it). It is enforced in **`canBuy`, not in the shop screen**, because
+`tools/simplayer.js` never opens a screen — it calls `buy` directly, cheapest-affordable-
+first. `tests/crownshop.test.js` drives the bot's own shopping routine at every stage of
+the campaign with a 10¹² budget and asserts it buys none of them, *and* that it does buy
+them once everything has fallen — the two together prove the gate is the campaign rather
+than a constant `false`.
+
+An unknown `requires` value is treated as UNMET rather than ignored, so content asking
+for a gate `meta/upgrades.js` does not implement cannot go on sale by default.
 
 ## Three specialists, each owning a verb
 
@@ -702,7 +880,21 @@ by signature rather than by class name.
   `tools/smoke.mjs` looked for `.hud-dock .chip` and `.hud-dock .booster`; when both moved to
   the rails they became "not present", the step went on reporting ok, and neither control
   was hit-tested by anything any more. Selectors are on the control's own class now, and
-  absent is a FAILURE rather than a note.
+  absent is a FAILURE rather than a note. It happened a second time and was caught by the
+  same rule: the world map's shop step selected `.wm-actions button`, so the moment
+  "Incursions" joined that row it would have been hit-testing the wrong control while
+  still reporting the shop was fine. It is `.btn.wm-shop` now.
+- **A dialog that outgrows the window has to scroll, and `.dialog` did not.** The menu
+  grew a fifth action plus a drawer that itemises a payout, and past that point the title
+  and Continue were simply above the viewport with no way to reach them. `max-height:
+  92vh; overflow-y: auto` — and the overlay's `place-items: center` is what keeps the
+  overflow from being clipped on one side only.
+- **`window.__game` exposes `screens` so the smoke test can seed a finished campaign.**
+  Both endgame surfaces are gated on twenty-four conquests, which a smoke test cannot
+  play; it marks the region records conquered, re-enters the map, and then drives the
+  incursion overlay and the abdication drawer with real pointer events like everything
+  else. Skipping that would have left the two newest screens as the only ones nothing
+  ever clicked — which is exactly how a release once shipped unclickable.
 - **Tests that assert the wrong thing** are the recurring failure mode here, not tests
   that fail. Dead boosters and an unclickable UI both passed a green suite because the
   fixtures encoded the bug. Prefer asserting against real `buildBattleConfig` output
@@ -712,6 +904,13 @@ by signature rather than by class name.
 - `localStorage` keys are separate and independently validated: `hexdominion.save`
   (campaign) and `hexdominion.battle` (mid-battle resume). Anything stale, corrupt,
   finished, or from a different contract version is discarded rather than migrated.
+  **Abdication drops the mid-battle blob explicitly**: `meta/resume.js` validates the
+  CONTRACT, not the campaign, so an otherwise-valid blob would drop the player back into
+  a battle for a region the new run does not hold.
+- **`meta/legacy.js` must not import `meta/idle.js`.** `idle → modifiers → upgrades →
+  legacy` is a real chain, so an import back would close a cycle. It does not need one:
+  after a reset nothing is conquered, so income is exactly 0 by construction rather than
+  by recomputation.
 
 ## Deployment
 
