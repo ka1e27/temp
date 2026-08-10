@@ -579,8 +579,42 @@ Offering him on the fan cost a wall's whole output for forty seconds to duplicat
 every landing already grants free, and then kept building them until you noticed.
 `cmdTrain` rejects it with `unit-not-trainable` rather than trusting the picker.
 
+### The HUD has two layouts, and JS decides which
+
+`battle-parts.js placeRails` owns it, sets `.is-railed` / `.is-docked` on `<html>`, and the
+stylesheets follow. **It is deliberately not a media query**: the same condition picks where
+the rails are *reparented* and CSS cannot move a node, so a breakpoint meant the condition
+written twice in two languages with nothing checking they agreed — and they did not.
+
+- **Railed** (`min-width: 721px` **and** `min-height: 561px`): troop types down the left,
+  boosters down the right, mounted *inside* the corner plates so a tall column and a
+  top-anchored stack cannot both claim the same edge. The bottom keeps the three things you
+  change constantly — send strength, what a drag does, speed.
+- **Docked**: both rails are reparented into the dock, which is one horizontally scrolling
+  row, and `display: contents` dissolves the wrapper so their cards become direct flex items
+  of it.
+
+**Both axes, and the second one was learned the hard way.** Width alone put the rails on the
+sides of a phone in **landscape** — 844px wide so "not a phone", 390px tall so no room for a
+column at all — and board share fell to 52%.
+
+**Four cards along the bottom was the original complaint**, and the two that moved are the
+two you touch least: the troop filter is a preference you set once, a booster is fired a
+handful of times a battle.
+
 ### Gestures and controls
 
+- **A drag can set a rally, not just send.** `view.rallyMode`, toggled by the **Drag does:
+  Send / Rally** control. Rally had exactly one input and it was a RIGHT-drag — which does
+  not exist on a touchscreen, and on a trackpad is a two-finger click held through a drag,
+  which is not dependably reported as button 2. The two-finger-tap fallback only ever
+  covered the *click* form of `setRally`, so the drag — and with it the chain and the
+  toggle — was unreachable on both of the devices this is actually played on. The mode
+  routes a plain drag down the exact same branch as the right-drag, so it inherits the chain
+  and the toggle rather than reimplementing either. An armed booster outranks it: a one-shot
+  aim beats a standing mode. Pinned in `tests/tapsend.test.js` (with a negative control) and
+  end-to-end in `tools/smoke.mjs`, which asserts the left drag sets the rally **and sends no
+  squads**.
 - **A tap never sends.** Tap-then-tap used to issue a send and fired by accident constantly
   — the panel sits over the board and every neighbour is a legal target. Dragging is the
   only way to send. `view.armed` survives as "last touched" for `setRally`'s fallback and
@@ -607,12 +641,17 @@ every group is wider than the viewport on its own, so the dock folded to five st
 the HUD took ~85% of the screen and the board was a 200px band. Nothing overflowed, nothing
 errored, every tap target was a comfortable 44px. A screenshot found it in one look.
 
-So the tool now measures **how much of the screen the board actually gets**, by hit-testing
-a grid of points and asking what the player would see there. Element geometry cannot answer
-it: the plates are absolutely positioned and overlap, so summing areas double-counts and
-summing heights ignores that two may sit side by side. Below `MIN_BOARD_PCT` (55) it fails.
-Battle only — "how much of a shop is not shop" is not a question, and asking it produced a
-0% and a false alarm.
+So the tool now measures **how much of the screen the board actually gets**, as plate
+COVERAGE over a grid of points. Below `MIN_BOARD_PCT` (55) it fails. Battle only — "how much
+of a shop is not shop" is not a question, and asking it produced a 0% and a false alarm.
+
+**It hit-tested at first, and that was wrong in the one direction that matters.** `#hud` is
+`pointer-events: none` and only the *controls* opt back in, so a plate's own opaque
+background is not interactive: every point over the body of a panel fell straight through to
+the canvas and counted as a clear view. It scored a layout with two full-height rails
+covering both flanks at **84%**. Coverage over the plates' rectangles answers what is
+actually painted, and using a grid rather than summing areas is what makes two overlapping
+plates count once instead of twice.
 
 The fix is one rule: below 720px the dock stops wrapping and becomes **one horizontally
 scrollable row**, with the unit names dropped from the chips (the colour and the key letter
@@ -659,6 +698,11 @@ by signature rather than by class name.
   unclickable because `tools/smoke.mjs` used synthetic `el.click()`, which bypasses hit
   testing. The smoke test now dispatches **real pointer events** and asserts
   `document.elementFromPoint` lands on the target first. Keep it that way.
+- **A smoke selector that names a CONTAINER stops asserting when the layout moves.**
+  `tools/smoke.mjs` looked for `.hud-dock .chip` and `.hud-dock .booster`; when both moved to
+  the rails they became "not present", the step went on reporting ok, and neither control
+  was hit-tested by anything any more. Selectors are on the control's own class now, and
+  absent is a FAILURE rather than a note.
 - **Tests that assert the wrong thing** are the recurring failure mode here, not tests
   that fail. Dead boosters and an unclickable UI both passed a green suite because the
   fixtures encoded the bug. Prefer asserting against real `buildBattleConfig` output

@@ -143,12 +143,21 @@ try {
   await page.screenshot(`${OUT}/01-battle.png`);
 
   // ---- 3. HUD controls are genuinely hittable ----------------------------
-  for (const [sel, label] of [
-    ['.hud-dock .seg', 'strength segment'],
-    ['.hud-dock .chip', 'unit filter chip'],
-    ['.hud-dock .booster', 'booster button'],
+  // Located by their own class, NOT by which container they happen to sit in.
+  // These read `.hud-dock .chip` and `.hud-dock .booster`, and when the chips
+  // and boosters moved to the left rail both silently became "not present" and
+  // this step went on reporting ok — the controls were no longer hit-tested by
+  // anything. A selector that encodes the layout is a test that stops asserting
+  // the moment the layout changes, which is the failure mode CLAUDE.md warns
+  // about. `required` is the other half: absent now FAILS.
+  for (const [sel, label, required] of [
+    ['.seg', 'strength segment', true],
+    ['.hud-dragmode', 'drag-mode toggle', true],
+    ['.chip', 'unit filter chip', true],
+    ['.booster', 'booster button', true],
   ]) {
     if (await has(sel)) await hitPoint(sel, label);
+    else if (required) throw new Error(`${label} (${sel}) is missing from the HUD`);
     else note(`${label} not present`);
   }
   step('HUD controls hittable');
@@ -246,6 +255,53 @@ try {
       throw new Error(`right-drag ${rally.fromId} -> ${rally.toId} set rallyTargets=${got}`);
     }
     step(`right-drag rally: ${rally.fromId} -> ${rally.toId}`);
+
+    // ---- 5b(ii). the SAME rally with the LEFT button, via the mode ---------
+    // The reason the mode exists: a right-drag does not exist on a touchscreen
+    // and a trackpad will not reliably report button 2 mid-drag, so on both of
+    // the devices this is played on the rally drag was unreachable. Asserting
+    // it with a real left drag is the only way to know the mode is wired to the
+    // gesture and not merely to a CSS class.
+    // The source must be a site the PLAYER holds — a rally is a standing order
+    // issued by a garrison — so the drag runs from the same source as above, to
+    // a second neighbour. Reversing it would have started on neutral ground and
+    // legitimately done nothing.
+    await click('.hud-dragmode[data-mode="rally"]', 'rally mode');
+    const modeOn = await page.eval(() => !!window.__game.__ui?.rallyMode);
+    if (!modeOn) throw new Error('rally mode button did not set view.rallyMode');
+
+    const second = await page.eval((fromId, takenId) => {
+      const g = window.__game;
+      const b = g.state.battle;
+      const from = b.sites.find((s) => s.id === fromId);
+      const to = from && b.sites.find((s) => from.adj.includes(s.id) && s.id !== takenId);
+      if (!to) return null;
+      const z = g.__view.siteScreen(to, {});
+      return { to: { x: Math.round(z.x), y: Math.round(z.y) }, toId: to.id };
+    }, rally.fromId, rally.toId);
+
+    if (!second) note('no second neighbour to rally at');
+    else {
+      const before = await page.eval((id) => window.__game.state.battle.squads
+        .filter((q) => q.from === id).length, rally.fromId);
+      await page.drag(rally.from, second.to, 12);       // LEFT button
+      await page.sleep(600);
+      const got2 = await page.eval((id) => window.__game.state.battle.sites
+        .find((s) => s.id === id)?.rallyTargets ?? [], rally.fromId);
+      if (!got2.includes(second.toId)) {
+        throw new Error(`left-drag in rally mode ${rally.fromId} -> ${second.toId} `
+          + `set rallyTargets=${got2} — the mode is not reaching the gesture`);
+      }
+      // And it must NOT have sent troops. A mode that quietly launches an
+      // attack instead of setting a standing order is the worst thing it could
+      // do, and it is exactly what happens if `rallyMode` is only wired to CSS.
+      const after = await page.eval((id) => window.__game.state.battle.squads
+        .filter((q) => q.from === id).length, rally.fromId);
+      if (after > before) throw new Error(`rally mode also launched ${after - before} squad(s)`);
+      step(`left-drag rally via mode: ${rally.fromId} -> ${second.toId}, no squads sent`);
+    }
+
+    await click('.hud-dragmode[data-mode="send"]', 'send mode');
   }
 
   // ---- 5c. a chained drag routes THROUGH a waypoint -----------------------

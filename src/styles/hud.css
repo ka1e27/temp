@@ -10,8 +10,20 @@
   position: absolute; display: flex; flex-direction: column;
   gap: var(--s-3); padding: var(--s-3); max-width: 46vw;
 }
-.hud-tl { top: 0; left: 0; align-items: flex-start; }
-.hud-tr { top: 0; right: 0; align-items: flex-end; }
+/* The left corner is the whole LEFT COLUMN: readouts at the top, then the rail
+   of controls under them. Bounded to the space above the dock so the rail
+   scrolls instead of running underneath it — the corner is `top: 0` with no
+   height of its own, so without this its last card simply disappeared. */
+.hud-tl {
+  top: 0; left: 0; align-items: flex-start;
+  max-height: calc(100% - var(--dock-h) - var(--s-3)); min-height: 0;
+}
+/* Bounded for the same reason as the left: the boosters rail lives in here and
+   must scroll rather than run under the outcome preview and the dock. */
+.hud-tr {
+  top: 0; right: 0; align-items: flex-end;
+  max-height: calc(100% - var(--dock-h) - var(--s-3)); min-height: 0;
+}
 
 /* --- Gold + income --------------------------------------------------------
    The most-glanced number in the battle, so it is the biggest thing in the
@@ -132,6 +144,39 @@
   color: var(--c-text-dim); white-space: nowrap;
 }
 .hud-group-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+
+/* --- Left rail ------------------------------------------------------------
+   Four cards along the bottom was too many, and the two that moved here are the
+   two you touch least: the troop filter is a standing preference you set once,
+   and a booster is fired a handful of times a battle. What stayed at the bottom
+   is what changes constantly — send strength, what a drag means, and speed.
+
+   A COLUMN costs board WIDTH rather than board height, which is the right trade
+   on both screens this has to work on: a phone is tall and narrow, a laptop is
+   wide and short. It scrolls rather than growing, so a longer roster cannot push
+   it off the top and bottom of a short viewport the way the dock once did.
+
+   Vertically centred and pointer-events only on the cards, so the empty rail
+   above and below them stays a part of the board you can drag through. */
+.hud-rail {
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: var(--s-3); min-height: 0;
+  overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none;
+  padding: 2px;
+}
+.hud-rail::-webkit-scrollbar { display: none; }
+.hud-rail .hud-group { flex: 0 0 auto; }
+/* One column of controls, not a wrapped grid: the rail is as wide as its widest
+   chip and every item is in the same place every time. Only while the rail IS a
+   rail — when the HUD is docked these cards are reparented into the dock and go
+   back to being ordinary horizontal rows. `.is-railed` is set by battle-hud.js
+   `placeRails`, which owns that decision; see hud.responsive.css for why it is a
+   class and not a breakpoint. */
+.is-railed .hud-rail .hud-group-row { flex-direction: column; align-items: stretch; }
+
+/* Send / Rally. `.seg` already carries the segmented look; this one only has to
+   be wide enough for a word rather than a percentage. */
+.hud-dragmode { min-width: 62px; }
 
 /* --- Segmented controls: strength, and battle speed ---------------------- */
 

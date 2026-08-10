@@ -55,41 +55,57 @@
    a known height, and the board gets the rest of the screen back. Scroll
    snapping makes the groups land squarely rather than half-shown.
 
-   720px rather than a phone-exact number: this is the width at which the dock
-   can no longer hold two groups side by side, and a small tablet in portrait
-   has the same problem as a phone. */
+   `.is-docked` ON <html>, NOT A MEDIA QUERY, and that is the load-bearing part.
+   The same decision picks where the rails live (battle-hud.js `placeRails`), so
+   expressing it as a breakpoint meant the same condition written twice in two
+   languages with nothing checking they agreed — and they did not: the JS said
+   width alone, so a phone in LANDSCAPE (844x390) put the rails on the sides of a
+   390px-tall screen and the board fell to 52%. battle-hud.js now owns the
+   decision, sets the class, and this file follows it. */
+html.is-docked { --dock-h: calc(var(--hit) + var(--s-6) + var(--s-5)); }
+
+.is-docked .hud-dock {
+  left: 0; right: 0; transform: none;
+  width: 100%; max-width: 100%;
+  flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain;
+  justify-content: flex-start; align-items: stretch;
+  gap: var(--s-3); padding: 0 var(--s-3) 2px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.is-docked .hud-dock::-webkit-scrollbar { display: none; }
+.is-docked .hud-group {
+  flex: 0 0 auto; scroll-snap-align: start; padding: var(--s-2) var(--s-3);
+}
+.is-docked .hud-group-row { flex-wrap: nowrap; }
+
+/* The rails are reparented INTO the dock in this mode (battle-hud.js
+   `placeRails`). `display: contents` dissolves the wrapper so its cards become
+   direct flex items of the scrolling row, rather than one box inside it that
+   scrolls on its own axis. */
+.is-docked .hud-rail { display: contents; }
+
+/* The chips carry the units' full names, which is what made the troop-type
+   group three rows tall. The colour swatch and the key letter are the two
+   things you actually read mid-battle; the name lives in the tooltip and in the
+   aria-label, so nothing is lost to a screen reader. */
+.is-docked .chip-name { display: none; }
+/* Still a full thumb target in BOTH axes. Dropping the name shrank these to
+   34px wide, which is under the 44px minimum — a control that is tall enough
+   and too narrow is just as hard to hit, and measuring only height would have
+   called it fine. */
+.is-docked .chip {
+  padding: var(--s-1) var(--s-2); gap: var(--s-1);
+  min-width: var(--hit); justify-content: center;
+}
+/* The corners stop being a column of readouts PLUS a rail, so they go back to
+   their natural height rather than being capped against the dock. */
+.is-docked .hud-tl, .is-docked .hud-tr { max-height: none; }
+
+/* Narrow-viewport cosmetics. Genuinely about WIDTH — the corners have to fit
+   two abreast and the coach mark has to clear the clock — so these stay a media
+   query rather than following the docked/railed decision. */
 @media (max-width: 720px) {
-  :root { --dock-h: calc(var(--hit) + var(--s-6) + var(--s-5)); }
-
-  .hud-dock {
-    left: 0; right: 0; transform: none;
-    width: 100%; max-width: 100%;
-    flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain;
-    justify-content: flex-start; align-items: stretch;
-    gap: var(--s-3); padding: 0 var(--s-3) 2px;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-  }
-  .hud-dock::-webkit-scrollbar { display: none; }
-  .hud-group { flex: 0 0 auto; scroll-snap-align: start; padding: var(--s-2) var(--s-3); }
-  .hud-group-row { flex-wrap: nowrap; }
-
-  /* The chips carry the units' full names, which is what made the troop-type
-     group three rows tall. The colour swatch and the key letter are the two
-     things you actually read mid-battle; the name lives in the tooltip and in
-     the aria-label, so nothing is lost to a screen reader. */
-  .chip-name { display: none; }
-  /* Still a full thumb target in BOTH axes. Dropping the name shrank these to
-     34px wide, which is under the 44px minimum — a control that is tall enough
-     and too narrow is just as hard to hit, and only measuring height would have
-     called it fine. */
-  .chip {
-    padding: var(--s-1) var(--s-2); gap: var(--s-1);
-    min-width: var(--hit); justify-content: center;
-  }
-
-  /* Corners shrink so the objective line and the coach mark stop colliding
-     with the clock. */
   .hud-corner { max-width: 52vw; padding: var(--s-2); gap: var(--s-2); }
   .hud-gold { padding: var(--s-2) var(--s-3); }
   .hud-gold .hud-value { font-size: var(--t-lg); }

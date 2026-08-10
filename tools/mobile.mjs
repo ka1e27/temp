@@ -6,8 +6,9 @@
 //      every group folded onto its own row and the stack took ~85% of the
 //      screen: the board was a 200px band, the game was unplayable, and NOTHING
 //      ELSE IN THIS FILE NOTICED — no overflow, no error, every tap target a
-//      comfortable 44px. Measured by hit-testing a grid of points, because what
-//      is asked is literally "if I look at this pixel, do I see the game".
+//      comfortable 44px. Measured as PLATE COVERAGE over a grid of points; the
+//      first version hit-tested instead and was wrong for a subtle reason worth
+//      reading before touching it (see the block itself).
 //   2. HORIZONTAL OVERFLOW — the page is wider than the viewport, so the whole
 //      layout scrolls sideways and the board drifts under the HUD.
 //   3. OFF-SCREEN CONTROLS — a button whose centre is outside the viewport, or
@@ -62,33 +63,44 @@ const audit = (min) => page.eval((minTap) => {
     boardPct: null,
   };
 
-  // THE HEADLINE NUMBER. Hit-test a grid and ask what the player would actually
-  // see there: the board, or a slab of HUD on top of it. Element geometry cannot
-  // answer this — the plates are absolutely positioned and overlap each other,
-  // so summing their areas double-counts and summing their heights ignores that
-  // two may sit side by side.
+  // THE HEADLINE NUMBER: how much of the screen is still board.
+  //
+  // COVERAGE, not hit-testing. The first version asked `elementFromPoint` what
+  // was on top and counted anything that was not a plate as board — wrong in
+  // the one direction that matters, because `#hud` is pointer-events:none and
+  // only the CONTROLS opt back in. A plate's opaque background is not
+  // interactive, so every point over the body of a panel fell straight through
+  // to the canvas and counted as a clear view: it scored a layout with two
+  // full-height rails covering both flanks at 84%.
+  //
+  // A grid over the plates' rectangles answers what is actually PAINTED, and
+  // the grid — rather than summing areas — is what makes two overlapping plates
+  // count once instead of twice.
+  //
   // Battle only: it is the scene with a board to be eaten. The world map and
   // the shop are documents, and "how much of a shop is not shop" is not a
   // question — asking it there produced a 0% and a false alarm.
-  const canvas = out.scene === 'battle'
-    ? document.querySelector('#board-fx, #board-bg, canvas') : null;
-  if (canvas) {
-    let board = 0;
+  if (out.scene === 'battle') {
+    const plates = [...document.querySelectorAll('.panel, .hint, .hud-objective')]
+      .filter((el) => {
+        const st = getComputedStyle(el);
+        return st.display !== 'none' && st.visibility !== 'hidden' && Number(st.opacity) > 0.05;
+      })
+      .map((el) => el.getBoundingClientRect())
+      .filter((b) => b.width > 0 && b.height > 0);
+    let covered = 0;
     let total = 0;
-    for (let gy = 0; gy < 40; gy++) {
-      for (let gx = 0; gx < 20; gx++) {
-        const x = Math.round(((gx + 0.5) / 20) * vw);
-        const y = Math.round(((gy + 0.5) / 40) * vh);
-        const hit = document.elementFromPoint(x, y);
-        if (!hit) continue;
+    for (let gy = 0; gy < 60; gy++) {
+      for (let gx = 0; gx < 30; gx++) {
+        const x = ((gx + 0.5) / 30) * vw;
+        const y = ((gy + 0.5) / 60) * vh;
         total++;
-        // The canvas itself, or anything transparent that sits directly over it
-        // (#hud is pointer-events:none, so a hit there IS a clear view).
-        if (hit === canvas || hit.tagName === 'CANVAS'
-          || hit.id === 'hud' || hit.id === 'screen-root' || hit.tagName === 'BODY') board++;
+        if (plates.some((b) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom)) {
+          covered++;
+        }
       }
     }
-    out.boardPct = total ? Math.round((board / total) * 100) : null;
+    out.boardPct = total ? Math.round(((total - covered) / total) * 100) : null;
   }
   const name = (el) => {
     const cls = typeof el.className === 'string' && el.className

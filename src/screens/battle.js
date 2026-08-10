@@ -126,7 +126,14 @@ export function createBattleScene(ctx) {
       document.body.dataset.scene = 'battle';
       // Exposed for the browser smoke test, which drives real drag gestures
       // through the same pointer path a player uses.
-      if (window.__game) { window.__game.__view = board; window.__game.__fx = fx; }
+      // `__view` is the BOARD (geometry + camera); `__ui` is the presentation
+      // state the input layer writes — two different things that both got
+      // called "view" in conversation, so they are named apart here.
+      if (window.__game) {
+        window.__game.__view = board;
+        window.__game.__fx = fx;
+        window.__game.__ui = view;
+      }
 
       return [
         () => input?.dispose(),

@@ -14,41 +14,12 @@ import { createHotkeys } from './battle-hotkeys.js';
 import { createOrders, cmd } from './battle-orders.js';
 
 export { cmd, filterList } from './battle-orders.js';
+export { createView } from './battle-view.js';
 
 const TAP_SLOP = 6;       // CSS px of travel still counted as a tap
 const TWO_FINGER_MS = 260;
 const DOUBLE_TAP_MS = 320;
 
-/** Shared presentation state. Read by the renderer and the HUD, written only
- *  here. Never touched by the simulation. */
-export function createView(init = {}) {
-  return {
-    fraction: 0.5,
-    filter: { militia: true, spearmen: true, raiders: true, rams: true, marshal: true },
-    selection: [],
-    armed: null,        // click-then-click source
-    /** Booster waiting for a target site. The next site click fires it there;
-     *  Esc, the same key again, or a click on empty board cancels. */
-    armedBooster: null,
-    selectedSquad: null,
-    hoverId: null,
-    dragFrom: null,
-    dragTo: null,
-    /** In-progress RIGHT-button rally drag. Same from→to shape as dragFrom/To,
-     *  kept separate so the renderer can draw it dashed — a rally is a standing
-     *  order, and it should not look like a squad leaving now. */
-    rallyFrom: null,
-    rallyTo: null,
-    /** Sites the current drag is routing THROUGH, in order, excluding both the
-     *  source and the destination. Empty for an ordinary one-hop order. */
-    chain: [],
-    pointer: { x: 0, y: 0 },
-    box: null,
-    trainPickerFor: null,
-    lastCommand: null,
-    ...init,
-  };
-}
 
 /**
  * @param {{canvas:HTMLCanvasElement, board:object, view:object,
@@ -104,7 +75,10 @@ export function createBattleInput(o) {
     // the source and dragging to the target set target === source, i.e. it
     // CLEARED the rally you were trying to set. A right-click that never moves
     // still runs the old select-then-click path on release.
-    if (ev.button === 2) {
+    // `view.rallyMode` routes a PLAIN drag down this exact path, so the mode
+    // gets the chain and the toggle for free rather than reimplementing either.
+    // An armed booster still wins: aiming is a one-shot and outranks a mode.
+    if (ev.button === 2 || (view.rallyMode && !view.armedBooster)) {
       rally = { fromId: hit?.owner === 'player' ? hit.id : null, sx: s.x, sy: s.y, moved: false };
       if (rally.fromId) {
         view.rallyFrom = rally.fromId;
@@ -371,6 +345,14 @@ export function createBattleInput(o) {
     view,
     /** Exposed so HUD chips route through exactly the same code as the keys. */
     setFraction(f) { view.fraction = f; bus?.emit('ui:fraction', f); },
+    /** Switch what a plain drag means. Turning it on cancels an armed booster:
+     *  the two are both "the next gesture means something else" and having both
+     *  live at once is how a player ends up firing a bombard at their own camp. */
+    setRallyMode(on) {
+      view.rallyMode = !!on;
+      if (view.rallyMode) ord.cancelBooster?.();
+      bus?.emit('ui:rally-mode', view.rallyMode);
+    },
     toggleFilter(u) { view.filter[u] = !view.filter[u]; bus?.emit('ui:filter', view.filter); },
     /** Arms a targeted booster (rally / bombard / fortify) so the next site
      *  click fires it there; fires an untargeted one (march / tithe) at once. */

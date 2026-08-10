@@ -20,9 +20,13 @@ import { goldFlow, flowLine } from './battle-econ.js';
 import { createSitePanel, createWithdraw, createAlert, rejectionText } from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
-import { TRAIN_FAN_R, TRAIN_FAN_DEG } from './battle-anchor.js';
-import { TRAINABLE_UNITS } from '../battle/training.js';
 import { createSpeedControl } from './battle-speed.js';
+import {
+  buildTrainPicker, renderComp, renderCaveats, placeFan, placeRails,
+} from './battle-parts.js';
+// `updateTrain` indexes the chips against the SAME list they were built from —
+// see the loop in it — so this stays here even though the fan itself moved.
+import { TRAINABLE_UNITS } from '../battle/training.js';
 
 export {
   computePreview, previewLine, projectGarrison, travelSecondsFor,
@@ -56,6 +60,30 @@ export function createBattleHud(o) {
       'aria-label': `Send ${percent(f)} of a garrison per order`,
       on: { click: () => input.setFraction(f) },
     }));
+  /**
+   * WHAT A DRAG MEANS. Two segments, because a rally had exactly one input and
+   * it was a RIGHT-drag — which does not exist on a phone at all, and on a
+   * trackpad is a two-finger click held and dragged, which most trackpads will
+   * not reliably report. The two-finger-tap fallback in battle-input.js only
+   * ever covered the click form, never the drag, so the chained rally and the
+   * toggle were unreachable on both of the devices this is actually played on.
+   *
+   * A MODE rather than a one-shot arm: setting a rally network is several
+   * gestures in a row. It is loud about being on — the segment lights, and the
+   * board's drag line goes dashed — because a mode that silently turns your
+   * attacks into standing orders would be the worst possible bug to ship here.
+   * Right-drag still works and is unchanged.
+   */
+  const dragMode = [
+    ['send', 'Send', 'A drag sends troops now'],
+    ['rally', 'Rally', 'A drag sets a standing rally instead of sending'],
+  ].map(([id, label, title]) =>
+    h('button.seg.hud-dragmode', {
+      text: label, 'data-interactive': true, type: 'button', 'data-mode': id,
+      title, 'aria-label': title,
+      on: { click: () => input.setRallyMode(id === 'rally') },
+    }));
+
   // FULL NAMES, never `MIL`/`SPE`/`RAI`. The three-letter stubs were unreadable
   // to anyone who had not already learned the roster, and the hover card is
   // where that roster is now taught — see battle-tip.js.
@@ -130,18 +158,64 @@ export function createBattleHud(o) {
   // into measuring the label as if it could grow arbitrarily wide, which
   // quietly inflated every card by 30-40% and pushed the dock into wrapping a
   // full viewport step earlier than intended.
+  // FOUR CARDS ALONG THE BOTTOM WAS TOO MANY, and the two that moved are the
+  // two you touch least often: the troop filter is a standing preference you
+  // set once, and a booster is fired a handful of times a battle. What is left
+  // at the bottom is what you change constantly — how much of a garrison an
+  // order sends, what a drag means, and how fast the battle runs.
+  //
+  // The rail is a COLUMN down the left, which costs board width rather than
+  // board height. That is the right trade on both screens this has to work on:
+  // a phone is tall and narrow, and a laptop is wide and short.
   el.dock = h('div.hud-dock', {},
     h('div.hud-group.panel', {}, h('span.hud-group-label', { text: '% of garrison' }),
       h('div.hud-group-row', {}, ...strength)),
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }),
-      h('div.hud-group-row', {}, ...chips)),
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }),
-      h('div.hud-group-row', {}, ...boosters)),
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Drag does' }),
+      h('div.hud-group-row', {}, ...dragMode)),
     speed.el);
+  // ONE RAIL PER SIDE, because both together do not fit in one column: eight
+  // named troop chips and five boosters stack to about 700px and a 760px
+  // viewport has roughly 500 to give once the readouts and the dock have taken
+  // theirs. Splitting them also puts each next to the corner it belongs with —
+  // the filter beside the treasury you spend, the boosters beside the clock
+  // they are raced against.
+  el.rail = h('div.hud-rail', {},
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }),
+      h('div.hud-group-row', {}, ...chips)));
+  el.railRight = h('div.hud-rail.hud-rail-right', {},
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }),
+      h('div.hud-group-row', {}, ...boosters)));
+  // MOUNTED INSIDE THE CORNERS, not as free-floating siblings. As a sibling the
+  // rail was centred on the viewport and promptly sat on top of the gold
+  // readout while its own bottom card ran off under the dock — a tall column and
+  // a top-anchored stack both laying claim to the same edge with nothing
+  // arbitrating. Inside a corner they are one flow: the rail starts where the
+  // readouts end, and the corner's height cap makes it scroll rather than
+  // collide with the dock.
   mount(root, el.tl, el.tr, el.dock, site.el, el.preview, el.train);
 
+  /**
+   * WHERE THE RAILS LIVE DEPENDS ON THE SHAPE OF THE SCREEN, and this is a
+   * reparent rather than a CSS rule because CSS cannot move a node.
+   *
+   * On a desktop the sides are the free space: the board is wide, the corners
+   * are short, and a column costs width nobody was using. On a phone the sides
+   * are the ONLY space — measured at 390x844, two vertical rails covered both
+   * flanks and squeezed the board into a strip down the middle, which is the
+   * same disease as the four-card dock, just rotated. There the rails go back
+   * into the dock, which is already one horizontally scrolling row.
+   *
+   * `display: contents` on a docked rail (see hud.responsive.css) makes its
+   * cards direct flex items of the dock, so they scroll with everything else
+   * instead of being a box inside a box.
+   */
+  off(placeRails({ tl: el.tl, tr: el.tr, dock: el.dock, rail: el.rail, right: el.railRight }));
+
   // Where the HUD's own furniture is, so the anchored site panel can stay off
-  // it. Measured rarely — see battle-insets.js.
+  // it. The two rails live INSIDE the corner plates, so they are covered by the
+  // same two rectangles and there is nothing extra to register — which is the
+  // second reason they are mounted there. Measured rarely — see
+  // battle-insets.js.
   const insets = createHudInsets({ dock: el.dock, plates: [el.tl, el.tr] });
 
   // Cached writers: an unchanged value costs one comparison and no DOM work.
@@ -164,6 +238,7 @@ export function createBattleHud(o) {
   set.trainX = bindStyle(el.train, '--x');
   set.trainY = bindStyle(el.train, '--y');
   const segOn = strength.map((s) => bindClass(s, 'is-on'));
+  const dragOn = dragMode.map((s) => bindClass(s, 'is-on'));
   const chipOn = chips.map((c) => bindClass(c, 'is-on'));
   const chipOff = chips.map((c) => bindClass(c, 'is-off'));
   const boostCd = boosters.map((b) => bindStyle(b.lastChild, '--cd'));
@@ -221,6 +296,8 @@ export function createBattleHud(o) {
     set.urgent(state.rules.hardCapTicks - state.tick < TICK_HZ * 60);
 
     for (let i = 0; i < SEND_FRACTIONS.length; i++) segOn[i](view.fraction === SEND_FRACTIONS[i]);
+    dragOn[0](!view.rallyMode);
+    dragOn[1](!!view.rallyMode);
     for (let i = 0; i < UNIT_IDS.length; i++) {
       chipOn[i](view.filter[UNIT_IDS[i]] !== false);
       chipOff[i](view.filter[UNIT_IDS[i]] === false);
@@ -280,9 +357,7 @@ export function createBattleHud(o) {
     const id = view.trainPickerFor;
     const s = id ? siteOf(state, id) : null;
     if (!s) return;
-    board.siteScreen(s, _p);
-    set.trainX(`${Math.round(_p.x)}px`);
-    set.trainY(`${Math.round(_p.y)}px`);
+    placeFan(board, s, set);
   }
 
   function updateTrain(state) {
@@ -308,65 +383,5 @@ export function createBattleHud(o) {
   };
 }
 
-const _p = { x: 0, y: 0 };
-
-/** One 44px chip per trainable unit, fanned in an arc around the selected site:
- *  the highest frequency decision in the game, sitting at the point of attention
- *  instead of in a sidebar. A 44px circle cannot hold "Spearmen", so the glyph
- *  stays short and the hover card carries the name and the job.
- *
- *  TRAINABLE_UNITS, not UNIT_IDS: the marshal is commissioned with RECRUIT and
- *  is not a thing a stronghold can be set to build. Offering him here cost a
- *  wall's whole output for forty seconds to duplicate a body every landing
- *  already grants, and then quietly kept building them. */
-function buildTrainPicker(host, input, view, tip) {
-  // Radius chosen so the chips across a 170-degree fan do not touch, and the fan
-  // GROWS with the roster — this was fixed at a five-chip radius and the three
-  // specialists landed on top of each other. TRAIN_FAN_R in battle-anchor.js
-  // mirrors the same formula, so the site panel keeps clear of the fan.
-  const a0 = -175;
-  const units = TRAINABLE_UNITS;
-  return units.map((u, i) => {
-    const a = (a0 + (TRAIN_FAN_DEG / Math.max(1, units.length - 1)) * i) * (Math.PI / 180);
-    const chip = h('button.train-chip', {
-      'data-interactive': true, type: 'button',
-      'aria-label': `Train ${UNITS_UI[u].name} here — ${UNITS_UI[u].role}`,
-      vars: {
-        '--chip': `var(--c-${u})`,
-        '--dx': `${Math.round(Math.cos(a) * TRAIN_FAN_R)}px`,
-        '--dy': `${Math.round(Math.sin(a) * TRAIN_FAN_R)}px`,
-      },
-      on: { click: () => input.setTrain(view.trainPickerFor, u) },
-    }, h('span.train-chip-icon'), h('span.train-chip-key', { text: u.slice(0, 3).toUpperCase() }));
-    mount(host, chip);
-    tip.attach(chip, u, 'Click to train this here');
-    return { el: chip, on: bindClass(chip, 'is-on'), locked: bindClass(chip, 'is-locked') };
-  });
-}
-
-/** Mirrors the on-canvas garrison bar, so the same five hues mean the same
- *  five things in both places. */
-function renderComp(host, comp, n) {
-  const sig = UNIT_IDS.map((u) => comp[u] || 0).join(',');
-  if (host.dataset.sig === sig) return;
-  host.dataset.sig = sig;
-  clear(host);
-  if (!n) return;
-  for (const u of UNIT_IDS) {
-    const c = comp[u] || 0;
-    if (!c) continue;
-    mount(host, h('span', { style: { width: `${(c / n) * 100}%`, background: `var(--c-${u})` } }));
-  }
-}
-
-function renderCaveats(host, pv) {
-  const list = [];
-  if (pv.kind !== 'reinforce') list.push('if unreinforced');
-  if (pv.hp !== undefined && pv.hp < pv.hpMax) list.push(`walls ${percent(pv.hp / pv.hpMax)} on arrival`);
-  if (pv.defSurvivors > 0) list.push(`${pv.defSurvivors} defenders hold`);
-  const sig = list.join('|');
-  if (host.dataset.sig === sig) return;
-  host.dataset.sig = sig;
-  clear(host);
-  for (const c of list) mount(host, h('span.pv-caveat', { text: c }));
-}
+// The training fan and the two small preview renderers live in
+// ./battle-parts.js — split out at the 400-line cap, imported above.
