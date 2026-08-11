@@ -15,7 +15,7 @@ import {
 } from '../src/meta/modifiers.js';
 import { refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome } from '../src/meta/idle.js';
-import { generateBattleMap } from '../src/battle/mapgen.js';
+import { generateBattleMap, verifyReachable } from '../src/battle/mapgen.js';
 import { startBattle } from '../src/battle/sim.js';
 import { siteGoldPerSec } from '../src/battle/economy.js';
 import { terrainGoldMult } from '../src/battle/terrain.js';
@@ -306,15 +306,12 @@ test('the fallback layout is connected, unblocked, and has one camp and one cast
     const blocked = new Set(gen.blocked.map(([q, x]) => `${q},${x}`));
     for (const s of gen.sites) assert.ok(!blocked.has(`${s.hex[0]},${s.hex[1]}`), 'site on a wall');
 
-    // Sends go to adjacent sites only, so a disconnected graph is unwinnable.
-    const adj = new Map(gen.sites.map((s) => [s.id, []]));
-    for (const [a, b] of gen.adjacency) { adj.get(a).push(b); adj.get(b).push(a); }
-    const seen = new Set([gen.sites[0].id]);
-    const queue = [gen.sites[0].id];
-    while (queue.length) {
-      for (const n of adj.get(queue.pop())) if (!seen.has(n)) { seen.add(n); queue.push(n); }
-    }
-    assert.equal(seen.size, gen.sites.length, `${r.id} site graph is disconnected`);
+    // fallbackMapGen already returns an empty `adjacency` (there is no site
+    // graph any more, here or in the real generator), so the connectivity
+    // claim belongs to hex reachability instead: every site must be walkable
+    // from every other over unblocked ground.
+    const grid = { cols: r.grid.cols, rows: r.grid.rows, blocked: gen.blocked };
+    assert.ok(verifyReachable(grid, gen.sites), `${r.id} site got walled off`);
   }
 });
 

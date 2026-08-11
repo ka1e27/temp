@@ -59,11 +59,14 @@ test('a tick runs economy then training, and gold is integer centigold', () => {
 });
 
 test('gold brownout scales training proportionally and never stalls', () => {
+  // Two training grounds, not strongholds — a wall trains nothing at all now
+  // (content/balance.js SITES), so a brownout shared between two sites that
+  // never spend a centigold would never be visible.
   const s = build({
     sites: [
       LINE[0],
-      { id: 'sa', kind: 'stronghold', hex: [3, 0], owner: 'player', garrison: {}, hp: 250, hpMax: 250 },
-      { id: 'sb', kind: 'stronghold', hex: [6, 0], owner: 'player', garrison: {}, hp: 250, hpMax: 250 },
+      { id: 'sa', kind: 'trainingGround', hex: [3, 0], owner: 'player', garrison: {}, hp: 180, hpMax: 180 },
+      { id: 'sb', kind: 'trainingGround', hex: [6, 0], owner: 'player', garrison: {}, hp: 180, hpMax: 180 },
       { id: 'castle', kind: 'castle', hex: [9, 0], owner: 'enemy', garrison: { militia: 8 }, hp: 600, hpMax: 600 },
     ],
     adjacency: [['camp', 'sa'], ['sa', 'sb'], ['sb', 'castle']],

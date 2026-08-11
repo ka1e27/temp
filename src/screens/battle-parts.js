@@ -1,9 +1,11 @@
 // Pieces of the battle HUD, split out of battle-hud.js at the 400-line cap:
-// the training fan, and the two small renderers the outcome preview uses.
+// the training fan, and the drag/attack preview together with the two small
+// renderers it calls.
 //
-// They were the natural cut because none of them touches the HUD's cached
-// writers or its update loop — each is a pure "given this data, paint this
-// element" function over a host node it is handed.
+// Each is a "given this data, paint these elements" function over whatever
+// host node or bag of cached writers it is handed, never a closure over
+// createBattleHud's own construction — which is what let updatePreview move
+// here without dragging its caller's whole closure along with it.
 
 import { h, mount, clear, bindClass } from '../ui/dom.js';
 // `percent` was used by renderCaveats and never imported, so the "walls 62% on
@@ -14,9 +16,11 @@ import { percent } from '../ui/format.js';
 import { UNIT_IDS } from '../content/balance.js';
 import { UNITS_UI } from '../content/strings.js';
 import { TRAINABLE_UNITS } from '../battle/training.js';
+import { siteOf, computePreview } from './battle-preview.js';
 import { TRAIN_FAN_R, TRAIN_FAN_DEG } from './battle-anchor.js';
 
 const _p = { x: 0, y: 0 };
+const INSUFFICIENT = 'INSUFFICIENT — walls repair faster than you break them';
 
 /** One 44px chip per trainable unit, fanned in an arc around the selected site:
  *  the highest frequency decision in the game, sitting at the point of attention
@@ -52,6 +56,49 @@ export function buildTrainPicker(host, input, view, tip) {
   });
 }
 
+/**
+ * The drag/attack preview: works out what (if anything) is legal to compute,
+ * then paints every readout off the result. Moved from battle-hud.js at the
+ * 400-line cap — the natural cut, since renderComp/renderCaveats (which it
+ * calls) already lived here.
+ *
+ * `set`/`el` are handed in rather than closed over, so this stays a plain
+ * function of its arguments: `set` is createBattleHud's cached writers,
+ * `el.pvComp`/`el.pvCaveats` the two nodes renderComp/renderCaveats paint.
+ * @param {object} state @param {object} view presentation state
+ * @param {object} set @param {object} el @param {Function} [travelSeconds]
+ */
+export function updatePreview(state, view, set, el, travelSeconds) {
+  const fromId = view.dragFrom || view.armed || view.selection[0];
+  const toId = view.dragTo || (view.hoverId !== fromId ? view.hoverId : null);
+  const from = fromId ? siteOf(state, fromId) : null;
+  // Free movement: legal is just "ours, distinct" — pathBetween in cmdSend is the real check.
+  const legal = from && toId && !view.armedBooster
+    && from.owner === 'player' && from.id !== toId;
+  const pv = legal
+    ? computePreview(state, fromId, toId, {
+      fraction: view.fraction,
+      filter: UNIT_IDS.filter((u) => view.filter[u] !== false),
+      travelSeconds,
+    })
+    : null;
+
+  set.pvOpen(!!pv);
+  if (!pv) return;
+  // win is undefined for reinforce/unscouted, so compare booleans, not `!`.
+  set.pvWin(pv.win === true);
+  set.pvLoss(pv.win === false);
+  set.pvReinforce(pv.kind === 'reinforce');
+  set.pvTitle(`${pv.sendN} troops → ${pv.to}`);
+  set.verdict(pv.verdict);
+  set.pvLine(pv.line);
+  set.pvNote(pv.insufficient ? INSUFFICIENT
+    : pv.win === false ? 'Send more, or change what you are sending.' : '');
+  set.pvBlocked(!!pv.insufficient);
+  renderComp(el.pvComp, pv.send, pv.sendN);
+  renderCaveats(el.pvCaveats, pv);
+}
+
 /** Mirrors the on-canvas garrison bar, so the same five hues mean the same
  *  five things in both places. */
 export function renderComp(host, comp, n) {
@@ -69,7 +116,10 @@ export function renderComp(host, comp, n) {
 
 export function renderCaveats(host, pv) {
   const list = [];
-  if (pv.kind !== 'reinforce') list.push('if unreinforced');
+  // Only the two kinds that actually compute a fight earn this caveat — an
+  // unscouted target has no "if unreinforced" claim to make, because it has
+  // no garrison number for that claim to be conditional on in the first place.
+  if (pv.kind === 'assault' || pv.kind === 'relieve') list.push('if unreinforced');
   if (pv.hp !== undefined && pv.hp < pv.hpMax) list.push(`walls ${percent(pv.hp / pv.hpMax)} on arrival`);
   if (pv.defSurvivors > 0) list.push(`${pv.defSurvivors} defenders hold`);
   const sig = list.join('|');

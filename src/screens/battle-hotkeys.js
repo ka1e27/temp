@@ -40,6 +40,7 @@ export function createHotkeys(o) {
     // Esc unwinds one step at a time: the aiming reticle first, then selection.
     if (k === 'escape') {
       if (ord.cancelBooster()) return;
+      if (ord.cancelBuild()) return;
       view.armed = null;
       ord.selectOnly(null);
       clearDrag();

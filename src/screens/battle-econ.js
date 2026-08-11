@@ -19,7 +19,9 @@ import {
   SITES, UNITS, RALLY_KEEP, TERRAIN, SITE_LEVELS, SITE_UPGRADE,
 } from '../content/balance.js';
 import { siteGoldPerSec, factionGoldPerSec } from '../battle/economy.js';
-import { groundOf, siteDefMultOf, terrainName, isOpen } from '../battle/terrain.js';
+import {
+  groundOf, siteDefMultOf, garrisonMultOf, terrainName, isOpen,
+} from '../battle/terrain.js';
 import {
   trainJob, siteTrainRate, siteTrainCostPerSec, factionTrainCostPerSec, garrisonCap,
 } from '../battle/training.js';
@@ -60,11 +62,21 @@ export function siteIntel(state, site) {
     blocked: !!job && job.blocked,
     held: total(site.garrison),
     cap: 0,
-    // Terrain, straight from battle/terrain.js — the same two functions the
+    // Terrain, straight from battle/terrain.js — the same functions the
     // simulation resolves the fight with, so the panel cannot claim a defence
-    // bonus the attacker will not actually meet.
+    // bonus the attacker will not actually meet. garrisonMultOf rides along:
+    // this is the one "defence" number the panel shows, and dropping it would
+    // understate a stronghold on exactly the line meant to explain why an
+    // assault failed.
     ground,
-    defMult: siteDefMultOf(state, site),
+    defMult: siteDefMultOf(state, site) * garrisonMultOf(state, site),
+    // ...and carried SEPARATELY as well, because the two surfaces that show
+    // `defMult` are both gated on the ground being interesting. A stronghold on
+    // open flat ground has a 30% garrison bonus and would have said nothing at
+    // all about it — the rule would exist in `power()` and nowhere the player
+    // can read it, which is how this project shipped four upgrades that did
+    // nothing. The gate reads this too.
+    garrisonMult: garrisonMultOf(state, site),
     riverFarm: site.kind === 'farm' && ground.river,
     // The castle gate, visible rather than a secret rule (see battle/state.js
     // castleSealed): a siege that cannot complete must say so, the same spirit
@@ -145,8 +157,14 @@ export function trainLine(intel) {
  */
 export function terrainLine(intel) {
   const g = intel.ground;
-  if (isOpen(g)) return '';
-  const parts = [terrainName(g).toUpperCase(), `defence ${fixed(intel.defMult, 2)}x`];
+  const dug = (intel.garrisonMult ?? 1) > 1;
+  // A STRONGHOLD ON OPEN GROUND STILL HAS SOMETHING TO SAY. The gate used to be
+  // the terrain alone, which was right while the terrain was the only thing
+  // that moved this number; a garrison bonus that only announced itself on a
+  // hillside would be a rule the player meets in the field and never reads.
+  if (isOpen(g) && !dug) return '';
+  const name = isOpen(g) ? 'DUG IN' : terrainName(g).toUpperCase();
+  const parts = [name, `defence ${fixed(intel.defMult, 2)}x`];
   if (intel.riverFarm) parts.push(`gold +${Math.round((TERRAIN.riverFarmGold - 1) * 100)}%`);
   const worst = tellingUnit(g);
   if (worst) parts.push(worst);

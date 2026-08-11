@@ -83,20 +83,39 @@ test('a sub-threshold force can never breach, no matter how long it sits', () =>
   assert.ok(Number.isFinite(breachSeconds(comp({ raiders: 3 }), 100, 'farm')));
 });
 
-test('a few troops cannot take a stronghold, but a real force can', () => {
-  const hp = siteMaxHp('stronghold');
-  // 4 militia = 2.4 dps vs 4.0/s repair -> impossible.
-  assert.equal(breachSeconds(comp({ militia: 4 }), hp, 'stronghold'), Infinity);
-  // 20 militia = 12 dps, net 8 -> ~31s. This is the designed threshold.
-  const t = breachSeconds(comp({ militia: 20 }), hp, 'stronghold');
-  assert.ok(t > 25 && t < 35, `expected ~31s, got ${t}`);
+test('a few troops cannot take a training ground or a stronghold, but a real force can', () => {
+  // THE YARD AND THE WALL ARE TWO BUILDINGS NOW (content/balance.js SITES), and
+  // this is the contrast that justifies it: the SAME token force bounces off
+  // both, and the SAME real force cracks the yard in seconds flat but has to
+  // commit for nearly three times as long against the wall.
+  const yardHp = siteMaxHp('trainingGround');
+  const wallHp = siteMaxHp('stronghold');
+
+  // 4 militia = 2.4 dps: below the yard's 3.0/s repair AND the wall's 5.5/s.
+  // A token force takes neither building.
+  assert.equal(breachSeconds(comp({ militia: 4 }), yardHp, 'trainingGround'), Infinity);
+  assert.equal(breachSeconds(comp({ militia: 4 }), wallHp, 'stronghold'), Infinity);
+
+  // 20 militia = 12 dps. Net 9 against the yard's 3.0/s repair -> 180/9 = 20s:
+  // a real force takes the barracks quickly.
+  const tYard = breachSeconds(comp({ militia: 20 }), yardHp, 'trainingGround');
+  assert.ok(tYard > 17 && tYard < 23, `expected ~20s, got ${tYard}`);
+  // Net 6.5 against the wall's 5.5/s repair -> 340/6.5 = ~52s. The SAME army
+  // that shrugs off the yard has to commit for nearly three times as long
+  // against the wall, and that gap is HP and regen alone (340 vs 180, 5.5 vs
+  // 3.0/s) — `garrisonMult` is a FIELD-battle term (see combat.js `power`), so
+  // a wall is doubly harder: tougher to even win the field against, and only
+  // then slower to crack once you have.
+  const tWall = breachSeconds(comp({ militia: 20 }), wallHp, 'stronghold');
+  assert.ok(tWall > 48 && tWall < 57, `expected ~52s, got ${tWall}`);
+  assert.ok(tWall > tYard * 2, 'the wall must cost more than double the yard, at the same force');
 });
 
 test('rams are the siege answer', () => {
   const hp = siteMaxHp('stronghold');
-  // 2 rams = 24 dps, net 20 -> 12.5s
+  // 2 rams = 24 dps, net 18.5 against the wall's 5.5/s regen -> 340/18.5 = ~18s.
   const t = breachSeconds(comp({ rams: 2 }), hp, 'stronghold');
-  assert.ok(t > 10 && t < 15, `expected ~12.5s, got ${t}`);
+  assert.ok(t > 16 && t < 21, `expected ~18s, got ${t}`);
   assert.equal(siegeDps(comp({ rams: 1 })), 20 * siegeDps(comp({ militia: 1 })),
     'a ram is worth 20 militia at siege');
 });

@@ -244,25 +244,22 @@ export const ENEMY_UNITS_BY_TIER = Object.freeze([
  */
 export const ENEMY_MARSHALS_BY_TIER = Object.freeze([0, 0, 0, 1, 1, 2]);
 
-/** Starting garrisons the meta layer writes into a generated map, before
- *  enemy scaling. Battle never invents troops; the config says what is there. */
-export const BASE_GARRISON = Object.freeze({
-  castle: { spearmen: 4, militia: 4 },
-  stronghold: { spearmen: 3, militia: 2 },
-  farm: { militia: 3 },
-  camp: {},
-});
-/** Neutral sites are lightly held — they are the opening move, not a wall. */
-export const NEUTRAL_GARRISON = Object.freeze({ militia: 2 });
-/** Player-held outposts at the start of a region. */
-export const PLAYER_SITE_GARRISON = Object.freeze({ militia: 2 });
+// --- The meta layer's own fallback map --------------------------------------
+// BASE_GARRISON, NEUTRAL_GARRISON, PLAYER_SITE_GARRISON and FALLBACK_MAP moved
+// to ./regions.fallback.js when this file needed the line budget back, the
+// same way the two clamps below arrived FROM regions.data.js. Re-exported
+// here so every existing `import { BASE_GARRISON } from
+// '../content/regions.rules.js'` — direct, or via regions.data.js's own
+// re-export — keeps resolving. They are DEAD ON THE REAL PATH (see that
+// file's header for what that means and why it is what makes them one group);
+// `BATTLE_START` stays here because it is not one of them — modifiers.js
+// reads it on every battle, real generator or not.
+export {
+  BASE_GARRISON, NEUTRAL_GARRISON, PLAYER_SITE_GARRISON, FALLBACK_MAP,
+} from './regions.fallback.js';
 
 /** Opening battle-gold pools. You are ~1.9x behind on paper and win on tempo. */
 export const BATTLE_START = Object.freeze({ playerGold: 300, enemyGold: 200 });
-
-/** Tuning for meta's own fallback layout, used only when battle/mapgen.js is
- *  not injected. Degree 3 keeps the site graph planar-ish with real front lines. */
-export const FALLBACK_MAP = Object.freeze({ blockedFrac: 0.08, degree: 3 });
 
 // --- The two clamps every row goes through --------------------------------
 // Moved here from ./regions.data.js when tier 5 shipped: both are statements
@@ -370,30 +367,9 @@ export const GATE_CLAMP = (n) => Math.max(0, Math.min(0.85, Number(n) || 0));
  * the scatter to lay texture around the crossings.
  */
 
-/**
- * THE ROW BUILDER. Lives here rather than in ./regions.data.js because every
- * line of it is a statement about EVERY region — the two clamps above, and the
- * hard cap being derived rather than authored — which is this file's job, and
- * because that file needs its budget for the table.
- *
- * id, name, tier, hex, adjacentTo, enemyMult, cols, rows, [enemy,neutral,player],
- * develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour, shape
- *
- * `shape` is LAST and optional because it arrived last and because omitting it
- * means `open` — the rectangle every one of these rows was measured on. See
- * SHAPE_RULE below for what a shape is allowed to be and why the table only
- * spends it where the flavour text already promised it.
- */
-export const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
-  develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour, shape = 'open') => ({
-  id, name, tier, hex, adjacentTo, enemyMult,
-  grid: { cols, rows },
-  siteCounts: { enemy: siteCounts[0], neutral: siteCounts[1], player: siteCounts[2] },
-  develop: DEVELOP_CLAMP(develop),
-  castleGateFrac: GATE_CLAMP(castleGateFrac),
-  rewardPerSec, targetLengthMin, flavour, shape,
-  hardCapMs: Math.round(
-    Math.max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
-  ),
-  startsUnlocked: false,
-});
+// --- The row builder ---------------------------------------------------------
+// T() moved to ./regions.rowbuilder.js when authoring the enemy's site MIX
+// (rather than a flat count) needed room this file could not spare — the same
+// reason BASE_GARRISON and friends moved to ./regions.fallback.js above. It
+// imports the two clamps and the hard-cap constants from here; regions.data.js
+// is T's only importer, and reads it from the new file directly.

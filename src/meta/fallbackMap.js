@@ -48,7 +48,12 @@ export function fallbackMapGen({ grid, siteCounts, seed }) {
   }));
   const castleAt = enemySlots.length - 1 - Math.floor(enemySlots.length / 6);
   enemySlots.forEach((s, i) => sites.push({
-    id: `e${i}`, kind: i === castleAt ? 'castle' : (i % 3 === 1 ? 'stronghold' : 'farm'),
+    id: `e${i}`,
+    // One of each, so the fallback map is a legal board rather than a farm belt:
+    // a stronghold trains nothing now, so an enemy holding only those would sit
+    // there unable to replace a single casualty.
+    kind: i === castleAt ? 'castle'
+      : (i % 3 === 1 ? 'stronghold' : (i % 3 === 2 ? 'trainingGround' : 'farm')),
     owner: 'enemy', hex: offsetToAxial(s.col, s.row),
   }));
   neutralSlots.forEach((s, i) => sites.push({

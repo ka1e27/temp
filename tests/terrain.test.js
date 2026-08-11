@@ -20,7 +20,7 @@ import { generateBattleMap } from '../src/battle/mapgen.js';
 import { startBattle, step } from '../src/battle/sim.js';
 import { assertBattleConfig, CONTRACT_VERSION } from '../src/battle/contract.js';
 import {
-  groundOf, siteDefMultOf, terrainGoldMult, terrainName, isOpen,
+  groundOf, siteDefMultOf, garrisonMultOf, terrainGoldMult, terrainName, isOpen,
 } from '../src/battle/terrain.js';
 import { resolveField, breachSeconds, siegeDps, power, emptyComp } from '../src/battle/combat.js';
 import { runEconomy, goldOf, siteGoldPerSec } from '../src/battle/economy.js';
@@ -45,7 +45,12 @@ test('a fort in the mountains survives an assault that takes the same fort on op
   assert.equal(groundOf(hills, hillFort).highland, 1, 'the test fort must be fully highland');
 
   // ONE attacking force, sized so it wins on the flat. Nothing else differs.
-  const assault = comp({ militia: 16, raiders: 2 });
+  // A stronghold's own defMult carries this fixture (1.25 -> 1.55, content/
+  // balance.js SITES), so the control force needed a real bump (16 -> 20
+  // militia) to still take it in the open — `garrisonMult` is deliberately
+  // NOT wired into `attack` here, because it is a property of the BUILDING,
+  // not the ground, and would move both sides of this comparison equally.
+  const assault = comp({ militia: 20, raiders: 2 });
   const attack = (state, site) => resolveField(assault, site.garrison, {
     siteDefMult: siteDefMultOf(state, site),
     defenderOwnsSite: true,
@@ -167,8 +172,12 @@ test('a river makes the ground it runs through SOFTER, which is what stops terra
   assert.ok(b < a, `walls on a watercourse must hold less well: ${a} -> ${b}`);
 
   // And it is a real outcome, not just a number: a force that bounces off the
-  // dry fort takes the same fort on the river.
-  const assault = comp({ militia: 13 });
+  // dry fort takes the same fort on the river. Bumped 13 -> 16 militia for the
+  // stronghold's higher defMult (1.25 -> 1.55, content/balance.js SITES); the
+  // river's own softening (x0.85 on the site, x0.85 again on the spearmen
+  // garrison's own ground block) is exactly what still turns that loss into a
+  // win.
+  const assault = comp({ militia: 16 });
   const go = (state) => {
     const site = state.sites.find((x) => x.id === 'fort');
     return resolveField(assault, site.garrison, {
@@ -267,6 +276,14 @@ test('the preview reports the terrain-adjusted fight, not the flat-ground one', 
     const s = ground({ grid });
     const camp = s.sites.find((x) => x.id === 'camp');
     camp.garrison = comp({ militia: 30, raiders: 6 });
+    // FOG. This test is about the TERRAIN adjustment the preview makes, not
+    // about fog — battle-preview.js only computes a real fight for a site
+    // the player has actually scouted (decision 10), and the fixture puts
+    // the fort 5+ hexes from camp on purpose, for the ring maths every other
+    // test in this file depends on. Poking state.vision directly is what
+    // scouts it without moving a site.
+    const fort = s.sites.find((x) => x.id === 'fort');
+    s.vision.player[`${fort.hex[0]},${fort.hex[1]}`] = 1;
     return s;
   };
   const flat = build({});
@@ -297,17 +314,36 @@ test('the site panel says WHY a site is hard, and stays silent on open ground', 
   const flat = ground();
   const hills = ground({ grid: { blocked: ringTwo(TERRAIN.mountainFull) } });
   const fortOf = (s) => s.sites.find((x) => x.id === 'fort');
+  const campOf = (s) => s.sites.find((x) => x.id === 'camp');
 
-  assert.equal(terrainLine(siteIntel(flat, fortOf(flat))), '',
-    'open ground has no explanation to give');
+  // An ordinary site with no garrison bonus (the camp — see basicMods/ground()
+  // fixture) on unremarkable ground genuinely has nothing to say. Silence is
+  // still the "nothing to explain" case; it just is not the default for every
+  // site any more.
+  assert.equal(terrainLine(siteIntel(flat, campOf(flat))), '',
+    'open ground with no garrison bonus has no explanation to give');
+
+  // A STRONGHOLD is never silent, even on flat ground: `garrisonMult` is a
+  // property of the BUILDING, not the terrain (see combat.js `power`), so it
+  // has to speak from the one line this panel has for "why is this defence
+  // bigger than the site's own kind implies".
+  const dugIn = terrainLine(siteIntel(flat, fortOf(flat)));
+  assert.match(dugIn, /^DUG IN/, `expected a stronghold to announce its garrison, got "${dugIn}"`);
+  const dugInShown = Number(dugIn.match(/defence ([\d.]+)x/)[1]);
+  assert.ok(Math.abs(dugInShown
+    - siteDefMultOf(flat, fortOf(flat)) * garrisonMultOf(flat, fortOf(flat))) < 0.005,
+  'DUG IN must show the COMBINED multiplier, or it understates the wall by 30%');
 
   const line = terrainLine(siteIntel(hills, fortOf(hills)));
   assert.match(line, /HIGHLAND/, `expected the ground named, got "${line}"`);
   assert.match(line, /defence/, 'the number the fight will actually use must be stated');
   assert.ok(/rams|raiders/.test(line), `expected the unit worst hit to be named: "${line}"`);
-  // Whatever multiplier it prints has to be the one the simulation resolves with.
+  // Whatever multiplier it prints has to be the one the simulation resolves
+  // with — terrain AND the stronghold's own garrison bonus both, since a real
+  // assault meets both at once.
   const shown = Number(line.match(/defence ([\d.]+)x/)[1]);
-  assert.ok(Math.abs(shown - siteDefMultOf(hills, fortOf(hills))) < 0.005);
+  assert.ok(Math.abs(shown
+    - siteDefMultOf(hills, fortOf(hills)) * garrisonMultOf(hills, fortOf(hills))) < 0.005);
 
   const wetFarm = (() => {
     const s = ground({ grid: { rivers: [[3, 4]] } });

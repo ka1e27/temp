@@ -28,6 +28,11 @@ export function createView(init = {}) {
     /** Booster waiting for a target site. The next site click fires it there;
      *  Esc, the same key again, or a click on empty board cancels. */
     armedBooster: null,
+    /** Building kind waiting for a HEX rather than a site — the same one-shot
+     *  shape as an armed booster (arm, aim, fire-or-cancel), because the
+     *  whole point of building is raising one on ground nothing already
+     *  occupies. An armed booster still outranks this: see battle-input.js. */
+    armedBuild: null,
     selectedSquad: null,
     hoverId: null,
     dragFrom: null,
@@ -51,9 +56,6 @@ export function createView(init = {}) {
      *  order, and it should not look like a squad leaving now. */
     rallyFrom: null,
     rallyTo: null,
-    /** Sites the current drag is routing THROUGH, in order, excluding both the
-     *  source and the destination. Empty for an ordinary one-hop order. */
-    chain: [],
     pointer: { x: 0, y: 0 },
     box: null,
     trainPickerFor: null,

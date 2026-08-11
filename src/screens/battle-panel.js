@@ -15,10 +15,11 @@
 // Upgrade button and the rally stepper append commands through `input`, exactly
 // like a click on the board does.
 import { total } from '../battle/combat.js';
-import { rallyKeepOf, rallyTargetsOf, upgradeProgress } from '../battle/state.js';
+import { rallyKeepOf, rallyTargetsOf, upgradeProgress, buildProgress } from '../battle/state.js';
+import { perceivedSite, perceivedSquads } from '../battle/vision.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
-import { duration } from '../ui/format.js';
+import { duration, spaceCase } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
 import { createFollower } from './battle-follow.js';
 import { createFillBar, createCompBar } from './battle-bars.js';
@@ -30,7 +31,7 @@ import {
   siteIntel, trainLine, gateLine, upgradePreview,
 } from './battle-econ.js';
 import { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
-import { createKeepRow, createRecruitRow } from './battle-actions.js';
+import { createKeepRow, createRecruitRow, createBuildRow } from './battle-actions.js';
 // Re-exported so nothing downstream has to know the actions group moved out.
 export { setKeep, recruit, recruitOffer } from './battle-actions.js';
 
@@ -92,6 +93,7 @@ export function createSitePanel(o) {
   }, 'Upgrade');
   const keep = createKeepRow(getState, input, targetId);
   const hire = createRecruitRow(getState, input, targetId);
+  const builds = createBuildRow(getState, input, view);
   // Four visual groups, so the eye chunks "what this site IS" (head) from
   // "what it's WORTH" (econ) from "why it's hard / what's happening to it"
   // (context) from "what you can do about it" (actions) instead of scanning
@@ -102,7 +104,8 @@ export function createSitePanel(o) {
   const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, buildBar.el, stat);
-  const actions = h('div.hud-site-actions', {}, keep.el, hire.el, upgradePreviewRow, upgrade);
+  const actions = h('div.hud-site-actions', {},
+    keep.el, hire.el, builds.el, upgradePreviewRow, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, and a panel that let clicks through would sit
   // over the board, take a click on its own text as a click on empty ground,
@@ -181,11 +184,18 @@ export function createSitePanel(o) {
     if (squad) { setShown(false); showSquad(state, squad); return; }
 
     const id = view.selection[0];
-    const site = id ? siteOf(state, id) : null;
+    // FOG. `perceivedSite` returns the real object for anything owned or
+    // currently in sight, so nothing below changes for the ordinary case —
+    // it only ever substitutes a GHOST, which carries no garrison/hp/level/
+    // trainType at all. Reading those off it would silently read
+    // `undefined`, and `undefined` still renders; the branch below is where
+    // that gets stopped instead of drawn.
+    const real = id ? siteOf(state, id) : null;
+    const site = real ? perceivedSite(state, 'player', real) : null;
     setAnchor(site);
     set.open(!!site);
     if (!site) {
-      setShown(false); keep.show(null); hire.show(null);
+      setShown(false); keep.show(null); hire.show(null); builds.show(null);
       blankVitals(); set.siege(false); return;
     }
 
@@ -205,6 +215,30 @@ export function createSitePanel(o) {
       setShown(false);
       keep.show(null);
       hire.show(null);
+      builds.show(null);
+      if (wrote) follower.markDirty();
+      return;
+    }
+
+    // UNSCOUTED. Kind and position are common knowledge (battle/vision.js),
+    // so the panel still opens and anchors on the ghost — but everything
+    // that CHANGES (garrison, HP, level, training, siege, a rally list) is
+    // exactly what a ghost does not carry, and none of it is read past this
+    // point. The one fact fog lets a ghost keep is the last-known owner, and
+    // only in the past tense: real when it exists, silent when it does not,
+    // never re-derived into anything more current than that.
+    if (site.ghost) {
+      wrote |= set.title(spaceCase(site.kind).toUpperCase());
+      wrote |= set.sub(site.owner ? `UNSCOUTED · last seen: ${site.owner}` : 'UNSCOUTED');
+      wrote |= blankVitals();
+      wrote |= set.trains('');
+      wrote |= set.stat('');
+      set.statWarn(false);
+      set.siege(false);
+      setShown(false);
+      keep.show(null);
+      hire.show(null);
+      builds.show(null);
       if (wrote) follower.markDirty();
       return;
     }
@@ -213,7 +247,7 @@ export function createSitePanel(o) {
     // The same condition statusLine() already used to say "UNDER SIEGE" —
     // escalated here into the whole panel's chrome instead of one line.
     const hostile = !!(site.siege || intel?.gate?.sealed);
-    wrote |= set.title(`${site.kind.toUpperCase()} · L${site.level}`);
+    wrote |= set.title(`${spaceCase(site.kind).toUpperCase()} · L${site.level}`);
     wrote |= set.sub('');
 
     // Bar fills never change the panel's own BOX size (fixed height, content
@@ -244,19 +278,27 @@ export function createSitePanel(o) {
     wrote |= updateTerrainBubbles(terrain, intel);
     // The bar carries the build now, which also un-masks the status line: a site
     // besieged WHILE it builds used to report "building · 12s left" and never
-    // once say UNDER SIEGE, because the build branch returned first.
-    const building = site.upgradeTicksLeft > 0;
-    if (building) {
+    // once say UNDER SIEGE, because the build branch returned first. A site
+    // still going up (buildTicksLeft) shares this same bar with one being
+    // upgraded (upgradeTicksLeft) — the two never overlap, same as the
+    // board's own bar (render/siteBuild.js).
+    const upgrading = site.upgradeTicksLeft > 0;
+    const constructing = site.buildTicksLeft > 0;
+    if (upgrading) {
       buildBar.update(upgradeProgress(site),
         `L${site.level} · ${duration(site.upgradeTicksLeft / TICK_HZ)}`);
+    } else if (constructing) {
+      buildBar.update(buildProgress(site),
+        `${spaceCase(site.kind).toUpperCase()} · ${duration(site.buildTicksLeft / TICK_HZ)}`);
     }
-    wrote |= buildBar.show(building);
+    wrote |= buildBar.show(upgrading || constructing);
     wrote |= set.stat(statusLine(site, intel));
     set.statWarn(hostile);
     set.siege(hostile);
     // A hold-back only means anything where there is a rally to hold back from.
     wrote |= keep.show(site.owner === 'player' && rallyTargetsOf(site).length ? site : null);
     wrote |= hire.show(site);
+    wrote |= builds.show(site);
 
     const offer = upgradeOffer(state, site);
     wrote |= setShown(site.owner === 'player');
@@ -288,6 +330,7 @@ export function createSitePanel(o) {
     set.siege(false);
     wrote |= keep.show(null);
     wrote |= hire.show(null);
+    wrote |= builds.show(null);
     if (wrote) follower.markDirty();
   }
 
@@ -310,8 +353,17 @@ export function createSitePanel(o) {
 
 
 function squadById(state, id) {
-  for (let i = 0; i < state.squads.length; i++) {
-    if (state.squads[i].id === id) return state.squads[i];
+  // FOG. A squad carries no ghost (battle/vision.js) — `perceivedSquads`
+  // drops one the instant it leaves vision, on the board (battle-orders.js
+  // `squadAt`) and here. Scanning `state.squads` directly, as this used to,
+  // kept the panel reporting an enemy column's live strength and route long
+  // after its glyph had faded from the canvas — the same leak decision 13
+  // closes, found one surface later. `view.selectedSquad` itself is left
+  // alone: if the same column marches back into a watchtower's ring it
+  // should reappear, not stay gone forever.
+  const squads = perceivedSquads(state, 'player');
+  for (let i = 0; i < squads.length; i++) {
+    if (squads[i].id === id) return squads[i];
   }
   return null;
 }

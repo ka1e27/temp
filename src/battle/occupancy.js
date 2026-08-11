@@ -21,8 +21,30 @@
 // per frame.
 // PURE.
 import { asHex } from './influence.js';
-import { isBlocked } from './state.js';
 import { inGrid } from './mapgen.js';
+
+/**
+ * Impassable terrain — mountains and the region's shape mask.
+ *
+ * Backed by a Set rather than the array's own `includes`, and the reason is A*:
+ * `findPath` asks this once per NEIGHBOUR per expansion, so a linear scan over a
+ * few hundred strings was the inner loop of every path in the game. The cache is
+ * keyed on the `blocked` ARRAY's identity, which is exactly right — mapgen
+ * assigns it once and nothing mutates it in place, so a new array (a resumed
+ * battle, a second battle in one process) misses and rebuilds.
+ *
+ * WeakMap'd rather than stored on state, because state is pure JSON: a Set on it
+ * would not survive `JSON.stringify`, which is the whole save format.
+ */
+const blockedCache = new WeakMap();
+export function blockedSet(state) {
+  const list = state.grid.blocked;
+  let set = blockedCache.get(list);
+  if (!set) { set = new Set(list); blockedCache.set(list, set); }
+  return set;
+}
+
+export const isBlocked = (state, q, r) => blockedSet(state).has(`${q},${r}`);
 
 const kOf = (q, r) => `${q},${r}`;
 

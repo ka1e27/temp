@@ -20,13 +20,22 @@ let n = 0;
 const NO_EXPEDITION = emptyComp();
 
 /**
- * A small hand-built region: a camp directly adjacent to the enemy castle
- * (so "rushing the throne" costs nothing but the march), plus four neutral
- * farms off that path. Five non-castle sites in all, so "hold only the
- * capital's doorstep" (camp alone, 1/5 = 0.2) and "hold most of the
- * countryside too" (camp + 3 farms, 4/5 = 0.8) land cleanly on either side of
- * a 0.6 gate — the exact shape the design brief describes: beelining the
- * throne is not enough, the ground off that path has to flip too.
+ * A small hand-built region: a camp two hexes from the enemy castle (so
+ * "rushing the throne" costs nothing but the march), plus four neutral farms
+ * off that path. Five non-castle sites in all, so "hold only the capital's
+ * doorstep" (camp alone, 1/5 = 0.2) and "hold most of the countryside too"
+ * (camp + 3 farms, 4/5 = 0.8) land cleanly on either side of a 0.6 gate — the
+ * exact shape the design brief describes: beelining the throne is not enough,
+ * the ground off that path has to flip too.
+ *
+ * EVERY HEX HERE MUST BE INSIDE THE DECLARED GRID, and that is a real
+ * constraint rather than tidiness. `grid` is an OFFSET rectangle
+ * (`axialFromOffset(col, row) = {q: col - floor(row/2), r: row}`), so a 9x9
+ * grid holds no negative `r` at all and only a little negative `q`. This
+ * fixture used to sit two farms at [0,-2] and [-2,0] — off-map — and passed
+ * anyway, because a send was legal on an AUTHORED EDGE and `travelTicks` fell
+ * back to raw hex distance when pathing failed. Free movement has no edges to
+ * lie with: an off-map site is simply `no-route`, forever.
  *
  * The enemy is given no gold at all (`startGold: 0, goldRateMult: 0`) so its
  * garrison cannot regrow mid-test — the point here is the GATE, not whether a
@@ -44,11 +53,11 @@ function buildConfig(castleGateFrac, hardCapMs = 999_999_000) {
     region: { id: 'test', name: 'Test', tier: 3 },
     grid: { cols: 9, rows: 9, blocked: [] },
     sites: [
-      site('camp', 'camp', [0, 0], 'player', { militia: 80 }, 480),
-      site('castle', 'castle', [2, 0], 'enemy', { militia: 6 }, 480),
+      site('camp', 'camp', [0, 4], 'player', { militia: 80 }, 480),
+      site('castle', 'castle', [2, 4], 'enemy', { militia: 6 }, 480),
       site('farm', 'f1', [0, 2], 'neutral', { militia: 2 }, 100),
-      site('farm', 'f2', [0, -2], 'neutral', { militia: 2 }, 100),
-      site('farm', 'f3', [-2, 0], 'neutral', { militia: 2 }, 100),
+      site('farm', 'f2', [0, 6], 'neutral', { militia: 2 }, 100),
+      site('farm', 'f3', [-2, 4], 'neutral', { militia: 2 }, 100),
       site('farm', 'f4', [2, 2], 'neutral', { militia: 2 }, 100),
     ],
     adjacency: [

@@ -7,12 +7,15 @@
 // Everything here appends a COMMAND through `input` and reads its value back off
 // the SIMULATION. Nothing writes to a site. That is what makes a rejected order
 // visibly do nothing instead of leaving a control lying about the state.
-import { RALLY_KEEP, UNITS, SITES, CENTIGOLD, RECRUIT } from '../content/balance.js';
+import {
+  RALLY_KEEP, UNITS, SITES, CENTIGOLD, RECRUIT, BUILDABLE_KINDS, BUILD_COSTS,
+} from '../content/balance.js';
 import { TICK_HZ } from '../core/loop.js';
 import { rallyKeepOf, clampRallyKeep } from '../battle/state.js';
-import { recruitReadyTick } from '../battle/commands.js';
+import { recruitReadyTick, buildingFor } from '../battle/commands.js';
 import { goldOf } from '../battle/economy.js';
 import { h, bindText, bindClass } from '../ui/dom.js';
+import { spaceCase } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
 import { keepLabel } from './battle-econ.js';
 
@@ -168,4 +171,77 @@ export function recruit(state, siteId, input) {
   if (!site || !recruitOffer(state, site).can) return false;
   input.recruit(site.id, 'marshal');
   return true;
+}
+
+/**
+ * RAISE A BUILDING.
+ *
+ * Unlike Recruit, a click here does not act on the selected site at all — it
+ * ARMS a kind, and a separate click on the board (battle-input.js) resolves
+ * the hex and fires. `buildBlocker` already answers WHERE; this only ever
+ * has to answer WHAT, and whether the treasury covers it right now, which is
+ * why `kind` is a loop variable here rather than something read off the
+ * current selection the way Recruit's `site` is.
+ * PURE — the whole affordability gate is testable without a DOM.
+ * @returns {{shown:boolean, can:boolean, label:string, why:string}}
+ */
+export function buildOffer(state, kind) {
+  const out = { shown: false, can: false, label: '', why: '' };
+  const spec = BUILD_COSTS[kind];
+  if (!state || !spec) return out;
+  out.shown = true;
+  out.label = `${spaceCase(kind).toUpperCase()} · ${spec.gold}g · ${spec.sec}s`;
+  if (buildingFor(state, 'player').length) {
+    out.why = 'Already raising something — one at a time.';
+    return out;
+  }
+  if (goldOf(state.factions.player) < spec.gold * CENTIGOLD) {
+    out.why = 'Not enough gold.';
+    return out;
+  }
+  out.can = true;
+  return out;
+}
+
+/**
+ * The build action's row: one button per buildable kind, so `kind` is fixed
+ * per button rather than a picker the player opens first — the loadout is
+ * short enough (three) that naming each one on its own face costs nothing and
+ * saves a click every time.
+ */
+export function createBuildRow(getState, input, view) {
+  const buttons = BUILDABLE_KINDS.map((kind) => h(`button.btn.hud-build.hud-build-${kind}`, {
+    'data-interactive': true, type: 'button',
+    on: { click: () => input.useBuild(kind) },
+  }, ''));
+  const el = h('div.hud-build-row', {}, ...buttons);
+  const label = buttons.map((b) => bindText(b, ''));
+  const armedSet = buttons.map((b) => bindClass(b, 'is-armed'));
+  const open = bindClass(el, 'is-open');
+  const can = buttons.map(() => null);
+
+  return {
+    el,
+    /** @param {?object} site the selected site, or null to hide the row.
+     *  @returns {boolean} true when the row appeared, vanished or changed. */
+    show(site) {
+      const state = getState();
+      const shown = !!state && !!site && site.owner === 'player';
+      let wrote = open(shown) ? 1 : 0;
+      if (!shown) return !!wrote;
+      for (let i = 0; i < BUILDABLE_KINDS.length; i++) {
+        const kind = BUILDABLE_KINDS[i];
+        const offer = buildOffer(state, kind);
+        const armed = view.armedBuild === kind;
+        wrote |= label[i](offer.label);
+        wrote |= armedSet[i](armed);
+        if (can[i] !== offer.can) {
+          can[i] = offer.can;
+          buttons[i].disabled = !offer.can;
+        }
+        buttons[i].title = armed ? 'Click a hex to place it · Esc cancels' : offer.why;
+      }
+      return !!wrote;
+    },
+  };
 }

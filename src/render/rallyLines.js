@@ -8,6 +8,7 @@
 // mutated in place.
 import { arcPath, arcPoint, chevron } from './routes.js';
 import { rallyTargetsOf } from '../battle/state.js';
+import { perceivedSite } from '../battle/vision.js';
 
 const _a = { x: 0, y: 0 };
 const _b = { x: 0, y: 0 };
@@ -16,9 +17,15 @@ const _d = { x: 0, y: 0 };
 const DASH = [0, 0];
 const NO_DASH = [];
 
-/** Rally lines: a site that auto-sends once its garrison passes the threshold.
- *  Dashed, low contrast — a standing order, not an event. */
-export function drawRallies(ctx, state, px, g) {
+/**
+ * Rally lines: a site that auto-sends once its garrison passes the threshold.
+ * Dashed, low contrast — a standing order, not an event.
+ *
+ * `rallyTargets` is exactly the kind of live, changing fact fog hides — a
+ * ghost never carries it — so an enemy site not currently owned or in sight
+ * draws no rally line at all, same as it draws no garrison count.
+ */
+export function drawRallies(ctx, state, faction, px, g) {
   DASH[0] = px * 4;
   DASH[1] = px * 6;
   ctx.setLineDash(DASH);
@@ -27,13 +34,22 @@ export function drawRallies(ctx, state, px, g) {
     let any = false;
     ctx.beginPath();
     for (let i = 0; i < state.sites.length; i++) {
-      const s = state.sites[i];
-      if (s.owner !== owner) continue;
+      const raw = state.sites[i];
+      if (raw.owner !== owner) continue;
+      const s = perceivedSite(state, faction, raw);
+      if (s.ghost) continue;
       // One site may feed several neighbours in turn, so every link is drawn.
       const targets = rallyTargetsOf(s);
       for (let t = 0; t < targets.length; t++) {
         const o = g.byId(targets[t]);
-        if (!o) continue;
+        // BOTH ENDS, not just the source. `byId` goes through `perceivedSite`,
+        // so an unscouted destination comes back as a GHOST — which is truthy,
+        // and a bare `!o` check therefore draws a dashed line with two
+        // arrowheads pointing straight at ground the player has never seen,
+        // announcing both that something is there and that the enemy is
+        // reinforcing toward it. A rally is a live order, and live is exactly
+        // the half fog hides.
+        if (!o || o.ghost) continue;
         any = true;
         g.pos(s, _a);
         g.pos(o, _b);
@@ -45,7 +61,7 @@ export function drawRallies(ctx, state, px, g) {
       ctx.strokeStyle = g.palette.border[owner];
       ctx.stroke();
       ctx.setLineDash(NO_DASH);
-      drawRallyArrows(ctx, state, px, g, owner);
+      drawRallyArrows(ctx, state, faction, px, g, owner);
       ctx.setLineDash(DASH);
     }
   }
@@ -65,7 +81,7 @@ export function drawRallies(ctx, state, px, g) {
  * link a single mark is easy to miss, and on a short one an end-anchored mark
  * disappears under a site glyph.
  */
-function drawRallyArrows(ctx, state, px, g, owner) {
+function drawRallyArrows(ctx, state, faction, px, g, owner) {
   const size = Math.max(g.hexSize * 0.13, px * 4.5);
   ctx.strokeStyle = g.palette.border[owner];
   ctx.lineWidth = px * 1.8;
@@ -73,12 +89,14 @@ function drawRallyArrows(ctx, state, px, g, owner) {
   ctx.lineJoin = 'round';
   ctx.beginPath();
   for (let i = 0; i < state.sites.length; i++) {
-    const s = state.sites[i];
-    if (s.owner !== owner) continue;
+    const raw = state.sites[i];
+    if (raw.owner !== owner) continue;
+    const s = perceivedSite(state, faction, raw);
+    if (s.ghost) continue;
     const targets = rallyTargetsOf(s);
     for (let n = 0; n < targets.length; n++) {
       const o = g.byId(targets[n]);
-      if (!o) continue;
+      if (!o || o.ghost) continue;   // the arrowheads leak the same fact the line does
       g.pos(s, _a);
       g.pos(o, _b);
       const dx = _b.x - _a.x;

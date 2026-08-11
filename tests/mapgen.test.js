@@ -83,37 +83,17 @@ test('every site can reach every other site over unblocked hexes', () => {
   }
 });
 
-test('the site graph is one connected component with a sane degree spread', () => {
+test('there is no site graph any more: adjacency is empty, and hex reach is the connectivity invariant', () => {
+  // buildAdjacency/mapgraph.js are deleted — armies march freely, so there is
+  // no authored edge list to hold a degree spread against. What replaced it is
+  // verifyReachable (a BFS over unblocked hexes), already exercised above as
+  // THE connectivity invariant; what is left to pin here is that nothing
+  // quietly resurrects a graph in its place.
   for (const seed of SEEDS) {
     for (const spec of [SPEC, BIG]) {
-      const { sites, adjacency } = generateBattleMap(spec, seed);
-      const ids = sites.map((s) => s.id);
-      const adj = Object.fromEntries(ids.map((id) => [id, []]));
-      for (const [a, b] of adjacency) {
-        assert.notEqual(a, b, 'no self loops');
-        adj[a].push(b);
-        adj[b].push(a);
-      }
-      // flood fill
-      const seen = new Set([ids[0]]);
-      const stack = [ids[0]];
-      while (stack.length) {
-        for (const n of adj[stack.pop()]) if (!seen.has(n)) { seen.add(n); stack.push(n); }
-      }
-      assert.equal(seen.size, ids.length, `isolated cluster at seed ${seed}`);
-
-      const degrees = ids.map((id) => adj[id].length);
-      assert.ok(Math.min(...degrees) >= 1, 'no isolated site');
-      // +2 rather than +1: the soft-opening guarantee may add an edge to a site
-      // already at the cap. A map where a home base has no reachable soft target
-      // has no legal opening move, which is worse than a slightly busy node.
-      assert.ok(Math.max(...degrees) <= MAPGEN.adjacency.maxDegree + 2, 'degree stays readable');
-      const avg = (adjacency.length * 2) / ids.length;
-      // Upper bound allows for the soft-opening edge: every home base is
-      // guaranteed a bordering farm it does not own, which can add an edge
-      // beyond the target average. Without it a camp can generate walled in
-      // behind a stronghold and the battle has no legal opening move.
-      assert.ok(avg >= 2.4 && avg <= 3.6, `average degree ${avg} outside the design range`);
+      const { grid, sites, adjacency } = generateBattleMap(spec, seed);
+      assert.deepEqual(adjacency, [], 'generateBattleMap must return an empty adjacency');
+      assert.ok(verifyReachable(grid, sites), `seed ${seed}: a site got walled off`);
     }
   }
 });

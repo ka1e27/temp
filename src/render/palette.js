@@ -257,17 +257,22 @@ export function derive(c) {
   // token's nominal alpha: at full strength it turned the board into a
   // spreadsheet and buried the one line that matters, the front.
   p.grid = withAlpha(mix(c.line, c.bg, 0.45), c.gridAlpha * 0.62);
-  // The adjacency graph. You may only send between adjacent sites, so this is
-  // load-bearing rules information and is drawn as a road, not a hint: a dark
-  // casing under a light core keeps it legible over any colour of ground.
+  // What was the adjacency graph's colour. The graph itself is gone with the
+  // rule it drew (see battleView.js), but `link` survives as routes.js's
+  // fallback stroke for a squad whose owner has no colour — one live consumer,
+  // and a neutral grey is exactly right for it.
   p.link = withAlpha(c.textDim, 0.55);
-  p.linkCase = withAlpha('#000000', 0.4);
   p.plate = withAlpha(c.surface, 0.85);
   // --a-blocked controls how completely a mountain masks the territory
   // underneath: below 1 the flood bleeds through, so terrain still reads as
   // being INSIDE someone's ground.
   p.blocked = withAlpha(mix(c.bg, c.line, 0.8), c.blockedAlpha);
   p.blockedEdge = withAlpha(c.textDim, 0.55);
+  // FOG OF WAR (render/fog.js): a flat dark wash over ground outside current
+  // sight, no hue of its own — it must read as "unknown", never as a third
+  // faction's colour, so it has to sit over the plate shading, the flood,
+  // rivers and mountains without fighting any of them for attention.
+  p.fogVeil = withAlpha('#000000', 0.5);
   // WATER. ONE flat translucent fill, nothing else — the third pass at this
   // (see river.js for the full history). The first two both shaded it: a
   // four-layer stack of a darkened valley, a darkened bed, the water and a

@@ -13,6 +13,7 @@ import { generateBattleMap } from '../battle/mapgen.js';
 import { createBattleView } from '../render/battleView.js';
 import { setRiverLayer } from '../render/hexRenderer.js';
 import { createFx, fxFromEvent } from '../render/fx.js';
+import { fxVisible } from '../render/fog.js';
 import { createBattleInput, createView } from '../screens/battle-input.js';
 import { createBattleHud, travelSecondsFor } from '../screens/battle-hud.js';
 import { saveBattle, clearBattle } from '../meta/resume.js';
@@ -65,11 +66,12 @@ export function createBattleScene(ctx) {
 
   const getState = () => ctx.state.battle;
 
+  const siteOf = (battle, siteId) => battle?.sites.find((s) => s.id === siteId) ?? null;
+
   /** Sim events name a site, never a coordinate — the simulation has no idea
    *  where anything is on screen. Effects need one, so resolve it here. */
   const locate = (siteId) => {
-    const battle = getState();
-    const site = battle?.sites.find((s) => s.id === siteId);
+    const site = siteOf(getState(), siteId);
     return site && board ? board.sitePos(site, { x: 0, y: 0 }) : null;
   };
 
@@ -116,7 +118,12 @@ export function createBattleScene(ctx) {
         volume: () => ctx.state?.meta?.settings?.volume ?? 0.7,
       });
       fx = createFx();
-      board = createBattleView({ bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx });
+      // The board is always drawn for the PLAYER — there is no spectator or
+      // enemy-eye view — but named rather than left implicit, so the renderer
+      // itself never has to assume who it is fogging the board for.
+      board = createBattleView({
+        bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx, viewFaction: 'player',
+      });
       const presentation = createView();
       input = createBattleInput({
         canvas: qs('#board-fx'), board, view: presentation, getState, bus: ctx.bus,
@@ -173,8 +180,24 @@ export function createBattleScene(ctx) {
       // state.events and we drain them here, AFTER the tick, so a listener can
       // never mutate state the simulation is mid-way through iterating.
       for (const ev of drainEvents(battle)) {
-        fxFromEvent(fx, ev, board.palette, board.hexSize, locate);
-        sound?.onEvent(ev);
+        // FOG. An effect — and a sound — is a claim that something happened
+        // THERE, so both answer to the same rule the board does. Measured on
+        // gallowmoor before this gate: 85% of all combat and economy effects
+        // fired on ground the player cannot see, 385 of them gold "+N" floats
+        // over the enemy's training grounds. See render/fog.js `fxVisible`.
+        //
+        // An event that names no site is NOT a positional claim (a battle
+        // ending, a command refused) and passes through untouched — gating
+        // those on a hex they do not have would silence them all.
+        //
+        // The bus is deliberately outside the gate: it feeds game logic, not
+        // the screen, and starving a coach beat or the results screen of the
+        // fact that something happened is a different bug from drawing it.
+        const at = ev.siteId != null ? siteOf(battle, ev.siteId) : null;
+        if (ev.siteId == null || fxVisible(battle, 'player', ev, at)) {
+          fxFromEvent(fx, ev, board.palette, board.hexSize, locate);
+          sound?.onEvent(ev);
+        }
         ctx.bus.emit(`battle:${ev.type}`, ev);
       }
 

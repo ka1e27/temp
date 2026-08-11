@@ -47,7 +47,7 @@ function nonDecreasing(values, label, key = (r) => r.id) {
   }
 }
 
-test('campaign: every region is winnable by an ordinary player, at every tier', { timeout: 900000 }, () => {
+test('campaign: every region is winnable by an ordinary player, at every tier', { timeout: 1200000 }, () => {
   // Deliberately a FLOOR rather than a win-rate assertion: tuning happens on
   // tools/simrunner.js at n >= 96, and a band re-measured at n=8 fails on noise
   // constantly. What this catches is the thing that actually shipped — a region
@@ -65,12 +65,35 @@ test('campaign: every region is winnable by an ordinary player, at every tier', 
   // floors at 18%, where a sixteen-seed sample is empty 5% of the time and a
   // twenty-four-seed one 1%. The floor is a claim about the region; a sample that
   // fails one time in twenty is a claim about the dice.
+  //
+  // A SECOND BATCH, ONLY WHEN THE FIRST COMES UP EMPTY — the third time this
+  // exact number has had to grow, and for the third time it is the tier-6 floor
+  // moving, not a bigger campaign. Fog of war (battle/belief.js) measured a real
+  // drop for the single tightest margin in the game: widowsgate reads 6% at
+  // n=48 under full fog (both the enemy AI and the harness bot blind), down from
+  // 25% pre-fog. `wins > 0` is still an honest claim about a 6% region — it is
+  // not broken, it is exactly as hard as `TOO HARD` on tools/simrunner.js already
+  // says — but a 24-seed sample can no longer promise it: P(zero) at a true 6%
+  // is ~22%, not the <=1% this floor is supposed to run at. Escalating only on
+  // an empty first batch is what keeps that promise without paying for it on the
+  // twenty-three regions that were never in question — each of those still
+  // resolves on the first 24, exactly as before. This is a MEASURED regression
+  // in the fog change's report, not something this test papers over; re-tuning
+  // widowsgate itself (content/regions.data.js) is the separate, scheduled pass.
   const SEEDS = 24;
+  const ESCALATED_SEEDS = 24;
   for (let i = 0; i < REGIONS.length; i++) {
-    const wins = Array.from({ length: SEEDS }, (_, k) => playOnce(i, 1000 + (k + 1) * 7919))
+    const seedAt = (k) => 1000 + (k + 1) * 7919;
+    let attempted = SEEDS;
+    let wins = Array.from({ length: SEEDS }, (_, k) => playOnce(i, seedAt(k)))
       .filter((b) => b.status === 'win').length;
+    if (wins === 0) {
+      wins = Array.from({ length: ESCALATED_SEEDS }, (_, k) => playOnce(i, seedAt(SEEDS + k)))
+        .filter((b) => b.status === 'win').length;
+      attempted += ESCALATED_SEEDS;
+    }
     assert.ok(wins > 0,
-      `${REGIONS[i].id} was not won once in ${SEEDS} attempts — it is not a hard region,`
+      `${REGIONS[i].id} was not won once in ${attempted} attempts — it is not a hard region,`
       + ' it is a broken one');
   }
 });
@@ -120,9 +143,9 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
   // The regression this exists for. `ramTrainShare` and `counterTrainShare` are
   // SHARES of production; rolled per think against every eligible site — which
   // is how the ram appetite was originally written — they ratchet to 100%,
-  // because a stronghold that flips never flips back. Rams defend at 2 and a
+  // because a yard that flipped never flipped back. Rams defend at 2 and a
   // counter-picked raider at 4, against the 8-with-a-1.75-bulwark of the
-  // spearmen they replace, so after a few minutes every wall in the region was
+  // spearmen they replace, so after a few minutes every yard in the region was
   // paper. Only tiers 3+ adapt, so the effect landed precisely on the regions
   // meant to be hardest: at n=48 with the tail dial already re-curved, obsidian
   // won 83% in 5.0 minutes against tier-2 highmarch's 8%.
@@ -132,14 +155,23 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
   // battle/ai.js `adapt` reserves before either share spends anything.
   // MEASURED AS A SUSTAINED STATE, not an instantaneous worst, and the reason is
   // that the bug this exists for was PERMANENT. A ratchet cannot repair itself —
-  // "a stronghold that flips never flips back" — so it shows up as thousands of
+  // "a yard that flipped never flipped back" — so it shows up as thousands of
   // consecutive ticks. What an instantaneous worst ALSO catches, now that the
   // player lands with a real army, is the half-second after they capture the
-  // enemy's spear forts and before its next think re-orders one back. Measured
+  // enemy's spear yards and before its next think re-orders one back. Measured
   // on nightharrow: the enemy is spear-less for 6 ticks out of 3600 (0.2%), in
   // one unbroken run of 0.6 seconds. Failing on that would be asserting that the
   // AI reacts within one tick of losing a site, which is not a thing this game
   // claims and not what the regression was.
+  //
+  // `kind === 'trainingGround'`, not `'stronghold'` — a wall trains nothing at
+  // all now (content/balance.js SITES) and `adapt` never orders one about, so
+  // its `trainType` is whatever `normalizeSites` stamped on at creation
+  // ('spearmen' for an enemy site) and never moves again. Measuring strongholds
+  // here would watch a number that cannot change and call the silence a pass:
+  // `worst.rams` and `worst.spearlessRun` would both read a permanent zero,
+  // which is exactly this file's own definition of a bug hiding in a green
+  // suite (see the header on tests/terrain.test.js for the general rule).
   const i = REGIONS.length - 1;
   const battle = startBattle(configFor(i));
   let nextThink = 0;
@@ -148,7 +180,7 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
   for (let t = 0; t < 3600 && battle.status === 'running'; t++) {
     if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
     step(battle);
-    const forts = battle.sites.filter((s) => s.owner === 'enemy' && s.kind === 'stronghold');
+    const forts = battle.sites.filter((s) => s.owner === 'enemy' && s.kind === 'trainingGround');
     if (forts.length < 4) continue;                   // too few left to say anything
     const share = (u) => forts.filter((s) => s.trainType === u).length / forts.length;
     worst.rams = Math.max(worst.rams, share('rams'));
@@ -156,12 +188,12 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
     worst.spearlessRun = Math.max(worst.spearlessRun, run);
   }
   assert.ok(worst.rams <= 0.75,
-    `${(worst.rams * 100).toFixed(0)}% of the enemy's strongholds were building siege engines`
+    `${(worst.rams * 100).toFixed(0)}% of the enemy's training grounds were building siege engines`
     + ' — the ram appetite has ratcheted again');
   assert.ok(worst.spearlessRun <= 30,
-    `the enemy held no spear fort at all for ${(worst.spearlessRun / 10).toFixed(1)}s straight —`
-    + ' a wall of def-2 rams and def-4 raiders is not a wall, and the backbone'
-    + ' reserve in battle/ai.js `adapt` is no longer repairing it');
+    `the enemy held no spear yard at all for ${(worst.spearlessRun / 10).toFixed(1)}s straight —`
+    + ' a yard of def-2 rams and def-4 raiders is not a backbone, and the reserve'
+    + ' in battle/ai.js `adapt` is no longer repairing it');
 });
 
 test('campaign: the throne is the last fight, not the last speed bump', () => {

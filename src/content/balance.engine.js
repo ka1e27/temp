@@ -43,13 +43,53 @@ export const MAPGEN = {
   edgeMargin: 1,          // keep sites off the outer ring
   homeBandFrac: 0.25,     // camp/castle sit inside this fraction of their edge
   ownBandFrac: 0.42,      // a faction's other sites stay inside this fraction
+  holdBandFrac: 0.30,     // ...but its WALLS AND YARDS stay inside this one, so
+                          //    the war machine is on the throne's doorstep and
+                          //    the marches are farmland. See mapgen planSites.
+  /** ...and a band is not enough on its own, because a band is a vertical STRIPE
+   *  and a site at the top of it is nowhere near a castle at the bottom. Holds
+   *  are additionally kept inside this fraction of the map's width, measured as
+   *  a real hex radius around the throne. See mapgen `pickHex`. */
+  holdRadiusFrac: 0.30,
+  /** ...and the enemy's FARMS sweep from the edge of the hold band out to here,
+   *  which is past `ownBandFrac` on purpose: the marches are farmland and they
+   *  reach toward the middle of the map, so the countryside is what the player
+   *  meets first and the war machine is what they meet last. */
+  farmBandFrac: 0.58,
   neutralBand: [0.28, 0.72],
   blockedFrac: 0.11,      // share of hexes turned into impassable mountain
   blockedClusterMax: 3,
   highlandFortShare: 0.35, // ...of fortifications also get a range around them
   siteClearance: 1,       // no blocked hex within this radius of a site
   adjacency: { minDegree: 2, maxDegree: 4, targetAvgDegree: 2.8 },
-  enemyStrongholdShare: 0.34,
+  /**
+   * How many of a faction's extra sites are HOLDS (walls + yards) rather than
+   * farms. 0.34 for this project's whole life, and it had to grow the moment
+   * `stronghold` stopped training: half of every faction's holds are now
+   * buildings that produce nothing, so the same share bought half the army.
+   *
+   * Measured on the opening training throughput across all 24 regions, which is
+   * what `tests/campaign.test.js` calls the raid claim — "the enemy out-produces
+   * you" — and it is a claim the split quietly broke: at 0.34/0.50 saltmere
+   * opened at 1.04x against a 1.05 floor, a raid on country you can out-build.
+   *
+   *     holds  forts   min      median
+   *     0.34   0.50    1.04x     1.80x   <- the split, unpaid for
+   *     0.34   0.34    1.04x     2.40x
+   *     0.45   0.50    1.04x     2.40x
+   *     0.45   0.34    1.06x     3.11x   <- shipped
+   *     0.50   0.34    1.06x     3.60x
+   *
+   * The minimum is floored by the TIER-1 regions and cannot be bought here:
+   * riverfen's enemy has four extra sites, so one hold is one yard whatever the
+   * share is. That WAS the region table's problem: every shipped region now
+   * authors its own enemy mix directly (`siteCounts.enemyMix`, regions.data.js
+   * via regions.rowbuilder.js `T()`), so this share is a FALLBACK now — read by
+   * battle/mapgen.js `planSites` only for a regionSpec with no mix to read (a
+   * test fixture, an ad hoc tools/simrunner.js row). No shipped region touches
+   * it any more, but plenty of specs built by hand still do.
+   */
+  enemyStrongholdShare: 0.45,
   neutralStrongholdShare: 0.25,
   playerStrongholdEvery: 2,
   neutralScaleShare: 0.5, // neutrals feel enemyMult at half strength
@@ -69,25 +109,48 @@ export const MAPGEN = {
    * is exactly 1.0 there and the frozen opening does not move.
    */
   throneGarrisonPerDevelop: 1.80,
-  trainType: { camp: 'militia', castle: 'militia', stronghold: 'spearmen', farm: 'militia' },
+  /** A site's default build. `stronghold` is ABSENT and that is the rule, not an
+   *  omission — it trains nothing now, and `trainableUnit` falls back to a
+   *  buildable type for anything that has no entry here. */
+  trainType: { camp: 'militia', castle: 'militia', trainingGround: 'spearmen', farm: 'militia' },
+  /** How many of a faction's non-farm holdings are WALLS rather than YARDS. The
+   *  rest are training grounds — a region is mostly farms either way, and this
+   *  splits what used to be a single `stronghold` count in two. A THIRD, not a
+   *  half: a wall produces nothing, so this is the number that decides how much
+   *  of the enemy's country is army rather than architecture (see
+   *  `enemyStrongholdShare` above for the measurement). `fortsAmong` in
+   *  mapgen.js guarantees at least one yard whatever this rounds to.
+   *
+   *  STILL LOAD-BEARING FOR THE NEUTRAL POOL, which never got its own per-region
+   *  column and still splits off this one share — and still the enemy
+   *  fallback's own fort/yard split when a regionSpec has no authored mix. */
+  fortShareOfHolds: 0.34,
   /** Starting garrisons before enemyMult. The player's camp is deliberately
    *  empty: the expedition deploys into it at tick 0.
    *
    *  THESE ARE THE LIVE NUMBERS. `PLAYER_SITE_GARRISON` and friends in
-   *  content/regions.rules.js are only read by meta/fallbackMap.js, which the
+   *  content/regions.fallback.js are only read by meta/fallbackMap.js, which the
    *  real path never uses — a balance pass that edits those changes nothing.
    *
    *  Thinned along with EXPEDITION above: a foothold should be a foothold, not
    *  a second army. The player's outposts start held rather than garrisoned. */
+  // watchtower is `{}` for all three: `mapgen.js planSites` never places one
+  // (nobody starts with a watchtower, you build them — see BUILD_COSTS), so
+  // this entry is never actually read on the generated path. It exists so
+  // the per-kind tables have no hole for a kind that IS real mid-battle.
   garrison: {
     player: { camp: {}, farm: { militia: 3, spearmen: 1 },
-              stronghold: { militia: 3, spearmen: 2 } },
+              trainingGround: { militia: 3, spearmen: 1 },
+              stronghold: { militia: 3, spearmen: 2 }, watchtower: {} },
     enemy: {
       castle: { militia: 4, spearmen: 3 },
       farm: { militia: 4 },
+      trainingGround: { militia: 3, spearmen: 2 },
       stronghold: { militia: 3, spearmen: 3 },
+      watchtower: {},
     },
-    neutral: { farm: { militia: 3 }, stronghold: { militia: 2, spearmen: 3 } },
+    neutral: { farm: { militia: 3 }, trainingGround: { militia: 2, spearmen: 2 },
+               stronghold: { militia: 2, spearmen: 3 }, watchtower: {} },
   },
 };
 

@@ -73,6 +73,16 @@ async function click(selector, label = selector) {
   return p;
 }
 
+/** Click a raw canvas point rather than a selector — for a gesture that
+ *  targets bare ground, where there is no DOM element for hitPoint() to
+ *  resolve against. */
+async function clickAt(x, y) {
+  await page.mouse('mouseMoved', x, y);
+  await page.mouse('mousePressed', x, y);
+  await page.mouse('mouseReleased', x, y);
+  await page.sleep(320);
+}
+
 /** Advance out of whatever screen we are on until we reach `want`. */
 async function reach(want, maxHops = 6) {
   for (let i = 0; i < maxHops; i++) {
@@ -314,62 +324,69 @@ try {
     await click('.hud-dragmode[data-mode="send"]', 'send mode');
   }
 
-  // ---- 5c. a chained drag routes THROUGH a waypoint -----------------------
-  // Waypoints require a DIRECT HIT rather than snapTarget's forgiving lean, so
-  // this has to be a real drag that actually passes over the middle site. A
-  // unit test cannot show that: it is the gesture that is under test here.
-  const chain = await page.eval(() => {
+  // A chained drag used to be tested here — one gesture routing THROUGH a
+  // waypoint. Free movement deleted the mechanism: a send is legal wherever a
+  // path exists, so a drag is just "picked up here, released there" and the
+  // pathfinder covers the ground in between on its own. Nothing left to drive.
+
+  // ---- 5c. building mid-battle: arm, click a hex, a site appears ---------
+  // Arming is a HUD control like any other and goes through click(selector);
+  // the SECOND click lands on bare ground, not a DOM element, so it is driven
+  // at a raw canvas point the way the drag/rally steps above are. The target
+  // hex comes from the REAL buildBlocker — dynamically imported inside the
+  // page, against the REAL live state, the same module the running game
+  // already loaded — rather than a guess, so this step cannot pass by aiming
+  // at a hex that merely looks legal.
+  const build = await page.eval(async () => {
+    const { buildBlocker } = await import('/src/battle/commands.js');
+    const { axialFromOffset, distance } = await import('/src/core/hex.js');
+    const { hexCx, hexCy } = await import('/src/render/hexGeom.js');
     const g = window.__game;
     const b = g.state.battle;
-    const byId = (id) => b.sites.find((s) => s.id === id);
-    // camp -> some site we own -> anything beyond it.
-    const src = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
-    let mid = null; let dst = null;
-    for (const m of src.adj.map(byId)) {
-      if (!m) continue;
-      const d = m.adj.map(byId).find((x) => x && x.id !== src.id && !src.adj.includes(x.id));
-      if (d) { mid = m; dst = d; break; }
-    }
-    if (!mid || !dst) return null;
-    // A waypoint must be ground we hold, and a fresh map does not reliably hand
-    // us a camp -> owned -> beyond path. The GESTURE is what is under test, so
-    // the precondition is set up rather than waited for.
-    mid.owner = 'player';
-    const pt = (s) => { const p = g.__view.siteScreen(s, {}); return { x: Math.round(p.x), y: Math.round(p.y) }; };
-    return { from: pt(src), mid: pt(mid), to: pt(dst), fromId: src.id, midId: mid.id, toId: dst.id };
-  });
-  if (!chain) note('no camp -> owned -> beyond path on this map to chain along');
-  else {
-    // Identify the new squad by ID, never by index: squads are REMOVED from the
-    // array when they arrive, so an index taken before the drag can point past
-    // the end by the time it lands.
-    const before = await page.eval(() => window.__game.state.battle.nextSquadId);
-    // Drag in two straight runs so the pointer genuinely crosses the middle site.
-    await page.mouse('mouseMoved', chain.from.x, chain.from.y, 'none', 0);
-    await page.mouse('mousePressed', chain.from.x, chain.from.y, 'left', 1);
-    for (const leg of [[chain.from, chain.mid], [chain.mid, chain.to]]) {
-      for (let i = 1; i <= 10; i++) {
-        await page.mouse('mouseMoved',
-          leg[0].x + ((leg[1].x - leg[0].x) * i) / 10,
-          leg[0].y + ((leg[1].y - leg[0].y) * i) / 10, 'left', 1);
-        await page.sleep(16);
+    b.factions.player.goldCg = 1_000_000;   // affordability is not what this tests
+    const camp = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
+    if (!camp) return null;
+    const home = { q: camp.hex[0], r: camp.hex[1] };
+    let best = null;
+    let bestD = -1;
+    for (let r = 0; r < b.grid.rows; r++) {
+      for (let col = 0; col < b.grid.cols; col++) {
+        const hex = axialFromOffset(col, r);
+        if (buildBlocker(b, 'player', hex)) continue;
+        // Farthest from the camp, so the second click below cannot land on
+        // the site panel — anchored on the camp for the whole step.
+        const d = distance(home, hex);
+        if (d > bestD) { bestD = d; best = hex; }
       }
     }
-    await page.mouse('mouseReleased', chain.to.x, chain.to.y, 'left', 0);
-    await page.sleep(700);
+    if (!best) return null;
+    const at = g.__view.siteScreen(camp, {});
+    const to = g.__view.camera.worldToScreen(
+      hexCx(best.q, best.r, g.__view.hexSize), hexCy(best.q, best.r, g.__view.hexSize), {},
+    );
+    return {
+      camp: { x: Math.round(at.x), y: Math.round(at.y) },
+      hex: { x: Math.round(to.x), y: Math.round(to.y) },
+      q: best.q, r: best.r,
+    };
+  });
+  if (!build) throw new Error('no legal build hex found on this map — nothing to click');
 
-    const got = await page.eval((minId) => {
-      const sq = window.__game.state.battle.squads.filter((s) => s.id >= minId).at(-1);
-      return sq ? { route: sq.route ?? null, to: sq.to, legs: sq.legEnds?.length ?? 0 } : null;
-    }, before);
-    if (!got) throw new Error('a chained drag produced no squad');
-    if (!got.route || got.route.length < 3) {
-      throw new Error(`drag ${chain.fromId}->${chain.midId}->${chain.toId} did not chain: `
-        + `route=${JSON.stringify(got.route)} to=${got.to}`);
-    }
-    step(`chained drag: ${got.route.join(' -> ')} (${got.legs} legs)`);
-    await page.screenshot(`${OUT}/05-chain.png`);
+  await clickAt(build.camp.x, build.camp.y);      // select a player site, opens the panel
+  await click('.hud-build-farm', 'the Build Farm action');
+  const armed = await page.eval(() => window.__game.__ui?.armedBuild ?? null);
+  if (armed !== 'farm') throw new Error(`Build Farm did not arm: armedBuild=${armed}`);
+
+  await clickAt(build.hex.x, build.hex.y);        // the second click: a hex, not a site
+  await page.sleep(500);
+  const built = await page.eval((q, r) => window.__game.state.battle.sites
+    .find((s) => s.hex[0] === q && s.hex[1] === r) ?? null, build.q, build.r);
+  if (!built || !(built.buildTicksLeft > 0)) {
+    throw new Error(`build did not land at [${build.q},${build.r}]: ${JSON.stringify(built)}`);
   }
+  const stillArmed = await page.eval(() => window.__game.__ui?.armedBuild ?? null);
+  if (stillArmed) throw new Error(`armedBuild=${stillArmed} after firing — it must self-clear`);
+  step(`build: armed Farm, clicked [${build.q},${build.r}], buildTicksLeft=${built.buildTicksLeft}`);
 
   // ---- 6. effects actually render ----------------------------------------
   let sawFx = false;

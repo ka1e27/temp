@@ -13,16 +13,16 @@ import { UNIT_IDS, SITES, SEND_FRACTIONS, BOOSTERS } from '../content/balance.js
 import { UNITS_UI } from '../content/strings.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
-import { compact, clock, percent, rate } from '../ui/format.js';
+import { compact, clock, percent, rate, spaceCase } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
-import { siteOf, computePreview } from './battle-preview.js';
+import { siteOf } from './battle-preview.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import { createSitePanel, createWithdraw, createAlert, rejectionText } from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
 import { createSpeedControl } from './battle-speed.js';
 import {
-  buildTrainPicker, renderComp, renderCaveats, placeFan, placeRails,
+  buildTrainPicker, updatePreview, placeFan, placeRails,
 } from './battle-parts.js';
 // `updateTrain` indexes the chips against the SAME list they were built from —
 // see the loop in it — so this stays here even though the fan itself moved.
@@ -32,7 +32,6 @@ export {
   computePreview, previewLine, projectGarrison, travelSecondsFor,
 } from './battle-preview.js';
 
-const INSUFFICIENT = 'INSUFFICIENT — walls repair faster than you break them';
 const AIMING = (id) => `AIMING ${id.toUpperCase()} — click a site · Esc cancels`;
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -264,11 +263,11 @@ export function createBattleHud(o) {
     // event types, so the enemy could take a stronghold off you and leave no
     // trace but a ring in their colour on a 41px glyph.
     off(bus.on('battle:site-captured', (ev) => {
-      if (ev.from === 'player') alert.show(`LOST — ${ev.kind} taken`, now(), 'danger');
-      else if (ev.to === 'player') alert.show(`TAKEN — ${ev.kind}`, now(), 'good');
+      if (ev.from === 'player') alert.show(`LOST — ${spaceCase(ev.kind).toLowerCase()} taken`, now(), 'danger');
+      else if (ev.to === 'player') alert.show(`TAKEN — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'good');
     }));
     off(bus.on('battle:siege-begun', (ev) => {
-      if (ev.owner === 'enemy') alert.show(`UNDER SIEGE — ${ev.kind}`, now(), 'danger');
+      if (ev.owner === 'enemy') alert.show(`UNDER SIEGE — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'danger');
     }));
   }
 
@@ -329,37 +328,12 @@ export function createBattleHud(o) {
 
     speed.update(state);
     site.update(state);
-    updatePreview(state);
+    // The drag/attack preview — computing it and painting every readout off
+    // the result moved to battle-parts.js at the 400-line cap, the natural
+    // cut since renderComp/renderCaveats (which it calls) already lived
+    // there.
+    updatePreview(state, view, set, el, o.travelSeconds);
     updateTrain(state);
-  }
-
-  function updatePreview(state) {
-    const fromId = view.dragFrom || view.armed || view.selection[0];
-    const toId = view.dragTo || (view.hoverId !== fromId ? view.hoverId : null);
-    const from = fromId ? siteOf(state, fromId) : null;
-    const legal = from && toId && !view.armedBooster
-      && from.owner === 'player' && from.adj.includes(toId);
-    const pv = legal
-      ? computePreview(state, fromId, toId, {
-        fraction: view.fraction,
-        filter: UNIT_IDS.filter((u) => view.filter[u] !== false),
-        travelSeconds: o.travelSeconds,
-      })
-      : null;
-
-    set.pvOpen(!!pv);
-    if (!pv) return;
-    set.pvWin(pv.kind !== 'reinforce' && pv.win);
-    set.pvLoss(pv.kind !== 'reinforce' && !pv.win);
-    set.pvReinforce(pv.kind === 'reinforce');
-    set.pvTitle(`${pv.sendN} troops → ${pv.to}`);
-    set.verdict(pv.verdict);
-    set.pvLine(pv.line);
-    set.pvNote(pv.insufficient ? INSUFFICIENT
-      : pv.win === false ? 'Send more, or change what you are sending.' : '');
-    set.pvBlocked(!!pv.insufficient);
-    renderComp(el.pvComp, pv.send, pv.sendN);
-    renderCaveats(el.pvCaveats, pv);
   }
 
   /** The fan's POSITION only — the cheap half of updateTrain, run per frame so
@@ -394,5 +368,5 @@ export function createBattleHud(o) {
   };
 }
 
-// The training fan and the two small preview renderers live in
-// ./battle-parts.js — split out at the 400-line cap, imported above.
+// The training fan, the drag/attack preview and its two small renderers all
+// live in ./battle-parts.js — split out at the 400-line cap, imported above.

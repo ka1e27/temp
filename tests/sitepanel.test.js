@@ -115,7 +115,7 @@ function fixture() {
     sites: [
       { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 4 }, hp: 600, hpMax: 600 },
       { id: 'f1', kind: 'farm', hex: [1, 0], owner: 'player', garrison: {}, hp: 100, hpMax: 100 },
-      { id: 'hold', kind: 'stronghold', hex: [2, 0], owner: 'player', garrison: {}, hp: 250, hpMax: 250 },
+      { id: 'hold', kind: 'trainingGround', hex: [2, 0], owner: 'player', garrison: {}, hp: 180, hpMax: 180 },
       { id: 'cas', kind: 'castle', hex: [5, 0], owner: 'enemy', garrison: { militia: 6 }, hp: 600, hpMax: 600 },
     ],
     adjacency: [['camp', 'f1'], ['f1', 'hold']],
@@ -174,8 +174,8 @@ test('the panel renders the economics of the selected site', () => {
 
   select(view, 'hold');
   panel.update(s);
-  assert.deepEqual(moneyBubbles(panel), ['TRAIN -3.0/s']);
-  assert.equal(panel.el.find('hud-site-train').textContent, 'militia x2 every 8s · 0.25/s');
+  assert.deepEqual(moneyBubbles(panel), ['TRAIN -3.9/s']);
+  assert.equal(panel.el.find('hud-site-train').textContent, 'militia x2 every 6.2s · 0.33/s');
 });
 
 test('a site that costs more than it earns is marked as draining', () => {

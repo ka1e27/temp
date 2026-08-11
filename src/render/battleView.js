@@ -1,7 +1,7 @@
 // The battle board renderer. TWO CANVASES, deliberately:
 //
-//   #board-bg  terrain, the territory flood, the adjacency graph and site base
-//              shapes. Repainted ONLY when the background is dirty — an
+//   #board-bg  terrain, the territory flood and site base shapes. Repainted
+//              ONLY when the background is dirty — an
 //              ownership or level change, i.e. roughly once a second, not
 //              sixty times.
 //   #board-fx  everything that moves: squads, garrison bars, HP rings, siege
@@ -12,7 +12,7 @@
 // dash patterns are mutated in place, draws are batched by colour, `ctx.font`
 // is assigned exactly once per frame, and there is no `shadowBlur` anywhere
 // (it costs 10-50x a plain fill).
-import { UNIT_IDS, SITES, SITE_LEVELS } from '../content/balance.js';
+import { UNIT_IDS } from '../content/balance.js';
 import { createSurface, createCamera, pointerPos } from './canvas.js';
 import { createBgCache } from './bgcache.js';
 import { palette as loadPalette } from './palette.js';
@@ -26,21 +26,28 @@ import {
 } from './siteGlyphs.js';
 import { siteHeadYAt } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
+import { drawBuildTargets } from './buildTargets.js';
 import {
-  drawSquads, drawSquadLabels, drawDragArc, drawBox, drawChainLegs, drawSquadRoutes,
+  drawSquads, drawSquadLabels, drawDragArc, drawBox, drawSquadRoutes,
 } from './routes.js';
 import { drawRallies, drawRallyDrag } from './rallyLines.js';
 import { drawStaticFormation } from './formation.js';
 import { numStr } from '../ui/format.js';
+// FOG OF WAR. `perceivedSite`/`perceivedSquads` are the one resolver every
+// surface is meant to call (battle/vision.js); `fog.js` is the renderer's own
+// half — the drawn flood and the veil, neither of which is "hide one object".
+import { perceivedSite, perceivedSquads } from '../battle/vision.js';
+import {
+  perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA,
+} from './fog.js';
+import { capOf, signature } from './battleViewSig.js';
 
 const HEX_SIZE = 34;   // world units; the camera does all the zooming
 const LABEL_PX = 14;   // constant on-screen size at any zoom
-const OWNER_N = { player: 1, enemy: 2, neutral: 3 };
 const OWNERS3 = ['player', 'enemy', 'neutral'];
 const OWNERS2 = ['player', 'enemy'];
 
 const _a = { x: 0, y: 0 };
-const _b = { x: 0, y: 0 };
 const _bounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
 /** Space the HUD occupies over the board: the gold/clock row on top and the
@@ -49,11 +56,15 @@ const HUD_INSETS = Object.freeze({ top: 56, bottom: 96, left: 8, right: 8 });
 
 /**
  * @param {{bg:HTMLCanvasElement, fx:HTMLCanvasElement, hexSize?:number,
- *          fxLayer?:object}} opts
+ *          fxLayer?:object, viewFaction?:'player'|'enemy'}} opts
+ *   `viewFaction` is who the board is drawn FOR — always 'player' in
+ *   practice (screens/battle.js is the one caller), but threaded through
+ *   rather than hardcoded so nothing here has to assume it.
  */
 export function createBattleView(opts) {
   const p = loadPalette();
   const hexSize = opts.hexSize ?? HEX_SIZE;
+  const viewFaction = opts.viewFaction ?? 'player';
   const camera = createCamera({ minZoom: 0.3, maxZoom: 2.6 });
   const bgCache = createBgCache({ el: opts.bg, camera });
   let autoFit = true;
@@ -61,6 +72,7 @@ export function createBattleView(opts) {
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   let lastSig = NaN;
   let owners = new Uint8Array(0);
+  let veil = new Uint8Array(0);
   let blockedSig = null;
   let spin = 0;
   let state0 = null;
@@ -89,9 +101,16 @@ export function createBattleView(opts) {
     return out;
   }
 
+  // PERCEIVED, not raw — every consumer below (hover/selection halos, the drag
+  // and rally previews, a squad's endpoints) gets whatever this faction
+  // actually knows about that site, so a halo traced around a ghost can never
+  // draw the storeys of a level it has not seen (see siteShapes.js
+  // traceStructure). Position and kind are common knowledge either way.
   function byId(id) {
     const list = state0.sites;
-    for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === id) return perceivedSite(state0, viewFaction, list[i]);
+    }
     return null;
   }
 
@@ -180,8 +199,14 @@ export function createBattleView(opts) {
       blockedSig = state.grid.blocked;
       board.blocked = new Set(state.grid.blocked);
     }
-    owners = computeOwners(state.influence, board.cols, board.rows, owners);
+    // THE DRAWN FLOOD, not the sim's — see render/fog.js. state.influence
+    // itself is never touched, so the castle gate, territory score and march
+    // speed all keep reading the true one.
+    owners = computeOwners(
+      perceivedInfluence(state, viewFaction), board.cols, board.rows, owners,
+    );
     board.owners = owners;
+    veil = computeVeil(state, viewFaction, board.cols, board.rows, veil);
 
     camera.applyTo(ctx, bg.dpr);
     drawPlates(ctx, board);
@@ -190,33 +215,35 @@ export function createBattleView(opts) {
     drawGridLines(ctx, board);
     board.lineWidth = 2.5 / camera.zoom;
     drawFrontLine(ctx, board);
-    drawLinks(ctx, state, 1 / camera.zoom);
     for (let i = 0; i < state.sites.length; i++) {
-      const s = state.sites[i];
+      // A ghost draws too — kind and position are common knowledge (design
+      // decision 9) — but faded, so it reads as remembered rather than live.
+      const s = perceivedSite(state, viewFaction, state.sites[i]);
       sitePos(s, _a);
+      if (s.ghost) ctx.globalAlpha = GHOST_ALPHA;
       drawSiteBase(ctx, s, _a.x, _a.y, siteRadius(s.kind, hexSize), p, 1 / camera.zoom);
+      if (s.ghost) ctx.globalAlpha = 1;
     }
   }
 
-  /** Sends go to adjacent sites only, so the graph is drawn explicitly — the
-   *  rule should never be something the player has to infer from a rejection. */
-  function drawLinks(ctx, state, px) {
-    ctx.beginPath();
-    for (let i = 0; i < state.sites.length; i++) {
-      const s = state.sites[i];
-      sitePos(s, _a);
-      for (let j = 0; j < s.adj.length; j++) {
-        const o = byId(s.adj[j]);
-        if (!o || o.id < s.id) continue;
-        sitePos(o, _b);
-        ctx.moveTo(_a.x, _a.y);
-        ctx.lineTo(_b.x, _b.y);
-      }
-    }
-    ctx.strokeStyle = p.link;
-    ctx.lineWidth = px * 2.5;
-    ctx.stroke();
-  }
+  // THE LINK GRAPH IS GONE, and deleting it was the point rather than a tidy-up.
+  //
+  // It drew one line per `site.adj` entry, and its own comment said why: "sends
+  // go to adjacent sites only, so the graph is drawn explicitly — the rule
+  // should never be something the player has to infer from a rejection." That
+  // rule no longer exists. An army marches anywhere it can find a path to, and
+  // `adj` was redefined as REACH — every site within `MOVEMENT.reachHexes` —
+  // which is a scan bound for the AI and the harness, not a promise to anybody.
+  //
+  // So the lines had stopped being information and become an anti-explanation:
+  // at hex reach a late map draws forty-odd of them into a cobweb that connects
+  // nearly everything to nearly everything, and what it tells the player is a
+  // constraint the engine gave up enforcing. A screenshot found this; no test
+  // could, because every one of them still drew correctly.
+  //
+  // What replaces it is the ground itself — the mountains, the shape mask and
+  // the bases that deny their own hex are all already drawn, and they are what
+  // actually decides where an army can go.
 
   // ---- per-frame ----------------------------------------------------------
 
@@ -227,23 +254,29 @@ export function createBattleView(opts) {
     const px = 1 / camera.zoom;
     const t = state.tick + (alpha > 0 ? (alpha < 1 ? alpha : 1) : 0);
     const pulse = 0.5 + 0.5 * Math.sin(spin * 3);
+    // Own squads always; the enemy's only while this faction can see them
+    // (battle/vision.js perceivedSquads) — computed ONCE and threaded through
+    // every consumer below, so a route line or a formation block can never
+    // disagree with the troop pieces about who is visible.
+    const visSquads = perceivedSquads(state, viewFaction);
 
     // UNDER the sites and the squads, unlike the pass at the end of this
     // function. A capture wash drawn on top reads as a filter over the board;
     // drawn underneath it reads as the ground itself changing hands.
     opts.fxLayer?.drawGround(ctx, p, px);
-    drawRallies(ctx, state, px, geo);
-    drawSquadRoutes(ctx, state, px, geo);
+    // The veil: over the ground and the background's own ghost silhouettes,
+    // under everything this frame draws for real (render/fog.js).
+    drawVeil(ctx, veil, state.grid.cols, state.grid.rows, hexSize, p);
+    drawRallies(ctx, state, viewFaction, px, geo);
+    drawSquadRoutes(ctx, visSquads, px, geo);
     drawHighlights(ctx, state, view, px, pulse);
     if (view?.dragFrom) {
       const from = byId(view.dragFrom);
       const to = view.dragTo ? byId(view.dragTo) : null;
       if (from) {
-        // Committed hops first, then the live leg from wherever they ended —
-        // so a chained drag reads as one road being drawn, not as an arc that
-        // keeps jumping its origin.
-        const head = drawChainLegs(ctx, from, view.chain, px, geo) || from;
-        drawDragArc(ctx, head, to, view.pointer, px, geo);
+        // One arc, straight from the source: free movement means a send is
+        // never routed through a waypoint drawn on the way, only aimed.
+        drawDragArc(ctx, from, to, view.pointer, px, geo);
         if (to) {
           sitePos(to, _a);
           drawSelection(ctx, to, _a.x, _a.y, siteRadius(to.kind, hexSize), p, px, 1);
@@ -254,8 +287,7 @@ export function createBattleView(opts) {
       const from = byId(view.rallyFrom);
       const to = view.rallyTo ? byId(view.rallyTo) : null;
       if (from) {
-        const head = drawChainLegs(ctx, from, view.chain, px, geo) || from;
-        drawRallyDrag(ctx, head, to, view.pointer, px, geo);
+        drawRallyDrag(ctx, from, to, view.pointer, px, geo);
         if (to && to.id !== from.id) {
           sitePos(to, _a);
           drawSelection(ctx, to, _a.x, _a.y, siteRadius(to.kind, hexSize), p, px, 1);
@@ -263,11 +295,15 @@ export function createBattleView(opts) {
       }
     }
     if (view?.box) drawBox(ctx, view.box, px, geo);
+    // Ground, not a site — drawn before the site loop so the pieces sitting
+    // on top of it stay crisp rather than tinted along with the hexes.
+    drawBuildTargets(ctx, state, view, hexSize, p, px);
 
     for (let i = 0; i < state.sites.length; i++) {
-      const s = state.sites[i];
+      const s = perceivedSite(state, viewFaction, state.sites[i]);
       sitePos(s, _a);
       const r = siteRadius(s.kind, hexSize);
+      if (s.ghost) continue; // a building you know is there, and nothing else
       drawSiteState(ctx, s, _a.x, _a.y, r, p, px);
       drawBuildBar(ctx, s, _a.x, _a.y, r, p, px);
       drawHpRing(ctx, s, _a.x, _a.y, r, p, px);
@@ -276,9 +312,9 @@ export function createBattleView(opts) {
       if (s.siege) drawSiegeStack(ctx, s, _a.x, _a.y, r, px);
     }
 
-    drawSquads(ctx, state, t, px, geo);
+    drawSquads(ctx, visSquads, t, px, geo);
     opts.fxLayer?.draw(ctx, p, px);
-    drawLabels(ctx, state, t, px);
+    drawLabels(ctx, state, visSquads, t, px);
   }
 
   function drawHighlights(ctx, state, view, px, pulse) {
@@ -319,8 +355,9 @@ export function createBattleView(opts) {
   }
 
   /** ONE text pass, ONE `ctx.font` assignment, batched by colour. The font
-   *  string is cached against zoom so a steady camera allocates nothing. */
-  function drawLabels(ctx, state, t, px) {
+   *  string is cached against zoom so a steady camera allocates nothing.
+   *  `squads` is the PERCEIVED list drawFrame already built. */
+  function drawLabels(ctx, state, squads, t, px) {
     if (camera.zoom !== fontZoom) {
       fontZoom = camera.zoom;
       fontStr = `700 ${(LABEL_PX * px).toFixed(2)}px ui-monospace, Menlo, monospace`;
@@ -332,8 +369,9 @@ export function createBattleView(opts) {
       const owner = OWNERS3[o];
       ctx.fillStyle = p.owner[owner];
       for (let i = 0; i < state.sites.length; i++) {
-        const s = state.sites[i];
-        if (s.owner !== owner) continue;
+        // Ghost or not, no digits over ground you cannot currently verify.
+        const s = perceivedSite(state, viewFaction, state.sites[i]);
+        if (s.ghost || s.owner !== owner) continue;
         let n = 0;
         for (let k = 0; k < UNIT_IDS.length; k++) n += s.garrison[UNIT_IDS[k]] || 0;
         sitePos(s, _a);
@@ -343,7 +381,7 @@ export function createBattleView(opts) {
     ctx.textBaseline = 'middle';
     for (let o = 0; o < OWNERS2.length; o++) {
       ctx.fillStyle = p.owner[OWNERS2[o]];
-      drawSquadLabels(ctx, state, t, px, geo, OWNERS2[o]);
+      drawSquadLabels(ctx, squads, t, px, geo, OWNERS2[o]);
     }
     // Floating numbers share this pass, so the font is still set exactly once.
     opts.fxLayer?.drawText(ctx, p, px);
@@ -352,31 +390,5 @@ export function createBattleView(opts) {
   return api;
 }
 
-// --- helpers ----------------------------------------------------------------
-
-/** `builtLevel`, not `s.level`: the level increments when the upgrade is paid
- *  for, but the sim keeps producing — and capping — at the OLD level until the
- *  work finishes. Using s.level here over-reported cap for the whole build. */
-function capOf(s) {
-  return SITES[s.kind].cap + SITE_LEVELS[Math.min(SITE_LEVELS.length - 1, builtLevel(s) - 1)].cap;
-}
-
-/** Cheap change detector for the background. Ownership, level, whether a site
- *  is mid-build, and the influence field are the only things painted there that
- *  move, and the sim recomputes influence only on an ownership change — so this
- *  is exact.
- *
- *  `upgradeTicksLeft` has to be in here, not just `level`: level increments the
- *  moment the upgrade is PAID FOR, so hashing it alone repaints when the work
- *  starts and never again — the scaffolding then stays pegged out on a finished
- *  building forever. Only the 0/non-0 transition matters, so the countdown does
- *  not repaint the background every tick. */
-function signature(state) {
-  let hsh = (state.sites.length * 2654435761) | 0;
-  for (let i = 0; i < state.sites.length; i++) {
-    const s = state.sites[i];
-    hsh = (hsh * 31 + (OWNER_N[s.owner] || 0) * 7 + s.level * 3
-      + (s.upgradeTicksLeft > 0 ? 1 : 0)) | 0;
-  }
-  return (hsh + (state.influenceVersion || 0) * 977) | 0;
-}
+// capOf/signature moved to ./battleViewSig.js at the 400-line cap — see the
+// import above; neither was exported from here, so nothing else changes.

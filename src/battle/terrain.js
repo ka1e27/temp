@@ -280,6 +280,21 @@ export function siteDefMultOf(state, site) {
     * (g.river ? TERRAIN.riverDefMult : 1);
 }
 
+/**
+ * The multiplier a site gives the TROOPS standing in it, as opposed to the one
+ * it gives its own walls. 1 for everything but a stronghold.
+ *
+ * Deliberately its own function rather than a term inside `siteDefMultOf`,
+ * because the two are separated by exactly one thing and that thing is the
+ * point: `sunderedDefMult` strips the wall and cannot touch this. Folding them
+ * would make a stronghold a farm with a bigger number, answerable by the one
+ * unit that already answers big numbers.
+ *
+ * Terrain is deliberately NOT applied here either. Mountains make a wall
+ * harder to storm; they do not make its garrison braver.
+ */
+export const garrisonMultOf = (state, site) => SITES[site.kind].garrisonMult ?? 1;
+
 /** What a farm on a watercourse is worth. 1 for anything that is not one. */
 export function terrainGoldMult(state, site) {
   if (site.kind !== 'farm') return 1;

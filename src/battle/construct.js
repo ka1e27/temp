@@ -1,0 +1,162 @@
+// RAISING A BUILDING MID-BATTLE.
+//
+// Split out of ./commands.js for the line budget and re-exported from there, so
+// `HANDLERS.BUILD` is the only thing that has to know this file exists — same
+// arrangement as ./boosters.js.
+//
+// The map used to be the map you were dealt: you could take ground but never
+// make any, and every economic decision in a battle was "which of these existing
+// sites do I level". This is the other half — you choose WHERE your production
+// and your walls go, on ground you have taken, which is what makes a captured
+// countryside worth something beyond its own output.
+//
+// Modelled on `cmdUpgrade` throughout, because it is the same shape of purchase:
+// spend gold now, wait out a timer, get a stronger board. The differences are
+// the two that matter — it needs a place to stand, and it makes a site that did
+// not exist, which is a thing nothing in this engine had ever done.
+// PURE.
+import { distance } from '../core/hex.js';
+import { inGrid } from './mapgen.js';
+import {
+  BUILD_COSTS, BUILD_RANGE_HEXES, BUILD_MIN_SEPARATION, SITES, CENTIGOLD, RALLY_KEEP,
+} from '../content/balance.js';
+// `buildTicksLeft` and `brownout` aside, the shape below is exactly what
+// state.js `createBattleState` builds. A built site that were missing a field
+// would work until the one tick something read it.
+import { TICK_HZ } from '../core/loop.js';
+import { goldOf, applyGold } from './economy.js';
+import { isBlocked, recomputeReach, clampRallyKeep } from './state.js';
+import { recomputeOccupancy } from './occupancy.js';
+import { recomputeInfluence } from './influence.js';
+import { recomputeVision } from './vision.js';
+import { siteMaxHp, emptyComp } from './combat.js';
+import { trainableUnit } from './training.js';
+
+const sec = (s) => Math.max(1, Math.round(s * TICK_HZ));
+
+/** Sites a faction has under construction right now. Exported because both the
+ *  command and the UI need the same answer and two implementations of "am I
+ *  already building" would drift the moment one of them grew a special case. */
+export const buildingFor = (state, faction) => state.sites
+  .filter((s) => s.owner === faction && s.buildTicksLeft > 0);
+
+/**
+ * Why this hex cannot be built on, or null when it can.
+ *
+ * READ-ONLY and exported, so `screens/battle-input.js` can paint a legal hex
+ * green while the player is still choosing rather than rejecting them after the
+ * click. A build preview that disagreed with the command would be the same
+ * class of bug as a battle preview that disagrees with the simulation.
+ *
+ * @param {object} state @param {string} faction @param {{q,r}} at
+ */
+export function buildBlocker(state, faction, at) {
+  if (!inGrid(state.grid, at)) return 'off-map';
+  if (isBlocked(state, at.q, at.r)) return 'blocked-ground';
+  // Every existing site at once: the occupancy map answers "is something HERE",
+  // and separation answers "is something too near", and a build has to clear
+  // both. One pass, because a site is both.
+  let near = false;
+  for (const s of state.sites) {
+    const d = distance({ q: s.hex[0], r: s.hex[1] }, at);
+    if (d === 0) return 'occupied';
+    if (d < BUILD_MIN_SEPARATION) return 'too-close';
+    if (s.owner === faction && d <= BUILD_RANGE_HEXES) near = true;
+  }
+  // ...and it has to be YOUR ground. Not influence, deliberately: influence is a
+  // flood with a soft edge that a player reads as a colour rather than as a
+  // number, so "you may build where the wash reaches" would be a rule nobody
+  // could predict the boundary of. Hexes from a site you hold is a rule you can
+  // count on your fingers.
+  if (!near) return 'no-ground';
+  return null;
+}
+
+/**
+ * Raise a building. `cmd = { t: 'BUILD', kind, hex: [q, r] }`.
+ *
+ * The new site starts at ONE HP and empty, and that is the whole risk of the
+ * purchase rather than an implementation detail: a half-built yard behind your
+ * line is a gift to anything that reaches it, so building forward is a bet and
+ * building at home is slow. It also means nothing special has to happen when the
+ * enemy takes one — it is a site, and every rule that applies to a site applies
+ * to it.
+ *
+ * ONE AT A TIME PER FACTION, like `cmdUpgrade`'s per-site rule and for the same
+ * reason: it keeps the spend rate honest. Without it a treasury that has been
+ * idling can convert itself into a row of strongholds in a single tick.
+ */
+export function cmdBuild(state, cmd, by) {
+  const spec = BUILD_COSTS[cmd?.kind];
+  if (!spec) return 'not-buildable';
+  const hex = cmd.hex;
+  if (!Array.isArray(hex) || hex.length !== 2) return 'malformed';
+  const at = { q: hex[0], r: hex[1] };
+
+  if (buildingFor(state, by).length) return 'already-building';
+  const why = buildBlocker(state, by, at);
+  if (why) return why;
+
+  const costCg = spec.gold * CENTIGOLD;
+  if (goldOf(state.factions[by]) < costCg) return 'insufficient-gold';
+  applyGold(state.factions[by], -costCg);
+
+  const site = {
+    id: nextBuildId(state, cmd.kind),
+    kind: cmd.kind,
+    hex: [at.q, at.r],
+    owner: by,
+    level: 1,
+    garrison: emptyComp(),
+    hp: 1,
+    hpMax: siteMaxHp(cmd.kind, 1),
+    adj: [],
+    siege: null,
+    shieldTicks: 0,
+    upgradeTicksLeft: 0,
+    buildTicksLeft: sec(spec.sec),
+    rallyTargets: [],
+    rallyCursor: 0,
+    rallyKeep: clampRallyKeep(state.rules?.rallyKeepDefault ?? RALLY_KEEP.default),
+    trainType: 'militia',
+    trainProgress: 0,
+  };
+  // The roster it may actually build, not a hopeful default: `trainableUnit`
+  // falls back to something the faction has unlocked, which is what stops a
+  // captured — or here, a raised — yard sitting on a type it can never finish.
+  if (SITES[site.kind].train) site.trainType = trainableUnit(site, state.mods[by]);
+  state.sites.push(site);
+
+  // A SITE APPEARED, so every derived per-site map is stale at once. `adj` is
+  // hex reach, which nothing recomputes on its own because the site list used to
+  // be fixed for the whole battle; occupancy decides what may be marched
+  // through, and a building that did not deny its hex would be scenery.
+  //
+  // INFLUENCE WAS ONCE THE THIRD AND MISSED. The comment here said "both" and
+  // fixed two of three, so a farm you raised painted no territory at all until
+  // some unrelated capture elsewhere happened to re-trigger the flood — the
+  // board simply did not show the ground you had just paid for. VISION IS NOW
+  // A FOURTH, and the same bug aimed squarely at its flagship use: miss it
+  // here and a watchtower you BUILD grants no sight until an unrelated capture
+  // happens. All four are invalidated by exactly the same events and belong at
+  // the same call sites; `sim.js siegePhase` runs the same set on a flip.
+  recomputeReach(state.sites);
+  recomputeOccupancy(state);
+  recomputeInfluence(state);
+  recomputeVision(state);
+  return null;
+}
+
+/** `pb01`, `eb02`… — the same shape mapgen's ids have, so nothing downstream can
+ *  tell a built site from a generated one by its name. Counts existing ids
+ *  rather than keeping a counter on state, because a counter is one more thing a
+ *  resumed battle would have to carry and get right. */
+function nextBuildId(state, kind) {
+  const tag = kind === 'stronghold' ? 's' : kind === 'trainingGround' ? 'y' : 'f';
+  const prefix = 'b';
+  let n = 1;
+  const taken = new Set(state.sites.map((s) => s.id));
+  let id = `${prefix}${tag}${String(n).padStart(2, '0')}`;
+  while (taken.has(id)) { n++; id = `${prefix}${tag}${String(n).padStart(2, '0')}`; }
+  return id;
+}

@@ -19,7 +19,17 @@ const MAP = [
   { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 20 }, hp: 600, hpMax: 600 },
   { id: 'pf', kind: 'farm', hex: [3, 0], owner: 'player', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
   { id: 'es', kind: 'stronghold', hex: [6, 0], owner: 'enemy', garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen' },
-  { id: 'es2', kind: 'stronghold', hex: [1, 5], owner: 'enemy', garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen' },
+  // 4 hexes from `pf`, where `es` is 3 — so a synchronised wave still has a
+  // near element and a far one to hold it back for. It used to sit at [1,5],
+  // five hexes out, and was a "neighbour" only because the fixture authored an
+  // adjacency EDGE saying so. `site.adj` is hex reach now, so a fixture has to
+  // put things where it claims they are.
+  //
+  // It is also a YARD rather than a second wall, so this map has one of each.
+  // `adapt` only ever orders `trainingGround`s about — a stronghold trains
+  // nothing since the kinds split — and a fixture of two strongholds would have
+  // made every counter-training assertion below pass by ordering nothing.
+  { id: 'es2', kind: 'trainingGround', hex: [0, 4], owner: 'enemy', garrison: { militia: 20 }, hp: 180, hpMax: 180, trainType: 'spearmen' },
   { id: 'castle', kind: 'castle', hex: [9, 0], owner: 'enemy', garrison: { militia: 20 }, hp: 600, hpMax: 600 },
 ];
 
@@ -103,6 +113,18 @@ test('it will not attack what it cannot beat, and never strips the castle bare',
     sites: MAP.map((x) => (x.id === 'pf' ? { ...x, garrison: { spearmen: 30 } } : { ...x })),
     tier: 4,
   });
+  // SIGHTED, DELIBERATELY. `pf` sits 3 hexes from `es` — inside `freeLunchHexes`
+  // but outside every ordinary building's VISION_RADIUS (1) — so under real fog
+  // this spearwall is exactly the trap fog exists to allow: the AI cannot tell
+  // a reinforced farm from a weak one it has never scouted, and measured, it
+  // walks straight into this one (battle/belief.js `believedGhost`'s presumed
+  // garrison reads well under the safety margin a real 30-spearmen wall needs).
+  // That is fog working as intended, not a regression — a hidden trap is
+  // supposed to be able to catch a blind opponent. What this test is actually
+  // about is the SAFETY-MARGIN MATH: given a target it can actually assess,
+  // does the AI correctly refuse a fight it cannot win? Isolating that from
+  // "can it see the wall at all" is exactly what the escape hatch is for.
+  s.ai.sighted = true;
   think(s);
   assert.equal(sends(s, 'pf').length, 0, 'a spearwall is not a free lunch');
   const fromCastle = sends(s).filter((c) => c.from === 'castle');
@@ -158,7 +180,7 @@ test('counter-training is OFF at tiers 1-2 and ON at 3-4', () => {
     assert.ok(trains.length > 0, `tier ${tier} should adapt`);
     assert.ok(trains.every((c) => c.unit === AI.counterPick.spearmen),
       'militia is the answer to a spearwall');
-    assert.ok(total(s.ai.seenPlayerComp) > 0, 'it samples what it saw');
+    assert.ok(total(s.ai.learnedPlayerComp) > 0, 'it samples what it saw');
   }
 });
 
@@ -201,8 +223,13 @@ function wallMap(walls) {
   const adjacency = [['camp', 'pf']];
   for (let i = 0; i < walls; i++) {
     sites.push({
-      id: `es${i}`, kind: 'stronghold', hex: [6, i], owner: 'enemy',
-      garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen',
+      // A YARD, not a wall. These are the sites `adapt` retrains, and since the
+      // site kinds split it is `trainingGround` that trains — a stronghold
+      // produces nothing at all. Left as `stronghold` this whole fixture kept
+      // building maps the adaptation phase could not see, and every assertion
+      // below quietly became "the enemy ordered nothing, so it never disarmed".
+      id: `es${i}`, kind: 'trainingGround', hex: [6, i], owner: 'enemy',
+      garrison: { militia: 20 }, hp: 180, hpMax: 180, trainType: 'spearmen',
     });
     adjacency.push(['pf', `es${i}`], [`es${i}`, 'castle']);
   }
@@ -238,7 +265,7 @@ test('the enemy always keeps a spear backbone, at every tier and every wall coun
       s.sites.find((x) => x.id === 'pf').siege = { owner: 'enemy', comp: comp({ militia: 8 }) };
       // The steady state a real battle reaches: the yards it wanted on rams are
       // ALREADY on rams, so this think issues no ram order for them at all.
-      const forts = s.sites.filter((x) => x.kind === 'stronghold');
+      const forts = s.sites.filter((x) => x.kind === 'trainingGround');
       const wantRams = Math.max(1, Math.round(forts.length * AI.ramTrainShare
         * AI_TIERS[tier - 1].ramAppetite));
       for (const f of forts.slice(forts.length - wantRams)) f.trainType = 'rams';
@@ -270,7 +297,7 @@ test('a counter-pick the player has stopped fielding is walked back', () => {
   // that were converted while they were still the enemy's answer. This is the
   // shape the real obsidian battle reaches, and it is more than the counter
   // quota, which is what leaves orphans behind when the pick changes.
-  const walls = () => s.sites.filter((x) => x.kind === 'stronghold');
+  const walls = () => s.sites.filter((x) => x.kind === 'trainingGround');
   for (const w of walls()) w.trainType = 'militia';
 
   // Now the player is all militia; the answer to that is raiders, and the

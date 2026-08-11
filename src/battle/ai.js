@@ -8,16 +8,26 @@
 // The single thing that makes it feel like an opponent rather than a spawner:
 // every squad in a wave shares ONE arriveTick. It always strikes synchronized.
 //
+// FOG OF WAR: it cannot see the true board either, any more. Every phase below
+// is handed `view` — `belief.js beliefFor(state, ME)` — instead of `state`.
+// None of this file's SCORING changed to make that true; the phases still call
+// the exact same aicore.js/aihome.js functions on the exact same argument name.
+// See belief.js for what the swap actually does and why `adapt()` alone is a
+// deliberate exception.
+//
 // Measurements and order-emitters live in ./aicore.js; the home-defence planner
-// and the surplus maths live in ./aihome.js. This file is the phase list.
+// and the surplus maths live in ./aihome.js; the composition-adaptation phase
+// lives in ./aiadapt.js. This file is the phase list.
 // PURE.
-import { AI, UNIT_IDS, SITES, MAPGEN } from '../content/balance.js';
+import { AI } from '../content/balance.js';
 import { createRng } from '../core/rng.js';
 import { TICK_HZ } from '../core/loop.js';
 import {
-  power, total, emptyComp, addComp, breachSeconds,
+  power, total, addComp, breachSeconds,
 } from './combat.js';
 import { siteById, effectiveLevel } from './state.js';
+import { distance } from '../core/hex.js';
+import { asHex } from './influence.js';
 import { groundOf } from './terrain.js';
 import { attritionMods } from './economy.js';
 import { garrisonCap } from './training.js';
@@ -26,17 +36,38 @@ import {
   minFraction, launch, adjacentSources, threatOn, frontDistance,
 } from './aicore.js';
 import { homeGuard, pressure, commitFor, stagingFor, concurrentFor } from './aihome.js';
+import { adapt } from './aiadapt.js';
+import { beliefFor } from './belief.js';
 
 // --- 1. free lunch ---------------------------------------------------------
 // Runs first, at EVERY tier. Leave a farm on 3 militia and it will be taken.
-
+//
+// THIS PHASE HAS NO SLOT BUDGET, and that is deliberate — undefended ground is
+// free, so refusing it to stay under a concurrency cap would be the AI declining
+// a gift. What bounded it instead was the DOORSTEP, and the doorstep used to be
+// `site.adj`: an authored planar graph at `targetAvgDegree` 2.8.
+//
+// Hex reach removed that bound and nothing replaced it. `adj` is 4.7 sites on
+// the smallest map and 8.8 on the biggest, so "adjacent and weakly held" became
+// most of the board: measured on gallowmoor, tier 3 — `concurrent` 2, and ONE
+// during the warm-up — the opening think launched at FIVE distinct targets and
+// the player was down from ten sites to five by minute two. The concurrency
+// ladder in AI_TIERS was not being disobeyed so much as bypassed.
+//
+// So the doorstep is explicit and it is a knob, in hexes, exactly as
+// `homeRadiusHexes` is. `MOVEMENT.reachHexes` stays the AI's ATTACK horizon —
+// what it will march on when it has decided to spend an army. This is the much
+// smaller radius inside which it does not have to decide anything.
 function freeLunch(state, knobs, out, busy, taken) {
   const targets = {};
   for (const s of state.sites) {
     if (s.owner !== ME) continue;
+    const here = asHex(s.hex);
     for (const id of s.adj) {
       const t = siteById(state, id);
-      if (t && t.owner !== ME) targets[t.id] = true;
+      if (!t || t.owner === ME) continue;
+      if (distance(here, asHex(t.hex)) > AI.freeLunchHexes) continue;
+      targets[t.id] = true;
     }
   }
   for (const id of Object.keys(targets).sort()) {
@@ -219,134 +250,7 @@ function retreat(state, knobs, out, rng, busy) {
   }
 }
 
-// --- 6. adapt composition (tier 3+ only) -----------------------------------
-
-function playerArmy(state) {
-  let comp = emptyComp();
-  for (const s of state.sites) {
-    if (s.owner === FOE) comp = addComp(comp, s.garrison);
-    if (s.siege?.owner === FOE) comp = addComp(comp, s.siege.comp);
-  }
-  for (const sq of state.squads) if (sq.owner === FOE) comp = addComp(comp, sq.comp);
-  return comp;
-}
-
-/**
- * Move `want` of `pool` onto `unit`, counting what is already there. Sites past
- * the share go back to the kind's default, so the mix CONVERGES on the share
- * instead of drifting toward whatever was picked last.
- */
-function retrain(out, pool, unit, want) {
-  const n = Math.max(0, Math.min(pool.length, Math.round(want)));
-  const on = pool.filter((s) => s.trainType === unit);
-  const off = pool.filter((s) => s.trainType !== unit);
-  for (let i = on.length; i < n && off.length; i++) {
-    const site = off.shift();
-    out.push({ t: 'TRAIN', by: ME, site: site.id, unit });
-  }
-  for (let i = n; i < on.length; i++) {
-    const site = on[i];
-    const back = MAPGEN.trainType[site.kind];
-    if (back && back !== unit) out.push({ t: 'TRAIN', by: ME, site: site.id, unit: back });
-  }
-}
-
-/**
- * What the enemy builds. TWO SHARES OF PRODUCTION, NOT TWO COIN FLIPS.
- *
- * `ramTrainShare` and the counter-train share both used to be rolled per think
- * against every eligible site, which RATCHETS — a stronghold that flipped never
- * flipped back — so a few minutes in, every wall in the region was held by
- * def-2 rams or def-4 raiders instead of def-8 spearmen behind a 1.75 bulwark.
- * Only tiers 3 and 4 counter-train at all, so the effect landed exactly on the
- * regions that are supposed to be the hardest: measured at n=48 with the tail
- * dial already re-curved, obsidian won 83% in 5.0m against a 23-minute target
- * while tier-2 highmarch — which cannot adapt and therefore kept its spearwall —
- * won 8%. The enemy was disarming itself, and it looked like a difficulty curve.
- *
- * `adaptComposition: boolean` is now `counterShare: number`, for the same reason
- * `staging: boolean` became `stagingRatio`/`stagingKeep` (see content/ai.data.js):
- * a boolean is a CLIFF. Measured at n=96, turning it off was worth 17 points of
- * win rate on gallowmoor and 32 on karrowmere — the largest difficulty step in
- * the campaign, and an unadvertised flag flipping at a tier boundary.
- *
- * Now the AI answers what you field with a PORTION of its production and keeps a
- * spear backbone behind it, which is what makes "the enemy counter-trains here"
- * (duskfell) a threat rather than a gift.
- */
-function adapt(state, knobs, out) {
-  const seen = state.ai.seenPlayerComp ?? emptyComp();
-  const now = playerArmy(state);
-  const sample = emptyComp();
-  const d = AI.sampleDecay;
-  for (const u of UNIT_IDS) sample[u] = (seen[u] || 0) * d + (now[u] || 0) * (1 - d);
-  state.ai.seenPlayerComp = sample;
-
-  const unlocked = state.mods[ME]?.unlockedUnits ?? [];
-  const trainers = state.sites
-    .filter((s) => s.owner === ME && SITES[s.kind].train > 0).sort(byId);
-
-  // Rams are a tier knob, not an adaptation: even T1 brings one occasionally.
-  // They are also worthless on defence, so the appetite only applies while there
-  // is a wall to knock down — when the siege ends, the yards go back to spears.
-  const sieging = state.sites.some((s) => s.siege?.owner === ME);
-  const strongholds = trainers.filter((s) => s.kind === 'stronghold');
-  // THE SPEAR BACKBONE IS RESERVED BEFORE EITHER PASS SPENDS ANYTHING. Rams and
-  // the counter-pick are two independent shares of the same strongholds, and
-  // nothing used to add them up: measured on obsidian, a 50% ram appetite over
-  // seven walls took four, the counter share took the fifth, and two captured
-  // neutral forts were already on the counter unit — seven walls, not one of
-  // them a wall. Reserving one first is a cap on the SUM, which is the only
-  // place the guarantee can live; `retrain` walks the surplus back to spearmen
-  // on its own, so this also un-does a backbone an earlier think spent.
-  const spendable = Math.max(0, strongholds.length - (strongholds.length >= 2 ? 1 : 0));
-  let rams = 0;
-  if (unlocked.includes('rams')) {
-    // A share, but never a share that rounds to nothing: on a small map two
-    // strongholds times 0.4 is zero engines, and "the enemy brings its own
-    // rams" would silently be false for exactly the maps you can see it on.
-    const want = sieging
-      ? Math.max(1, strongholds.length * AI.ramTrainShare * knobs.ramAppetite) : 0;
-    rams = Math.min(Math.round(want), spendable);
-    retrain(out, strongholds, 'rams', rams);
-  }
-
-  if (!(knobs.counterShare > 0)) return;
-  const dominant = UNIT_IDS
-    .filter((u) => sample[u] > 0)
-    .sort((a, b) => sample[b] - sample[a] || (a < b ? -1 : 1))[0];
-  if (!dominant) return;
-  const pick = AI.counterPick[dominant];
-  if (!pick || !unlocked.includes(pick)) return;
-  // STRONGHOLDS adapt; the castle does not. The throne is the win condition, so
-  // it builds the kind's default and keeps building it — chasing the player's
-  // composition with the one garrison that cannot be allowed to lose is how an
-  // AI talks itself into holding its capital with siege engines.
-  // A stronghold ALREADY building rams is off the table too, not just one that
-  // was ordered this think: filtering only on `out` let the two passes consume
-  // the same wall between them. The ram pass frees them again when the siege
-  // ends, by ordering them back to spearmen.
-  const pool = strongholds.filter((s) => s.trainType !== 'rams'
-    && !out.some((c) => c.t === 'TRAIN' && c.site === s.id));
-  // Same floor as the ram appetite, and for the same reason — but it does not
-  // get to spend the wall the ram appetite left standing.
-  const want = Math.max(1, pool.length * knobs.counterShare);
-  retrain(out, pool, pick, Math.min(Math.round(want), Math.max(0, spendable - rams)));
-
-  // Finally, anything still building an OLD pick. `retrain` only walks back the
-  // one unit it was asked about, so when the player switches army the previous
-  // answer is ORPHANED and that yard builds it forever. Measured on obsidian:
-  // two captured forts sat on militia long after the spearmen they answered
-  // were gone, which is how seven strongholds ended up with no spearwall.
-  for (const s of strongholds) {
-    const ordered = out.find((c) => c.t === 'TRAIN' && c.site === s.id);
-    const unit = ordered ? ordered.unit : s.trainType;
-    const back = MAPGEN.trainType[s.kind];
-    if (unit === back || unit === pick || unit === 'rams') continue;
-    if (ordered) ordered.unit = back;
-    else out.push({ t: 'TRAIN', by: ME, site: s.id, unit: back });
-  }
-}
+// --- 6. adapt composition lives in ./aiadapt.js -----------------------------
 
 // --- entry point -----------------------------------------------------------
 
@@ -368,9 +272,21 @@ export function think(state) {
   const busy = new Set();   // sources committed this think — local, never stored
   const taken = {};         // targets committed this think
 
+  // FOG OF WAR — the one line that computes it. `state.ai.sighted` is never
+  // set on the real path (screens/battle.js never writes it); it exists purely
+  // so tools/simrunner.js `--sighted` can take a fully-sighted reading for
+  // measurement without editing this file or reverting anything. Everything
+  // from here down reads `view`, never `state` — except `adapt()` and
+  // `homeGuard()`, two DELIBERATE exceptions (see aiadapt.js and the comment
+  // at the `homeGuard` call below).
+  const view = state.ai.sighted ? state : beliefFor(state, ME);
+
   // Everything downstream spends army, so measure the surplus before any of it
-  // has been promised, then hand the phases the ratios it buys.
-  const p = pressure(state);
+  // has been promised, then hand the phases the ratios it buys. Read off
+  // `view`: a threat the AI cannot see is not army it should hold in reserve
+  // against, or the "surplus" this feeds would itself be a leak of information
+  // fog is supposed to hide.
+  const p = pressure(view);
   const knobs = {
     ...tier,
     commit: commitFor(tier, p),
@@ -379,16 +295,36 @@ export function think(state) {
   };
   state.ai.pressure = p;
 
+  // ALSO NOT `view` — and this one took a measured, reverted first attempt to
+  // find. `homeGuard`'s `encroachment` (aihome.js) sums the garrison of every
+  // FOE-owned site within `homeRadiusHexes` of the castle — a WIDER, STANDING
+  // awareness that was already a deliberate exception to ordinary vigilance
+  // before fog existed (`defend()`'s 6-second squad-in-flight horizon is far
+  // too late for the win condition). Fogging it does not make the castle more
+  // cautious, it makes `homeGuard` blind to the one build-up it exists to
+  // catch: a never-scouted neighbour reads as `owner: null`, encroachment's
+  // `s.owner !== FOE` check drops it, and a real 40-strong stack standing next
+  // door registers as nothing at all. The tempting fix — presume an unscouted
+  // neighbour's owner is the FOE, the same way its garrison is presumed real —
+  // was tried and measured worse: every unscouted neighbour, including a
+  // truly empty one, then read as a confirmed body of troops, and `homeGuard`
+  // answered by recalling an entire rear army for a phantom (see belief.js
+  // `believedGhost`). The castle's own household guard reading the true board
+  // is the narrower, safer claim — exactly the shape of exception `adapt()`
+  // already has, for the same reason: this is doctrine about defending the
+  // win condition, not a sentry's momentary sightline.
   const guarded = homeGuard(state, out, busy);
-  freeLunch(state, knobs, out, busy, taken);
-  defend(state, knobs, out, busy, guarded);
-  attack(state, knobs, out, busy, taken, rng);
-  consolidate(state, knobs, out, busy);
-  retreat(state, knobs, out, rng, busy);
+  freeLunch(view, knobs, out, busy, taken);
+  defend(view, knobs, out, busy, guarded);
+  attack(view, knobs, out, busy, taken, rng);
+  consolidate(view, knobs, out, busy);
+  retreat(view, knobs, out, rng, busy);
+  // NOT `view` — see aiadapt.js. The player's whole-battle composition is
+  // deliberately unfogged (fog-design.md decision 11).
   adapt(state, knobs, out);
 
   for (const cmd of out) state.commands.push(cmd);
-  state.ai.activeAttacks = activeAttacks(state);
+  state.ai.activeAttacks = activeAttacks(view);
   state.ai.nextThinkTick = state.tick
     + Math.max(1, Math.round(tier.reactionTicks * rng.jitter(AI.thinkJitter)));
   state.rngState = rng.state;

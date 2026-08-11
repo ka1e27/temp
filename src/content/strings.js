@@ -111,7 +111,7 @@ export const UNITS_UI = Object.freeze({
     name: 'Marshal',
     role: 'Commander',
     desc: 'One per site. Every troop standing with it fights 25% harder and '
-      + 'the stronghold it sits in trains 40% faster. One rides free with '
+      + 'the site he stands in trains 40% faster. One rides free with '
       + 'every expedition once unlocked; commission more in battle for gold.',
   }),
 });
@@ -207,7 +207,7 @@ export const COACH = Object.freeze({
   fieldWon: "You've beaten the defenders — now hold position while your troops break the walls.",
   captured: 'Farms fund your army.',
   gold100: 'Strongholds turn gold into soldiers, and take more troops to crack.',
-  strongholdTaken: 'Pick what this stronghold trains. Switching keeps its progress.',
+  strongholdTaken: 'Pick what this training ground builds. Switching keeps its progress.',
   buildRams: 'Build rams, then take the castle.',
   siegeStalled: 'Walls repair faster than you break them. Send more, or pull out.',
   retreat: 'Retreat pulls a force home. It cannot be intercepted — you only lose the ground.',

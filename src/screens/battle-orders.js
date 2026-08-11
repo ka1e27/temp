@@ -12,8 +12,10 @@
 // corrupt the sim.
 import { UNIT_IDS } from '../content/balance.js';
 import { squadProgress, squadBow } from '../render/routes.js';
+import { perceivedSquads } from '../battle/vision.js';
 import { loadStops, routeAt } from '../render/routePath.js';
 import { needsTarget } from './battle-keys.js';
+import { createArmedBuild } from './battle-build.js';
 
 /** Click slop for picking an in-flight squad off its arc, as a fraction of a
  *  hex. Deliberately tight: a stray click near a route must still deselect. */
@@ -34,9 +36,10 @@ export const filterList = (filter) => UNIT_IDS.filter((u) => filter[u] !== false
  * that tolerance, because the log is also the determinism test's input.
  */
 export const cmd = {
-  send: (from, to, fraction, filter, via) => (via && via.length
-    ? { t: 'SEND', from, to, fraction, filter, via }
-    : { t: 'SEND', from, to, fraction, filter }),
+  // No more `via`: a chained send existed to express several adjacent hops as
+  // one order, and free movement (pathBetween) makes that a plain march — see
+  // movement.js spawnSquad.
+  send: (from, to, fraction, filter) => ({ t: 'SEND', from, to, fraction, filter }),
   // `mode` is omitted entirely when unset rather than sent as undefined: these
   // objects are asserted to be plain serializable data, and a key that only
   // exists sometimes is a worse shape than one that never exists.
@@ -50,6 +53,7 @@ export const cmd = {
   train: (site, unit) => ({ t: 'TRAIN', site, unit }),
   recruit: (site, unit) => ({ t: 'RECRUIT', site, unit }),
   upgrade: (site) => ({ t: 'UPGRADE', site }),
+  build: (kind, hex) => ({ t: 'BUILD', kind, hex }),
   withdraw: () => ({ t: 'WITHDRAW' }),
 };
 
@@ -72,20 +76,23 @@ export function createOrders(o) {
   };
 
   const site = (id) => getState().sites.find((x) => x.id === id) || null;
-  const canSend = (from, to) => !!from && !!to && from.id !== to.id
-    && from.owner === 'player' && from.adj.includes(to.id);
+  // Reach used to be `from.adj`, the authored edge list a send could not cross;
+  // legality now belongs entirely to cmdSend's pathBetween check, so the UI only
+  // has to rule out the senseless pairs (nothing, yourself, someone else's site).
+  const canSend = (from, to) => !!from && !!to && from.id !== to.id && from.owner === 'player';
 
-  /** Snap the drag to a LEGAL target: a direct hit on an adjacent site, else
-   *  the nearest adjacent site the pointer is leaning toward. Snapping is what
-   *  teaches the adjacency rule without a tutorial line. */
+  /** Snap the drag to whatever the pointer is actually over, else the nearest
+   *  site of ANY owner nearby. It used to magnet only toward `from.adj`
+   *  members, because that was the whole legal set; free movement makes every
+   *  pair a candidate, so snapping is now purely about forgiving a sloppy
+   *  drag, not about teaching an adjacency rule. */
   function snapTarget(from, wx, wy) {
     const hit = board.siteAt(getState(), wx, wy);
-    if (hit && (hit.id === from.id || from.adj.includes(hit.id))) return hit;
+    if (hit) return hit;
     let best = null;
     let bestD = board.hexSize * 2.4;
-    for (const id of from.adj) {
-      const t = site(id);
-      if (!t) continue;
+    for (const t of getState().sites) {
+      if (t.id === from.id) continue;
       board.sitePos(t, _a);
       const d = Math.hypot(wx - _a.x, wy - _a.y);
       if (d < bestD) { bestD = d; best = t; }
@@ -93,37 +100,15 @@ export function createOrders(o) {
     return best;
   }
 
-  /**
-   * `chain` is the ordered list of sites the drag passed through between the
-   * source and the target, excluding both. Empty for an ordinary send, so the
-   * one-hop and chained paths are literally the same call.
-   */
-  function issueSend(from, to, chain) {
-    const via = chain && chain.length ? chain : null;
-    if (via ? !canChain(from, via, to) : !canSend(from, to)) return false;
-    push(cmd.send(from.id, to.id, view.fraction, filterList(view.filter), via));
-    return true;
-  }
-
-  /**
-   * Mirror of battle/commands.js `checkVia`, so the UI refuses exactly what the
-   * simulation would refuse and a drag can never build an order that silently
-   * dies on arrival. Every leg adjacent; every stop PASSED THROUGH is ours; the
-   * final stop is the objective and may be hostile; no stop twice.
-   */
-  function canChain(from, via, to) {
-    if (!from || !to || from.owner !== 'player') return false;
-    const stops = [from.id, ...via, to.id];
-    const seen = new Set();
-    for (let i = 0; i < stops.length; i++) {
-      if (seen.has(stops[i])) return false;
-      seen.add(stops[i]);
-      if (i === 0) continue;
-      const prev = site(stops[i - 1]);
-      const cur = site(stops[i]);
-      if (!prev || !cur || !prev.adj.includes(cur.id)) return false;
-      if (i < stops.length - 1 && cur.owner !== 'player') return false;
-    }
+  /** A send is legal wherever the sim can actually route one — cmdSend's own
+   *  pathBetween check is what refuses it, so there is nothing left to mirror
+   *  here. There used to be one: `canChain` re-validated a whole waypoint list
+   *  exactly the way commands.js did, because a chain could otherwise die on
+   *  arrival if the two checks ever disagreed. Free movement deleted the thing
+   *  they both validated. */
+  function issueSend(from, to) {
+    if (!canSend(from, to)) return false;
+    push(cmd.send(from.id, to.id, view.fraction, filterList(view.filter)));
     return true;
   }
 
@@ -322,6 +307,13 @@ export function createOrders(o) {
     return true;
   }
 
+  // Armed construction (arm a kind, resolve the next click to a hex, push
+  // BUILD) is the same one-shot shape as an armed booster above but needs
+  // `fromPixel`, so it moved to ./battle-build.js at the 400-line cap.
+  const { armBuild, cancelBuild, fireBuild } = createArmedBuild({
+    view, canvas, bus, board, cancelBooster, pushBuild: (kind, hex) => push(cmd.build(kind, hex)),
+  });
+
   // ---- squads -------------------------------------------------------------
 
   /** Nearest in-flight squad to a world point, so `R` can reach one. Squads are
@@ -331,10 +323,21 @@ export function createOrders(o) {
     const r = board.hexSize * SQUAD_PICK;
     let best = null;
     let bestD = r * r;
-    for (let i = 0; i < st.squads.length; i++) {
-      const sq = st.squads[i];
-      // Through the SAME polyline the renderer walks: a chained squad drawn on
-      // leg three must not be clickable back on leg one.
+    // FOG, and it follows straight from the comment above: hit-testing reuses
+    // the renderer's geometry so a squad is clickable exactly where it is
+    // DRAWN — and a squad outside vision is not drawn at all. Scanning the raw
+    // list would leave an invisible enemy column pickable out of empty dark,
+    // which is a worse tell than drawing it would have been, because the player
+    // learns the army is there by finding it with the cursor.
+    //
+    // Unlike a SITE, whose position and kind are common knowledge (so clicking
+    // a ghost to aim a blind attack is intended), a squad's existence is
+    // precisely what fog hides.
+    const squads = perceivedSquads(st, 'player');
+    for (let i = 0; i < squads.length; i++) {
+      const sq = squads[i];
+      // Through the SAME geometry the renderer walks, so a squad drawn mid-arc
+      // is clickable exactly where it is drawn.
       const stops = loadStops(sq, geo);
       if (!stops) continue;
       routeAt(sq, stops, squadProgress(sq, st.tick), squadBow(sq), _p, null);
@@ -368,9 +371,10 @@ export function createOrders(o) {
   }
 
   return {
-    push, site, canSend, canChain, snapTarget, issueSend,
+    push, site, canSend, snapTarget, issueSend,
     issueRally, toggleRally, issueRallyChain, issueRallyKeep,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
+    armBuild, cancelBuild, fireBuild,
   };
 }

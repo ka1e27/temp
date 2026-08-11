@@ -30,6 +30,16 @@ export const REJECTIONS = Object.freeze({
   'already-upgrading': 'That site is already building.',
   'max-level': 'Already fully upgraded.',
   'insufficient-gold': 'Not enough gold.',
+  // Raising a new building: buildBlocker's five refusals, plus cmdBuild's own
+  // two. A rejection the player cannot read is the same as no feedback at
+  // all — see the boosters this table already exists to fix.
+  'not-buildable': 'That cannot be raised — only a farm, a yard or a wall may be built.',
+  'already-building': 'Already raising something — one at a time.',
+  'off-map': 'That is off the map.',
+  'blocked-ground': 'You cannot build on that ground.',
+  occupied: 'Something already stands there.',
+  'too-close': 'Too close to another site.',
+  'no-ground': 'That is not your ground — build nearer a site you hold.',
   'unknown-target': 'No such rally target.',
   'bad-keep': 'A rally hold-back is a whole number of troops.',
   'nowhere-to-retreat': 'Nowhere to retreat to.',
