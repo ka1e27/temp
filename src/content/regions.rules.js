@@ -342,22 +342,55 @@ export const DEVELOP_CLAMP = (n) => Math.max(1, Math.min(5, Number(n) || 1));
 export const GATE_CLAMP = (n) => Math.max(0, Math.min(0.85, Number(n) || 0));
 
 /**
+ * THE SHAPE COLUMN, and the rule it obeys.
+ *
+ * Every battle was once fought on the same silhouette — a full cols x rows
+ * rectangle — while this table's flavour claimed otherwise on nine rows:
+ * Ironwood's "single-file passes", Saltmere's "lagoon splits the field", the
+ * Sunder's "two bridges", Obsidian's "three fronts". Decoration over one
+ * rectangle, exactly as Ironcrown's Marshal was decoration over an empty throne.
+ *
+ * THE RULE: A SHAPE IS ASSIGNED TO SAY WHAT THE REGION ALREADY CLAIMED, NEVER
+ * TO TUNE IT. Each of the eighteen shaped rows was picked off its own flavour
+ * line; the six left `open` were left open because their flavour is the ABSENCE
+ * of one — Greywater is "the widest front line in the campaign", and a waist
+ * through that would be a new lie replacing the old.
+ *
+ * That is a design rule, not a balance claim, and the difference matters. A
+ * shape absolutely does move a win rate — it moves where sites can be placed,
+ * and so the whole adjacency graph — so the tune that FOLLOWS one is the dial's
+ * job, exactly as it is for a grid row. What the rule forbids is reaching for a
+ * shape because a region needs to be harder: that is how `siteCounts.player`
+ * crept to 48% of the board with every difficulty number passing.
+ *
+ * Shapes carve 7-27% of the rectangle and count INSIDE the existing rock budget
+ * rather than on top of it (mapgen.js seeds `blocked` with the mask), so a
+ * `narrow` valley spends all of it and a `split` rift spends a third, leaving
+ * the scatter to lay texture around the crossings.
+ */
+
+/**
  * THE ROW BUILDER. Lives here rather than in ./regions.data.js because every
  * line of it is a statement about EVERY region — the two clamps above, and the
  * hard cap being derived rather than authored — which is this file's job, and
  * because that file needs its budget for the table.
  *
  * id, name, tier, hex, adjacentTo, enemyMult, cols, rows, [enemy,neutral,player],
- * develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour
+ * develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour, shape
+ *
+ * `shape` is LAST and optional because it arrived last and because omitting it
+ * means `open` — the rectangle every one of these rows was measured on. See
+ * SHAPE_RULE below for what a shape is allowed to be and why the table only
+ * spends it where the flavour text already promised it.
  */
 export const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
-  develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour) => ({
+  develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour, shape = 'open') => ({
   id, name, tier, hex, adjacentTo, enemyMult,
   grid: { cols, rows },
   siteCounts: { enemy: siteCounts[0], neutral: siteCounts[1], player: siteCounts[2] },
   develop: DEVELOP_CLAMP(develop),
   castleGateFrac: GATE_CLAMP(castleGateFrac),
-  rewardPerSec, targetLengthMin, flavour,
+  rewardPerSec, targetLengthMin, flavour, shape,
   hardCapMs: Math.round(
     Math.max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
   ),

@@ -21,6 +21,7 @@ export const REJECTIONS = Object.freeze({
   'site-cannot-train': 'Farms cannot train troops.',
   'not-commissionable': 'That unit cannot be commissioned.',
   'already-commissioned': 'That site already has one.',
+  'recruit-cooling': 'No one to commission yet — the last one only just rode out.',
   'unknown-unit': 'No such unit.',
   'unit-locked': 'That unit is not unlocked yet.',
   'already-upgrading': 'That site is already building.',

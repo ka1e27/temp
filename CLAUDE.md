@@ -38,6 +38,7 @@ node tools/simrunner.js --all --n=32 --legacy=27    # the campaign on a SECOND r
 npm run mobile             # phone-width layout audit — needs `npm start` running
 node tools/mobile.mjs --w=844 --h=390                # a phone in landscape
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
+node tools/shapeshot.mjs   # one screenshot per region SILHOUETTE — needs `npm start`
 ```
 
 `npm test` needs the glob quoted (`"tests/**/*.test.js"`); `node --test tests/` does not
@@ -66,7 +67,8 @@ home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data
 `regions.rules.js`, `sim.js`←`rally.js`, `commands.js`←`boosters.js`,
 `battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`, `mainmenu.js`←
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
-`simrunner.js`←`simladder.js`.
+`simrunner.js`←`simladder.js`, `mapgen.js`←`mapgraph.js` (mapgen decides where the sites
+are; mapgraph decides which of them are neighbours).
 
 **`regions.rules.js` now also holds the two load-bearing rules of the region table**
 (a region's step must be the size of the player's step into it; the player's step
@@ -131,6 +133,71 @@ integerization) followed by a **siege** against structure HP that regenerates.
 mechanism is what makes "a few troops genuinely cannot take a stronghold" and "a real army
 grinds one down in half a minute" both true, without an arbitrary minimum-troops rule.
 Sieges are interruptible, so relief forces matter.
+
+An in-progress upgrade shows as a **bar**, in both places: `bar-build` in the site panel
+and a second thin fill under the site on the board (`render/siteBuild.js`), stacked below
+the training bar it deliberately mirrors. The denominator is the interesting half and it
+lives in one place — `battle/state.js upgradeProgress()` — because `cmdUpgrade` raises
+`site.level` as it *starts* the build, so the step being paid for is
+`SITE_UPGRADE[level - 2]`, and a renderer that re-derived that off-by-two would draw a
+perfectly plausible wrong bar. Moving the build out of `statusLine` also un-masked a real
+bug: a site besieged *while* it built used to report "building · 12s left" and never once
+say UNDER SIEGE, because the build branch returned first.
+
+### Region shapes
+
+A region is not a rectangle. `content/regions.rules.js` `SHAPE_RULE` + `battle/mapshape.js`:
+five silhouettes (`open`, `narrow`, `choke`, `split`, `branch`) chosen per row in the region
+table, generated as a MASK of out-of-play hexes on their own seeded stream. The mask joins
+`grid.blocked`, so the renderer draws it as a massif, pathing walks round it and
+`verifyReachable` treats it as wall — the whole feature needed one region column and **no
+change to movement, combat, the AI, the contract or the save format.**
+
+Three properties are load-bearing:
+
+- **The mask arrives connected.** `pruneIslands` keeps only the largest open component,
+  because `repairConnectivity` fixes a walled-off site by *deleting* rock and would
+  otherwise drill straight through the silhouette. It is explicitly forbidden from clearing
+  shape rock.
+- **It is spent inside the rock budget, not on top of it** — `mapgen.js` seeds `blocked`
+  with the mask, so `scatterMountains` stops early. A `narrow` valley spends the whole
+  budget and the silhouette *is* the terrain; a `split` rift spends a third and the scatter
+  still lays texture around the crossings.
+- **`open` is byte-identical to the pre-shape generator**, verified against HEAD on four
+  seeds for all six open regions and pinned intrinsically in `tests/mapshape.test.js`. That
+  is what let eighteen regions be reshaped without touching the other six.
+
+The assignment rule is a design rule, not a balance one: **a shape says what the region
+already claimed.** Nine rows of flavour text described maps the generator never made —
+Ironwood's "single-file passes", Saltmere's "lagoon splits the field", the Sunder's "two
+bridges", Obsidian's "three fronts" — in exactly the way Ironcrown's Marshal was decoration
+over an empty throne. Reaching for a shape *because* a region needs to be harder is
+forbidden; that is how `siteCounts.player` crept to 48% of the board with every difficulty
+number passing.
+
+**A shape is NOT a dial, and that cost three full n=96 sweeps to establish.** It does not
+apply a tax a smaller carve scales down — it *re-rolls where the sites land*, and a late
+region's win rate is a steep function of layout. The first cut (`SQUEEZE` neck 0.52 / keep
+0.76 / trunk 0.34) moved eighteen regions by −29 to +9 and put eight outside `WIN_BAND`.
+Softening all three by ~40% did **not** shrink each delta toward zero — it scattered them
+again by −17 to +22: duskfell went −14 → +8 and thanescar +2 → −17 on the same softening.
+Expect to re-measure, not to interpolate.
+
+It is also violently size-dependent — the same `choke` is worth **+5 on a 13×10 board and
+−16 on a 21×16 one**. Four regions still needed the dial after softening, and three of them
+had room: `gallowmoor 3.26→3.12`, `karrowmere 3.82→3.68`, `blackspire 3.92→3.84` (with
+`thanescar 3.85→3.80` to keep `enemyMult` non-decreasing).
+
+**Tier 6 ships unshaped, deliberately.** It is the one tier with no dial headroom —
+4.37/4.44/4.48 against nightharrow's 4.36 — so there is nothing to pay a shape with, and
+widowsgate is additionally the incursion arena, where a `choke` took the ladder from
+94/88/75/38/19 to 81/56/50/13/0 across depths 1–30. Reverting the three restored their
+**exact** pre-shape win rates (26/29/26) and left the ladder untouched. If a future pass
+wants tier 6 shaped, the prerequisite is dial headroom, not a gentler mask.
+
+*(Pre-existing and not caused by this pass: `highmarch` reads 65% at n=96 against a 66%
+floor, in the baseline too. It cannot be dialled down — kaldan sits at 2.75 and highmarch at
+2.76 — so it is a 1-point miss inside n=96 noise.)*
 
 ### Rendering
 
@@ -396,6 +463,18 @@ expedition budget can never buy one. Unlocking grants exactly one free per landi
 the budget (`withFreeMarshal`), and more are commissioned in battle with the `RECRUIT`
 verb: pay gold, he arrives at once, `trainType` untouched. Only units with a `maxPerSite`
 are commissionable, which is what makes buying one outright safe.
+
+**The commission is on a cooldown, and it is FACTION-WIDE rather than per site**
+(`RECRUIT.marshal.cooldownSec`, 90). `maxPerSite: 1` was the whole brake, and it stops
+braking the moment gold stops being scarce — 250 is a rounding error against a treasury
+that funds a 700-slot landing, so a late-game player simply bought one for every stronghold
+on the board. A faction-wide timer makes it a decision about *when and where* instead of a
+purchase you repeat until you notice. It lives in **sim state**
+(`faction.recruitReadyTick`), so it survives a resume and replays identically from a command
+log; a cooldown parked in the HUD would do neither. `battle-actions.js` counts it down in
+the button's own label, and reads `recruitReadyTick()` off the sim rather than recomputing
+it — a countdown derived independently is a second implementation of the rule. The harness
+never recruits, so this cannot have moved a balance number.
 
 ## Tier 5, and the enemy Marshal that finally exists
 

@@ -125,7 +125,7 @@
    carries no divider either. Bars/bubbles moved out of this file into
    panelbars.css, but the emptiness check has to know about both now. */
 .hud-site-econ:not(:has(.hud-selection-sub:not(:empty), .bubbles:not(:empty), .bar.is-open)),
-.hud-site-context:not(:has(.hud-selection-sub:not(:empty), .bubbles:not(:empty))) {
+.hud-site-context:not(:has(.hud-selection-sub:not(:empty), .bubbles:not(:empty), .bar.is-open)) {
   display: none;
 }
 

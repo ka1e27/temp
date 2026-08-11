@@ -244,7 +244,7 @@ function resolveArrival(state, group) {
     // Beating the garrison does NOT capture: the siege begins.
     site.garrison = emptyComp();
     site.siege = { owner, comp: r.attSurvivors };
-    pushEvent(state, EVENTS.SIEGE_BEGUN, { siteId: site.id, owner, hp: site.hp });
+    pushEvent(state, EVENTS.SIEGE_BEGUN, { siteId: site.id, kind: site.kind, owner, hp: site.hp });
   } else {
     site.garrison = r.defSurvivors;
     skirmishHome(state, site, group);

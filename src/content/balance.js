@@ -188,7 +188,13 @@ export const SITE_UPGRADE = [
  * cheap one. `maxPerSite` is unchanged and still binds.
  */
 export const RECRUIT = {
-  marshal: { gold: 250 },
+  // `cooldownSec` is FACTION-WIDE, not per site. Gold is the only thing standing
+  // between a rich late-game player and a marshal in every stronghold on the
+  // board, and by the endgame gold is not scarce — 250 is a rounding error
+  // against a treasury that funds a 700-slot landing. A cooldown makes the
+  // commission a decision about WHEN and WHERE rather than a purchase you make
+  // as many times as you can afford, which is the same reason `maxPerSite` is 1.
+  marshal: { gold: 250, cooldownSec: 90 },
 };
 
 /** Territory influence radius by site kind, and the movement effect. */

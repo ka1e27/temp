@@ -14,6 +14,7 @@
 // (it costs 10-50x a plain fill).
 import { UNIT_IDS, SITES, SITE_LEVELS } from '../content/balance.js';
 import { createSurface, createCamera, pointerPos } from './canvas.js';
+import { createBgCache } from './bgcache.js';
 import { palette as loadPalette } from './palette.js';
 import {
   computeOwners, drawPlates, drawFlood, drawFrontLine, drawBlocked, drawGridLines,
@@ -24,6 +25,7 @@ import {
   drawGarrisonPlaque, drawSelection, drawHover, garrisonLabelY, builtLevel,
 } from './siteGlyphs.js';
 import { siteHeadYAt } from './siteShapes.js';
+import { drawBuildBar } from './siteBuild.js';
 import {
   drawSquads, drawSquadLabels, drawDragArc, drawBox, drawChainLegs, drawSquadRoutes,
 } from './routes.js';
@@ -53,17 +55,10 @@ export function createBattleView(opts) {
   const p = loadPalette();
   const hexSize = opts.hexSize ?? HEX_SIZE;
   const camera = createCamera({ minZoom: 0.3, maxZoom: 2.6 });
+  const bgCache = createBgCache({ el: opts.bg, camera });
   let autoFit = true;
-  let bgDirty = true;
-  /* THE BACKGROUND REPAINT GATE. `#board-bg` costs ~54ms and `markBgDirty` is
-     called on every pointermove while panning, so a camera gesture repainted it
-     ONCE PER FRAME: 295 repaints in a 10s pan, 60fps -> 31 desktop, 36 -> 17 on
-     a throttled phone. Gating to 8/s measured 53fps and 78 repaints; terrain
-     lags the pieces by one interval mid-drag and nothing else changes. */
-  const BG_GATE_MS = 125;
+
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-  let bgAskedAt = 0;
-  let bgPending = false;
   let lastSig = NaN;
   let owners = new Uint8Array(0);
   let blockedSig = null;
@@ -72,7 +67,8 @@ export function createBattleView(opts) {
   let fontZoom = -1;
   let fontStr = '';
 
-  const onResize = (w, hgt) => { camera.setViewport(w, hgt); bgDirty = true; };
+  const onResize = (w, hgt) => { camera.setViewport(w, hgt); bgCache.markDirty(true); };
+  let firstFit = true;
   const bg = createSurface(opts.bg, { alpha: false, onResize });
   const fx = createSurface(opts.fx, { alpha: true, onResize });
   camera.setViewport(bg.cssW, bg.cssH);
@@ -104,17 +100,7 @@ export function createBattleView(opts) {
     hexSize,
     get palette() { return p; },
 
-    /** Coalesced — see BG_GATE_MS. `force` skips the gate for the callers that
-     *  are not gestures (a fit, a zoom reset), where the repaint owes this
-     *  frame. */
-    markBgDirty(force) {
-      if (force) { bgDirty = true; bgAskedAt = 0; return; }
-      const t = nowMs();
-      if (t - bgAskedAt < BG_GATE_MS) { bgPending = true; return; }
-      bgAskedAt = t;
-      bgPending = false;
-      bgDirty = true;
-    },
+    markBgDirty(force) { bgCache.markDirty(force); },
     releaseAutoFit() { autoFit = false; },
 
     /** Frame the whole grid — on first draw, and on resize until the player
@@ -122,7 +108,7 @@ export function createBattleView(opts) {
     fitTo(state, pad = 20, insets = HUD_INSETS) {
       gridBounds(state.grid.cols, state.grid.rows, hexSize, _bounds);
       camera.fit(_bounds, pad, insets);
-      bgDirty = true;
+      bgCache.markDirty(true);
     },
 
     sitePos,
@@ -158,16 +144,12 @@ export function createBattleView(opts) {
      */
     draw(state, alpha, view, frameMs) {
       state0 = state;
-      if (autoFit && bgDirty) api.fitTo(state);
+      if (autoFit && firstFit) { api.fitTo(state); firstFit = false; }
       const sig = signature(state);
-      if (sig !== lastSig) { lastSig = sig; bgDirty = true; }
-      // A gesture that ended inside the gate still owes one repaint.
-      if (!bgDirty && bgPending && nowMs() - bgAskedAt >= BG_GATE_MS) {
-        bgAskedAt = nowMs();
-        bgPending = false;
-        bgDirty = true;
-      }
-      if (bgDirty) { redrawBg(state); bgDirty = false; }
+      // Ownership, level or influence changed: that is a REPAINT, not a slide.
+      if (sig !== lastSig) { lastSig = sig; bgCache.markDirty(true); }
+      if (bgCache.take()) redrawBg(state);
+      bgCache.sync();
       // WALL-CLOCK, not per-frame. This was a flat `+= 0.016` every frame, so
       // on a 120Hz display every siege ring rotated and every selection pulsed
       // at exactly double speed — the animation ran at whatever rate the
@@ -183,6 +165,7 @@ export function createBattleView(opts) {
 
   function redrawBg(state) {
     const ctx = bg.ctx;
+    bgCache.painted();
     bg.fill(p.bg);
     board.cols = state.grid.cols;
     board.rows = state.grid.rows;
@@ -286,6 +269,7 @@ export function createBattleView(opts) {
       sitePos(s, _a);
       const r = siteRadius(s.kind, hexSize);
       drawSiteState(ctx, s, _a.x, _a.y, r, p, px);
+      drawBuildBar(ctx, s, _a.x, _a.y, r, p, px);
       drawHpRing(ctx, s, _a.x, _a.y, r, p, px);
       drawSiegeRing(ctx, s, _a.x, _a.y, r, p, px, spin);
       drawGarrisonPlaque(ctx, s.garrison, capOf(s), _a.x, _a.y, r, p, px, hexSize);

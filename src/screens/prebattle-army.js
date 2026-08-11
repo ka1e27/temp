@@ -50,7 +50,12 @@ export function renderArmy(body, view) {
     h('span.pb-types-note.dim', {
       text: sum.typesFull
         ? 'at the limit — drop one to the last body to swap it out'
-        : `room for ${sum.typesMax - sum.types} more`,
+        : view.unlocked.length <= sum.types
+          // "room for 3 more" when the player owns exactly militia and spearmen
+          // advertises headroom that cannot be filled for hours, which makes the
+          // cap read as noise rather than as a decision.
+          ? 'every troop you have unlocked is already in this army'
+          : `room for ${Math.min(sum.typesMax - sum.types, view.unlocked.length - sum.types)} more`,
     })));
 
   const list = h('ul.pb-units', { role: 'list' });

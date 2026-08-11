@@ -127,6 +127,17 @@ function cmdTrain(state, cmd, by) {
  * whitelist: a cap is exactly what makes "buy it outright" safe, because there
  * is no amount of gold that turns into an army this way.
  */
+/**
+ * The tick a faction may commission `unit` again — 0 when it never has.
+ *
+ * Exported because the HUD has to show the same number the sim enforces. A
+ * countdown computed independently in the panel is a second implementation of
+ * the rule, and the two drift the first time either side changes.
+ */
+export function recruitReadyTick(state, by, unit) {
+  return state?.factions?.[by]?.recruitReadyTick?.[unit] ?? 0;
+}
+
 function cmdRecruit(state, cmd, by) {
   const site = siteById(state, cmd.site);
   if (!site) return 'unknown-site';
@@ -138,10 +149,16 @@ function cmdRecruit(state, cmd, by) {
   if (!state.mods[by].unlockedUnits.includes(unit)) return 'unit-locked';
   const cap = UNITS[unit].maxPerSite ?? Infinity;
   if ((site.garrison[unit] || 0) >= cap) return 'already-commissioned';
+  if (state.tick < recruitReadyTick(state, by, unit)) return 'recruit-cooling';
   const costCg = spec.gold * CENTIGOLD;
   if (goldOf(state.factions[by]) < costCg) return 'insufficient-gold';
 
   applyGold(state.factions[by], -costCg);
+  if (spec.cooldownSec) {
+    const f = state.factions[by];
+    f.recruitReadyTick = f.recruitReadyTick ?? {};
+    f.recruitReadyTick[unit] = state.tick + sec(spec.cooldownSec);
+  }
   site.garrison[unit] = (site.garrison[unit] || 0) + 1;
   pushEvent(state, EVENTS.UNITS_TRAINED, { siteId: site.id, owner: by, unit, count: 1 });
   return null;

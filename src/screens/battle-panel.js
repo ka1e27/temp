@@ -15,7 +15,7 @@
 // Upgrade button and the rally stepper append commands through `input`, exactly
 // like a click on the board does.
 import { total } from '../battle/combat.js';
-import { rallyKeepOf, rallyTargetsOf } from '../battle/state.js';
+import { rallyKeepOf, rallyTargetsOf, upgradeProgress } from '../battle/state.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration } from '../ui/format.js';
@@ -71,6 +71,13 @@ export function createSitePanel(o) {
   // site.trainProgress read directly, never re-derived (see battle-bars.js).
   const trainBar = createFillBar('bar-train');
   const trainStats = h('div.hud-site-unit-stats.bubbles', {});
+  // The build timer, as a BAR rather than the "building · 12s left" line it
+  // replaces. A countdown is a number you have to read twice to know whether it
+  // is nearly done; a fill answers that at a glance, which is the same argument
+  // the HP and training bars already won. `upgradeProgress` is the sim's, not
+  // this file's — see battle-bars.js's header on why a fraction is never
+  // computed here.
+  const buildBar = createFillBar('bar-build');
   // WHY a site is tough. Terrain the player cannot read is an invisible
   // difficulty dial, and this row is what makes it visible.
   const terrain = h('div.hud-site-terrain.bubbles', {});
@@ -94,7 +101,7 @@ export function createSitePanel(o) {
   // stray divider either.
   const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
-  const context = h('div.hud-site-context', {}, terrain, stat);
+  const context = h('div.hud-site-context', {}, terrain, buildBar.el, stat);
   const actions = h('div.hud-site-actions', {}, keep.el, hire.el, upgradePreviewRow, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, and a panel that let clicks through would sit
@@ -163,6 +170,7 @@ export function createSitePanel(o) {
     wrote |= hpBar.show(false);
     wrote |= compBar.show(false);
     wrote |= trainBar.show(false);
+    wrote |= buildBar.show(false);
     wrote |= clearBubbles(money, terrain, trainStats, upgradePreviewRow) ? 1 : 0;
     return wrote;
   }
@@ -234,6 +242,15 @@ export function createSitePanel(o) {
     wrote |= updateUnitStatBubbles(trainStats, training ? intel.unit : null);
 
     wrote |= updateTerrainBubbles(terrain, intel);
+    // The bar carries the build now, which also un-masks the status line: a site
+    // besieged WHILE it builds used to report "building · 12s left" and never
+    // once say UNDER SIEGE, because the build branch returned first.
+    const building = site.upgradeTicksLeft > 0;
+    if (building) {
+      buildBar.update(upgradeProgress(site),
+        `L${site.level} · ${duration(site.upgradeTicksLeft / TICK_HZ)}`);
+    }
+    wrote |= buildBar.show(building);
     wrote |= set.stat(statusLine(site, intel));
     set.statWarn(hostile);
     set.siege(hostile);
@@ -312,9 +329,6 @@ function hpColor(site, frac) {
 }
 
 function statusLine(site, intel) {
-  if (site.upgradeTicksLeft > 0) {
-    return `building · ${duration(site.upgradeTicksLeft / TICK_HZ)} left`;
-  }
   if (intel?.gate?.sealed) return `UNDER SIEGE · ${gateLine(intel)}`;
   if (site.siege) return 'UNDER SIEGE';
   if (site.shieldTicks > 0) return 'fortified';

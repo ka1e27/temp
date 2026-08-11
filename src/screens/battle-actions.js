@@ -8,7 +8,9 @@
 // the SIMULATION. Nothing writes to a site. That is what makes a rejected order
 // visibly do nothing instead of leaving a control lying about the state.
 import { RALLY_KEEP, UNITS, SITES, CENTIGOLD, RECRUIT } from '../content/balance.js';
+import { TICK_HZ } from '../core/loop.js';
 import { rallyKeepOf, clampRallyKeep } from '../battle/state.js';
+import { recruitReadyTick } from '../battle/commands.js';
 import { goldOf } from '../battle/economy.js';
 import { h, bindText, bindClass } from '../ui/dom.js';
 import { siteOf } from './battle-preview.js';
@@ -138,6 +140,16 @@ export function recruitOffer(state, site) {
   out.label = `Marshal · ${RECRUIT.marshal.gold}g`;
   if ((site.garrison.marshal || 0) >= (UNITS.marshal.maxPerSite ?? 1)) {
     out.why = 'This site already has a Marshal.';
+    return out;
+  }
+  // The cooldown is read from the SIM rather than recomputed, so the button can
+  // never offer a commission the next tick would refuse. It counts down in the
+  // label because a disabled button with no reason is indistinguishable from a
+  // broken one — which is how three boosters shipped unreachable.
+  const left = recruitReadyTick(state, 'player', 'marshal') - state.tick;
+  if (left > 0) {
+    out.label = `Marshal · ${Math.ceil(left / TICK_HZ)}s`;
+    out.why = 'No one to commission yet — the last one only just rode out.';
     return out;
   }
   if (goldOf(state.factions.player) < RECRUIT.marshal.gold * CENTIGOLD) {

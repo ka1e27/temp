@@ -5,7 +5,9 @@
 // which is what gives us instant retry, mid-battle resume, and byte-comparable
 // determinism tests.
 // PURE.
-import { SITES, SITE_LEVELS, BOOSTERS, UNIT_IDS, RALLY_KEEP } from '../content/balance.js';
+import {
+  SITES, SITE_LEVELS, SITE_UPGRADE, BOOSTERS, UNIT_IDS, RALLY_KEEP,
+} from '../content/balance.js';
 import { emptyComp, addComp } from './combat.js';
 import { TICK_HZ } from '../core/loop.js';
 
@@ -52,6 +54,10 @@ function makeFaction() {
     unitsKilled: 0,
     peakArmy: 0,
     goldEarnedCg: 0,
+    // unit id -> the tick a commission of it is allowed again. Faction-wide and
+    // sim-owned, so it survives a resume and replays from a command log; a
+    // cooldown parked in the HUD would do neither.
+    recruitReadyTick: {},
   };
 }
 
@@ -279,6 +285,26 @@ export function castleSealed(state, castle) {
  *  (which produces at the OLD level until it completes). */
 export function effectiveLevel(site) {
   return site.upgradeTicksLeft > 0 ? Math.max(1, site.level - 1) : site.level;
+}
+
+/**
+ * How far an in-progress site upgrade has got, 0..1 — and 0 when nothing is
+ * building.
+ *
+ * The DENOMINATOR is the interesting part and it is why this is a function
+ * rather than a division at each call site: the site only stores ticks
+ * REMAINING, and `cmdUpgrade` raises `site.level` at the moment it starts the
+ * build, so the step being paid for is always `SITE_UPGRADE[level - 2]`. Two
+ * surfaces draw this (the panel bar and the board's build ring) and a second
+ * copy of that off-by-two is exactly the kind of thing that goes wrong once the
+ * ladder is extended — which it already has been.
+ */
+export function upgradeProgress(site) {
+  const left = site?.upgradeTicksLeft ?? 0;
+  if (left <= 0) return 0;
+  const spec = SITE_UPGRADE[site.level - 2];
+  const total = spec ? sec(spec.sec) : 0;
+  return total > 0 ? Math.max(0, Math.min(1, 1 - left / total)) : 0;
 }
 
 /**
