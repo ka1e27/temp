@@ -339,39 +339,9 @@ test('harness: --noconstruct really is the bot that could not build', () => {
   assert.equal(built, 0, 'the opt-out still issued BUILD commands');
 });
 
-/** Watchtowers actually raised across three battles at a fixed seed — shared
- *  by the pair below so they are the same claim with the flag flipped,
- *  rather than two independent measurements that could quietly drift apart. */
-function countTowers(opts) {
-  let towers = 0;
-  for (const id of ['gallowmoor', 'riverfen', 'ashford']) {
-    const battle = startRun(id, 8919, before(id), 10);
-    let nextThink = 0;
-    while (battle.status === 'running' && battle.tick < 4800) {
-      if (battle.tick >= nextThink) { playerTurn(battle, opts); nextThink = battle.tick + 20; }
-      step(battle);
-      for (const e of battle.events) {
-        if (e.type === 'site-built' && e.kind === 'watchtower') towers++;
-      }
-    }
-  }
-  return towers;
-}
-
-test('harness: it can raise a watchtower toward a throne it cannot see', () => {
-  // The bot's own answer to fog (simbuild.js `scoutTurn`) — CLAUDE.md's
-  // most-repeated lesson again: a mechanic the harness cannot play is a
-  // mechanic nobody has measured.
-  assert.ok(countTowers({}) > 0,
-    'the bot never raised a single watchtower across three battles — `scoutTurn` '
-    + 'is queuing nothing, or everything it queues is being refused');
-});
-
-test('harness: --noscout really is the bot with no answer to fog', () => {
-  // The guard on the newest escape hatch, exactly as --noupgrades and
-  // --noconstruct have one.
-  assert.equal(countTowers({ scout: false }), 0, 'the opt-out still raised a watchtower');
-});
+// The watchtower mechanic itself (`scoutTurn`, its opt-out, and the late-tier
+// check) moved to tests/scout.test.js for the line budget — same reason
+// campaignplay.test.js split from campaign.test.js.
 
 test('harness: the build order prefers production, and that is the whole rule', () => {
   // The negative control. `PRIORITY` is plain data, so a behavioural test that
