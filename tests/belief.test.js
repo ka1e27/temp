@@ -110,6 +110,69 @@ test('belief: a VISIBLE site is the real object, every field intact', () => {
 });
 
 // ---------------------------------------------------------------------------
+// A throne's allegiance is common knowledge — the ownership half only,
+// never the garrison half
+// ---------------------------------------------------------------------------
+
+test('belief: the enemy castle is known to be the enemy\'s from tick 0, sight unseen', () => {
+  const b = board([
+    { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 10 } },
+    // Thirty hexes from the camp — nothing at VISION_RADIUS 1 reaches it, so
+    // this is exercising the SAME never-scouted-ghost branch every other test
+    // in this file does, not some other path.
+    {
+      id: 'castle', kind: 'castle', hex: [30, 0], owner: 'enemy',
+      garrison: { spearmen: 24, militia: 6 }, hp: 400, level: 3,
+    },
+  ]);
+  const real = at(b, 'castle');
+  const ghost = believed(b, 'player', 'castle');
+  assert.equal(ghost.ghost, true, 'this must actually be exercising the never-scouted branch');
+
+  // THE POSITIVE HALF: unlike an ordinary site (previous section), owner is
+  // the TRUE current owner, not `state.seen[...] ?? null`. Without this, a
+  // target scan filtering on `site.owner === FOE` never finds the castle at
+  // all — measured: gallowmoor seed 8919, 1,741 player sends in a whole
+  // battle and zero of them at the castle.
+  assert.equal(ghost.owner, 'enemy');
+  assert.equal(ghost.owner, real.owner);
+
+  // THE NEGATIVE CONTROL, and the reason this is two assertions and not one:
+  // "the AI can see the throne" would also make this pass if it crept in by
+  // accident. Garrison, HP and level stay exactly as presumed as any other
+  // ghost — you know whose flag flies over the castle, not what stands
+  // behind the door.
+  assert.notEqual(total(ghost.garrison), total(real.garrison),
+    'the garrison must stay a presumption — knowing the OWNER is not knowing the ARMY');
+  assert.equal(total(ghost.garrison), Math.max(1, Math.round(SITES.castle.cap * PRESUMED_GARRISON_FRAC)));
+  assert.equal(ghost.level, 1);
+  assert.notEqual(ghost.level, real.level);
+  assert.equal(ghost.hp, siteMaxHp('castle', 1));
+  assert.notEqual(ghost.hp, real.hp);
+});
+
+test('belief: the MIRROR case — the player\'s camp is known to be the player\'s, from the enemy\'s side', () => {
+  // Same shape, viewed from the other faction, because `THRONE_KINDS` has to
+  // work for whichever faction is asking: the enemy AI has to be able to
+  // TARGET the player's camp exactly as the harness bot has to target the
+  // enemy's castle, or the fix only helps one direction of the same battle.
+  const b = board([
+    // Total 30, deliberately NOT the presumed 16 (round(SITES.camp.cap * 0.20))
+    // — a coincidental match here would make the negative control pass for
+    // the wrong reason.
+    { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { spearmen: 20, militia: 10 } },
+    { id: 'castle', kind: 'castle', hex: [30, 0], owner: 'enemy', garrison: { militia: 8 } },
+  ]);
+  const real = at(b, 'camp');
+  const ghost = believed(b, 'enemy', 'camp');
+  assert.equal(ghost.ghost, true);
+  assert.equal(ghost.owner, 'player');
+  assert.equal(ghost.owner, real.owner);
+  assert.notEqual(total(ghost.garrison), total(real.garrison),
+    'the mirror case must keep the garrison presumption too, not just the ownership fix');
+});
+
+// ---------------------------------------------------------------------------
 // Your own active siege is your own operation, not intelligence about theirs
 // ---------------------------------------------------------------------------
 

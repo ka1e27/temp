@@ -14,6 +14,7 @@ import { resolveField, breachSeconds, projectHp, scaleComp, total, emptyComp }
   from '../battle/combat.js';
 import { travelTicks } from '../battle/movement.js';
 import { groundOf, siteDefMultOf, garrisonMultOf } from '../battle/terrain.js';
+import { perceivedSite } from '../battle/vision.js';
 import { TICK_HZ } from '../core/loop.js';
 import { fixed, duration, plural } from '../ui/format.js';
 
@@ -71,6 +72,22 @@ export function computePreview(state, fromId, toId, o = {}) {
   const send = scaleComp(filtered(from.garrison, o.filter), o.fraction ?? 0.5);
   const sendN = total(send);
   const eta = (o.travelSeconds || travelSecondsFor)(state, from, to, send);
+
+  // AN UNSCOUTED TARGET GETS NO PREVIEW — decision 10, and it collides with
+  // this file's own header on purpose. The guarantee below only holds because
+  // every number past this point comes off the SAME functions the simulation
+  // resolves combat with, and that cannot extend to a garrison the player has
+  // never seen. sendN and eta are exempt: they describe the player's own
+  // troops and the ground under them, neither of which fog hides, so a blind
+  // send still gets those two numbers and nothing else.
+  if (perceivedSite(state, 'player', to).ghost) {
+    const pv = {
+      from: from.id, to: to.id, sendN, send, eta, kind: 'unscouted', verdict: 'UNSCOUTED',
+    };
+    pv.line = previewLine(pv);
+    return pv;
+  }
+
   const mods = state.mods || {};
   const regenMult = mods[to.owner]?.structureRegenMult ?? 1;
   const siegeMult = mods.player?.siegeDmgMult ?? 1;
@@ -135,6 +152,8 @@ export function computePreview(state, fromId, toId, o = {}) {
 export function previewLine(pv) {
   if (!pv) return '';
   if (pv.kind === 'reinforce') return `REINFORCE +${pv.sendN} · ETA ${duration(pv.eta)}`;
+  // No AP/DP/verdict on a garrison nobody has seen — see the ghost branch above.
+  if (pv.kind === 'unscouted') return `UNSCOUTED · ETA ${duration(pv.eta)}`;
   const parts = [`AP ${fixed(pv.ap)} / DP ${fixed(pv.dp)}`, pv.verdict];
   if (pv.win) parts.push(plural(pv.survivors, 'survives', 'survive'));
   else if (pv.skirmish > 0) parts.push(`${pv.skirmish} skirmish home`);

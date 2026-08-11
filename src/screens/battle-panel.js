@@ -16,6 +16,7 @@
 // like a click on the board does.
 import { total } from '../battle/combat.js';
 import { rallyKeepOf, rallyTargetsOf, upgradeProgress, buildProgress } from '../battle/state.js';
+import { perceivedSite, perceivedSquads } from '../battle/vision.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration, spaceCase } from '../ui/format.js';
@@ -183,7 +184,14 @@ export function createSitePanel(o) {
     if (squad) { setShown(false); showSquad(state, squad); return; }
 
     const id = view.selection[0];
-    const site = id ? siteOf(state, id) : null;
+    // FOG. `perceivedSite` returns the real object for anything owned or
+    // currently in sight, so nothing below changes for the ordinary case —
+    // it only ever substitutes a GHOST, which carries no garrison/hp/level/
+    // trainType at all. Reading those off it would silently read
+    // `undefined`, and `undefined` still renders; the branch below is where
+    // that gets stopped instead of drawn.
+    const real = id ? siteOf(state, id) : null;
+    const site = real ? perceivedSite(state, 'player', real) : null;
     setAnchor(site);
     set.open(!!site);
     if (!site) {
@@ -199,6 +207,29 @@ export function createSitePanel(o) {
     if (n > 1) {
       wrote |= set.title(`${n} sites selected`);
       wrote |= set.sub('R retreats · right-drag sets rally');
+      wrote |= blankVitals();
+      wrote |= set.trains('');
+      wrote |= set.stat('');
+      set.statWarn(false);
+      set.siege(false);
+      setShown(false);
+      keep.show(null);
+      hire.show(null);
+      builds.show(null);
+      if (wrote) follower.markDirty();
+      return;
+    }
+
+    // UNSCOUTED. Kind and position are common knowledge (battle/vision.js),
+    // so the panel still opens and anchors on the ghost — but everything
+    // that CHANGES (garrison, HP, level, training, siege, a rally list) is
+    // exactly what a ghost does not carry, and none of it is read past this
+    // point. The one fact fog lets a ghost keep is the last-known owner, and
+    // only in the past tense: real when it exists, silent when it does not,
+    // never re-derived into anything more current than that.
+    if (site.ghost) {
+      wrote |= set.title(spaceCase(site.kind).toUpperCase());
+      wrote |= set.sub(site.owner ? `UNSCOUTED · last seen: ${site.owner}` : 'UNSCOUTED');
       wrote |= blankVitals();
       wrote |= set.trains('');
       wrote |= set.stat('');
@@ -322,8 +353,17 @@ export function createSitePanel(o) {
 
 
 function squadById(state, id) {
-  for (let i = 0; i < state.squads.length; i++) {
-    if (state.squads[i].id === id) return state.squads[i];
+  // FOG. A squad carries no ghost (battle/vision.js) — `perceivedSquads`
+  // drops one the instant it leaves vision, on the board (battle-orders.js
+  // `squadAt`) and here. Scanning `state.squads` directly, as this used to,
+  // kept the panel reporting an enemy column's live strength and route long
+  // after its glyph had faded from the canvas — the same leak decision 13
+  // closes, found one surface later. `view.selectedSquad` itself is left
+  // alone: if the same column marches back into a watchtower's ring it
+  // should reappear, not stay gone forever.
+  const squads = perceivedSquads(state, 'player');
+  for (let i = 0; i < squads.length; i++) {
+    if (squads[i].id === id) return squads[i];
   }
   return null;
 }

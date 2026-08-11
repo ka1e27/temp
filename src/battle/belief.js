@@ -71,8 +71,8 @@ function presumedGarrison(kind) {
  * `hp` presumes full health for that presumed level — there is no information
  * suggesting otherwise, and a random guess would be a second thing to defend.
  *
- * OWNER IS DELIBERATELY LEFT ALONE, at whatever `perceivedSite` gave it — a
- * real last-known owner (decision 14) if this faction ever saw it, `null` if
+ * OWNER IS OTHERWISE LEFT ALONE, at whatever `perceivedSite` gave it — a real
+ * last-known owner (decision 14) if this faction ever saw it, `null` if
  * neither side ever has. A stronger version of this file once presumed a
  * never-seen ghost's owner as the OPPOSING faction, on the theory that "I
  * don't know whose flag that is" should default to caution the same way the
@@ -84,6 +84,12 @@ function presumedGarrison(kind) {
  * ai.js for the fix that actually shipped: `homeGuard` alone reads the TRUE
  * state, the same exception `adapt()` already had, rather than teaching every
  * ghost to lie about who holds it.
+ *
+ * "Otherwise", because `beliefFor` overrides this ONE field, after this
+ * function returns, for the two throne kinds — see `THRONE_KINDS` below. That
+ * override does not belong in this function: `believedGhost` is about
+ * presumed answers to genuinely unknown questions, and a throne's occupant is
+ * not one of those.
  */
 function believedGhost(site) {
   const level = 1;
@@ -130,11 +136,46 @@ function believedGhost(site) {
  * every existing `state.commands.push(...)` call site downstream keep working
  * unchanged, whether it was handed `state` or this view.
  */
+
+// A THRONE'S ALLEGIANCE IS COMMON KNOWLEDGE — the corollary of decision 9
+// that only bites once something tries to ATTACK a never-scouted castle.
+// `perceivedSite`'s `owner: state.seen[...] ?? null` is the right rule for a
+// farm, whose current holder is exactly the live fact fog exists to hide. It
+// is the wrong rule for the two sites `sim.js endPhase` treats as the win
+// condition: you are invading ground the enemy holds outright, so you
+// already know whose castle that is before you have seen a single hex of
+// it — the same "there is a fort on that hill" reasoning decision 9 already
+// gives every OTHER site, applied to the one pair where it actually matters.
+// It is not even uncertain: `endPhase` proves it by construction, because a
+// RUNNING battle can never have `castle.owner !== 'enemy'` or
+// `camp.owner !== 'player'` — either flip ends the battle the same tick it
+// happens, so there is no tick at which fog could be hiding a different
+// answer. `owner: null` on the enemy castle was not fog; it was a wrong
+// answer to a question fog was never entitled to ask.
+//
+// Left unfixed, a target scan that filters on `site.owner === FOE` never
+// finds the castle: measured on gallowmoor seed 8919, the harness bot swept
+// the countryside for a whole battle, sent 1,741 orders and NONE at the
+// castle, never once saw its hex, and timed out with the castle sitting at
+// 672/672 — CLAUDE.md's "the bot quietly declines to play" failure mode,
+// with fog as a new cause of it.
+//
+// The fix stays narrow ON PURPOSE: only `owner`, only these two kinds.
+// Garrison, HP, siege and level stay exactly as presumed as any other
+// ghost — "you know whose flag flies over the throne" is not "you know how
+// many stand behind the door". `tests/belief.test.js` pins both halves with
+// a negative control, because the failure this guards is the fix quietly
+// growing into "the AI can see the throne".
+const THRONE_KINDS = new Set(['camp', 'castle']);
+
 export function beliefFor(state, faction) {
   const sites = state.sites.map((site) => {
     if (site.siege?.owner === faction) return site;
     const perceived = perceivedSite(state, faction, site);
-    return perceived.ghost ? believedGhost(perceived) : perceived;
+    if (!perceived.ghost) return perceived;
+    const ghost = believedGhost(perceived);
+    if (THRONE_KINDS.has(ghost.kind)) ghost.owner = site.owner;
+    return ghost;
   });
   return { ...state, sites, squads: perceivedSquads(state, faction) };
 }
