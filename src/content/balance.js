@@ -188,7 +188,13 @@ export const SITE_UPGRADE = [
  * cheap one. `maxPerSite` is unchanged and still binds.
  */
 export const RECRUIT = {
-  marshal: { gold: 250 },
+  // `cooldownSec` is FACTION-WIDE, not per site. Gold is the only thing standing
+  // between a rich late-game player and a marshal in every stronghold on the
+  // board, and by the endgame gold is not scarce — 250 is a rounding error
+  // against a treasury that funds a 700-slot landing. A cooldown makes the
+  // commission a decision about WHEN and WHERE rather than a purchase you make
+  // as many times as you can afford, which is the same reason `maxPerSite` is 1.
+  marshal: { gold: 250, cooldownSec: 90 },
 };
 
 /** Territory influence radius by site kind, and the movement effect. */
@@ -215,12 +221,42 @@ export const ATTRITION_BLEED_SEC = 5;
 /** The ladder is only re-evaluated every N ticks; it moves on a 30s scale. */
 export const ATTRITION_CHECK_TICKS = 10;
 
+/**
+ * THE FIVE BOOSTERS, and why they hit harder than they used to.
+ *
+ * A charge is priced in RELICS now (content/upgrades.data.js `BOOSTER_SHOP`) —
+ * a currency that does not tick, cannot be idled toward, and is paid only for
+ * ground you have beaten. At 25-60 crowns each they were free from about region
+ * six onward and stayed free forever, so a booster was a lit button rather than
+ * a decision, and the numbers below were sized for something you could fire
+ * whenever it crossed your mind.
+ *
+ * They are sized for something you fire three times a battle now. Every one of
+ * them was already the ANSWER to a specific loss — the reinforcement that
+ * arrives too late, the wall that will not crack, the counter-attack you cannot
+ * survive — and each is now big enough to actually be that answer:
+ *
+ *   rally    2 -> 3 hops, and 50% -> 65% of each garrison. The verb is "every
+ *            spare body I own, here, now"; at two hops it reached your own back
+ *            line and not the front you were losing.
+ *   march    0.50 -> 0.35 travel. Half speed does not beat a siege timer.
+ *   bombard  a quarter of a garrison -> a third, 60 -> 110 structure. 60 HP is
+ *            fifteen seconds of a stronghold's own repair; it never once turned
+ *            an uncrackable wall into a crackable one, which is the whole job.
+ *   fortify  20 -> 26 seconds, and attackers at 0.50 -> 0.40. It has to outlast
+ *            a real assault, not the first wave of one.
+ *   tithe    250 -> 400 gold and 15 -> 22 seconds of the training buff.
+ *
+ * NONE OF THIS MOVED A BALANCE NUMBER, and that is verifiable rather than
+ * hoped: tools/simplayer.js is launched with `boosters: []` on every run in
+ * content/regions.data.js, so the harness has never fired one.
+ */
 export const BOOSTERS = {
-  rally:    { charges: 2, cooldownSec: 75,  radius: 2, fraction: 0.5 },
-  march:    { charges: 3, cooldownSec: 40,  factor: 0.5 },
-  bombard:  { charges: 1, cooldownSec: 120, garrisonFrac: 0.25, hp: 60 },
-  fortify:  { charges: 2, cooldownSec: 60,  hp: 100, regenMult: 2, attackerMult: 0.5, sec: 20 },
-  tithe:    { charges: 2, cooldownSec: 90,  gold: 250, trainMult: 1.5, sec: 15 },
+  rally:    { charges: 2, cooldownSec: 75,  radius: 3, fraction: 0.65 },
+  march:    { charges: 3, cooldownSec: 40,  factor: 0.35 },
+  bombard:  { charges: 1, cooldownSec: 120, garrisonFrac: 0.33, hp: 110 },
+  fortify:  { charges: 2, cooldownSec: 60,  hp: 100, regenMult: 2, attackerMult: 0.40, sec: 26 },
+  tithe:    { charges: 2, cooldownSec: 90,  gold: 400, trainMult: 1.5, sec: 22 },
 };
 
 /**

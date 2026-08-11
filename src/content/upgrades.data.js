@@ -28,11 +28,16 @@
 //   'mult'    -> multiplied together:                  x prod
 //   'flat'    -> summed as a raw number (gold, troops, ms, garrison slots)
 //   'unlock'  -> a unit id, booster id, or feature flag
-// Nothing is allowed to invent a fifth bucket; see modifiers.js STACKING_ORDER.
+//   'unit'    -> summed per TROOP, applied as (1 + sum) inside power()
+// Nothing is allowed to invent a sixth bucket; see modifiers.js STACKING_ORDER.
 
 export const UPGRADE_GROUPS = Object.freeze([
   { id: 'empire', name: 'Empire', blurb: 'Six lines, no ceiling. Every level costs more than the last.' },
   { id: 'unlocks', name: 'Unlocks', blurb: 'Bought once. Militia and spearmen are free from the start.' },
+  {
+    id: 'troops', name: 'Troops', currency: 'relics',
+    blurb: 'Level one troop instead of all of them. Paid in relics, which do not tick.',
+  },
   { id: 'boosters', name: 'Boosters', blurb: 'Unlock a booster once; buy its charges per use.' },
   {
     id: 'crown', name: 'The Crown', requires: 'endgame',
@@ -49,7 +54,31 @@ export const OFFLINE = Object.freeze({
 const H2 = 2 * 60 * 60 * 1000;
 
 const U = (id, group, name, maxLevel, base, rate, effects, desc) =>
-  ({ id, group, name, maxLevel, cost: { base, rate }, effects, desc });
+  ({ id, group, name, maxLevel, cost: { base, rate }, effects, desc, currency: 'crowns' });
+
+/**
+ * A RELIC line: same builder, different purse.
+ *
+ * `currency` is read by meta/upgrades.js `canBuy`/`buy`, so a relic line cannot
+ * be bought with crowns however cheap it looks — and it is what makes these
+ * safe to add without re-tuning a region. tools/simplayer.js shops
+ * cheapest-affordable-first out of `shopListing`, and the harness earns relics
+ * NOWHERE: they are paid by meta/rewards.js `applyOutcome`, and the harness
+ * builds its empire by calling `markConquered` directly. Every battle in
+ * content/regions.data.js is therefore fought at zero relics, exactly as the
+ * Crown tier is fought behind a shut `endgame` gate. tests/relics.test.js pins
+ * that with the same negative control.
+ */
+const R = (id, unitId, name, base, rate, desc) => ({
+  ...U(id, 'troops', name, ENDLESS, base, rate, [unit(unitId, 0.06)], desc),
+  currency: 'relics',
+  // GATED ON OWNING THE TROOP, through the same `requires` mechanism the Crown
+  // tier uses — and enforced in meta/upgrades.js `canBuy`, not in the screen,
+  // for the same reason. Offering Sapper Veterans to a player who has never
+  // seen a sapper is a row they have to read and cannot use; the group grows
+  // with the roster instead, from two lines to seven.
+  requires: `unit:${unitId}`,
+});
 
 /**
  * The same builder, plus a GATE. `requires: 'endgame'` is checked by
@@ -68,6 +97,10 @@ const G = (id, name, base, rate, effects, desc) =>
   ({ ...U(id, 'crown', name, ENDLESS_LATE, base, rate, effects, desc), requires: 'endgame' });
 
 const add = (key, value) => ({ bucket: 'add', key, value });
+/** A PER-UNIT bonus: attack and defence, for one troop only. Crosses the seam
+ *  as `FactionMods.unitMult` (contract v7) and is applied inside
+ *  battle/combat.js `power`, per unit, rather than to the whole stack. */
+const unit = (unitId, value) => ({ bucket: 'unit', key: unitId, value });
 const mult = (key, value) => ({ bucket: 'mult', key, value });
 const flat = (key, value) => ({ bucket: 'flat', key, value });
 const unlock = (key, value) => ({ bucket: 'unlock', key, value });
@@ -165,6 +198,38 @@ export const UPGRADES = Object.freeze([
   G('citadels', 'Citadels', 350000, 1.60,
     [add('siegeDmg', 0.20), add('structureRegen', 0.25), flat('garrisonCap', 25)],
     '+20% siege damage, +25% repair on walls you hold, +25 garrison everywhere.'),
+
+  // --- Troops: one endless line each, bought with RELICS ---------------------
+  //
+  // `arms` levels every troop you own at once, which is the right shape for the
+  // campaign's main ladder and the wrong shape for a decision. These are the
+  // decision: relics are scarce and do not tick, so levelling militia is
+  // levelling militia INSTEAD of levelling rams, and the army you have spent
+  // three campaigns on is visibly yours rather than everyone's.
+  //
+  // +6% is deliberately `arms`'s own per-level value rather than something
+  // bigger. A per-unit line concentrates on the troops you actually field, so at
+  // equal numbers it is already the stronger buy; making it stronger PER LEVEL
+  // as well would turn "which troop" into "obviously all of them, in order".
+  //
+  // No marshal line. `banner` multiplies the stack he stands in and he is one
+  // body per landing, so a percentage on his own attack is a rounding error
+  // wearing a price tag — which is the exact failure this project refunded four
+  // upgrades for.
+  R('vetMilitia', 'militia', 'Militia Veterans', 6, 1.70,
+    '+6% attack and defence for militia, and militia alone.'),
+  R('vetSpearmen', 'spearmen', 'Spearmen Veterans', 6, 1.70,
+    '+6% attack and defence for spearmen. Stacks on their counter and bulwark.'),
+  R('vetOutriders', 'outriders', 'Outrider Veterans', 6, 1.70,
+    '+6% attack and defence for outriders. Speed is untouched — that is the unit.'),
+  R('vetRaiders', 'raiders', 'Raider Veterans', 6, 1.70,
+    '+6% attack and defence for raiders. Their escape share is untouched.'),
+  R('vetHalberds', 'halberds', 'Halberd Veterans', 6, 1.70,
+    '+6% attack and defence for halberds. Sunder is a share, not a stat.'),
+  R('vetSappers', 'sappers', 'Sapper Veterans', 6, 1.70,
+    '+6% attack and defence for sappers. Their repair is untouched.'),
+  R('vetRams', 'rams', 'Ram Crews', 6, 1.70,
+    '+6% attack and defence for rams. Siege damage rides Siegeworks, not this.'),
 ]);
 
 /**
@@ -213,13 +278,24 @@ export const UPGRADE_BY_ID = Object.freeze(
  * Booster inventory shop. `unlockedBy: null` means available from the start —
  * Forced March and Emergency Fortify are the two every player has, so a new
  * player still has a survive verb and an accelerate verb.
+ *
+ * CHARGES ARE PRICED IN RELICS, and that is what turned boosters back into
+ * decisions. At 25-60 CROWNS a charge they were free by region six and stayed
+ * free forever, because crowns tick: an idle economy earning hundreds a second
+ * cannot make anything scarce, it can only make you wait a moment longer. A
+ * booster that costs nothing is a button you press because it is lit.
+ *
+ * So they cost the currency that does not tick, and they hit harder to match —
+ * see content/balance.js `BOOSTERS` for what each one does now. The trade is
+ * deliberate and it is the whole feature: you fire fewer of them, and each one
+ * is worth walking across the map for.
  */
 export const BOOSTER_SHOP = Object.freeze({
-  rally:   { unlockedBy: 'boosterRally',   chargeCost: 40, maxStock: 9 },
-  march:   { unlockedBy: null,             chargeCost: 25, maxStock: 9 },
-  bombard: { unlockedBy: 'boosterBombard', chargeCost: 60, maxStock: 9 },
-  fortify: { unlockedBy: null,             chargeCost: 35, maxStock: 9 },
-  tithe:   { unlockedBy: 'boosterTithe',   chargeCost: 45, maxStock: 9 },
+  rally:   { unlockedBy: 'boosterRally',   chargeCost: 2, maxStock: 9, currency: 'relics' },
+  march:   { unlockedBy: null,             chargeCost: 1, maxStock: 9, currency: 'relics' },
+  bombard: { unlockedBy: 'boosterBombard', chargeCost: 3, maxStock: 9, currency: 'relics' },
+  fortify: { unlockedBy: null,             chargeCost: 2, maxStock: 9, currency: 'relics' },
+  tithe:   { unlockedBy: 'boosterTithe',   chargeCost: 2, maxStock: 9, currency: 'relics' },
 });
 
 /** Units owned before any purchase. */

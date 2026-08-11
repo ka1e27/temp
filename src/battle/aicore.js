@@ -73,12 +73,15 @@ export function defenceOf(state, site, attComp) {
     defending: true,
     onOwnSite: true,
     siteDefMult: siteDefMultOf(state, site),
-    statMult: state.mods[site.owner]?.unitDefMult ?? 1, ground: groundOf(state, site),
+    statMult: state.mods[site.owner]?.unitDefMult ?? 1,
+    unitMult: state.mods[site.owner]?.unitMult, ground: groundOf(state, site),
   });
 }
 
 export const attackPower = (state, comp, foe, ground = null) =>
-  power(comp, foe, { statMult: state.mods[ME]?.unitAtkMult ?? 1, ground });
+  power(comp, foe, {
+    statMult: state.mods[ME]?.unitAtkMult ?? 1, unitMult: state.mods[ME]?.unitMult, ground,
+  });
 
 /** What a site can spare: capped by the tier's commit ratio and the floor. */
 export function sourceFrom(state, site, cap) {

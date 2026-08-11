@@ -55,7 +55,7 @@ export function fallbackMapGen({ grid, siteCounts, seed }) {
     id: `n${i}`, kind: 'farm', owner: 'neutral', hex: offsetToAxial(s.col, s.row),
   }));
 
-  return { blocked: pickBlocked(rng, cols, rows, sites), sites, adjacency: nearestGraph(sites) };
+  return { blocked: pickBlocked(rng, cols, rows, sites), sites, adjacency: [] };
 }
 
 const hexDist = (a, b) =>
@@ -83,40 +83,6 @@ function pickBlocked(rng, cols, rows, sites) {
   return [...taken].map((i) => open[i]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 }
 
-/** Nearest-N graph, then a union-find pass that stitches any stranded component
- *  to its closest neighbour. Sends go to adjacent sites only, so a disconnected
- *  site graph is an unwinnable battle: this makes that impossible. */
-function nearestGraph(sites) {
-  const edges = new Set();
-  const parent = new Map(sites.map((s) => [s.id, s.id]));
-  const find = (x) => { while (parent.get(x) !== x) x = parent.get(x); return x; };
-  const link = (a, b) => {
-    edges.add(a < b ? `${a} ${b}` : `${b} ${a}`);
-    const ra = find(a); const rb = find(b);
-    if (ra !== rb) parent.set(ra, rb);
-  };
-  for (const a of sites) {
-    sites.filter((b) => b.id !== a.id)
-      .sort((x, y) => hexDist(a.hex, x.hex) - hexDist(a.hex, y.hex) || (x.id < y.id ? -1 : 1))
-      .slice(0, FALLBACK_MAP.degree)
-      .forEach((b) => link(a.id, b.id));
-  }
-  for (let guard = 0; guard < sites.length; guard++) {
-    if (new Set(sites.map((s) => find(s.id))).size <= 1) break;
-    let best = null;
-    for (const a of sites) {
-      for (const b of sites) {
-        if (find(a.id) === find(b.id)) continue;
-        const d = hexDist(a.hex, b.hex);
-        const tie = best && d === best.d && `${a.id}${b.id}` < `${best.a}${best.b}`;
-        if (!best || d < best.d || tie) best = { d, a: a.id, b: b.id };
-      }
-    }
-    if (!best) break;
-    link(best.a, best.b);
-  }
-  return [...edges].sort().map((e) => e.split(' '));
-}
 
 /** Fill in every field the contract requires, whoever generated the layout.
  *  An injected mapGen may set hp/garrison itself; anything it omits lands here. */

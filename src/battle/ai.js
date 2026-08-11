@@ -67,7 +67,8 @@ function defend(state, knobs, out, busy, guarded) {
     if (guarded && site.kind === 'castle') continue;
     const threat = threatOn(state, site);
     if (total(threat) === 0) continue;
-    const need = power(threat, site.garrison, { statMult: state.mods[FOE]?.unitAtkMult ?? 1 })
+    const need = power(threat, site.garrison,
+      { statMult: state.mods[FOE]?.unitAtkMult ?? 1, unitMult: state.mods[FOE]?.unitMult })
       * AI.defendMargin;
     if (defenceOf(state, site, threat) >= need) continue;
 
@@ -210,7 +211,8 @@ function retreat(state, knobs, out, rng, busy) {
     const threat = threatOn(state, site);
     if (total(threat) === 0) continue;
     const atk = state.mods[FOE]?.unitAtkMult ?? 1;
-    const tp = power(threat, site.garrison, { statMult: atk, ground: groundOf(state, site) });
+    const tp = power(threat, site.garrison,
+      { statMult: atk, unitMult: state.mods[FOE]?.unitMult, ground: groundOf(state, site) });
     if (tp > defenceOf(state, site, threat) * 2 && disciplined()) {
       out.push({ t: 'RETREAT', by: ME, site: site.id });
     }

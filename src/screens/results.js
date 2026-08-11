@@ -74,6 +74,9 @@ export function statRows(outcome, applied, before, after) {
   }
   if (outcome.result === 'win') {
     if (applied?.crowns) rows.push(['Crowns', `+${compact(applied.crowns)}`]);
+    // Only ever on a first conquest or a cleared rung, so its presence is
+    // itself the news: a raid on ground you already hold never shows this row.
+    if (applied?.relics) rows.push([UI.relics, `+${applied.relics}`]);
     if (after > before) rows.push([UI.income, `${rate(before)} → ${rate(after)}`]);
   }
   if (applied?.incursion) rows.push(['Depth', `${applied.incursion.depth}`]);

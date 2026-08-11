@@ -9,7 +9,27 @@
 /** Squad travel. secondsPerHex = hexSecondsPerSpeed / slowestUnitSpeed, so a
  *  militia (55) crosses a hex in ~1.1s and a ram (30) in 2.0s — one ram really
  *  does halve a stack's march, which is what telegraphs a siege push. */
-export const MOVEMENT = { hexSecondsPerSpeed: 38, minTicks: 1 };
+/**
+ * `reachHexes` is what `site.adj` MEANS now — how far away a site still counts
+ * as your business. It is not a movement limit: an army marches anywhere it can
+ * find a path to. It bounds the candidate set the AI and the harness bot scan,
+ * which the authored adjacency graph used to do as a side effect of existing.
+ *
+ * Sized against what it replaces, and MEASURED rather than guessed. The old
+ * graph ran `targetAvgDegree` 2.8 on sites at least 3 hexes apart. Average
+ * degree at each candidate radius, on real generated maps:
+ *
+ *     radius        3      4      5      6
+ *     riverfen    3.3    4.7    7.1    8.5
+ *     thanescar   5.0    8.3   11.2   14.9
+ *     widowsgate  5.4    8.8   12.9   17.3
+ *
+ * 4 is a real widening — roughly triple the old degree, so the AI can finally
+ * reach past the site immediately in front of it — while 5 and 6 make nearly
+ * every site every other site's neighbour on the late maps, which turns the
+ * per-site scan into an O(n^2) sweep whose answer is always "the castle".
+ */
+export const MOVEMENT = { hexSecondsPerSpeed: 38, minTicks: 1, reachHexes: 4 };
 
 /** Territory flood. Strength falls off linearly with distance from the site;
  *  two factions within `contestRatio` of each other paint a hatched band. */

@@ -23,6 +23,7 @@ import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { emptyComp } from '../src/battle/combat.js';
 import { goldOf } from '../src/battle/economy.js';
 import { UNIT_SLOTS, UNITS, RECRUIT, CENTIGOLD } from '../src/content/balance.js';
+import { TICK_HZ } from '../src/core/loop.js';
 import { recruitOffer } from '../src/screens/battle-actions.js';
 
 const world = (conquered = [], upgrades = {}) => {
@@ -174,6 +175,60 @@ test('marshal: only units with a per-site cap can be commissioned', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The cooldown
+// ---------------------------------------------------------------------------
+
+test('marshal: the cooldown is FACTION-WIDE, not per site', () => {
+  // The negative control is the shape of the test itself: two DIFFERENT sites,
+  // so `already-commissioned` cannot be what refuses the second one. Without a
+  // faction-wide cooldown this passes trivially, which is the point.
+  const s = battle({ gold: 100000 });
+  order(s, 'hold');
+  assert.deepEqual(rejections(s), []);
+
+  s.events = [];
+  order(s, 'camp');
+  assert.deepEqual(rejections(s), ['recruit-cooling']);
+  assert.equal(at(s, 'camp').garrison.marshal ?? 0, 0, 'and nothing was delivered');
+});
+
+test('marshal: the cooldown is paid in gold ONCE — a refusal charges nothing', () => {
+  const s = battle({ gold: 100000 });
+  order(s, 'hold');
+  const after = goldOf(s.factions.player);
+  order(s, 'camp');
+  assert.equal(goldOf(s.factions.player), after, 'a refused order is free');
+});
+
+test('marshal: it comes back when the cooldown runs out', () => {
+  const s = battle({ gold: 100000 });
+  order(s, 'hold');
+  const readyAt = s.factions.player.recruitReadyTick.marshal;
+  assert.equal(readyAt, Math.round(RECRUIT.marshal.cooldownSec * TICK_HZ),
+    'stamped in SIM state, so it survives a resume and replays from a command log');
+
+  s.tick = readyAt - 1;
+  s.events = [];
+  order(s, 'camp');
+  assert.deepEqual(rejections(s), ['recruit-cooling'], 'one tick short is still short');
+
+  s.tick = readyAt;
+  s.events = [];
+  order(s, 'camp');
+  assert.deepEqual(rejections(s), []);
+  assert.equal(at(s, 'camp').garrison.marshal, 1);
+});
+
+test('marshal: the cooldown does not follow him from one battle to the next', () => {
+  // Every faction starts a fight able to commission. A cooldown that leaked
+  // across battles would be a meta resource wearing sim state's clothes.
+  const s = battle({ gold: 100000 });
+  order(s, 'hold');
+  assert.ok(s.factions.player.recruitReadyTick.marshal > 0);
+  assert.deepEqual(battle().factions.player.recruitReadyTick, {});
+});
+
+// ---------------------------------------------------------------------------
 // The button that fires it
 // ---------------------------------------------------------------------------
 
@@ -198,4 +253,25 @@ test('marshal: the button explains itself rather than just going dead', () => {
   const s = battle();
   order(s, 'hold');
   assert.match(recruitOffer(s, at(s, 'hold')).why, /already/i);
+});
+
+test('marshal: the button counts the cooldown down instead of just going dead', () => {
+  const s = battle({ gold: 100000 });
+  order(s, 'hold');
+
+  // At a site that could otherwise take one — so this is the cooldown talking,
+  // not the per-site cap.
+  const cooling = recruitOffer(s, at(s, 'camp'));
+  assert.equal(cooling.shown, true);
+  assert.equal(cooling.can, false);
+  assert.equal(cooling.label, `Marshal · ${RECRUIT.marshal.cooldownSec}s`);
+
+  s.tick = s.factions.player.recruitReadyTick.marshal - TICK_HZ * 4;
+  assert.equal(recruitOffer(s, at(s, 'camp')).label, 'Marshal · 4s');
+
+  s.tick = s.factions.player.recruitReadyTick.marshal;
+  const ready = recruitOffer(s, at(s, 'camp'));
+  assert.equal(ready.can, true);
+  assert.match(ready.label, new RegExp(`${RECRUIT.marshal.gold}g`),
+    'and goes back to showing the price');
 });

@@ -26,6 +26,40 @@ import { META_EVENTS, emit } from './events.js';
 export const firstClearBonus = (region) => region.rewardPerSec * FIRST_CLEAR_BONUS_SECONDS;
 
 /**
+ * RELICS, the currency that is not paid for time.
+ *
+ * Two sources and no third, and the omission is the design: a RAID pays none.
+ * `raidLump` exists because re-clearing ground you already hold has to be worth
+ * something and must not be worth farming; a relic is the thing that must not be
+ * farmable at all, so re-clearing pays it zero rather than a little. The whole
+ * argument for `raidLump` not granting permanent income applies here with no
+ * softening.
+ *
+ * A region's first fall pays its TIER, so the campaign yields 78 across all
+ * twenty-four and is front-loaded with almost nothing — the early rows pay one
+ * each, which is what keeps a first-run player from levelling a troop line
+ * before the balance table has met them. The ladder pays with depth and has no
+ * end, which is what makes relics a real economy afterwards rather than a
+ * seventy-eight-item allowance.
+ */
+export const conquestRelics = (region) => Math.max(1, Math.floor(region?.tier ?? 1));
+/** A rung pays 1, and one more for every five rungs deep. */
+export const incursionRelics = (depth) => 1 + Math.floor(Math.max(1, depth) / 5);
+
+/** Pay relics and account for them. The ONLY writer, so "relics never tick" is
+ *  a property of this file rather than a convention. */
+function grantRelics(meta, amount, reason, bus) {
+  const n = Math.max(0, Math.floor(amount));
+  if (!n) return 0;
+  meta.relics = Math.max(0, Math.floor(meta.relics ?? 0)) + n;
+  meta.stats.relicsEarned = (meta.stats.relicsEarned ?? 0) + n;
+  emit(bus, META_EVENTS.RELICS_CHANGED, {
+    crowns: meta.crowns, relics: meta.relics, delta: n, reason,
+  });
+  return n;
+}
+
+/**
  * What a raid on `regionId` pays right now, in crowns. The relationship it
  * implements — and the two faults it replaces — are stated in full on the RAID
  * block in content/regions.data.js:
@@ -126,6 +160,9 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
     conquered: false,
     raided: false,
     crowns: 0,
+    /** Relics paid. Nonzero only on a first conquest or a cleared rung — a raid
+     *  pays none, deliberately (see `conquestRelics`). */
+    relics: 0,
     incomeAdded: 0,
     incomePerSec: meta.incomePerSec,
     opened: [],
@@ -162,6 +199,7 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
   if (depth) {
     summary.incursion = { depth, cleared: depth, mutators: [...(inc.mutators ?? [])] };
     summary.crowns = incursionLump(meta, depth);
+    summary.relics = grantRelics(meta, incursionRelics(depth), 'incursion', bus);
     completeIncursion(meta, depth, { won: true });
     stats.incursions = (stats.incursions ?? 0) + 1;
     meta.crowns += summary.crowns;
@@ -185,6 +223,7 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
     summary.newBest = true;
     summary.firstConquest = regionsConquered(meta) === 1;
     summary.crowns = firstClearBonus(region);
+    summary.relics = grantRelics(meta, conquestRelics(region), 'conquest', bus);
     summary.incomeAdded = region.rewardPerSec;
     summary.opened = refreshUnlocks(meta, bus);
   } else {

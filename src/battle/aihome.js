@@ -12,11 +12,13 @@
 //    horizon. That is far too late for the castle, which is the whole win
 //    condition: a player could mass on the doorstep unopposed and the AI would
 //    spend the build-up grabbing another farm. `homeGuard()` reads the army
-//    STANDING within a couple of hops, pulls reinforcement down chained sends
-//    from anywhere in its territory (not just next door), and abandons a siege
-//    of its own when nothing closer can arrive in time.
+//    STANDING within a couple of hexes, pulls reinforcement in from anywhere in
+//    its territory (not just next door), and abandons a siege of its own when
+//    nothing closer can arrive in time.
 // PURE.
 import { AI } from '../content/balance.js';
+import { distance } from '../core/hex.js';
+import { asHex } from './influence.js';
 import { power, total, addComp, emptyComp } from './combat.js';
 import { siteById } from './state.js';
 import {
@@ -72,40 +74,35 @@ export const concurrentFor = (knobs, p) =>
 // --- home defence ----------------------------------------------------------
 
 /**
- * BFS out from `site` over the site graph, recording hops and the step back
- * toward it. `ownedOnly` restricts the walk to ground the AI holds, which is
- * what makes the returned route legal for a chained SEND.
+ * Hex distance from `site` to every other, capped at `maxHexes`.
+ *
+ * This used to be a BFS over the site graph that also returned PARENT POINTERS,
+ * so a reliever could be handed the chain of owned sites it had to hop along —
+ * the only genuinely graph-shaped thing the AI ever did. Free movement retired
+ * both halves at once: there is no graph to walk, and a relief force marches
+ * straight home because nothing stops it but a base in the way, which the
+ * pathfinder already routes around.
  */
-function reach(state, site, maxHops, ownedOnly) {
-  const hop = { [site.id]: 0 };
-  const back = {};
-  const queue = [site];
-  for (let i = 0; i < queue.length; i++) {
-    const cur = queue[i];
-    if (hop[cur.id] >= maxHops) continue;
-    for (const id of [...cur.adj].sort()) {
-      if (hop[id] !== undefined) continue;
-      const next = siteById(state, id);
-      if (!next) continue;
-      if (ownedOnly && next.owner !== ME) continue;
-      hop[id] = hop[cur.id] + 1;
-      back[id] = cur.id;
-      queue.push(next);
-    }
+function reach(state, site, maxHexes) {
+  const out = {};
+  const from = asHex(site.hex);
+  for (const s of state.sites) {
+    const d = distance(from, asHex(s.hex));
+    if (d <= maxHexes) out[s.id] = d;
   }
-  return { hop, back };
+  return out;
 }
 
 /**
  * Everything the player has aimed at this site: what is already committed
  * (siege + inbound squads) plus what is merely STANDING within
- * `AI.homeRadius` hops of it. The second half is the whole point — a stack
+ * `AI.homeRadiusHexes` of it. The second half is the whole point — a stack
  * parked next door has not "threatened" anything yet, and waiting for it to
  * move is waiting until it is too late.
  */
 export function encroachment(state, site) {
   let comp = threatOn(state, site);
-  const { hop } = reach(state, site, AI.homeRadius, false);
+  const hop = reach(state, site, AI.homeRadiusHexes);
   for (const s of state.sites) {
     if (s.owner !== FOE || s.id === site.id) continue;
     if (hop[s.id] === undefined) continue;
@@ -116,7 +113,7 @@ export function encroachment(state, site) {
 
 /** Sites that can spare troops for home, nearest first, over owned ground. */
 function relievers(state, home, busy) {
-  const { hop, back } = reach(state, home, state.sites.length, true);
+  const hop = reach(state, home, Infinity);
   const out = [];
   for (const s of state.sites) {
     if (s.owner !== ME || s.id === home.id || busy.has(s.id)) continue;
@@ -126,9 +123,7 @@ function relievers(state, home, busy) {
     if (total(threatOn(state, s)) > 0) continue;
     const src = sourceFrom(state, s, 1);
     if (!src) continue;
-    const via = [];
-    for (let id = back[s.id]; id && id !== home.id; id = back[id]) via.push(id);
-    out.push({ ...src, hops: hop[s.id], via });
+    out.push({ ...src, hops: hop[s.id] });
   }
   return out.sort((a, b) => a.hops - b.hops || byId(a.site, b.site));
 }
@@ -158,7 +153,8 @@ export function homeGuard(state, out, busy) {
   const threat = encroachment(state, home);
   if (total(threat) === 0) return false;
 
-  const need = power(threat, home.garrison, { statMult: state.mods[FOE]?.unitAtkMult ?? 1 })
+  const need = power(threat, home.garrison,
+    { statMult: state.mods[FOE]?.unitAtkMult ?? 1, unitMult: state.mods[FOE]?.unitMult })
     * AI.homeGuardMargin;
   if (defenceOf(state, home, threat) >= need) return true;
 
@@ -171,7 +167,6 @@ export function homeGuard(state, out, busy) {
     const cmd = {
       t: 'SEND', by: ME, from: src.site.id, to: home.id, fraction: src.availFrac,
     };
-    if (src.via.length) cmd.via = src.via.reverse();
     out.push(cmd);
     busy.add(src.site.id);
     if (defenceOf(state, { ...home, garrison: addComp(home.garrison, held) }, threat) >= need) break;

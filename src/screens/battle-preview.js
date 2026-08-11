@@ -97,6 +97,10 @@ export function computePreview(state, fromId, toId, o = {}) {
     defenderOwnsSite: !relieving,
     attMult: mods.player?.unitAtkMult ?? 1,
     defMult: mods[relieving ? to.siege.owner : to.owner]?.unitDefMult ?? 1,
+    // Per-troop levels, on BOTH sides — the preview is a guarantee, not an
+    // estimate, and it only stays one if every term the sim reads reaches here.
+    attUnitMult: mods.player?.unitMult,
+    defUnitMult: mods[relieving ? to.siege.owner : to.owner]?.unitMult,
     shielded: !relieving && (to.shieldTicks || 0) > 0,
     ground,
   });

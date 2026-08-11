@@ -28,12 +28,25 @@ export function garrisonCap(state, site) {
     + (mods?.garrisonCapBonus ?? 0);
 }
 
-/** The site's chosen unit, falling back to the faction's first unlock if the
- *  pick is no longer legal (a captured site can inherit an alien trainType). */
+/**
+ * The site's chosen unit, falling back to the faction's first BUILDABLE unit
+ * when the pick is not legal for it.
+ *
+ * The fallback is what makes a captured yard safe — mapgen hands every site a
+ * `trainType` and the enemy's is routinely a type the taker did not bring,
+ * which is now the common case rather than the rare one: `unlockedUnits` is the
+ * player's LOADOUT (meta/composition.js `battleRoster`), so capturing a
+ * spearmen yard with a militia army is an ordinary Tuesday.
+ *
+ * It filters on `isTrainable` rather than taking `unlocked[0]` on trust,
+ * because the roster can contain the marshal — he rides free with every
+ * landing — and a site parked on a unit it may only ever hold one of would sit
+ * there producing nothing at all.
+ */
 export function trainableUnit(site, mods) {
   const unlocked = mods?.unlockedUnits ?? [];
-  if (!unlocked.length) return null;
-  return unlocked.includes(site.trainType) ? site.trainType : unlocked[0];
+  if (unlocked.includes(site.trainType) && isTrainable(site.trainType)) return site.trainType;
+  return unlocked.find(isTrainable) ?? null;
 }
 
 /** Cycles-per-second multiplier: site kind x level x upgrades x marshal x

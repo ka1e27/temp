@@ -5,7 +5,10 @@
 // which is what gives us instant retry, mid-battle resume, and byte-comparable
 // determinism tests.
 // PURE.
-import { SITES, SITE_LEVELS, BOOSTERS, UNIT_IDS, RALLY_KEEP } from '../content/balance.js';
+import {
+  SITES, SITE_LEVELS, SITE_UPGRADE, BOOSTERS, UNIT_IDS, RALLY_KEEP, MOVEMENT,
+} from '../content/balance.js';
+import { distance } from '../core/hex.js';
 import { emptyComp, addComp } from './combat.js';
 import { TICK_HZ } from '../core/loop.js';
 
@@ -27,7 +30,7 @@ import { TICK_HZ } from '../core/loop.js';
  * @property {string[]} rallyTargets       auto-send destinations, fed in turn
  * @property {number} rallyCursor          which of them is next; sim-owned
  * @property {number} rallyKeep            troops the rally leaves at home
- * @property {string[]} adj                adjacent site ids
+ * @property {string[]} adj                sites within MOVEMENT.reachHexes — see recomputeReach
  */
 
 /**
@@ -43,6 +46,8 @@ import { TICK_HZ } from '../core/loop.js';
  */
 
 const sec = (s) => Math.round(s * TICK_HZ);
+/** `[q,r]` -> `{q,r}`. Local so ./influence.js need not be imported here. */
+const asHexT = (h) => ({ q: h[0], r: h[1] });
 
 function makeFaction() {
   return {
@@ -52,6 +57,10 @@ function makeFaction() {
     unitsKilled: 0,
     peakArmy: 0,
     goldEarnedCg: 0,
+    // unit id -> the tick a commission of it is allowed again. Faction-wide and
+    // sim-owned, so it survives a resume and replays from a command log; a
+    // cooldown parked in the HUD would do neither.
+    recruitReadyTick: {},
   };
 }
 
@@ -84,6 +93,38 @@ function makeBoosters(available) {
     out[id] = { charges: n, max: n, used: 0, cdTicks: 0, cdMax: sec(spec.cooldownSec) };
   }
   return out;
+}
+
+/**
+ * REACH: which sites are near enough to be each other's business.
+ *
+ * `adj` was an authored graph and a send was legal only along an edge of it.
+ * Armies march freely now, so a fixed graph would be a fiction — but DELETING
+ * the field would be worse than a fiction, because ~30 consumers read it and
+ * every one fails SILENTLY on an empty array: an AI with no neighbours emits no
+ * orders, a bot with no neighbours never attacks, and every test still passes.
+ *
+ * So the field survives and its meaning changes: every site within
+ * `MOVEMENT.reachHexes`, straight-line. That is what the AI and the bot always
+ * wanted — "what is near me" — and it needs no pathfinding, so it is cheap to
+ * recompute whenever the site list changes. Legality moved to where free
+ * movement makes it interesting: `cmdSend` asks whether a PATH exists.
+ *
+ * Sorted, because AI iteration must not depend on placement order.
+ */
+export function recomputeReach(sites) {
+  for (const s of sites) s.adj = [];
+  for (let i = 0; i < sites.length; i++) {
+    for (let j = i + 1; j < sites.length; j++) {
+      const a = sites[i];
+      const b = sites[j];
+      if (distance(asHexT(a.hex), asHexT(b.hex)) > MOVEMENT.reachHexes) continue;
+      a.adj.push(b.id);
+      b.adj.push(a.id);
+    }
+  }
+  for (const s of sites) s.adj.sort();
+  return sites;
 }
 
 /**
@@ -122,13 +163,7 @@ export function createBattleState(config) {
     };
   });
 
-  const byId = Object.fromEntries(sites.map((s) => [s.id, s]));
-  for (const [a, b] of config.adjacency) {
-    if (!byId[a].adj.includes(b)) byId[a].adj.push(b);
-    if (!byId[b].adj.includes(a)) byId[b].adj.push(a);
-  }
-  // Deterministic ordering: AI iteration must not depend on adjacency input order.
-  for (const s of sites) s.adj.sort();
+  recomputeReach(sites);
 
   const factions = { player: makeFaction(), enemy: makeFaction() };
   factions.player.goldCg = Math.round(config.player.startGold * 100);
@@ -170,6 +205,14 @@ export function createBattleState(config) {
     /** hexKey -> 'player' | 'enemy' | 'neutral' | 'contested'. Recomputed only
      *  on ownership change, never per frame. */
     influence: {},
+    /** hexKey -> owner faction of the site standing there (./occupancy.js).
+     *  What makes "you cannot march through a base" a rule the pathfinder can
+     *  answer in O(1) instead of a scan of every site per hex per expansion. */
+    occupancy: {},
+    /** Bumped whenever a per-hex map is rebuilt. Read by the path cache and by
+     *  the renderer's `signature()` — which declared it long before anything
+     *  wrote it. */
+    influenceVersion: 0,
 
     /** UI writes intents here; the sim drains them at the top of each tick.
      *  Presentation can therefore never corrupt the simulation. */
@@ -232,7 +275,28 @@ export const siteById = (state, id) => state.sites.find((s) => s.id === id);
 
 export const hexKey = (hex) => `${hex[0]},${hex[1]}`;
 
-export const isBlocked = (state, q, r) => state.grid.blocked.includes(`${q},${r}`);
+/**
+ * Impassable terrain — mountains and the region's shape mask.
+ *
+ * Backed by a Set rather than the array's own `includes`, and the reason is A*:
+ * `findPath` asks this once per NEIGHBOUR per expansion, so a linear scan over a
+ * few hundred strings was the inner loop of every path in the game. The cache is
+ * keyed on the `blocked` ARRAY's identity, which is exactly right — mapgen
+ * assigns it once and nothing mutates it in place, so a new array (a resumed
+ * battle, a second battle in one process) misses and rebuilds.
+ *
+ * WeakMap'd rather than stored on state, because state is pure JSON: a Set on it
+ * would not survive `JSON.stringify`, which is the whole save format.
+ */
+const blockedCache = new WeakMap();
+export function blockedSet(state) {
+  const list = state.grid.blocked;
+  let set = blockedCache.get(list);
+  if (!set) { set = new Set(list); blockedCache.set(list, set); }
+  return set;
+}
+
+export const isBlocked = (state, q, r) => blockedSet(state).has(`${q},${r}`);
 
 /** Total units a faction has anywhere: garrisons, sieges, and squads in flight. */
 export function armySize(state, faction) {
@@ -279,6 +343,26 @@ export function castleSealed(state, castle) {
  *  (which produces at the OLD level until it completes). */
 export function effectiveLevel(site) {
   return site.upgradeTicksLeft > 0 ? Math.max(1, site.level - 1) : site.level;
+}
+
+/**
+ * How far an in-progress site upgrade has got, 0..1 — and 0 when nothing is
+ * building.
+ *
+ * The DENOMINATOR is the interesting part and it is why this is a function
+ * rather than a division at each call site: the site only stores ticks
+ * REMAINING, and `cmdUpgrade` raises `site.level` at the moment it starts the
+ * build, so the step being paid for is always `SITE_UPGRADE[level - 2]`. Two
+ * surfaces draw this (the panel bar and the board's build ring) and a second
+ * copy of that off-by-two is exactly the kind of thing that goes wrong once the
+ * ladder is extended — which it already has been.
+ */
+export function upgradeProgress(site) {
+  const left = site?.upgradeTicksLeft ?? 0;
+  if (left <= 0) return 0;
+  const spec = SITE_UPGRADE[site.level - 2];
+  const total = spec ? sec(spec.sec) : 0;
+  return total > 0 ? Math.max(0, Math.min(1, 1 - left / total)) : 0;
 }
 
 /**

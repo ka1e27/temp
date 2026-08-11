@@ -100,22 +100,23 @@
 // +0.50, so anything past tier 2 must be moved in steps of 0.05 and re-measured,
 // never extrapolated.
 //
-// THE CURRENT MEASURED CURVE, in campaign order, at n=64 with the band edges
-// confirmed at n=240:
+// THE CURRENT MEASURED CURVE, at n=96, re-taken end to end for the SHAPE pass:
 //
-//     tier 1   89 84 84 84        tier 4   52 34 52 47
-//     tier 2   80 70 72 78 72     tier 5   22 23 36    (34 on nightharrow at n=240)
-//     tier 3   55 69 53 59 69     tier 6   36 27 19    (21 25 21 at n=240)
+//     tier 1   88 85 86 83        tier 4   56 40 42 40
+//     tier 2   82 73 75 74 76     tier 5   24 23 30
+//     tier 3   67 53 54 66 53     tier 6   26 29 26
 //
-// TIERS 1-5 ARE BYTE-FOR-BYTE WHAT THEY WERE BEFORE TIER 6 SHIPPED, and that is
-// the property the fourth expedition segment exists to guarantee rather than a
-// happy result: `EXPEDITION.finalAfter` is 20, which is the conquest count region
-// 21 is attacked with, so nothing tier 6 was paid for can reach backwards. The
-// tier-6 rows were solved against that.
+// All twenty-four report `ok`, on win rate and on length. Highmarch was the last
+// holdout and a PRE-EXISTING one: 65% against a 66% floor on the unshaped
+// baseline too, and stable at n=240, so not noise. `enemyMult` cannot answer it
+// (kaldan 2.75, highmarch 2.76 — 0.01 of room), so the fix is `develop` 1.35 ->
+// 1.25, the only column with headroom. 73% at n=96, 68% at n=240.
 //
-// Every one of the twenty-four reports `ok` against its tier's WIN_BAND and its
-// advertised length. Nothing is balance-frozen any more — the expedition re-base
-// changed regions 1-5 by construction, so they are solved with the rest.
+// TIER 6 IS BYTE-FOR-BYTE WHAT IT SHIPPED AS, twice over: `EXPEDITION.finalAfter`
+// is 20, the conquest count region 21 is attacked with, so nothing tier 6 was
+// paid for can reach backwards — and it is the one tier the shape pass left
+// unshaped, for want of dial headroom (see SHAPE_RULE). Nothing is
+// balance-frozen any more; every row above is solved with the rest.
 //
 // NOTE THE DIAL RAMP STEEPENED AT TIER 3 (+0.21 a region against tier 4's
 // +0.08), and that is the second load-bearing rule doing its job rather than an
@@ -342,22 +343,55 @@ export const DEVELOP_CLAMP = (n) => Math.max(1, Math.min(5, Number(n) || 1));
 export const GATE_CLAMP = (n) => Math.max(0, Math.min(0.85, Number(n) || 0));
 
 /**
+ * THE SHAPE COLUMN, and the rule it obeys.
+ *
+ * Every battle was once fought on the same silhouette — a full cols x rows
+ * rectangle — while this table's flavour claimed otherwise on nine rows:
+ * Ironwood's "single-file passes", Saltmere's "lagoon splits the field", the
+ * Sunder's "two bridges", Obsidian's "three fronts". Decoration over one
+ * rectangle, exactly as Ironcrown's Marshal was decoration over an empty throne.
+ *
+ * THE RULE: A SHAPE IS ASSIGNED TO SAY WHAT THE REGION ALREADY CLAIMED, NEVER
+ * TO TUNE IT. Each of the eighteen shaped rows was picked off its own flavour
+ * line; the six left `open` were left open because their flavour is the ABSENCE
+ * of one — Greywater is "the widest front line in the campaign", and a waist
+ * through that would be a new lie replacing the old.
+ *
+ * That is a design rule, not a balance claim, and the difference matters. A
+ * shape absolutely does move a win rate — it moves where sites can be placed,
+ * and so the whole adjacency graph — so the tune that FOLLOWS one is the dial's
+ * job, exactly as it is for a grid row. What the rule forbids is reaching for a
+ * shape because a region needs to be harder: that is how `siteCounts.player`
+ * crept to 48% of the board with every difficulty number passing.
+ *
+ * Shapes carve 7-27% of the rectangle and count INSIDE the existing rock budget
+ * rather than on top of it (mapgen.js seeds `blocked` with the mask), so a
+ * `narrow` valley spends all of it and a `split` rift spends a third, leaving
+ * the scatter to lay texture around the crossings.
+ */
+
+/**
  * THE ROW BUILDER. Lives here rather than in ./regions.data.js because every
  * line of it is a statement about EVERY region — the two clamps above, and the
  * hard cap being derived rather than authored — which is this file's job, and
  * because that file needs its budget for the table.
  *
  * id, name, tier, hex, adjacentTo, enemyMult, cols, rows, [enemy,neutral,player],
- * develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour
+ * develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour, shape
+ *
+ * `shape` is LAST and optional because it arrived last and because omitting it
+ * means `open` — the rectangle every one of these rows was measured on. See
+ * SHAPE_RULE below for what a shape is allowed to be and why the table only
+ * spends it where the flavour text already promised it.
  */
 export const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCounts,
-  develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour) => ({
+  develop, castleGateFrac, rewardPerSec, targetLengthMin, flavour, shape = 'open') => ({
   id, name, tier, hex, adjacentTo, enemyMult,
   grid: { cols, rows },
   siteCounts: { enemy: siteCounts[0], neutral: siteCounts[1], player: siteCounts[2] },
   develop: DEVELOP_CLAMP(develop),
   castleGateFrac: GATE_CLAMP(castleGateFrac),
-  rewardPerSec, targetLengthMin, flavour,
+  rewardPerSec, targetLengthMin, flavour, shape,
   hardCapMs: Math.round(
     Math.max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
   ),

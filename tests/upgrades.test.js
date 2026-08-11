@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createState } from '../src/core/store.js';
+import { UNIT_IDS } from '../src/content/balance.js';
 import {
   UPGRADES, UPGRADE_BY_ID, UPGRADE_GROUPS, BOOSTER_SHOP, RETIRED_UPGRADES,
   SAFE_MAX_LEVEL, upgradeCost,
@@ -15,9 +16,10 @@ import {
   isUnlocked, countOf, buyCharge, canBuyCharge, consume, toConfigBoosters, defaultSelection,
 } from '../src/meta/boosters.js';
 
-const meta = (crowns = 0, upgrades = {}) => {
+const meta = (crowns = 0, upgrades = {}, relics = 0) => {
   const s = createState({ seed: 1, now: 0 });
   s.meta.crowns = crowns;
+  s.meta.relics = relics;
   Object.assign(s.meta.upgrades, upgrades);
   return s.meta;
 };
@@ -38,24 +40,30 @@ test('every upgrade sits in a declared group and has a sane cost curve', () => {
   }
 });
 
-test('the endless lines are the six Empire ones plus the four gated Crown ones', () => {
+test('the endless lines are the Empire six, the Crown four and one per troop', () => {
   const endless = UPGRADES.filter(isEndless).map((u) => u.id).sort();
   assert.deepEqual(endless, [
     'arms', 'citadels', 'drill', 'exchequer', 'grandArmy', 'siegeworks',
-    'standingArmy', 'treasury', 'warChest', 'warCollege',
+    'standingArmy', 'treasury', 'vetHalberds', 'vetMilitia', 'vetOutriders',
+    'vetRaiders', 'vetRams', 'vetSappers', 'vetSpearmen', 'warChest', 'warCollege',
   ]);
   for (const id of endless) {
     const u = UPGRADE_BY_ID[id];
-    assert.ok(u.group === 'empire' || u.group === 'crown',
+    assert.ok(['empire', 'crown', 'troops'].includes(u.group),
       `${id} is endless but sits in the ${u.group} group`);
     assert.ok(u.cost.rate > 1,
       `${id} must actually get more expensive, or it is free money forever`);
-    // THE HALF THAT MATTERS: an endless line outside the Empire group must be
-    // GATED. An ungated one would be on sale during the campaign, and the harness
-    // buys cheapest-affordable-first — so it would re-tune all twenty-four
-    // measured regions the moment it shipped.
-    assert.equal(u.group === 'crown', u.requires === 'endgame',
-      `${id}: the Crown group and the endgame gate must be the same set`);
+    // THE HALF THAT MATTERS, and it is the reason an endless line can ship at
+    // all: one outside the Empire group must be UNBUYABLE BY THE HARNESS, or it
+    // re-tunes all twenty-four measured regions the moment it exists. There are
+    // exactly two ways to be that, and every endless line uses one of them —
+    // the Crown tier is gated shut for the whole campaign, and a troop line is
+    // priced in a currency tools/simplayer.js never earns.
+    if (u.group === 'crown') assert.equal(u.requires, 'endgame', `${id} must be gated`);
+    else if (u.group === 'troops') {
+      assert.equal(u.currency, 'relics', `${id} must be priced in relics`);
+      assert.match(u.requires, /^unit:/, `${id} must be gated on owning its troop`);
+    } else assert.equal(u.currency, 'crowns', `${id} is an Empire line and must cost crowns`);
   }
   // Everything else is bought exactly once.
   for (const u of UPGRADES) {
@@ -84,16 +92,24 @@ test('the shop is small enough to read at a glance', () => {
   // Gated lines are not on screen until the campaign is finished, so the list a
   // player scans mid-campaign is the ungated half — and that half is the number
   // the original complaint was about.
-  const onScreenNow = repeatable.filter((u) => !u.requires);
-  assert.ok(onScreenNow.length <= 8,
-    `${onScreenNow.length} permanent lines is too many to scan every visit`);
-  assert.ok(repeatable.length <= 12,
-    `${repeatable.length} permanent lines even at the endgame is too many`);
+  // The TROOPS group is counted apart, and that is a claim rather than an
+  // exemption. Those rows are one per troop, in roster order, in the roster's
+  // own colours, and each says the same sentence about a different unit — so a
+  // player looks their troop up rather than reading the list. They are also
+  // gated on owning the troop, so a new player sees two of them and not seven.
+  const heterogeneous = repeatable.filter((u) => !u.requires);
+  const perTroop = repeatable.filter((u) => u.requires?.startsWith('unit:'));
+  assert.ok(heterogeneous.length <= 8,
+    `${heterogeneous.length} permanent lines is too many to scan every visit`);
+  assert.ok(perTroop.length <= UNIT_IDS.length,
+    'the per-troop family must never be longer than the roster it mirrors');
+  assert.ok(repeatable.length - perTroop.length <= 12,
+    'permanent lines outside the per-troop family, even at the endgame, is too many');
   assert.ok(oneOff.length <= 12,
     `${oneOff.length} one-off unlocks is too long a shopping list to start with`);
   const openGroups = UPGRADE_GROUPS.filter((g) => !g.requires);
-  assert.ok(openGroups.length <= 3, 'three headings at most before the endgame');
-  assert.ok(UPGRADE_GROUPS.length <= 4, 'four headings at most, ever');
+  assert.ok(openGroups.length <= 4, 'four headings at most before the endgame');
+  assert.ok(UPGRADE_GROUPS.length <= 5, 'five headings at most, ever');
   for (const u of UPGRADES) {
     assert.ok(u.desc.length <= 100, `${u.id} description is ${u.desc.length} chars — too long`);
   }
@@ -310,19 +326,29 @@ test('booster unlock prices match the plan', () => {
   assert.equal(UPGRADE_BY_ID.boosterBombard.cost.base, 900);
 });
 
-test('charge purchase is atomic and respects max stock', () => {
-  const m = meta(1000, { boosterRally: 1 });
+test('charge purchase is atomic, billed to RELICS, and respects max stock', () => {
+  // The unlock is a crown line and the charges are a relic price, so a fixture
+  // with one purse full and the other empty is the interesting case — and it is
+  // the case a player is actually in for most of a campaign.
   const cost = BOOSTER_SHOP.rally.chargeCost;
+  const m = meta(1000, { boosterRally: 1 }, 50);
   assert.equal(buyCharge(m, 'rally', 3).ok, true);
   assert.equal(countOf(m, 'rally'), 3);
-  assert.equal(m.crowns, 1000 - cost * 3);
+  assert.equal(m.relics, 50 - cost * 3);
+  assert.equal(m.crowns, 1000, 'and the treasury was never touched');
 
-  const broke = meta(cost - 0.001, { boosterRally: 1 });
+  // A treasury full of crowns buys NOTHING here. Without this the currency
+  // would be decoration: the whole point is that waiting cannot pay for these.
+  const rich = meta(1e9, { boosterRally: 1 }, 0);
+  assert.equal(buyCharge(rich, 'rally').ok, false);
+  assert.equal(buyCharge(rich, 'rally').reason, 'insufficient');
+  assert.equal(countOf(rich, 'rally'), 0);
+
+  const broke = meta(0, { boosterRally: 1 }, cost - 1);
   assert.equal(buyCharge(broke, 'rally').ok, false);
-  assert.equal(countOf(broke, 'rally'), 0);
-  assert.equal(broke.crowns, cost - 0.001);
+  assert.equal(broke.relics, cost - 1, 'and nothing was deducted');
 
-  const full = meta(1e6, { boosterRally: 1 });
+  const full = meta(0, { boosterRally: 1 }, 1e6);
   buyCharge(full, 'rally', BOOSTER_SHOP.rally.maxStock);
   assert.equal(buyCharge(full, 'rally').reason, 'full');
 });
@@ -336,7 +362,7 @@ test('consuming clamps at zero and ignores unknown ids', () => {
 });
 
 test('toConfigBoosters clamps to inventory and sorts for a stable hash', () => {
-  const m = meta(1e6, { boosterRally: 1, boosterTithe: 1 });
+  const m = meta(1e6, { boosterRally: 1, boosterTithe: 1 }, 1e6);
   buyCharge(m, 'rally', 2);
   buyCharge(m, 'tithe', 1);
   buyCharge(m, 'march', 4);

@@ -43,6 +43,21 @@
 .bar-train { height: 8px; margin-top: var(--s-1); }
 .bar-train .bar-fill { background: var(--c-accent); }
 
+/* The build bar DOES carry its number, because unlike training there is no
+   line above it saying what is being raised or how long it takes — it replaced
+   that line. Gold rather than the training blue: the two can run on the same
+   site at the same time, and two bars in one hue would read as one thing
+   stuttering. */
+   The label rides its own dark badge for the same reason the composition
+   bar's does: it sits over BOTH the gold fill and the dark track, and no
+   single text colour is readable on both. */
+.bar-build { height: 12px; }
+.bar-build .bar-fill { background: var(--c-gold); }
+.bar-build .bar-label {
+  background: rgba(10, 12, 16, 0.72); padding: 0 5px; border-radius: var(--r-1);
+  text-shadow: none;
+}
+
 /* --- Troop composition: a STACKED bar, one segment per unit present ---- */
 
 .bar-comp-track { position: absolute; inset: 0; display: flex; }

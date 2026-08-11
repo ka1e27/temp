@@ -19,17 +19,20 @@
   gap: var(--s-5); margin: var(--s-4) var(--s-4) 0; padding: var(--s-3) var(--s-5);
 }
 
-/* Treasury and income are glanced at constantly, so they lead — label above
-   value, the crown count at display size. Placement is explicit because the
-   scene emits label/value/label/value as one flat row of four. */
+/* Treasury, relics and income are glanced at constantly, so they lead — label
+   above value, the crown count at display size. Placement is explicit because
+   the scene emits label/value three times as one flat row of six, and the pairs
+   have to stack rather than run along. */
 .wm-treasury {
-  display: grid; grid-template-columns: max-content max-content;
-  column-gap: var(--s-7); row-gap: var(--s-1); align-items: baseline;
+  display: grid; grid-template-columns: repeat(3, max-content);
+  column-gap: var(--s-6); row-gap: var(--s-1); align-items: baseline;
 }
 .wm-treasury > :nth-child(1) { grid-area: 1 / 1; }
 .wm-treasury > :nth-child(2) { grid-area: 2 / 1; }
 .wm-treasury > :nth-child(3) { grid-area: 1 / 2; }
 .wm-treasury > :nth-child(4) { grid-area: 2 / 2; }
+.wm-treasury > :nth-child(5) { grid-area: 1 / 3; }
+.wm-treasury > :nth-child(6) { grid-area: 2 / 3; }
 .wm-treasury .label {
   font-size: var(--t-xs); letter-spacing: var(--track-label);
   text-transform: uppercase; color: var(--c-text-dim);
@@ -39,6 +42,12 @@
   letter-spacing: -0.02em; color: var(--c-gold);
 }
 .wm-treasury .income { font: var(--w-bold) var(--t-lg) / 1 var(--font-num); color: var(--c-player); }
+/* Smaller than the crown count and in the rank hue, because the two are read
+   for different reasons: crowns are a rate you watch climb, relics are a
+   holding you check before you go shopping. */
+.wm-treasury .relics {
+  font: var(--w-bold) var(--t-lg) / 1 var(--font-num); color: var(--c-rank);
+}
 
 .wm-body {
   flex: 1; display: grid; min-height: 0;

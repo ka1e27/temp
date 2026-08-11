@@ -11,6 +11,7 @@
 // caller's job (screens/mainmenu-legacy.js), because that is storage.
 
 import { LEGACY } from '../content/legacy.data.js';
+import { UPGRADE_BY_ID } from '../content/upgrades.data.js';
 import { REGIONS } from '../content/regions.data.js';
 import { createRegionTable, createStats, metaOf } from '../core/store.js';
 import { markConquered, refreshUnlocks } from './world.js';
@@ -65,10 +66,19 @@ export const headStartFor = (resets) => Math.min(
  * END THE RUN. Everything the empire owns goes; everything the PLAYER has done
  * stays; and the next run starts partway along the road it has already walked.
  *
- * Gone: crowns, the whole upgrade ladder, booster stock, the carried loadout.
+ * Gone: crowns, the CROWN-BOUGHT upgrade ladder, booster stock, the carried
+ * loadout.
  * Kept: legacy (plus this run's payout), lifetime stats, preferences, the
- * incursion ladder, and the fact that the tutorial has been seen — a player on
- * their second empire does not need to be taught to drag a squad.
+ * incursion ladder, relics AND the troop lines they bought, and the fact that
+ * the tutorial has been seen — a player on their second empire does not need to
+ * be taught to drag a squad.
+ *
+ * The relic half is the one worth stating rather than inferring. A hard
+ * currency whose purchases evaporated every reset would not be a hard currency,
+ * it would be a rental — the player would hoard it and never spend, which is
+ * exactly the failure mode a scarce currency has to avoid. So relics are the
+ * PLAYER's, like the ladder they are half-earned from, and so is what they
+ * bought; crowns and everything crowns bought are the RUN's.
  * Handed back: the first `headStartFor(resets)` regions, already conquered.
  *
  * Refuses and returns `{ok:false}` unless the campaign is finished, so a stale
@@ -89,13 +99,17 @@ export function abdicate(metaState, { bus, now = 0 } = {}) {
   const legacy = { points: legacyPoints(meta) + points, resets: legacyResets(meta) + 1 };
   const kept = {
     incursion: { ...incursionRecord(meta) },
+    // Filtered by CURRENCY rather than by an id list, so a troop line added
+    // later is kept without anybody remembering to add it here.
+    upgrades: Object.fromEntries(Object.entries(meta.upgrades ?? {})
+      .filter(([id]) => UPGRADE_BY_ID[id]?.currency === 'relics')),
     stats: { ...createStats(), ...(meta.stats ?? {}) },
     settings: meta.settings,
     tutorialSeen: meta.tutorialSeen,
   };
 
   meta.crowns = 0;
-  meta.upgrades = {};
+  meta.upgrades = kept.upgrades;
   meta.boosters = {};
   meta.loadout = null;
   meta.regions = createRegionTable();

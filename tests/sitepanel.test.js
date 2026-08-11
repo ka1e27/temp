@@ -360,3 +360,30 @@ test('a hostile siege turns the whole panel, not just the status line', () => {
   assert.equal(panel.el.find('hud-site-stat').classList.contains('is-warn'), true);
   assert.match(panel.el.find('hud-site-stat').textContent, /UNDER SIEGE/);
 });
+
+test('the build timer is a bar, and it no longer masks UNDER SIEGE', () => {
+  // The status line used to return `building · 12s left` FIRST, so a site
+  // besieged while it built never once said it was under siege. Moving the
+  // build to its own bar is what un-masks that, which is why both halves are
+  // asserted here rather than in buildbar.test.js.
+  const s = fixture();
+  const { panel, view } = mountPanel(s);
+  const camp = at(s, 'camp');
+  select(view, 'camp');
+  panel.update(s);
+  assert.equal(panel.el.find('bar-build').classList.contains('is-open'), false);
+
+  camp.level = 2;
+  camp.upgradeTicksLeft = 300;              // as cmdUpgrade leaves it: level ALREADY raised
+  panel.update(s);
+  const bar = panel.el.find('bar-build');
+  assert.equal(bar.classList.contains('is-open'), true);
+  assert.match(bar.textContent, /^L2 · /, 'the level being raised, and the time left');
+  assert.equal(panel.el.find('hud-site-stat').textContent, '', 'no duplicate text line');
+
+  camp.siege = { owner: 'enemy', comp: { militia: 5 } };
+  panel.update(s);
+  assert.match(panel.el.find('hud-site-stat').textContent, /UNDER SIEGE/);
+  assert.equal(panel.el.find('bar-build').classList.contains('is-open'), true,
+    'and the build is still visible alongside it');
+});

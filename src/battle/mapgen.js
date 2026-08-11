@@ -6,12 +6,13 @@
 //   1. every site can reach every other site over unblocked hexes;
 //   2. the derived site graph is one connected component.
 // PURE.
-import { distance, findPath, toPixel, key } from '../core/hex.js';
+import { distance, findPath, key } from '../core/hex.js';
 import { createRng, deriveSeed } from '../core/rng.js';
 import { MAPGEN, SITES, SITE_LEVELS, UNIT_IDS } from '../content/balance.js';
 import {
   carveRivers, scatterMountains, raiseHighlands, openGroundTest, shuffle,
 } from './terrain.js';
+import { shapeMask } from './mapshape.js';
 
 // --- grid geometry (offset <-> axial). mapgen owns the grid's shape, so the
 // --- rest of battle/ imports these rather than re-deriving them. -----------
@@ -71,17 +72,22 @@ function planSites(spec) {
   return plan;
 }
 
-function bandCandidates(grid, [lo, hi]) {
+/** @param {Set<string>} outside hexes the region's SHAPE puts out of play — a
+ *  site placed in one would be marooned inside a mountain range. */
+function bandCandidates(grid, [lo, hi], outside) {
   const m = MAPGEN.edgeMargin;
   const out = [];
   const span = Math.max(1, grid.cols - 1);
   for (let row = m; row < grid.rows - m; row++) {
     for (let col = m; col < grid.cols - m; col++) {
       const t = col / span;
-      if (t >= lo && t <= hi) out.push(axialFromOffset(col, row));
+      const h = axialFromOffset(col, row);
+      if (t >= lo && t <= hi && !outside.has(k(h))) out.push(h);
     }
   }
-  return out.length ? out : gridHexes(grid.cols, grid.rows);
+  // The fallback drops the MARGIN, never the shape: a band with no room left in
+  // it is a tuning problem, and a site inside the rock would be a bug.
+  return out.length ? out : gridHexes(grid.cols, grid.rows).filter((h) => !outside.has(k(h)));
 }
 
 /** First hex of a shuffled band that clears every placed site, relaxing the
@@ -159,9 +165,13 @@ function scaleGarrison(base, mult) {
  * terrain along the unobstructed route, which strictly shrinks the blocked set
  * and therefore always terminates.
  */
-function repairConnectivity(grid, blocked, siteHexes) {
-  const open = (h) => inGrid(grid, h) && !blocked.has(k(h));
-  const anywhere = (h) => inGrid(grid, h);
+function repairConnectivity(grid, blocked, siteHexes, outside) {
+  // `anywhere` is what this pass is allowed to CLEAR, and it stops at the
+  // region's shape: a repair that drilled through the silhouette would undo the
+  // one thing the region asked for. It never has to — mapshape.js hands back a
+  // connected open region, and every site was placed inside it.
+  const anywhere = (h) => inGrid(grid, h) && !outside.has(k(h));
+  const open = (h) => anywhere(h) && !blocked.has(k(h));
   const from = siteHexes[0];
   for (let i = 1; i < siteHexes.length; i++) {
     let guard = 0;
@@ -175,133 +185,17 @@ function repairConnectivity(grid, blocked, siteHexes) {
   }
 }
 
-// --- the site graph --------------------------------------------------------
+// --- the site graph is GONE ------------------------------------------------
+//
+// `buildAdjacency` drew a planar-ish graph of edges and a send was legal only
+// along one. Armies march freely now, so there is no graph to draw: the ground
+// itself decides what connects to what, and `verifyReachable` below is promoted
+// from a belt-and-braces check to THE connectivity invariant of a map.
+//
+// `config.adjacency` is still accepted and validated by the contract — a
+// fixture written before this may keep supplying one — and is simply ignored.
+// `battle/state.js recomputeReach` derives `site.adj` from hex distance instead.
 
-const segKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
-
-/** 2D orientation sign; used to test whether two graph edges cross. */
-const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-
-function crosses(e1, e2, pix) {
-  const [a, b] = e1;
-  const [c, d] = e2;
-  if (a === c || a === d || b === c || b === d) return false;
-  const p = pix[a]; const q = pix[b]; const r = pix[c]; const s = pix[d];
-  const d1 = Math.sign(cross(p, q, r));
-  const d2 = Math.sign(cross(p, q, s));
-  const d3 = Math.sign(cross(r, s, p));
-  const d4 = Math.sign(cross(r, s, q));
-  return d1 !== d2 && d3 !== d4;
-}
-
-function components(ids, edges) {
-  const adj = Object.fromEntries(ids.map((id) => [id, []]));
-  for (const [a, b] of edges) { adj[a].push(b); adj[b].push(a); }
-  const seen = {};
-  const groups = [];
-  for (const id of ids) {
-    if (seen[id]) continue;
-    const stack = [id];
-    const group = [];
-    seen[id] = true;
-    while (stack.length) {
-      const cur = stack.pop();
-      group.push(cur);
-      for (const n of adj[cur]) if (!seen[n]) { seen[n] = true; stack.push(n); }
-    }
-    groups.push(group.sort());
-  }
-  return groups;
-}
-
-/**
- * Connect each site to its nearest neighbours, then FORCE connectivity, then
- * top up to the target average degree. Edges that would cross an existing edge
- * are skipped unless connectivity depends on them — a planar-ish graph makes
- * drag targets unambiguous.
- */
-export function buildAdjacency(sites) {
-  const { minDegree, maxDegree, targetAvgDegree } = MAPGEN.adjacency;
-  const ids = sites.map((s) => s.id);
-  const pix = Object.fromEntries(sites.map((s) => [s.id, toPixel({ q: s.hex[0], r: s.hex[1] }, 1)]));
-  const hexOf = Object.fromEntries(sites.map((s) => [s.id, { q: s.hex[0], r: s.hex[1] }]));
-
-  const pairs = [];
-  for (let i = 0; i < sites.length; i++) {
-    for (let j = i + 1; j < sites.length; j++) {
-      pairs.push({ a: ids[i], b: ids[j], d: distance(hexOf[ids[i]], hexOf[ids[j]]) });
-    }
-  }
-  pairs.sort((x, y) => x.d - y.d || segKey(x.a, x.b).localeCompare(segKey(y.a, y.b)));
-
-  const deg = Object.fromEntries(ids.map((id) => [id, 0]));
-  const edges = [];
-  const taken = new Set();
-  const add = (a, b) => {
-    taken.add(segKey(a, b)); edges.push([a, b]); deg[a]++; deg[b]++;
-  };
-
-  for (const { a, b } of pairs) {
-    if (taken.has(segKey(a, b))) continue;
-    if (deg[a] >= maxDegree || deg[b] >= maxDegree) continue;
-    if (deg[a] >= minDegree && deg[b] >= minDegree) continue;
-    if (edges.some((e) => crosses([a, b], e, pix))) continue;
-    add(a, b);
-  }
-
-  // Connectivity beats planarity and beats the degree cap: an isolated cluster
-  // is an unplayable map, a crossed line is only ugly.
-  let guard = 0;
-  while (components(ids, edges).length > 1 && guard++ < ids.length * 4) {
-    const groups = components(ids, edges);
-    const home = new Map();
-    groups.forEach((g, gi) => g.forEach((id) => home.set(id, gi)));
-    const best = pairs.find((p) => home.get(p.a) !== home.get(p.b) && !taken.has(segKey(p.a, p.b)));
-    if (!best) break;
-    add(best.a, best.b);
-  }
-
-  for (const { a, b } of pairs) {
-    if (edges.length * 2 >= ids.length * targetAvgDegree) break;
-    if (taken.has(segKey(a, b))) continue;
-    if (deg[a] >= maxDegree || deg[b] >= maxDegree) continue;
-    if (edges.some((e) => crosses([a, b], e, pix))) continue;
-    add(a, b);
-  }
-
-  guaranteeSoftOpening(sites, edges, add, taken, pairs);
-
-  edges.sort((x, y) => segKey(x[0], x[1]).localeCompare(segKey(y[0], y[1])));
-  return edges;
-}
-
-/**
- * Every home base must border at least one FARM it does not own.
- *
- * Without this, a camp can generate boxed in behind a stronghold — 250 HP
- * repairing at 4/s, against an 8-unit expedition doing 4.8 siege damage. The
- * opening move is then technically legal and practically impossible, and the
- * whole battle stalls before it starts. A farm (100 HP, 2/s) is the soft target
- * that makes the first move exist.
- */
-function guaranteeSoftOpening(sites, edges, add, taken, pairs) {
-  const byId = Object.fromEntries(sites.map((s) => [s.id, s]));
-  for (const home of sites.filter((s) => s.kind === 'camp' || s.kind === 'castle')) {
-    const neighbours = edges
-      .filter((e) => e[0] === home.id || e[1] === home.id)
-      .map(([a, b]) => byId[a === home.id ? b : a]);
-    if (neighbours.some((n) => n.kind === 'farm' && n.owner !== home.owner)) continue;
-
-    // Nearest farm this base does not already own. `pairs` is distance-sorted,
-    // so the first match is the closest one.
-    const link = pairs.find((p) => {
-      if (taken.has(segKey(p.a, p.b))) return false;
-      const other = p.a === home.id ? byId[p.b] : p.b === home.id ? byId[p.a] : null;
-      return other && other.kind === 'farm' && other.owner !== home.owner;
-    });
-    if (link) add(link.a, link.b);
-  }
-}
 
 // --- entry point -----------------------------------------------------------
 
@@ -319,16 +213,21 @@ export function generateBattleMap(regionSpec, seed) {
   const develop = spec.develop ?? spec.region?.develop ?? 1;
   const rng = createRng(deriveSeed(seed >>> 0, 'mapgen'));
   const grid = { cols, rows, blocked: [] };
+  // The region's SILHOUETTE, chosen once and never re-derived. It is decided
+  // before anything is placed, because it decides where things CAN be placed —
+  // see mapshape.js for why it also joins the rock budget rather than adding
+  // to it.
+  const outside = shapeMask(spec.shape ?? spec.region?.shape, cols, rows, seed >>> 0);
 
   const plan = planSites(spec);
   const levels = developLevels(plan, develop);
-  const wide = bandCandidates(grid, [0, 1]);
+  const wide = bandCandidates(grid, [0, 1], outside);
   const placed = [];
   const sites = [];
   const counters = {};
 
   for (const entry of plan) {
-    const hex = pickHex(rng, bandCandidates(grid, entry.band), placed, wide);
+    const hex = pickHex(rng, bandCandidates(grid, entry.band, outside), placed, wide);
     placed.push(hex);
     const n = (counters[entry.kind] = (counters[entry.kind] ?? 0) + 1);
     const id = entry.kind === 'camp' ? 'camp'
@@ -366,22 +265,31 @@ export function generateBattleMap(regionSpec, seed) {
   // Rivers first, on their OWN derived stream: mountains must avoid them, and
   // a separate stream means adding water did not reshuffle the site and
   // mountain placement of every map that already existed.
-  grid.rivers = carveRivers(seed >>> 0, cols, rows);
+  // ...and a watercourse that runs into a mountain range is the same lie the
+  // renderer would otherwise tell about rock on top of water (terrain.js
+  // `drawBlocked`), so the shape trims the rivers too.
+  grid.rivers = carveRivers(seed >>> 0, cols, rows).filter(([q, r]) => !outside.has(key(q, r)));
   const free = openGroundTest(placed, new Set(grid.rivers.map(([q, r]) => key(q, r))));
 
   // Massifs around a share of the forts FIRST, then the loose scatter tops the
   // map up to the same total blockedFrac it always had — the ranges are a
   // redistribution of the rock budget, not an addition to it. Connectivity is
   // repaired straight after, so neither pass can wall a site off.
-  const blocked = new Set();
+  //
+  // The SHAPE is seeded into the same set for exactly that reason, and it is
+  // what makes shapes cost what they should: a `narrow` valley already spends
+  // more than the whole rock budget, so the scatter adds nothing on top of it
+  // and the silhouette IS the region's terrain — while a `split` rift spends a
+  // fraction of it and the scatter still lays texture around the crossings.
+  const blocked = new Set(outside);
   raiseHighlands(rng, grid, sites.filter((s) => s.kind !== 'farm'), blocked, free);
   scatterMountains(rng, grid, free, blocked);
-  repairConnectivity(grid, blocked, placed);
+  repairConnectivity(grid, blocked, placed, outside);
   grid.blocked = [...blocked]
     .map((s) => s.split(',').map(Number))
     .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
 
-  return { grid, sites, adjacency: buildAdjacency(sites) };
+  return { grid, sites, adjacency: [] };
 }
 
 /** True when every site can reach every other over unblocked hexes. Exported

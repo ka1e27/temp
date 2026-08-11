@@ -82,11 +82,13 @@ export function groundMult(spec, ground) {
  * @param {boolean} opts.onOwnSite      enables spearmen bulwark
  * @param {number}  opts.siteDefMult    static per-site-kind defence bonus
  * @param {number}  opts.statMult       upgrade multiplier (unitAtkMult/unitDefMult)
+ * @param {?object} opts.unitMult       PER-TROOP multipliers, sparse (contract v7)
  * @param {?object} opts.ground         terrain of the hex being fought over
  */
 export function power(comp, foe, opts = {}) {
   const {
     defending = false, onOwnSite = false, siteDefMult = 1, statMult = 1, ground = null,
+    unitMult = null,
   } = opts;
   const foeN = total(foe);
   let p = 0;
@@ -94,6 +96,12 @@ export function power(comp, foe, opts = {}) {
     const n = comp[u] || 0;
     if (!n) continue;
     const spec = UNITS[u];
+    // PER-TROOP levels (contract v7). Inside the loop and not on `statMult`,
+    // because that is the entire point of them: an army of thirty militia and
+    // six rams with Militia Veterans at level 4 is stronger in a field and
+    // exactly as good at walls. A sparse map, so the common case is one lookup
+    // returning undefined.
+    const vet = unitMult?.[u] ?? 1;
     // Counter multiplier scales with how much of the ENEMY force is the
     // countered type — countering a pure spearwall is worth far more than
     // countering a token spear escort.
@@ -107,7 +115,7 @@ export function power(comp, foe, opts = {}) {
     // owns. What changes the fight is that the two forces are made of different
     // things: raiders storming a mountain fort are at 0.70 while the spearmen
     // holding it are at 1.30.
-    p += n * stat * m * bulwark * groundMult(spec, ground);
+    p += n * stat * m * bulwark * vet * groundMult(spec, ground);
   }
   if ((comp.marshal || 0) > 0) p *= 1 + UNITS.marshal.banner;
   if (defending) p *= siteDefMult;
@@ -179,9 +187,11 @@ export function resolveField(attackers, defenders, opts = {}) {
   const {
     siteDefMult = 1, defenderOwnsSite = true,
     attMult = 1, defMult = 1, shielded = false, ground = null,
+    attUnitMult = null, defUnitMult = null,
   } = opts;
 
-  let attPower = power(attackers, defenders, { statMult: attMult, ground });
+  let attPower = power(attackers, defenders,
+    { statMult: attMult, unitMult: attUnitMult, ground });
   if (shielded) attPower *= 0.5; // Emergency Fortify
   // Halberds strip the ground out from under the garrison before the round is
   // fought — see `sunderedDefMult`. Applied HERE rather than inside `power` so
@@ -192,6 +202,7 @@ export function resolveField(attackers, defenders, opts = {}) {
     onOwnSite: defenderOwnsSite,
     siteDefMult: sunderedDefMult(attackers, siteDefMult),
     statMult: defMult,
+    unitMult: defUnitMult,
     ground,
   });
 

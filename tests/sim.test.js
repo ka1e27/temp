@@ -363,3 +363,23 @@ test('same seed and same orders produce a byte-identical battle', () => {
   assert.equal(runOne(4242), runOne(4242));
   assert.notEqual(runOne(4242), runOne(4243), 'different seeds must diverge');
 });
+
+test('a siege event names the KIND of thing being besieged', () => {
+  // The HUD banner reads `UNDER SIEGE — ${ev.kind}` and said "— undefined" for
+  // as long as it has existed: SITE_CAPTURED carried a kind and SIEGE_BEGUN
+  // never did. Nothing caught it because no test read the payload and no
+  // screenshot was taken of a battle in trouble. Driven through the real sim
+  // rather than by hand-building the event, since a hand-built fixture is
+  // exactly what would have encoded the bug.
+  const s = build({ quiet: false });
+  s.commands.push({ t: 'SEND', from: 'camp', to: 'f1', frac: 1 });
+  let ev = null;
+  for (let i = 0; i < 600 && !ev; i++) {
+    step(s);
+    ev = s.events.find((e) => e.type === 'siege-begun') ?? null;
+  }
+  assert.ok(ev, 'the fixture must actually get a siege under way');
+  assert.equal(typeof ev.kind, 'string');
+  assert.ok(['farm', 'stronghold', 'camp', 'castle'].includes(ev.kind), `kind was ${ev.kind}`);
+  assert.equal(ev.kind, at(s, ev.siteId).kind, 'and it is THAT site’s kind');
+});

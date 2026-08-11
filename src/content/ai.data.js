@@ -293,14 +293,17 @@ export const AI = {
   // --- home: the castle is the win condition ------------------------------
   // defend() only sees squads already in the air inside threatHorizonTicks —
   // six seconds. For the castle that is too late, so homeGuard reads the army
-  // STANDING within homeRadius hops as well, reinforces down chained sends from
-  // anywhere in its own territory, and abandons a siege of its own when the gap
-  // is still this far from closed.
-  // Radius 1 = "standing on the doorstep". 2 was measured and is too jumpy: on
-  // a tier-1 map half the board is within two hops of the castle, so the AI
-  // spent the whole battle recalling an army nobody was threatening, and the
-  // COUNTRYSIDE got easier by exactly as much as the castle got harder.
-  homeRadius: 1,            // hops from the castle that count as encroachment
+  // STANDING nearby as well, reinforces from anywhere in its own territory, and
+  // abandons a siege of its own when the gap is still this far from closed.
+  //
+  // MEASURED IN HEXES NOW, not in hops, and the unit change is not cosmetic. As
+  // hops this was 1 — "standing on the doorstep" — and 2 was measured and
+  // rejected, because on a tier-1 map half the board was within two hops of the
+  // castle and the AI spent the battle recalling an army nobody was
+  // threatening. A hop was `minSeparation` 3 hexes or more, so 1 hop is roughly
+  // 3-4 hexes; this is set at the low end of that, and it is a knob the free
+  // movement pass has to RE-MEASURE rather than inherit.
+  homeRadiusHexes: 3,       // hexes from the castle that count as encroachment
   homeGuardMargin: 1.30,    // hold the castle against this multiple of what is near
   homeRecallRatio: 0.75,    // below this share of `need`, call the siege army home
   /** Rock-paper-scissors answer to whatever the player fields most. */

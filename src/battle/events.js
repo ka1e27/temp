@@ -13,6 +13,10 @@ export const EVENTS = Object.freeze({
   SQUAD_ARRIVED: 'squad-arrived',
   SQUAD_RETREATED: 'squad-retreated',
   FIELD_BATTLE: 'field-battle',
+  // Carries `kind` as well as `siteId`, because the HUD banner reads
+  // "UNDER SIEGE — stronghold" and read "— undefined" for as long as it
+  // existed: SITE_CAPTURED below carried a kind and this one did not. A payload
+  // nobody asserts on is exactly where that hides — tests/sim.test.js now does.
   SIEGE_BEGUN: 'siege-begun',
   SIEGE_REINFORCED: 'siege-reinforced',
   SIEGE_LIFTED: 'siege-lifted',

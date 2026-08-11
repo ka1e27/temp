@@ -35,9 +35,11 @@ node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a s
 node tools/simrunner.js --incursion=1-14 --n=32     # the endless ladder, by rung
 node tools/simrunner.js --incursion=40,55 --idle=600  # ...for a player who has idled
 node tools/simrunner.js --all --n=32 --legacy=27    # the campaign on a SECOND run
+node tools/simrunner.js --region=gallowmoor --relics=14   # ...spending its relics on troops
 npm run mobile             # phone-width layout audit — needs `npm start` running
 node tools/mobile.mjs --w=844 --h=390                # a phone in landscape
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
+node tools/shapeshot.mjs   # one screenshot per region SILHOUETTE — needs `npm start`
 ```
 
 `npm test` needs the glob quoted (`"tests/**/*.test.js"`); `node --test tests/` does not
@@ -66,7 +68,9 @@ home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data
 `regions.rules.js`, `sim.js`←`rally.js`, `commands.js`←`boosters.js`,
 `battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`, `mainmenu.js`←
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
-`simrunner.js`←`simladder.js`.
+`simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`, `sim.js`←`arrivals.js`,
+`store.js`←`refund.js`, `mapgen.js`←`mapgraph.js` (mapgen decides where the sites
+are; mapgraph decides which of them are neighbours).
 
 **`regions.rules.js` now also holds the two load-bearing rules of the region table**
 (a region's step must be the size of the player's step into it; the player's step
@@ -93,8 +97,15 @@ simulation run headless with zero mocking.
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **6**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **7**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly.
+
+**v7 is `FactionMods.unitMult` — the per-troop attack/defence multipliers the relic
+lines buy.** It is the one shop feature in this project's history that could not ride a
+field the contract already had, and the reason is the feature itself: `unitAtkMult` is one
+number for the whole stack, and the entire point is that militia and rams stop sharing it.
+Sparse — `{}` for every battle the balance table was measured with — so it costs nothing
+to carry and cannot be mistaken for a live field.
 
 **v6 is `rules.incursion` — `{depth, mutators[]}` — and it carries a rung's IDENTITY,
 not its effects.** Every incursion mutator is applied on the meta side through a field
@@ -131,6 +142,74 @@ integerization) followed by a **siege** against structure HP that regenerates.
 mechanism is what makes "a few troops genuinely cannot take a stronghold" and "a real army
 grinds one down in half a minute" both true, without an arbitrary minimum-troops rule.
 Sieges are interruptible, so relief forces matter.
+
+An in-progress upgrade shows as a **bar**, in both places: `bar-build` in the site panel
+and a second thin fill under the site on the board (`render/siteBuild.js`), stacked below
+the training bar it deliberately mirrors. The denominator is the interesting half and it
+lives in one place — `battle/state.js upgradeProgress()` — because `cmdUpgrade` raises
+`site.level` as it *starts* the build, so the step being paid for is
+`SITE_UPGRADE[level - 2]`, and a renderer that re-derived that off-by-two would draw a
+perfectly plausible wrong bar. Moving the build out of `statusLine` also un-masked a real
+bug: a site besieged *while* it built used to report "building · 12s left" and never once
+say UNDER SIEGE, because the build branch returned first.
+
+### Region shapes
+
+A region is not a rectangle. `content/regions.rules.js` `SHAPE_RULE` + `battle/mapshape.js`:
+five silhouettes (`open`, `narrow`, `choke`, `split`, `branch`) chosen per row in the region
+table, generated as a MASK of out-of-play hexes on their own seeded stream. The mask joins
+`grid.blocked`, so the renderer draws it as a massif, pathing walks round it and
+`verifyReachable` treats it as wall — the whole feature needed one region column and **no
+change to movement, combat, the AI, the contract or the save format.**
+
+Three properties are load-bearing:
+
+- **The mask arrives connected.** `pruneIslands` keeps only the largest open component,
+  because `repairConnectivity` fixes a walled-off site by *deleting* rock and would
+  otherwise drill straight through the silhouette. It is explicitly forbidden from clearing
+  shape rock.
+- **It is spent inside the rock budget, not on top of it** — `mapgen.js` seeds `blocked`
+  with the mask, so `scatterMountains` stops early. A `narrow` valley spends the whole
+  budget and the silhouette *is* the terrain; a `split` rift spends a third and the scatter
+  still lays texture around the crossings.
+- **`open` is byte-identical to the pre-shape generator**, verified against HEAD on four
+  seeds for all six open regions and pinned intrinsically in `tests/mapshape.test.js`. That
+  is what let eighteen regions be reshaped without touching the other six.
+
+The assignment rule is a design rule, not a balance one: **a shape says what the region
+already claimed.** Nine rows of flavour text described maps the generator never made —
+Ironwood's "single-file passes", Saltmere's "lagoon splits the field", the Sunder's "two
+bridges", Obsidian's "three fronts" — in exactly the way Ironcrown's Marshal was decoration
+over an empty throne. Reaching for a shape *because* a region needs to be harder is
+forbidden; that is how `siteCounts.player` crept to 48% of the board with every difficulty
+number passing.
+
+**A shape is NOT a dial, and that cost three full n=96 sweeps to establish.** It does not
+apply a tax a smaller carve scales down — it *re-rolls where the sites land*, and a late
+region's win rate is a steep function of layout. The first cut (`SQUEEZE` neck 0.52 / keep
+0.76 / trunk 0.34) moved eighteen regions by −29 to +9 and put eight outside `WIN_BAND`.
+Softening all three by ~40% did **not** shrink each delta toward zero — it scattered them
+again by −17 to +22: duskfell went −14 → +8 and thanescar +2 → −17 on the same softening.
+Expect to re-measure, not to interpolate.
+
+It is also violently size-dependent — the same `choke` is worth **+5 on a 13×10 board and
+−16 on a 21×16 one**. Four regions still needed the dial after softening, and three of them
+had room: `gallowmoor 3.26→3.12`, `karrowmere 3.82→3.68`, `blackspire 3.92→3.84` (with
+`thanescar 3.85→3.80` to keep `enemyMult` non-decreasing).
+
+**Tier 6 ships unshaped, deliberately.** It is the one tier with no dial headroom —
+4.37/4.44/4.48 against nightharrow's 4.36 — so there is nothing to pay a shape with, and
+widowsgate is additionally the incursion arena, where a `choke` took the ladder from
+94/88/75/38/19 to 81/56/50/13/0 across depths 1–30. Reverting the three restored their
+**exact** pre-shape win rates (26/29/26) and the ladder to 94/88/75/38/19 with the same
+win-medians, verified after the fact. If a future pass wants tier 6 shaped, the prerequisite
+is dial headroom, not a gentler mask.
+
+*(One pre-existing miss surfaced and was fixed on the way: `highmarch` read 65% against a
+66% floor — on the unshaped baseline too, and stably so at n=240, so not noise. `enemyMult`
+had 0.01 of room (kaldan 2.75, highmarch 2.76), so the answer was `develop` 1.35 → 1.25,
+the one column with headroom between kaldan's 1 and greywater's 1.5. 73% at n=96, 68% at
+n=240.)*
 
 ### Rendering
 
@@ -227,21 +306,23 @@ tier 2 played exactly as easy as tier 1. `src/content/regions.data.js` was retun
 it; the reasoning is in that file's third load-bearing rule.
 
 That table has since been retuned again, for the *uphill raid* pass (a smaller landing
-force, an enemy warm-up, and a shop with no ceiling). **The current measured curve, n=240:**
+force, an enemy warm-up, and a shop with no ceiling). **The current measured curve:**
 
 ```
-tier 1   89 84 84 84        tier 4   52 34 52 47
-tier 2   80 70 72 78 72     tier 5   22 23 36    (34 on nightharrow at n=240)
-tier 3   55 69 53 59 69     tier 6   36 27 19    (21 25 21 at n=240)
+tier 1   88 85 86 83        tier 4   56 40 42 40
+tier 2   82 73 75 74 76     tier 5   24 23 30
+tier 3   67 53 54 66 53     tier 6   26 29 26
 ```
 
-n=64 with the band edges confirmed at n=240. All twenty-four report `ok` against their
-tier's band *and* their advertised length. Nothing is frozen any more: the expedition
-re-base changed regions 1–5 by construction, so they were solved with the rest. What
-replaced the freeze is the per-tier `WIN_BAND`.
+n=96, re-taken end to end for the region-shape pass, which changed eighteen of the
+twenty-four maps; band edges confirmed at n=240. All twenty-four report `ok` against
+their tier's band *and* their advertised length. Nothing is frozen any more: the
+expedition re-base changed regions 1–5 by construction, so they were solved with the
+rest, and the shape pass re-solved most of tiers 3–4 on top. What replaced the freeze is
+the per-tier `WIN_BAND`.
 
-**Tiers 1–5 are byte-for-byte what they were before tier 6 shipped**, which is a
-guarantee rather than a happy result — see the fourth expedition segment below.
+**Tier 6 is byte-for-byte what it shipped as**, twice over — see the fourth expedition
+segment below, and the region-shape section for why that tier stayed unshaped.
 
 ## A raid stays a raid: the starting-footprint pass
 
@@ -396,6 +477,18 @@ expedition budget can never buy one. Unlocking grants exactly one free per landi
 the budget (`withFreeMarshal`), and more are commissioned in battle with the `RECRUIT`
 verb: pay gold, he arrives at once, `trainType` untouched. Only units with a `maxPerSite`
 are commissionable, which is what makes buying one outright safe.
+
+**The commission is on a cooldown, and it is FACTION-WIDE rather than per site**
+(`RECRUIT.marshal.cooldownSec`, 90). `maxPerSite: 1` was the whole brake, and it stops
+braking the moment gold stops being scarce — 250 is a rounding error against a treasury
+that funds a 700-slot landing, so a late-game player simply bought one for every stronghold
+on the board. A faction-wide timer makes it a decision about *when and where* instead of a
+purchase you repeat until you notice. It lives in **sim state**
+(`faction.recruitReadyTick`), so it survives a resume and replays identically from a command
+log; a cooldown parked in the HUD would do neither. `battle-actions.js` counts it down in
+the button's own label, and reads `recruitReadyTick()` off the sim rather than recomputing
+it — a countdown derived independently is a second implementation of the rule. The harness
+never recruits, so this cannot have moved a balance number.
 
 ## Tier 5, and the enemy Marshal that finally exists
 
@@ -600,6 +693,53 @@ with no migration" — and it did: nothing about the persisted shape changed.
   channels the campaign's curve is measured against, so a generous legacy there would not
   make a second run faster, it would make every measured region a walkover.
 
+## Relics: the currency that does not tick, and the troop lines it buys
+
+`meta.relics`, paid by `meta/rewards.js` and nothing else. Crowns accrue per second —
+that is the idle half of the game and also why they cannot price anything that has to
+stay scarce, because waiting is always an answer. Relics are paid only for ground you
+have **beaten**: a region's FIRST clear pays its tier (78 across the whole campaign,
+back-loaded — tier 1 pays one each), an incursion rung pays `1 + depth/5`, and a **raid
+pays none**. That last omission is the design: `raidLump` exists because re-clearing has
+to be worth something and must not be farmable, and a relic is the thing that must not be
+farmable at all.
+
+They buy two things. **Booster charges** — 1–3 relics each, where they used to be 25–60
+crowns and therefore free from about region six forever. And **one endless line per
+troop** (`vetMilitia` … `vetRams`, +6% attack and defence for that troop alone), which is
+the answer to "level the troops I like": `arms` levels everything you own at once, which
+is the right shape for the main ladder and the wrong shape for a decision.
+
+**Boosters got stronger to match**, since a charge now costs something real — rally 2→3
+hops and 50→65%, march 0.50→0.35, bombard ¼→⅓ of a garrison and 60→110 structure, fortify
+20→26s and attackers 0.50→0.40, tithe 250→400 gold. The harness launches every run with
+`boosters: []`, so none of it can have moved a measured number.
+
+**This is the third mechanism for shipping power without re-tuning the campaign**, after
+the Crown tier's `endgame` gate and the specialists' zero default weight — and it is the
+cleanest of the three: **the harness earns no relics at all.** `metaFor` builds its empire
+by calling `markConquered` directly and relics are paid by `applyOutcome`, so every battle
+in `regions.data.js` is fought at zero. `tests/relics.test.js` drives the bot's own
+shopping routine with a 10¹² crown budget at every stage and asserts it buys none of them,
+*and* that it does once relics are granted.
+
+**Contract v7 — `FactionMods.unitMult`**, sparse, applied per unit inside `combat.js
+power()`. This is the one shop feature that could NOT ride an existing field, and the
+reason is the feature: `unitAtkMult` is one number for the whole stack and the entire
+point is that militia and rams stop sharing it. `{}` for every measured battle.
+
+**Two things follow the currency rather than the run.** Relics survive abdication, and so
+do the lines they bought (`prestige.js` keeps `meta.upgrades` entries whose currency is
+relics, filtered by currency so a line added later is kept without anyone remembering).
+A hard currency whose purchases evaporate every reset is a rental, and the player would
+hoard it and never spend.
+
+**Measured, with `--relics=N` (new):** gallowmoor 67% at 0, **74% at 14** (what a real
+player holds by region 10), **92% at 78** (a whole campaign banked). So the table describes
+a player who does not spend them, and choosing to is worth ~7 points mid-campaign and ~25
+by the end of a run. That is the feature working, not a mis-tune — but it is the same
+shape as the `--idle` gap below and belongs beside it.
+
 ## The Crown tier: four more endless lines, gated
 
 `exchequer`, `grandArmy`, `warCollege`, `citadels` — endless, based at 200–350k, priced
@@ -766,6 +906,17 @@ included. Two properties are load-bearing and neither is obvious:
 Only the FIRST of a troop you do not already field is refused; more of one you do is always
 allowed. Trimming a carried loadout keeps the types with the most SLOTS committed, not the
 most bodies — 30 militia and 6 rams are both 30 slots, and the rams are obviously a choice.
+
+**...and the five you bring are the only five you can BUILD.** The cap capped what
+you could carry and nothing capped what you could then train, so the decision it exists
+to create expired the moment you captured somebody's yard: you picked five at the
+briefing and built the other three out of enemy strongholds, free and unannounced.
+`meta/composition.js battleRoster` narrows `unlockedUnits` to what the expedition
+actually carries, `cmdTrain` already gated on that field, and nothing in the engine
+changed. `trainableUnit` carries the other half — a captured yard set to an alien type
+falls back to a buildable one, and *never* to the Marshal, who would sit there producing
+nothing and looking busy. **Balance-neutral, measured**: the bot trains militia and rams,
+mapgen seeds militia and spearmen, and all four are in the default spread.
 
 **The Marshal is not a train option any more.** `TRAINABLE_UNITS` in `battle/training.js`
 is derived from `maxPerSite`, because the two halves are one rule: a unit you may only have
@@ -995,10 +1146,13 @@ activating focused buttons.
 - **`breachSeconds` stopped binding around region 8.** 33 militia out-pace a level-5
   castle's repair, and landing budgets reach 703 slots, so the mechanism the whole design
   rests on no longer gates anything late. This is why rams measure as a straight loss.
-- **The harness player is poorer than any real one.** `metaFor` grants one region's worth
-  of idle income and never raids; a player who simply plays back-to-back banks 2.29M
-  crowns by region 24 against the harness's 464k. At `--idle=50` the last region goes
-  from 25% to **85%**, so tiers 4–6 may be walkovers the table cannot see.
+- **The harness player is poorer than any real one**, in both currencies. `metaFor` grants
+  one region's worth of idle income and never raids; a player who simply plays back-to-back
+  banks 2.29M crowns by region 24 against the harness's 464k. At `--idle=50` the last region
+  goes from 25% to **85%**, so tiers 4–6 may be walkovers the table cannot see. Relics are
+  the same gap with a smaller number and a new flag: `--relics=14` (region 10's honest
+  holding) is +7 on gallowmoor, `--relics=78` is +25. Both are now re-takeable rather than
+  remembered, which is the only part that was ever actionable.
 - Dead seam fields with no reader: `ramImpactHp`, `rules.isRaid`, `rules.targetLengthMs`.
 - `tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 515 lines against a
   400-line cap and `npm run check` reports ok.

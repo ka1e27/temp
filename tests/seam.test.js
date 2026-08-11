@@ -22,9 +22,12 @@ import { buy } from '../src/meta/upgrades.js';
 import { sampleBattleConfig } from './fixtures/battleConfig.sample.js';
 
 /** A meta state with everything affordable, so unlocks can be exercised. */
-function richMeta(crowns = 500000) {
+function richMeta(crowns = 500000, relics = 500) {
   const state = createState({ seed: 11, now: 0 });
   state.meta.crowns = crowns;
+  // Booster CHARGES are priced in relics now, and an unlock still costs crowns —
+  // so a fixture that funds only one purse buys half of what it means to.
+  state.meta.relics = relics;
   return state.meta;
 }
 
@@ -94,10 +97,10 @@ test('assertBattleConfig rejects unknown ids and bad charge counts', () => {
 // --- features: the seam that five purchased upgrades needed ---------------
 
 test('the contract carries shop features, and validates them', () => {
-  assert.equal(CONTRACT_VERSION, 6,
+  assert.equal(CONTRACT_VERSION, 7,
     'features + booster validation landed in v2, the terrain layer in v3,'
     + ' the castle gate in v4, the rally target list and hold-back default in v5,'
-    + ' the incursion rung in v6');
+    + ' the incursion rung in v6, the per-troop multipliers in v7');
   const mods = makeMods({ features: ['doubleSpeed'] });
   assert.ok(hasMod(mods, 'doubleSpeed'));
   assert.ok(!hasMod(mods, 'standingOrders'));

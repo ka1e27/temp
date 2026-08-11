@@ -36,13 +36,16 @@ import {
 import {
   zeroComposition, distributeExpedition, fitComposition, carryComposition,
   compositionSlots, compositionTotal, overBudget, slotCost, typeCount, canAddType,
+  battleRoster,
 } from './composition.js';
 import { metaOf } from '../core/store.js';
 import { createRng, deriveSeed } from '../core/rng.js';
 import {
   offsetToAxial, fallbackMapGen, callMapGen, normalizeSites,
 } from './fallbackMap.js';
-import { upgradeEffects, addBonus, multBonus, flatBonus } from './upgrades.js';
+import {
+  upgradeEffects, addBonus, multBonus, flatBonus, unitMults,
+} from './upgrades.js';
 import { regionsConquered, effectiveEnemyMult, record, isConquered } from './world.js';
 import { toConfigBoosters } from './boosters.js';
 import { withFreeMarshal, withEnemyMarshal } from './marshals.js';
@@ -175,7 +178,16 @@ export function playerMods(metaState, expedition) {
     siegeDmgMult: stack(1, { additive: addBonus(fx, 'siegeDmg') }),
     structureRegenMult: stack(1, { additive: addBonus(fx, 'structureRegen') }),
     ramImpactHp: flatBonus(fx, 'ramImpactHp'),
-    unlockedUnits: fx.units,
+    // Per-troop levels, bought with relics (contract v7). Sparse: `{}` for
+    // every battle content/regions.data.js was measured with, because the
+    // harness earns no relics at all.
+    unitMult: unitMults(fx),
+    // THE LOADOUT IS THE ROSTER. Narrowed to what this expedition actually
+    // carries, not everything the shop has sold — see composition.js
+    // `battleRoster`. `cmdTrain` already gates on this field, so the five types
+    // you picked at the briefing are the five a stronghold can be set to build,
+    // and the cap stops being something you shrug off by capturing a yard.
+    unlockedUnits: battleRoster(fx.units, expedition),
     // Shop unlocks that change battle or HUD behaviour. Without this the
     // player could buy Tactician, Field Manual, Scout Report and Standing
     // Orders and none of them would cross the seam or do anything at all.

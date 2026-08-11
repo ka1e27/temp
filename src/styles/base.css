@@ -134,11 +134,18 @@ body {
   text-transform: uppercase; color: var(--c-text-dim);
 }
 
-/* Crowns are the game's one currency, so they get the game's one currency
-   mark — in the treasury, in the shop and on the results card alike. */
+/* Crowns get the game's currency mark — in the treasury, in the shop and on the
+   results card alike. Relics get a DIFFERENT one, and that matters more than it
+   looks: the two are quoted side by side at wildly different magnitudes, so a
+   price has to say which purse it wants without being read. Different glyph,
+   different hue, and neither is colour alone. */
 .crowns::before {
   content: "\25C6"; margin-right: 0.34em; font-size: 0.7em;
   color: var(--c-gold); opacity: 0.85; vertical-align: 0.08em;
+}
+.relics::before {
+  content: "\2726"; margin-right: 0.3em; font-size: 0.78em;
+  color: var(--c-rank); opacity: 0.9; vertical-align: 0.04em;
 }
 
 .sr-only {

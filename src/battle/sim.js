@@ -21,7 +21,9 @@ import {
   clampRallyKeep,
 } from './state.js';
 import { rallyPhase } from './rally.js';
+import { arrivalsPhase } from './arrivals.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
+import { recomputeOccupancy } from './occupancy.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget, clearPathCache } from './movement.js';
 import { drainCommands } from './commands.js';
@@ -43,18 +45,16 @@ export function startBattle(config) {
   clearPathCache();
   const state = createBattleState(config);
   state.grid.rivers = (config.grid?.rivers ?? []).map(([q, r]) => `${q},${r}`);
+  // Both per-hex maps, together, because they are invalidated by exactly the
+  // same event: a site changing hands or coming into existence.
   recomputeInfluence(state);
+  recomputeOccupancy(state);
   return state;
 }
 
-function recordCasualties(state, loser, killer, before, after) {
-  const lost = total(before) - total(after);
-  if (lost <= 0) return;
-  if (state.factions[loser]) state.factions[loser].unitsLost += lost;
-  if (state.factions[killer]) state.factions[killer].unitsKilled += lost;
-}
-
 const modOf = (state, faction, key, fallback = 1) => state.mods[faction]?.[key] ?? fallback;
+/** Per-troop levels (contract v7). Sparse and usually absent. */
+const vetOf = (state, faction) => state.mods[faction]?.unitMult;
 
 // --- phase 5: siege damage & HP regen --------------------------------------
 
@@ -115,165 +115,14 @@ function siegePhase(state) {
       site.hp = Math.min(site.hpMax, site.hp + regen);
     }
   }
-  if (flipped) recomputeInfluence(state);
+  if (flipped) { recomputeInfluence(state); recomputeOccupancy(state); }
 }
 
 // --- phase 6: rally auto-send lives in ./rally.js ---------------------------
 
-// --- phase 7: arrivals ------------------------------------------------------
-
-/**
- * A failed attack sends part of each SKIRMISHING contingent home — why a bad
- * probe costs a fraction, not the squad.
- *
- * Driven off every unit's `skirmish` field, not off `comp.raiders` as it was.
- * The VALUE was already read from the spec, so the hardcoded UNIT was invisible
- * and a second skirmisher would have escaped nothing. tests/units.test.js pins
- * it with a negative control.
- */
-function skirmishHome(state, site, group) {
-  for (const sq of group.squads) {
-    const escaped = {};
-    let back = 0;
-    for (const u of UNIT_IDS) {
-      const frac = UNITS[u].skirmish;
-      if (!frac) continue;
-      const n = Math.floor((sq.comp[u] || 0) * frac);
-      if (n > 0) { escaped[u] = n; back += n; }
-    }
-    if (back <= 0) continue;
-    const home = siteById(state, sq.from);
-    const target = home && home.owner === group.owner
-      ? home : retreatTarget(state, site, group.owner);
-    if (!target) continue;
-    const comp = { ...emptyComp(), ...escaped };
-    spawnSquad(state, {
-      owner: group.owner, from: site.id, to: target.id, comp, retreating: true,
-    });
-    state.factions[group.owner].unitsLost -= back;   // they got away after all
-    const foe = group.owner === 'player' ? 'enemy' : 'player';
-    if (state.factions[foe]) state.factions[foe].unitsKilled -= back;
-    pushEvent(state, EVENTS.SKIRMISH_ESCAPE, {
-      // `raiders` is kept as the headline count so existing consumers (the HUD
-      // toast, tests) keep reading a number rather than becoming undefined; it
-      // now means "bodies that got away", which is what it always displayed.
-      siteId: site.id, owner: group.owner, raiders: back, escaped, to: target.id,
-    });
-  }
-}
-
-/** Field battle against whoever is holding the ground, not against the walls. */
-function fightStack(state, group, site, holders, holderFaction) {
-  // No walls and no bulwark — but the ground is still the ground, so terrain
-  // applies here too. Only the FORTIFICATION bonus is absent.
-  const r = resolveField(group.comp, holders, {
-    siteDefMult: 1, defenderOwnsSite: false,
-    attMult: modOf(state, group.owner, 'unitAtkMult'),
-    defMult: modOf(state, holderFaction, 'unitDefMult'),
-    ground: groundOf(state, site),
-  });
-  recordCasualties(state, group.owner, holderFaction, group.comp, r.attSurvivors);
-  recordCasualties(state, holderFaction, group.owner, holders, r.defSurvivors);
-  pushEvent(state, EVENTS.FIELD_BATTLE, {
-    siteId: site.id, attacker: group.owner, win: r.win,
-    attPower: r.attPower, defPower: r.defPower,
-  });
-  return r;
-}
-
-function resolveArrival(state, group) {
-  const site = siteById(state, group.to);
-  if (!site) return;
-  const owner = group.owner;
-
-  if (site.owner === owner) {
-    const besieged = site.siege && site.siege.owner !== owner;
-    if (group.mode === 'return' || !besieged) {
-      site.garrison = addComp(site.garrison, group.comp);
-      pushEvent(state, EVENTS.SQUAD_ARRIVED, {
-        siteId: site.id, owner, count: total(group.comp), retreating: group.mode === 'return',
-      });
-      return;
-    }
-    // Relief: the besiegers are camped in the open, so no walls and no bulwark.
-    const besieger = site.siege.owner;
-    const r = fightStack(state, group, site, site.siege.comp, besieger);
-    if (r.win) {
-      site.siege = null;
-      site.garrison = addComp(site.garrison, r.attSurvivors);
-      pushEvent(state, EVENTS.SIEGE_LIFTED, { siteId: site.id, by: owner });
-    } else {
-      site.siege.comp = r.defSurvivors;
-    }
-    return;
-  }
-
-  if (site.siege && site.siege.owner === owner) {
-    site.siege.comp = addComp(site.siege.comp, group.comp);
-    pushEvent(state, EVENTS.SIEGE_REINFORCED, { siteId: site.id, owner });
-    return;
-  }
-  if (site.siege && total(site.siege.comp) > 0) {
-    // Three-way: whoever holds the field outside the walls owns the siege.
-    const holder = site.siege.owner;
-    const r = fightStack(state, group, site, site.siege.comp, holder);
-    if (r.win) site.siege = { owner, comp: r.attSurvivors };
-    else site.siege.comp = r.defSurvivors;
-    return;
-  }
-
-  const r = resolveField(group.comp, site.garrison, {
-    // siteDefMultOf, not SITES[kind].defMult: the mountains around a fort are
-    // part of how hard it is to take, and sim/preview/AI/harness all read the
-    // same function rather than each drifting their own way.
-    siteDefMult: siteDefMultOf(state, site),
-    defenderOwnsSite: true,
-    attMult: modOf(state, owner, 'unitAtkMult'),
-    defMult: modOf(state, site.owner, 'unitDefMult'),
-    shielded: site.shieldTicks > 0,
-    ground: groundOf(state, site),
-  });
-  recordCasualties(state, owner, site.owner, group.comp, r.attSurvivors);
-  recordCasualties(state, site.owner, owner, site.garrison, r.defSurvivors);
-  pushEvent(state, EVENTS.FIELD_BATTLE, {
-    siteId: site.id, attacker: owner, win: r.win,
-    attPower: r.attPower, defPower: r.defPower,
-  });
-
-  if (r.win) {
-    // Beating the garrison does NOT capture: the siege begins.
-    site.garrison = emptyComp();
-    site.siege = { owner, comp: r.attSurvivors };
-    pushEvent(state, EVENTS.SIEGE_BEGUN, { siteId: site.id, owner, hp: site.hp });
-  } else {
-    site.garrison = r.defSurvivors;
-    skirmishHome(state, site, group);
-  }
-}
-
-function arrivalsPhase(state) {
-  if (!state.squads.length) return;
-  const landed = state.squads.filter((sq) => sq.arriveTick <= state.tick);
-  if (!landed.length) return;
-  state.squads = state.squads.filter((sq) => sq.arriveTick > state.tick);
-
-  const groups = {};
-  for (const sq of landed) {
-    const site = siteById(state, sq.to);
-    // A retreat is a clean escape only into friendly ground. If the haven fell
-    // while they were in the air they have to fight for it after all.
-    const mode = sq.retreating && site && site.owner === sq.owner ? 'return' : 'engage';
-    const key = `${sq.to}|${sq.owner}|${mode}`;
-    const g = groups[key] ?? (groups[key] = {
-      to: sq.to, owner: sq.owner, mode, comp: emptyComp(), squads: [],
-    });
-    g.comp = addComp(g.comp, sq.comp);
-    g.squads.push(sq);
-  }
-  // Sorted keys: deterministic, and 'engage' resolves before 'return' so a
-  // retreating stack never gets dragged into someone else's relief battle.
-  for (const key of Object.keys(groups).sort()) resolveArrival(state, groups[key]);
-}
+// --- phase 7: arrivals lives in ./arrivals.js -------------------------------
+// Re-exported so the phase list at the top of this file stays findable.
+export { arrivalsPhase, fightStack, resolveArrival } from './arrivals.js';
 
 // --- phase 8: timers --------------------------------------------------------
 
