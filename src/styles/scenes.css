@@ -54,7 +54,18 @@
   color: var(--c-gold); margin-right: var(--s-3);
   font: var(--w-bold) var(--t-lg) / 1 var(--font-num);
 }
+.shop-treasury .relics {
+  color: var(--c-rank); margin-right: var(--s-3);
+  font: var(--w-bold) var(--t-lg) / 1 var(--font-num);
+}
 .shop-treasury .num { font-family: var(--font-num); color: var(--c-player); }
+/* A relic price is a small integer and a crown price is compacted, so the two
+   buttons are the same width and mean different things. The rank hue on the
+   edge is what tells them apart before the digits are read. */
+.btn.buy-relic {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-rank) 60%, transparent);
+  color: var(--c-rank);
+}
 
 .shop-list { overflow-y: auto; padding: var(--s-4) var(--s-5) var(--s-6); }
 /* The list is taller than the plate: fade the cut edge so "there is more

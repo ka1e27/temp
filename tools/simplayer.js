@@ -6,11 +6,14 @@
 // is measured with — not against a hand-built fixture.
 import { startBattle, step } from '../src/battle/sim.js';
 import { generateBattleMap } from '../src/battle/mapgen.js';
+// The between-battles shopping moved to ./simshop.js for the line budget and is
+// re-exported here, so this file stays the harness's one front door.
+import { spendCrowns, fieldedUnits } from './simshop.js';
+export { spendCrowns, fieldedUnits };
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome, incomePerSec } from '../src/meta/idle.js';
-import { shopListing, buy } from '../src/meta/upgrades.js';
 import { breachSeconds, total, resolveField } from '../src/battle/combat.js';
 import { groundOf, siteDefMultOf } from '../src/battle/terrain.js';
 import { siteControlFraction } from '../src/battle/state.js';
@@ -258,74 +261,6 @@ export function playerTurn(state, opts = {}) {
 }
 
 /**
- * Spend a realistic idle budget the way a player would: cheapest useful thing
- * first. Without this the harness tests an unupgraded player against later
- * regions, which is not a case the design claims is winnable.
- */
-export function spendCrowns(meta, crowns, fielded = null) {
-  meta.crowns += crowns;
-  const useless = pointlessUnlocks(fielded);
-
-  // A unit you have DECIDED to field is bought before the generic power, and
-  // that ordering is load-bearing rather than cosmetic. Cheapest-affordable-first
-  // drains the treasury into the six endless lines, and an unlock only ever gets
-  // taken on the tick it happens to be the cheapest thing left — so at gallowmoor
-  // the 400-crown outriders and 1200-crown halberds were bought while the
-  // 1800-crown sappers never were, and a `--weights=sappers` run silently landed
-  // ZERO sappers and reported the default army's win rate under their name.
-  // Nobody decides to bring a siege-repair detachment and then spends the money
-  // on a treasury level instead.
-  for (const unit of fielded ?? []) {
-    const id = UNLOCK_FOR[unit];
-    if (!id) continue;
-    const item = shopListing(meta).flatMap((g) => g.items).find((i) => i.id === id);
-    if (item && item.affordable && item.level < item.maxLevel) buy(meta, id, null);
-  }
-
-  for (let guard = 0; guard < 400; guard++) {
-    const affordable = shopListing(meta)
-      .flatMap((g) => g.items)
-      .filter((i) => i.affordable && i.level < i.maxLevel && !useless.has(i.id))
-      .sort((a, b) => a.cost - b.cost);
-    if (!affordable.length) break;
-    buy(meta, affordable[0].id, null);
-  }
-  recalcIncome(meta, null);
-}
-
-/**
- * Unlocks that buy this run nothing, and therefore must not be bought.
- *
- * The bot shops CHEAPEST-AFFORDABLE-FIRST, so a cheap unlock is taken almost
- * immediately — and a specialist it does not field is 3,400 crowns that would
- * otherwise have been Arms and Treasury levels. Measured at n=64 the moment the
- * three were added to the shop, obsidian fell 47% -> 33% and ironcrown 52% ->
- * 38% with no change to any region, any unit stat, or the army actually landed.
- * That is a MEASUREMENT ARTEFACT, not a difficulty change, so the fix belongs
- * here rather than in the balance table.
- *
- * The rule is "buy what you can use", and `fielded` is what makes it a rule
- * rather than a hardcoded list. A `--weights` run that names outriders MUST buy
- * their unlock: `fitComposition` drops any unit missing from `unlocked`, so
- * without this the loadout would be silently discarded and the run would report
- * the default army's win rate under a specialist's name — the exact class of
- * false measurement this whole pass exists to close.
- */
-const UNLOCK_FOR = Object.freeze({
-  outriders: 'unlockOutriders', halberds: 'unlockHalberds', sappers: 'unlockSappers',
-});
-
-function pointlessUnlocks(fielded) {
-  const out = new Set(Object.values(UNLOCK_FOR));
-  for (const u of fielded ?? []) out.delete(UNLOCK_FOR[u]);
-  return out;
-}
-
-/** The units a loadout actually asks for — the shop's reason to unlock them. */
-export const fieldedUnits = (weights) =>
-  (weights ? UNIT_IDS.filter((u) => (weights[u] ?? 0) > 0) : []);
-
-/**
  * A meta state for a player who has taken `conquered` and idled `idleMinutes`.
  *
  * `legacy` IS A SECOND RUN, and it exists because the claim "abdicating makes the
@@ -338,10 +273,18 @@ export const fieldedUnits = (weights) =>
  * income, so a second-run player has more to spend as well as better troops, and
  * spending first would measure only half the effect.
  */
-export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null, legacy = 0) {
+export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null, legacy = 0,
+  relics = 0) {
   const state = createState({ seed, now: 0 });
   for (const id of conquered) markConquered(state.meta, id, { now: 0, durationMs: 0 });
   if (legacy > 0) state.meta.legacy = { points: Math.floor(legacy), resets: 1 };
+  // RELICS ARE ZERO UNLESS ASKED FOR, and that zero is what every number in
+  // content/regions.data.js was measured against — `markConquered` above is why
+  // it holds, since relics are paid by meta/rewards.js `applyOutcome` and this
+  // function never calls it. `--relics=N` exists so the per-troop lines are
+  // MEASURABLE rather than merely believed to be safe: a number nobody can
+  // re-take is a number nobody will re-take.
+  if (relics > 0) state.meta.relics = Math.floor(relics);
   refreshUnlocks(state.meta, null);
   recalcIncome(state.meta, null);
   if (idleMinutes > 0) {
@@ -365,7 +308,7 @@ export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null, le
  */
 export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
   const state = metaFor(conquered, idleMinutes, seed, fieldedUnits(opts.weights),
-    opts.legacy ?? 0);
+    opts.legacy ?? 0, opts.relics ?? 0);
   const config = buildBattleConfig(state.meta, regionId, [], generateBattleMap, {
     seed,
     composition: opts.weights ?? null,

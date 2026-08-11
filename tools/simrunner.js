@@ -110,8 +110,12 @@ for (const id of regionIds) {
   // worth of the mechanic stays measurable rather than remembered.
   // `--legacy=30` measures a SECOND RUN — the same campaign for a player who has
   // abdicated once. Zero, and therefore absent from the table, unless asked for.
+  // `--relics=40` measures a player who has been paid for the ground they took
+  // and spent it on troop lines — the one lever the harness cannot earn on its
+  // own, and therefore the one the measured table says nothing about.
   const opts = {
     upgrades: !args.noupgrades, weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
+    relics: Number(args.relics ?? 0),
   };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 

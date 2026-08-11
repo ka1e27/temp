@@ -57,8 +57,10 @@ export function createWorldMapScene(ctx) {
       }
 
       const crowns = h('span.num.crowns');
+      const relics = h('span.num.relics');
       const income = h('span.num.income');
       const setCrowns = bindText(crowns);
+      const setRelics = bindText(relics);
       const setIncome = bindText(income);
       const header = h('div.wm-header.panel', {},
         // NOT a live region. It was `polite` and refreshes every 250ms, and
@@ -70,6 +72,7 @@ export function createWorldMapScene(ctx) {
         // service"); the treasury had not.
         h('div.wm-treasury', { 'aria-live': 'off' },
           h('span.label', { text: UI.treasury }), crowns,
+          h('span.label', { text: UI.relics }), relics,
           h('span.label', { text: UI.income }), income),
         h('div.wm-actions', {},
           // The endless ladder, and only once there is one. Built here rather
@@ -151,9 +154,9 @@ export function createWorldMapScene(ctx) {
       map.addEventListener('focusin', onFocus);
 
       buildBoard(board, detail);
-      refresh(setCrowns, setIncome);
+      refresh(setCrowns, setRelics, setIncome);
 
-      const timer = setInterval(() => refresh(setCrowns, setIncome), 250);
+      const timer = setInterval(() => refresh(setCrowns, setRelics, setIncome), 250);
       const off = ctx.bus.on('meta:region-unlocked', () => buildBoard(board, detail));
 
       return [
@@ -338,8 +341,12 @@ export function createWorldMapScene(ctx) {
     ctx.scenes.replace(ctx.screens.prebattle, { regionId });
   }
 
-  function refresh(setCrowns, setIncome) {
+  function refresh(setCrowns, setRelics, setIncome) {
     setCrowns(compact(meta().crowns));
+    // Uncompacted, like the shop's. A relic count is small enough to read
+    // exactly, and "1.2k" beside a treasury reading "1.2k" would be two
+    // different quantities wearing the same word.
+    setRelics(String(Math.floor(meta().relics ?? 0)));
     setIncome(rate(incomePerSec(meta())));
     if (!selected || !detailEl) return;
     const region = regionById(selected);

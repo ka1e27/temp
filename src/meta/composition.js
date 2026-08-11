@@ -34,6 +34,32 @@ export const typeCount = (comp) => UNIT_IDS.reduce(
 export const canAddType = (comp) => typeCount(comp) < LOADOUT_TYPES_MAX;
 
 /**
+ * THE ROSTER A BATTLE IS FOUGHT WITH: the troop types the expedition actually
+ * contains, in canonical order.
+ *
+ * This is what `unlockedUnits` means on the player's side of the seam, and the
+ * distinction matters. What you have UNLOCKED is what the loadout screen offers
+ * you; what you BROUGHT is what a stronghold can be set to build. Without this
+ * the cap was a lie by the second minute of every battle — you picked five types
+ * at the briefing and then trained the other three out of a captured yard, so
+ * "which answers am I bringing to this map" cost nothing to get wrong.
+ *
+ * Falls back to `unlocked` for an empty army rather than returning nothing:
+ * `unlockedUnits` is required non-empty at the seam, and a contract violation is
+ * a worse answer to a degenerate loadout than simply not narrowing it.
+ *
+ * @param {string[]} unlocked everything the shop has sold this player
+ * @param {?object} expedition the composition being landed
+ * @returns {string[]}
+ */
+export function battleRoster(unlocked, expedition) {
+  const brought = UNIT_IDS.filter(
+    (u) => unlocked.includes(u) && clampInt(expedition?.[u]) > 0,
+  );
+  return brought.length ? brought : [...unlocked];
+}
+
+/**
  * The `n` best-supported types out of `pool`, by weight.
  *
  * Ties break by SLOT COST and then by roster order, which matters more than it

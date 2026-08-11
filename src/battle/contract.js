@@ -10,6 +10,7 @@
 // ============================================================================
 // PURE.
 import { fnv1a, stableStringify } from '../core/hash.js';
+import { UNIT_IDS } from '../content/balance.js';
 
 // v2: FactionMods gained `features` (shop unlocks that change battle or HUD
 // behaviour), and `boosters` is now validated. Before v2, five purchasable
@@ -50,7 +51,7 @@ import { fnv1a, stableStringify } from '../core/hash.js';
 // consumers that must tell one rung from another: meta/rewards.js (an incursion
 // pays a depth-scaled lump and must never be mistaken for a raid on the same
 // region), the results screen, and the HUD.
-export const CONTRACT_VERSION = 6;
+export const CONTRACT_VERSION = 7;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
@@ -94,6 +95,7 @@ export const FEATURE_IDS = [
  * @property {number} garrisonCapBonus
  * @property {number} siegeDmgMult
  * @property {number} structureRegenMult
+ * @property {Record<string,number>} unitMult  per-troop atk/def, sparse
  * @property {UnitId[]} unlockedUnits  non-empty
  */
 
@@ -125,6 +127,18 @@ export const DEFAULT_MODS = Object.freeze({
   siegeDmgMult: 1,
   structureRegenMult: 1,
   ramImpactHp: 0,
+  /**
+   * v7. PER-TROOP attack/defence multipliers — unit id -> multiplier — applied
+   * inside battle/combat.js `power` per unit, on top of the stack-wide
+   * `unitAtkMult`/`unitDefMult`.
+   *
+   * SPARSE, and that is load-bearing rather than tidiness. Empty means "no
+   * troop has one", which is every battle content/regions.data.js was measured
+   * with, so the field costs nothing to carry and cannot be mistaken for a live
+   * one. A map of eight 1.0s would be a dead seam field wearing a live field's
+   * clothes — this project has refunded four upgrades for exactly that.
+   */
+  unitMult: {},
   unlockedUnits: ['militia', 'spearmen'],
   /** Shop unlocks. Without this field a purchased upgrade cannot influence a
    *  battle at all — which is how five of them shipped doing nothing. */
@@ -136,6 +150,7 @@ export const makeMods = (o = {}) => ({
   ...DEFAULT_MODS,
   ...o,
   expedition: { ...DEFAULT_MODS.expedition, ...(o.expedition ?? {}) },
+  unitMult: { ...(o.unitMult ?? {}) },
   unlockedUnits: o.unlockedUnits ?? [...DEFAULT_MODS.unlockedUnits],
   features: o.features ?? [],
 });
@@ -180,6 +195,21 @@ function checkMods(m, path, errs) {
   }
   if (!m.expedition || typeof m.expedition !== 'object') {
     errs.push(`${path}.expedition: must be a composition object`);
+  }
+  // OPTIONAL and sparse. Absent is the normal case, so the check is on the
+  // CONTENTS rather than on the field existing — a mods object from before v7
+  // is a faction with no per-troop levels, not an invalid one.
+  if (m.unitMult !== undefined) {
+    if (!m.unitMult || typeof m.unitMult !== 'object' || Array.isArray(m.unitMult)) {
+      errs.push(`${path}.unitMult: must be an object of unit id -> multiplier`);
+    } else {
+      for (const [id, v] of Object.entries(m.unitMult)) {
+        if (!UNIT_IDS.includes(id)) errs.push(`${path}.unitMult: unknown unit "${id}"`);
+        else if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) {
+          errs.push(`${path}.unitMult.${id}: expected finite number >= 0, got ${v}`);
+        }
+      }
+    }
   }
 }
 

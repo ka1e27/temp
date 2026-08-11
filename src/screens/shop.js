@@ -9,7 +9,7 @@
 import { h, clear, mount, bindText } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, SHOP } from '../content/strings.js';
-import { shopListing, buy } from '../meta/upgrades.js';
+import { shopListing, buy, canBuy } from '../meta/upgrades.js';
 import { inventory, buyCharge, canBuyCharge } from '../meta/boosters.js';
 import { incomePerSec, timeToAfford } from '../meta/idle.js';
 import { BOOSTER_LABEL } from './prebattle.js';
@@ -18,6 +18,7 @@ export function createShopScene(ctx) {
   let root = null;
   let listRoot = null;
   let setCrowns = null;
+  let setRelics = null;
   let setIncome = null;
   let watched = [];
 
@@ -30,8 +31,10 @@ export function createShopScene(ctx) {
     enter() {
       root = h('div.screen.shop-overlay');
       const crowns = h('span.num.crowns');
+      const relics = h('span.num.relics');
       const income = h('span.num');
       setCrowns = bindText(crowns);
+      setRelics = bindText(relics);
       setIncome = bindText(income);
 
       const close = h('button.btn.ghost.shop-close', {
@@ -44,6 +47,7 @@ export function createShopScene(ctx) {
         h('h2#shop-title', { text: UI.shop }),
         h('div.shop-treasury', { 'aria-live': 'polite' },
           h('span.label', { text: UI.treasury }), crowns,
+          h('span.label', { text: UI.relics }), relics,
           h('span.label', { text: UI.income }), income),
         close);
 
@@ -68,7 +72,7 @@ export function createShopScene(ctx) {
     },
 
     exit() {
-      root = listRoot = setCrowns = setIncome = null;
+      root = listRoot = setCrowns = setRelics = setIncome = null;
       watched = [];
     },
   };
@@ -79,6 +83,10 @@ export function createShopScene(ctx) {
   function tick() {
     const m = meta();
     setCrowns(compact(m.crowns));
+    // Never compacted. Relics run 0-200 over a whole campaign and "1.2k" is a
+    // crown-sized word — the two currencies have to be tellable apart at a
+    // glance or the shop's prices become guesswork.
+    setRelics(String(Math.floor(m.relics ?? 0)));
     setIncome(rate(incomePerSec(m)));
     for (const w of watched) {
       const ok = w.check();
@@ -92,18 +100,21 @@ export function createShopScene(ctx) {
   }
 
   /** Icon-only by design — the label is the price. Screen readers get the rest. */
-  function buyButton({ label, cost, check, wait, onBuy }) {
+  function buyButton({ label, cost, check, wait, onBuy, currency = 'crowns' }) {
     const ok = check();
-    const el = h('button.btn.buy', {
+    const relic = currency === 'relics';
+    const el = h(`button.btn.buy${relic ? '.buy-relic' : ''}`, {
       type: 'button',
       disabled: !ok,
       'aria-disabled': ok ? null : 'true',
-      'aria-label': `${UI.buy} ${label} for ${Math.round(cost)} crowns`,
+      'aria-label': `${UI.buy} ${label} for ${Math.round(cost)} ${relic ? 'relics' : 'crowns'}`,
       // Showing the wait turns "can't afford" into "come back in 90s",
-      // which is the pull the idle layer runs on.
+      // which is the pull the idle layer runs on — and is a LIE for a relic
+      // price, because no amount of waiting pays one. That row says where they
+      // come from instead.
       title: ok ? '' : wait(),
       on: { click: () => { if (check()) { onBuy(); render(); } } },
-    }, compact(cost));
+    }, relic ? String(cost) : compact(cost));
     watched.push({ el, check, wait, last: ok });
     return el;
   }
@@ -176,8 +187,9 @@ export function createShopScene(ctx) {
             : buyButton({
               label: item.name,
               cost: item.cost,
-              check: () => meta().crowns >= item.cost,
-              wait: () => `${SHOP.affordIn} ~${Math.ceil(timeToAfford(meta(), item.cost))}s`,
+              currency: item.currency,
+              check: () => canBuy(meta(), item.id).ok,
+              wait: () => waitText(item.cost, item.currency),
               onBuy: () => buy(meta(), item.id, ctx.bus),
             })));
   }
@@ -198,9 +210,20 @@ export function createShopScene(ctx) {
           : buyButton({
             label: `one ${name} charge`,
             cost: b.chargeCost,
+            currency: b.chargeCurrency,
             check: () => canBuyCharge(meta(), b.id, 1).ok,
-            wait: () => `${SHOP.affordIn} ~${Math.ceil(timeToAfford(meta(), b.chargeCost))}s`,
+            wait: () => waitText(b.chargeCost, b.chargeCurrency),
             onBuy: () => buyCharge(meta(), b.id, 1, ctx.bus),
           })));
+  }
+
+  /** Why you cannot afford it yet. For crowns that is a COUNTDOWN, because the
+   *  idle layer really will get you there and saying so is the pull the whole
+   *  idle half runs on. For relics it has to be a PLACE, because no amount of
+   *  waiting pays one — a "~90s" on a relic price would be the only outright
+   *  false thing in this screen. */
+  function waitText(cost, currency) {
+    if (currency === 'relics') return SHOP.relicsFrom;
+    return `${SHOP.affordIn} ~${Math.ceil(timeToAfford(meta(), cost))}s`;
   }
 }

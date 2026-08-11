@@ -35,6 +35,7 @@ node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a s
 node tools/simrunner.js --incursion=1-14 --n=32     # the endless ladder, by rung
 node tools/simrunner.js --incursion=40,55 --idle=600  # ...for a player who has idled
 node tools/simrunner.js --all --n=32 --legacy=27    # the campaign on a SECOND run
+node tools/simrunner.js --region=gallowmoor --relics=14   # ...spending its relics on troops
 npm run mobile             # phone-width layout audit — needs `npm start` running
 node tools/mobile.mjs --w=844 --h=390                # a phone in landscape
 node tools/smoke.mjs       # browser smoke test — needs `npm start` running first
@@ -67,7 +68,8 @@ home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data
 `regions.rules.js`, `sim.js`←`rally.js`, `commands.js`←`boosters.js`,
 `battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`, `mainmenu.js`←
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
-`simrunner.js`←`simladder.js`, `mapgen.js`←`mapgraph.js` (mapgen decides where the sites
+`simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`, `sim.js`←`arrivals.js`,
+`store.js`←`refund.js`, `mapgen.js`←`mapgraph.js` (mapgen decides where the sites
 are; mapgraph decides which of them are neighbours).
 
 **`regions.rules.js` now also holds the two load-bearing rules of the region table**
@@ -95,8 +97,15 @@ simulation run headless with zero mocking.
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **6**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **7**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly.
+
+**v7 is `FactionMods.unitMult` — the per-troop attack/defence multipliers the relic
+lines buy.** It is the one shop feature in this project's history that could not ride a
+field the contract already had, and the reason is the feature itself: `unitAtkMult` is one
+number for the whole stack, and the entire point is that militia and rams stop sharing it.
+Sparse — `{}` for every battle the balance table was measured with — so it costs nothing
+to carry and cannot be mistaken for a live field.
 
 **v6 is `rules.incursion` — `{depth, mutators[]}` — and it carries a rung's IDENTITY,
 not its effects.** Every incursion mutator is applied on the meta side through a field
@@ -684,6 +693,53 @@ with no migration" — and it did: nothing about the persisted shape changed.
   channels the campaign's curve is measured against, so a generous legacy there would not
   make a second run faster, it would make every measured region a walkover.
 
+## Relics: the currency that does not tick, and the troop lines it buys
+
+`meta.relics`, paid by `meta/rewards.js` and nothing else. Crowns accrue per second —
+that is the idle half of the game and also why they cannot price anything that has to
+stay scarce, because waiting is always an answer. Relics are paid only for ground you
+have **beaten**: a region's FIRST clear pays its tier (78 across the whole campaign,
+back-loaded — tier 1 pays one each), an incursion rung pays `1 + depth/5`, and a **raid
+pays none**. That last omission is the design: `raidLump` exists because re-clearing has
+to be worth something and must not be farmable, and a relic is the thing that must not be
+farmable at all.
+
+They buy two things. **Booster charges** — 1–3 relics each, where they used to be 25–60
+crowns and therefore free from about region six forever. And **one endless line per
+troop** (`vetMilitia` … `vetRams`, +6% attack and defence for that troop alone), which is
+the answer to "level the troops I like": `arms` levels everything you own at once, which
+is the right shape for the main ladder and the wrong shape for a decision.
+
+**Boosters got stronger to match**, since a charge now costs something real — rally 2→3
+hops and 50→65%, march 0.50→0.35, bombard ¼→⅓ of a garrison and 60→110 structure, fortify
+20→26s and attackers 0.50→0.40, tithe 250→400 gold. The harness launches every run with
+`boosters: []`, so none of it can have moved a measured number.
+
+**This is the third mechanism for shipping power without re-tuning the campaign**, after
+the Crown tier's `endgame` gate and the specialists' zero default weight — and it is the
+cleanest of the three: **the harness earns no relics at all.** `metaFor` builds its empire
+by calling `markConquered` directly and relics are paid by `applyOutcome`, so every battle
+in `regions.data.js` is fought at zero. `tests/relics.test.js` drives the bot's own
+shopping routine with a 10¹² crown budget at every stage and asserts it buys none of them,
+*and* that it does once relics are granted.
+
+**Contract v7 — `FactionMods.unitMult`**, sparse, applied per unit inside `combat.js
+power()`. This is the one shop feature that could NOT ride an existing field, and the
+reason is the feature: `unitAtkMult` is one number for the whole stack and the entire
+point is that militia and rams stop sharing it. `{}` for every measured battle.
+
+**Two things follow the currency rather than the run.** Relics survive abdication, and so
+do the lines they bought (`prestige.js` keeps `meta.upgrades` entries whose currency is
+relics, filtered by currency so a line added later is kept without anyone remembering).
+A hard currency whose purchases evaporate every reset is a rental, and the player would
+hoard it and never spend.
+
+**Measured, with `--relics=N` (new):** gallowmoor 67% at 0, **74% at 14** (what a real
+player holds by region 10), **92% at 78** (a whole campaign banked). So the table describes
+a player who does not spend them, and choosing to is worth ~7 points mid-campaign and ~25
+by the end of a run. That is the feature working, not a mis-tune — but it is the same
+shape as the `--idle` gap below and belongs beside it.
+
 ## The Crown tier: four more endless lines, gated
 
 `exchequer`, `grandArmy`, `warCollege`, `citadels` — endless, based at 200–350k, priced
@@ -850,6 +906,17 @@ included. Two properties are load-bearing and neither is obvious:
 Only the FIRST of a troop you do not already field is refused; more of one you do is always
 allowed. Trimming a carried loadout keeps the types with the most SLOTS committed, not the
 most bodies — 30 militia and 6 rams are both 30 slots, and the rams are obviously a choice.
+
+**...and the five you bring are the only five you can BUILD.** The cap capped what
+you could carry and nothing capped what you could then train, so the decision it exists
+to create expired the moment you captured somebody's yard: you picked five at the
+briefing and built the other three out of enemy strongholds, free and unannounced.
+`meta/composition.js battleRoster` narrows `unlockedUnits` to what the expedition
+actually carries, `cmdTrain` already gated on that field, and nothing in the engine
+changed. `trainableUnit` carries the other half — a captured yard set to an alien type
+falls back to a buildable one, and *never* to the Marshal, who would sit there producing
+nothing and looking busy. **Balance-neutral, measured**: the bot trains militia and rams,
+mapgen seeds militia and spearmen, and all four are in the default spread.
 
 **The Marshal is not a train option any more.** `TRAINABLE_UNITS` in `battle/training.js`
 is derived from `maxPerSite`, because the two halves are one rule: a unit you may only have
@@ -1079,10 +1146,13 @@ activating focused buttons.
 - **`breachSeconds` stopped binding around region 8.** 33 militia out-pace a level-5
   castle's repair, and landing budgets reach 703 slots, so the mechanism the whole design
   rests on no longer gates anything late. This is why rams measure as a straight loss.
-- **The harness player is poorer than any real one.** `metaFor` grants one region's worth
-  of idle income and never raids; a player who simply plays back-to-back banks 2.29M
-  crowns by region 24 against the harness's 464k. At `--idle=50` the last region goes
-  from 25% to **85%**, so tiers 4–6 may be walkovers the table cannot see.
+- **The harness player is poorer than any real one**, in both currencies. `metaFor` grants
+  one region's worth of idle income and never raids; a player who simply plays back-to-back
+  banks 2.29M crowns by region 24 against the harness's 464k. At `--idle=50` the last region
+  goes from 25% to **85%**, so tiers 4–6 may be walkovers the table cannot see. Relics are
+  the same gap with a smaller number and a new flag: `--relics=14` (region 10's honest
+  holding) is +7 on gallowmoor, `--relics=78` is +25. Both are now re-takeable rather than
+  remembered, which is the only part that was ever actionable.
 - Dead seam fields with no reader: `ramImpactHp`, `rules.isRaid`, `rules.targetLengthMs`.
 - `tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 515 lines against a
   400-line cap and `npm run check` reports ok.

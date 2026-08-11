@@ -158,7 +158,8 @@ export function homeGuard(state, out, busy) {
   const threat = encroachment(state, home);
   if (total(threat) === 0) return false;
 
-  const need = power(threat, home.garrison, { statMult: state.mods[FOE]?.unitAtkMult ?? 1 })
+  const need = power(threat, home.garrison,
+    { statMult: state.mods[FOE]?.unitAtkMult ?? 1, unitMult: state.mods[FOE]?.unitMult })
     * AI.homeGuardMargin;
   if (defenceOf(state, home, threat) >= need) return true;
 

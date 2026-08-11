@@ -15,6 +15,7 @@ export const UI = Object.freeze({
   crownsPerSec: '/s',
   income: 'Income',
   treasury: 'Treasury',
+  relics: 'Relics',
   worldMap: 'World Map',
   shop: 'Upgrades',
   boosters: 'Boosters',
@@ -162,6 +163,9 @@ export const SHOP = Object.freeze({
   militaryFirst: 'Veterancy and raiders win by burning farms fast. Both clear tier 2.',
   standingArmyNote: 'The most directly felt purchase in the game.',
   affordIn: 'Affordable in',
+  /** Relics cannot be waited for, so the tooltip names the two places they come
+   *  from instead of counting down to a moment that never arrives. */
+  relicsFrom: 'Relics come from first conquests and incursion rungs',
   chargeLabel: 'charges',
   boosterLocked: 'Unlock this booster before buying charges.',
   boosterFull: 'Stock full.',

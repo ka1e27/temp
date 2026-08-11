@@ -33,7 +33,13 @@ test('crown: the tier exists, is endless, and is the only gated thing in the sho
     assert.ok(u.cost.base >= 100000,
       `${u.id} costs ${u.cost.base} — the Crown tier is priced for an incursion economy`);
   }
-  const gated = UPGRADES.filter((u) => u.requires);
+  // The ENDGAME gate is the Crown tier's alone. The troop lines carry a
+  // `unit:` gate, which is a different claim about a different thing — it asks
+  // whether you own the troop, not whether you have finished the game — so the
+  // assertion is on the endgame gate specifically rather than on "has a
+  // requires", which would have quietly stopped testing anything the moment a
+  // second kind of gate existed.
+  const gated = UPGRADES.filter((u) => u.requires === 'endgame');
   assert.deepEqual(gated.map((u) => u.id).sort(), CROWN.map((u) => u.id).sort());
   assert.equal(UPGRADE_GROUPS.filter((g) => g.requires).length, 1);
 });

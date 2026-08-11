@@ -15,6 +15,11 @@ export const META_EVENTS = Object.freeze({
   /** { crowns, delta, reason } — reason is 'idle' | 'offline' | 'reward' | 'raid'
    *  | 'incursion' | 'legacy' | 'spend' */
   CROWNS_CHANGED: 'meta:crowns',
+  /** { crowns, relics, delta, reason } — the HARD currency moved. Its own event
+   *  rather than a `reason` on the one above, because every existing listener
+   *  treats that one as "the treasury changed" and would announce a relic as a
+   *  crown. Reasons: 'conquest' | 'incursion' | 'spend'. */
+  RELICS_CHANGED: 'meta:relics',
   /** { incomePerSec, previous } */
   INCOME_CHANGED: 'meta:income',
   /** { regionId } — became attackable because a neighbour fell */

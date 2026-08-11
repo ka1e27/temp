@@ -37,19 +37,25 @@ export function chargeCost(id) {
   return BOOSTER_SHOP[id]?.chargeCost ?? Infinity;
 }
 
-/** @returns {{ok:boolean, reason:string, cost:number, count:number}} */
+/** Which purse a charge is billed to. RELICS — see content/upgrades.data.js
+ *  `BOOSTER_SHOP` for why a currency that ticks could never price these. */
+export const chargeCurrency = (id) =>
+  (BOOSTER_SHOP[id]?.currency === 'relics' ? 'relics' : 'crowns');
+
+/** @returns {{ok:boolean, reason:string, cost:number, count:number, currency:string}} */
 export function canBuyCharge(meta, id, n = 1) {
   const entry = BOOSTER_SHOP[id];
   const count = countOf(meta, id);
-  if (!entry) return { ok: false, reason: 'unknown', cost: Infinity, count };
-  if (!isUnlocked(meta, id)) return { ok: false, reason: 'locked', cost: entry.chargeCost, count };
+  const currency = chargeCurrency(id);
+  const out = (ok, reason, cost) => ({ ok, reason, cost, count, currency });
+  if (!entry) return out(false, 'unknown', Infinity);
+  if (!isUnlocked(meta, id)) return out(false, 'locked', entry.chargeCost);
   const want = Math.max(1, Math.floor(n));
-  if (count + want > entry.maxStock) {
-    return { ok: false, reason: 'full', cost: entry.chargeCost * want, count };
-  }
+  if (count + want > entry.maxStock) return out(false, 'full', entry.chargeCost * want);
   const cost = entry.chargeCost * want;
-  if (!(meta.crowns >= cost)) return { ok: false, reason: 'insufficient', cost, count };
-  return { ok: true, reason: 'ok', cost, count };
+  const held = Math.max(0, Math.floor(meta?.[currency] ?? 0));
+  if (!(held >= cost)) return out(false, 'insufficient', cost);
+  return out(true, 'ok', cost);
 }
 
 /** Atomic, exactly like an upgrade purchase: all charges or none. */
@@ -57,15 +63,19 @@ export function buyCharge(meta, id, n = 1, bus) {
   const check = canBuyCharge(meta, id, n);
   if (!check.ok) return check;
   const want = Math.max(1, Math.floor(n));
+  const { currency } = check;
 
-  meta.crowns -= check.cost;
+  meta[currency] -= check.cost;
   meta.boosters[id] = check.count + want;
-  meta.stats.crownsSpent += check.cost;
+  if (currency === 'relics') meta.stats.relicsSpent += check.cost;
+  else meta.stats.crownsSpent += check.cost;
 
-  const result = { ok: true, reason: 'ok', cost: check.cost, count: meta.boosters[id] };
+  const result = {
+    ok: true, reason: 'ok', cost: check.cost, count: meta.boosters[id], currency,
+  };
   emit(bus, META_EVENTS.BOOSTER_PURCHASED, { id, added: want, ...result });
-  emit(bus, META_EVENTS.CROWNS_CHANGED, {
-    crowns: meta.crowns, delta: -check.cost, reason: 'spend',
+  emit(bus, currency === 'relics' ? META_EVENTS.RELICS_CHANGED : META_EVENTS.CROWNS_CHANGED, {
+    crowns: meta.crowns, relics: meta.relics, delta: -check.cost, reason: 'spend',
   });
   return result;
 }
@@ -95,6 +105,7 @@ export function inventory(meta) {
     unlocked: isUnlocked(meta, id),
     count: countOf(meta, id),
     chargeCost: chargeCost(id),
+    chargeCurrency: chargeCurrency(id),
     maxStock: BOOSTER_SHOP[id].maxStock,
     spec: specOf(id),
   }));
