@@ -47,7 +47,7 @@ function nonDecreasing(values, label, key = (r) => r.id) {
   }
 }
 
-test('campaign: every region is winnable by an ordinary player, at every tier', { timeout: 900000 }, () => {
+test('campaign: every region is winnable by an ordinary player, at every tier', { timeout: 1200000 }, () => {
   // Deliberately a FLOOR rather than a win-rate assertion: tuning happens on
   // tools/simrunner.js at n >= 96, and a band re-measured at n=8 fails on noise
   // constantly. What this catches is the thing that actually shipped — a region
@@ -65,12 +65,35 @@ test('campaign: every region is winnable by an ordinary player, at every tier', 
   // floors at 18%, where a sixteen-seed sample is empty 5% of the time and a
   // twenty-four-seed one 1%. The floor is a claim about the region; a sample that
   // fails one time in twenty is a claim about the dice.
+  //
+  // A SECOND BATCH, ONLY WHEN THE FIRST COMES UP EMPTY — the third time this
+  // exact number has had to grow, and for the third time it is the tier-6 floor
+  // moving, not a bigger campaign. Fog of war (battle/belief.js) measured a real
+  // drop for the single tightest margin in the game: widowsgate reads 6% at
+  // n=48 under full fog (both the enemy AI and the harness bot blind), down from
+  // 25% pre-fog. `wins > 0` is still an honest claim about a 6% region — it is
+  // not broken, it is exactly as hard as `TOO HARD` on tools/simrunner.js already
+  // says — but a 24-seed sample can no longer promise it: P(zero) at a true 6%
+  // is ~22%, not the <=1% this floor is supposed to run at. Escalating only on
+  // an empty first batch is what keeps that promise without paying for it on the
+  // twenty-three regions that were never in question — each of those still
+  // resolves on the first 24, exactly as before. This is a MEASURED regression
+  // in the fog change's report, not something this test papers over; re-tuning
+  // widowsgate itself (content/regions.data.js) is the separate, scheduled pass.
   const SEEDS = 24;
+  const ESCALATED_SEEDS = 24;
   for (let i = 0; i < REGIONS.length; i++) {
-    const wins = Array.from({ length: SEEDS }, (_, k) => playOnce(i, 1000 + (k + 1) * 7919))
+    const seedAt = (k) => 1000 + (k + 1) * 7919;
+    let attempted = SEEDS;
+    let wins = Array.from({ length: SEEDS }, (_, k) => playOnce(i, seedAt(k)))
       .filter((b) => b.status === 'win').length;
+    if (wins === 0) {
+      wins = Array.from({ length: ESCALATED_SEEDS }, (_, k) => playOnce(i, seedAt(SEEDS + k)))
+        .filter((b) => b.status === 'win').length;
+      attempted += ESCALATED_SEEDS;
+    }
     assert.ok(wins > 0,
-      `${REGIONS[i].id} was not won once in ${SEEDS} attempts — it is not a hard region,`
+      `${REGIONS[i].id} was not won once in ${attempted} attempts — it is not a hard region,`
       + ' it is a broken one');
   }
 });

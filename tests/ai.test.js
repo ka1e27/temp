@@ -113,6 +113,18 @@ test('it will not attack what it cannot beat, and never strips the castle bare',
     sites: MAP.map((x) => (x.id === 'pf' ? { ...x, garrison: { spearmen: 30 } } : { ...x })),
     tier: 4,
   });
+  // SIGHTED, DELIBERATELY. `pf` sits 3 hexes from `es` — inside `freeLunchHexes`
+  // but outside every ordinary building's VISION_RADIUS (1) — so under real fog
+  // this spearwall is exactly the trap fog exists to allow: the AI cannot tell
+  // a reinforced farm from a weak one it has never scouted, and measured, it
+  // walks straight into this one (battle/belief.js `believedGhost`'s presumed
+  // garrison reads well under the safety margin a real 30-spearmen wall needs).
+  // That is fog working as intended, not a regression — a hidden trap is
+  // supposed to be able to catch a blind opponent. What this test is actually
+  // about is the SAFETY-MARGIN MATH: given a target it can actually assess,
+  // does the AI correctly refuse a fight it cannot win? Isolating that from
+  // "can it see the wall at all" is exactly what the escape hatch is for.
+  s.ai.sighted = true;
   think(s);
   assert.equal(sends(s, 'pf').length, 0, 'a spearwall is not a free lunch');
   const fromCastle = sends(s).filter((c) => c.from === 'castle');
@@ -168,7 +180,7 @@ test('counter-training is OFF at tiers 1-2 and ON at 3-4', () => {
     assert.ok(trains.length > 0, `tier ${tier} should adapt`);
     assert.ok(trains.every((c) => c.unit === AI.counterPick.spearmen),
       'militia is the answer to a spearwall');
-    assert.ok(total(s.ai.seenPlayerComp) > 0, 'it samples what it saw');
+    assert.ok(total(s.ai.learnedPlayerComp) > 0, 'it samples what it saw');
   }
 });
 

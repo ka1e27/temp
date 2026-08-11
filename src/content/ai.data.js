@@ -254,8 +254,11 @@ export const AI = {
    *  become the least urgent target on the map. The yard outranks the wall
    *  because taking it is what stops the bleeding; the wall is only ground.
    *  watchtower is worth less than a farm: no income, no training, and this
-   *  score does not model sight yet — the AI is not blinded, so a building
-   *  that only buys information is not worth anything to it today. */
+   *  score still does not model sight — the AI is blinded now (battle/belief.js),
+   *  but `attack()` scores a TARGET's value, and a watchtower is never the
+   *  attacker's own; teaching the AI to value SIGHT is a scoring change this
+   *  pass deliberately did not make (fog-design.md decision 5), not a gap
+   *  this comment gets to paper over. */
   siteValue: {
     farm: 100, trainingGround: 190, stronghold: 150, camp: 400, castle: 400, watchtower: 60,
   },

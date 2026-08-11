@@ -8,6 +8,12 @@ import { AI, UNIT_IDS, SITES, MAPGEN } from '../content/balance.js';
 import { emptyComp, addComp } from './combat.js';
 import { ME, FOE, byId } from './aicore.js';
 
+/**
+ * Reads the TRUE `state`, not the belief-filtered view every other phase in
+ * this file family reads — see the comment on `learnedPlayerComp` below for
+ * why "what doctrine has the enemy inferred over the whole battle" is
+ * deliberately not the same question as "what can a sentry see right now".
+ */
 function playerArmy(state) {
   let comp = emptyComp();
   for (const s of state.sites) {
@@ -62,12 +68,25 @@ function retrain(out, pool, unit, want) {
  * (duskfell) a threat rather than a gift.
  */
 export function adapt(state, knobs, out) {
-  const seen = state.ai.seenPlayerComp ?? emptyComp();
+  // DELIBERATELY UNFOGGED, and called with the TRUE `state` from ai.js
+  // `think()` rather than the belief view every other phase reads — the one
+  // exception in this file's whole family (fog-design.md decision 11).
+  // `learnedPlayerComp` (renamed from `seenPlayerComp`, which claimed a sense
+  // this never had) is a decayed running average of the player's WHOLE army,
+  // sampled fresh every think and kept for minutes. "The enemy commander has
+  // learned what you field" is a claim about doctrine built up over a whole
+  // battle, not about what a sentry can see this second, so it does not need
+  // — and must not get — a building nearby to be true. Fogging it would make
+  // the counter-pick a coin flip and delete a tier-3-and-up mechanic CLAUDE.md
+  // measures at 17-32 points of win rate: an enormous balance change bolted
+  // onto a rendering feature. If that trade is ever wanted, it is a balance
+  // pass with its own measurement, not a side effect of this one.
+  const learned = state.ai.learnedPlayerComp ?? emptyComp();
   const now = playerArmy(state);
   const sample = emptyComp();
   const d = AI.sampleDecay;
-  for (const u of UNIT_IDS) sample[u] = (seen[u] || 0) * d + (now[u] || 0) * (1 - d);
-  state.ai.seenPlayerComp = sample;
+  for (const u of UNIT_IDS) sample[u] = (learned[u] || 0) * d + (now[u] || 0) * (1 - d);
+  state.ai.learnedPlayerComp = sample;
 
   const unlocked = state.mods[ME]?.unlockedUnits ?? [];
   const trainers = state.sites

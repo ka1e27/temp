@@ -5,6 +5,8 @@
 //   node tools/simrunner.js                 # the vertical slice
 //   node tools/simrunner.js --region=kaldan --n=50
 //   node tools/simrunner.js --all           # every shipped region
+//   node tools/simrunner.js --all --sighted=ai    # measure the fog off the AI alone
+//   node tools/simrunner.js --all --sighted=bot   # ...and off the harness bot alone
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -59,6 +61,22 @@ function loadoutWeights(spec) {
   return out;
 }
 const WEIGHTS = loadoutWeights(args.weights);
+
+/**
+ * `--sighted`, `--sighted=ai`, `--sighted=bot` or `--sighted=ai,bot` (equivalent
+ * to plain `--sighted`) — the measurement escape hatch for fog of war, exactly
+ * the shape `--noupgrades`/`--noconstruct` already are: real balance numbers
+ * never set either half, so the four-way table (nobody blind / AI blind only /
+ * bot blind only / both blind) stays a flag flip instead of a git operation.
+ * Omitted, BOTH sides are blind — the shipped behaviour.
+ */
+function sightedFlags(spec) {
+  if (!spec) return { ai: false, bot: false };
+  if (spec === true || spec === 'both') return { ai: true, bot: true };
+  const parts = String(spec).split(',');
+  return { ai: parts.includes('ai'), bot: parts.includes('bot') };
+}
+const SIGHTED = sightedFlags(args.sighted);
 
 /**
  * The win-rate band each TIER is aiming at, as [floor, ceiling] percentages.
@@ -121,6 +139,7 @@ for (const id of regionIds) {
     upgrades: !args.noupgrades, construct: !args.noconstruct,
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
+    sightedAi: SIGHTED.ai, sightedBot: SIGHTED.bot,
   };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 

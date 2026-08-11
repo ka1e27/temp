@@ -259,7 +259,7 @@ export function createBattleState(config) {
      *  so a listener can never mutate state mid-iteration. */
     events: [],
 
-    ai: { nextThinkTick: 0, activeAttacks: [], srcCooldown: {}, seenPlayerComp: emptyComp() },
+    ai: { nextThinkTick: 0, activeAttacks: [], srcCooldown: {}, learnedPlayerComp: emptyComp() },
     boosters: makeBoosters(config.boosters),
 
     rules: {

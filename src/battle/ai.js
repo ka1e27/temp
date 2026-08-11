@@ -8,6 +8,13 @@
 // The single thing that makes it feel like an opponent rather than a spawner:
 // every squad in a wave shares ONE arriveTick. It always strikes synchronized.
 //
+// FOG OF WAR: it cannot see the true board either, any more. Every phase below
+// is handed `view` — `belief.js beliefFor(state, ME)` — instead of `state`.
+// None of this file's SCORING changed to make that true; the phases still call
+// the exact same aicore.js/aihome.js functions on the exact same argument name.
+// See belief.js for what the swap actually does and why `adapt()` alone is a
+// deliberate exception.
+//
 // Measurements and order-emitters live in ./aicore.js; the home-defence planner
 // and the surplus maths live in ./aihome.js; the composition-adaptation phase
 // lives in ./aiadapt.js. This file is the phase list.
@@ -30,6 +37,7 @@ import {
 } from './aicore.js';
 import { homeGuard, pressure, commitFor, stagingFor, concurrentFor } from './aihome.js';
 import { adapt } from './aiadapt.js';
+import { beliefFor } from './belief.js';
 
 // --- 1. free lunch ---------------------------------------------------------
 // Runs first, at EVERY tier. Leave a farm on 3 militia and it will be taken.
@@ -264,9 +272,21 @@ export function think(state) {
   const busy = new Set();   // sources committed this think — local, never stored
   const taken = {};         // targets committed this think
 
+  // FOG OF WAR — the one line that computes it. `state.ai.sighted` is never
+  // set on the real path (screens/battle.js never writes it); it exists purely
+  // so tools/simrunner.js `--sighted` can take a fully-sighted reading for
+  // measurement without editing this file or reverting anything. Everything
+  // from here down reads `view`, never `state` — except `adapt()` and
+  // `homeGuard()`, two DELIBERATE exceptions (see aiadapt.js and the comment
+  // at the `homeGuard` call below).
+  const view = state.ai.sighted ? state : beliefFor(state, ME);
+
   // Everything downstream spends army, so measure the surplus before any of it
-  // has been promised, then hand the phases the ratios it buys.
-  const p = pressure(state);
+  // has been promised, then hand the phases the ratios it buys. Read off
+  // `view`: a threat the AI cannot see is not army it should hold in reserve
+  // against, or the "surplus" this feeds would itself be a leak of information
+  // fog is supposed to hide.
+  const p = pressure(view);
   const knobs = {
     ...tier,
     commit: commitFor(tier, p),
@@ -275,16 +295,36 @@ export function think(state) {
   };
   state.ai.pressure = p;
 
+  // ALSO NOT `view` — and this one took a measured, reverted first attempt to
+  // find. `homeGuard`'s `encroachment` (aihome.js) sums the garrison of every
+  // FOE-owned site within `homeRadiusHexes` of the castle — a WIDER, STANDING
+  // awareness that was already a deliberate exception to ordinary vigilance
+  // before fog existed (`defend()`'s 6-second squad-in-flight horizon is far
+  // too late for the win condition). Fogging it does not make the castle more
+  // cautious, it makes `homeGuard` blind to the one build-up it exists to
+  // catch: a never-scouted neighbour reads as `owner: null`, encroachment's
+  // `s.owner !== FOE` check drops it, and a real 40-strong stack standing next
+  // door registers as nothing at all. The tempting fix — presume an unscouted
+  // neighbour's owner is the FOE, the same way its garrison is presumed real —
+  // was tried and measured worse: every unscouted neighbour, including a
+  // truly empty one, then read as a confirmed body of troops, and `homeGuard`
+  // answered by recalling an entire rear army for a phantom (see belief.js
+  // `believedGhost`). The castle's own household guard reading the true board
+  // is the narrower, safer claim — exactly the shape of exception `adapt()`
+  // already has, for the same reason: this is doctrine about defending the
+  // win condition, not a sentry's momentary sightline.
   const guarded = homeGuard(state, out, busy);
-  freeLunch(state, knobs, out, busy, taken);
-  defend(state, knobs, out, busy, guarded);
-  attack(state, knobs, out, busy, taken, rng);
-  consolidate(state, knobs, out, busy);
-  retreat(state, knobs, out, rng, busy);
+  freeLunch(view, knobs, out, busy, taken);
+  defend(view, knobs, out, busy, guarded);
+  attack(view, knobs, out, busy, taken, rng);
+  consolidate(view, knobs, out, busy);
+  retreat(view, knobs, out, rng, busy);
+  // NOT `view` — see aiadapt.js. The player's whole-battle composition is
+  // deliberately unfogged (fog-design.md decision 11).
   adapt(state, knobs, out);
 
   for (const cmd of out) state.commands.push(cmd);
-  state.ai.activeAttacks = activeAttacks(state);
+  state.ai.activeAttacks = activeAttacks(view);
   state.ai.nextThinkTick = state.tick
     + Math.max(1, Math.round(tier.reactionTicks * rng.jitter(AI.thinkJitter)));
   state.rngState = rng.state;

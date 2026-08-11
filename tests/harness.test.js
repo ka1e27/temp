@@ -176,6 +176,16 @@ function midBattle(id, seed, ticks = 1800) {
         if (c.t !== 'SEND' || c.by) continue;
         const to = battle.sites.find((s) => s.id === c.to);
         if (to?.owner !== 'player') continue;   // an assault, not the column
+        // FOG'S STALE-OWNER MEMORY (decision 14) means `playerTurn`'s OWN belief
+        // can list a site as "mine" long after the enemy has quietly retaken it
+        // — `from` is real per this function's own true-state read, `to` real
+        // per the check above, but the bot planned the move off a ghost that
+        // still answered "player" from the last time it looked. The sim rejects
+        // that send outright (`commands.js` `cmdSend`: `not-your-site`) — a
+        // realistic, harmless, wasted order, not a troop movement — so it is
+        // not part of the column this test is measuring.
+        const from = battle.sites.find((s) => s.id === c.from);
+        if (from?.owner !== 'player') continue;
         column.push({ tick: battle.tick, from: c.from, to: c.to, at: adv[c.from], onto: adv[c.to] });
       }
       nextThink = battle.tick + 20;

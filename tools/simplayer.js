@@ -27,6 +27,7 @@ import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { goldOf } from '../src/battle/economy.js';
 import { UNIT_IDS, CENTIGOLD, SITES } from '../src/content/balance.js';
 import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
+import { beliefFor } from '../src/battle/belief.js';
 
 /**
  * WHAT TO TAKE NEXT: THE WALL, NOT THE FIELD.
@@ -150,11 +151,15 @@ export function advanceDistance(state) {
  * cost of the mechanic stays MEASURABLE after it is switched on — the delta in
  * CLAUDE.md was taken with `--noupgrades`, and re-taking it is one flag rather
  * than a fork of this file.
+ *
+ * FOG OF WAR: blinded like the AI (battle/belief.js) via `opts.sightedBot`,
+ * the measurement-only escape hatch (`--sighted`, tools/simrunner.js).
  */
 export function playerTurn(state, opts = {}) {
-  const mine = state.sites.filter((s) => s.owner === 'player');
-  const inFlight = new Set(state.squads.filter((q) => q.owner === 'player').map((q) => q.from));
-  const front = frontDistance(state);
+  const view = opts.sightedBot ? state : beliefFor(state, 'player');
+  const mine = view.sites.filter((s) => s.owner === 'player');
+  const inFlight = new Set(view.squads.filter((q) => q.owner === 'player').map((q) => q.from));
+  const front = frontDistance(view);
 
   // THE RIDERS GET FIRST REFUSAL, and the ordering is the whole tactic.
   //
@@ -168,7 +173,7 @@ export function playerTurn(state, opts = {}) {
   //
   // Queues nothing whatsoever when no garrison holds a rider, which is every
   // default run and therefore every tuned number in regions.data.js.
-  for (const src of mine) riderTurn(state, src, front);
+  for (const src of mine) riderTurn(view, src, front);
 
   for (const src of mine) {
     const garrison = total(src.garrison);
@@ -184,7 +189,7 @@ export function playerTurn(state, opts = {}) {
     // pace. The send is built from the filter it will actually be dispatched
     // with — evaluating one army and marching a different one is how a harness
     // reports a number about a battle it never fought.
-    const filter = assaultFilter(state, src);
+    const filter = assaultFilter(view, src);
     const send = {};
     for (const u of UNIT_IDS) {
       send[u] = filter.includes(u) ? Math.floor((src.garrison[u] || 0) * fraction) : 0;
@@ -194,7 +199,7 @@ export function playerTurn(state, opts = {}) {
     let best = null;
     let bestScore = Infinity;
     for (const id of src.adj) {
-      const t = state.sites.find((x) => x.id === id);
+      const t = view.sites.find((x) => x.id === id);
       if (!t || t.owner === 'player' || t.siege?.owner === 'player') continue;
       // The castle gate is VISIBLE (see screens/battle-panel.js) precisely so a
       // competent player does not commit an army to a siege that cannot
@@ -203,15 +208,15 @@ export function playerTurn(state, opts = {}) {
       // player reads "SEALED" and goes to take the countryside instead; this
       // bot does the same read directly off the territory fraction.
       if (t.kind === 'castle'
-        && siteControlFraction(state, 'player') < (state.rules.castleGateFrac ?? 0)) continue;
+        && siteControlFraction(view, 'player') < (view.rules.castleGateFrac ?? 0)) continue;
 
       // Terrain through the sim's own functions, not a hardcoded table: the
       // game shows the player an EXACT preview, so a competent player reads the
       // mountains around a fort. A harness that could not would systematically
       // throw armies at walls and report the region as too hard.
-      const ground = groundOf(state, t);
+      const ground = groundOf(view, t);
       const field = resolveField(send, t.garrison, {
-        siteDefMult: siteDefMultOf(state, t), garrisonMult: garrisonMultOf(state, t), ground,
+        siteDefMult: siteDefMultOf(view, t), garrisonMult: garrisonMultOf(view, t), ground,
       });
       // Demand a real margin, not a bare win. The defender reinforces while our
       // squad is in transit, so a coin-flip on paper is a loss on arrival —
@@ -250,7 +255,7 @@ export function playerTurn(state, opts = {}) {
   // it has already taken. Nothing caps the sink, deliberately: `garrisonCap`
   // limits TRAINING, not stacking, and the throne is the one target that needs
   // more bodies than a farm can build.
-  const advance = advanceDistance(state) ?? front;
+  const advance = advanceDistance(view) ?? front;
   for (const src of mine) {
     const d = advance[src.id];
     if (d === undefined) continue;
@@ -259,7 +264,7 @@ export function playerTurn(state, opts = {}) {
     if (garrison <= floor + 3) continue;
 
     const forward = src.adj
-      .map((id) => state.sites.find((x) => x.id === id))
+      .map((id) => view.sites.find((x) => x.id === id))
       .filter((n) => n && n.owner === 'player' && advance[n.id] < d)
       .sort((a, b) => advance[a.id] - advance[b.id]
         || total(b.garrison) - total(a.garrison))[0];
@@ -284,7 +289,7 @@ export function playerTurn(state, opts = {}) {
   for (const s of mine) {
     if (!SITES[s.kind].train) continue;
     const wantsSiege = s.adj.some((id) => {
-      const t = state.sites.find((x) => x.id === id);
+      const t = view.sites.find((x) => x.id === id);
       return t && t.owner !== 'player' && t.hpMax > SITES.trainingGround.hp;
     });
     const want = wantsSiege && state.mods.player.unlockedUnits.includes('rams')
@@ -301,9 +306,9 @@ export function playerTurn(state, opts = {}) {
   // raised a 350-gold yard while a 150-gold farm upgrade sat unbought would be
   // measuring a spender rather than an ordinary player.
   if (opts.upgrades === false) return;
-  upgradeTurn(state, front);
+  upgradeTurn(view, front);
   if (opts.construct !== false) {
-    constructTurn(state, front, buildHexes(state));
+    constructTurn(view, front, buildHexes(view));
   }
 }
 
@@ -352,6 +357,10 @@ export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null, le
  * parallel path. Omitted, `distributeExpedition` spreads by
  * DEFAULT_COMPOSITION_WEIGHTS exactly as before: every balance number in
  * regions.data.js is measured on that branch and must stay on it.
+ *
+ * `opts.sightedAi` is the enemy's half of the same escape hatch: it flips
+ * `state.ai.sighted` on the live battle object, the one field ai.js
+ * `think()` reads for it and nothing else ever writes.
  */
 export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
   const state = metaFor(conquered, idleMinutes, seed, fieldedUnits(opts.weights),
@@ -366,7 +375,9 @@ export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) 
     // harness cannot play is a mechanic nobody has measured.
     ...(opts.incursion ? { incursion: opts.incursion } : {}),
   });
-  return startBattle(config);
+  const battle = startBattle(config);
+  if (opts.sightedAi) battle.ai.sighted = true;
+  return battle;
 }
 
 /** Run one battle to its end with the scripted player at the wheel. */
