@@ -1356,20 +1356,38 @@ activating focused buttons.
 ### Still open, and why
 
 - **THE CAMPAIGN IS UNTUNED, on purpose, and this is the biggest open item.** Free
-  movement plus the yard/wall split moved every number, and the map redesign will move
-  them again by construction — `siteCounts` becomes a mix rather than a flat count.
-  Tuning between those two is work thrown away. Measured at n=12 after the split:
+  movement, the yard/wall split and construction each moved every number, and fog
+  will move them again — the AI goes from knowing the board to believing a stale
+  copy of it. Tuning between two structural changes is work thrown away, so the
+  whole table is solved ONCE, after phase 2.
+
+  Measured at n=48 with construction live, which is the number a tuner starts from:
 
   ```
-  tier 1  100 100 100  83     tier 4  67 83 75 50
-  tier 2   92 100  83  75 75  tier 5  33 58 75
-  tier 3   75  58  92  75 67  tier 6  58 42 33
+  region        win%  win-med  advertised      region        win%  win-med  advertised
+  riverfen       98%    5.6m      8m           thanescar      85%    3.7m     6.5m
+  ashford        96%    6.7m     10m           blackspire     94%    3.4m     7.5m
+  ironwood       94%    6.9m     12m           ironcrown      88%    3.4m     7.5m
+  saltmere       94%    7.3m     13m           obsidian       75%    4.7m     8.5m
+  kaldan         94%    8.0m     14m           ravensmarch    46%    4.8m       8m
+  highmarch      98%    6.9m     15m           gravenreach    40%    5.8m     8.5m
+  greywater      85%    6.8m   15.5m           nightharrow    52%    3.7m       9m
+  thornmoor      88%    8.1m     16m           stormhalt      58%    5.0m       9m
+  emberholt      96%    5.6m   16.5m           cinderwatch    31%    5.9m     9.5m
+  gallowmoor     92%    2.8m      7m           widowsgate     23%    7.6m      10m
+  sunder         83%    3.4m      7m
+  vaelstrand     94%    3.0m      7m           TWENTY-ONE of 24 read TOO EASY.
+  duskfell       90%    3.6m    8.5m           Only the last three are in band.
+  karrowmere     96%    3.9m    8.5m
   ```
 
-  Everything got easier because the enemy lost half its production to the split, and
-  **battle lengths roughly halved** (gallowmoor 3.9m against 7m advertised) because an
-  army marches straight at the throne now. `targetLengthMin` needs re-authoring across
-  the whole table, not just `enemyMult`.
+  **The lengths are the bigger story and they are the part a dial cannot fix.**
+  Every advertised number is two to three times the real one — emberholt promises
+  16.5 minutes and delivers 5.6 — because an army marches straight at the throne
+  instead of chaining through the countryside. `targetLengthMin` needs re-authoring
+  across the whole table, and doing that by lowering the promise is the wrong
+  answer for the late regions: a tier-6 battle SHOULD be long, so what has to move
+  there is the fight, not the label.
 - **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
   rule — a yard while it holds fewer than three, a farm after that — and never a
   stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
