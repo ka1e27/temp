@@ -293,6 +293,15 @@ fragility IS the risk the purchase carries, so building forward is a bet and
 building at home is slow. Left regenerating it healed out of being a soft target on
 its own (measured: 1.57 HP two ticks after it was paid for).
 
+**A new site invalidates THREE derived maps, not two.** `cmdBuild` recomputed reach
+and occupancy and not influence, so a farm you raised painted no territory at all
+until some unrelated capture elsewhere re-triggered the flood — the board simply did
+not show the ground you had just paid for. The comment above the call even said
+"both derived per-site maps" and fixed two of three. They are invalidated by exactly
+the same events and belong at the same call sites; `sim.js siegePhase` runs the same
+trio on a flip. This matters beyond the one bug because the vision layer is a fourth
+map on the same hook, aimed squarely at a building whose entire purpose is to see.
+
 **Scaffolding you seize is RUBBLE.** `buildTicksLeft` is a timer on the site, not on
 its owner, so before `razedByCapture` the enemy could walk onto a half-dug yard and
 have `timersPhase` finish it for them — observed on gallowmoor, 0 HP under an enemy

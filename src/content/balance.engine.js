@@ -82,7 +82,12 @@ export const MAPGEN = {
    *
    * The minimum is floored by the TIER-1 regions and cannot be bought here:
    * riverfen's enemy has four extra sites, so one hold is one yard whatever the
-   * share is. That is the region table's problem (`siteCounts`), not this one's.
+   * share is. That WAS the region table's problem: every shipped region now
+   * authors its own enemy mix directly (`siteCounts.enemyMix`, regions.data.js
+   * via regions.rowbuilder.js `T()`), so this share is a FALLBACK now — read by
+   * battle/mapgen.js `planSites` only for a regionSpec with no mix to read (a
+   * test fixture, an ad hoc tools/simrunner.js row). No shipped region touches
+   * it any more, but plenty of specs built by hand still do.
    */
   enemyStrongholdShare: 0.45,
   neutralStrongholdShare: 0.25,
@@ -114,7 +119,11 @@ export const MAPGEN = {
    *  half: a wall produces nothing, so this is the number that decides how much
    *  of the enemy's country is army rather than architecture (see
    *  `enemyStrongholdShare` above for the measurement). `fortsAmong` in
-   *  mapgen.js guarantees at least one yard whatever this rounds to. */
+   *  mapgen.js guarantees at least one yard whatever this rounds to.
+   *
+   *  STILL LOAD-BEARING FOR THE NEUTRAL POOL, which never got its own per-region
+   *  column and still splits off this one share — and still the enemy
+   *  fallback's own fort/yard split when a regionSpec has no authored mix. */
   fortShareOfHolds: 0.34,
   /** Starting garrisons before enemyMult. The player's camp is deliberately
    *  empty: the expedition deploys into it at tick 0.

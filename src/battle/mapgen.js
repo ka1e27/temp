@@ -87,11 +87,19 @@ function planSites(spec) {
     plan.push({ owner: 'player', kind, band: [0, MAPGEN.ownBandFrac] });
   }
 
+  // THE MIX IS AUTHORED PER REGION WHEN ONE IS SUPPLIED (regions.data.js
+  // `siteCounts.enemyMix`, via regions.rowbuilder.js `T()`) — a tuner can say
+  // "riverfen's enemy has 2 yards" directly, which the share below cannot: a
+  // handful of extra sites rounds to a fixed hold count no matter the share.
+  // A bare regionSpec (a test fixture, an ad hoc tools/simrunner.js row) has
+  // no mix to read, so it still falls back to the two shares below, exactly
+  // as this always worked.
   const enemyExtra = Math.max(0, (spec.enemySites ?? 6) - 1);
-  const holds = Math.min(enemyExtra,
+  const mix = spec.enemyMix ?? spec.region?.siteCounts?.enemyMix;
+  const holds = mix ? mix.forts + mix.grounds : Math.min(enemyExtra,
     Math.max(1, Math.round(enemyExtra * MAPGEN.enemyStrongholdShare)));
-  const forts = fortsAmong(holds);
-  const farms = Math.max(1, enemyExtra - holds);
+  const forts = mix ? mix.forts : fortsAmong(holds);
+  const farms = mix ? mix.farms : Math.max(1, enemyExtra - holds);
   for (let i = 0; i < enemyExtra; i++) {
     if (i < holds) {
       plan.push({
