@@ -252,8 +252,13 @@ export const AI = {
    *  kind that falls through scores as a farm, which is exactly how a training
    *  ground — the thing replacing the army you are killing — would quietly
    *  become the least urgent target on the map. The yard outranks the wall
-   *  because taking it is what stops the bleeding; the wall is only ground. */
-  siteValue: { farm: 100, trainingGround: 190, stronghold: 150, camp: 400, castle: 400 },
+   *  because taking it is what stops the bleeding; the wall is only ground.
+   *  watchtower is worth less than a farm: no income, no training, and this
+   *  score does not model sight yet — the AI is not blinded, so a building
+   *  that only buys information is not worth anything to it today. */
+  siteValue: {
+    farm: 100, trainingGround: 190, stronghold: 150, camp: 400, castle: 400, watchtower: 60,
+  },
   consolidationBonus: 0.15, // per adjacent site already held
   sampleDecay: 0.7,         // exponential decay on the observed player army
   // BOTH of these are SHARES OF PRODUCTION, converged on every think — see

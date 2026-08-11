@@ -24,6 +24,7 @@ import { rallyPhase } from './rally.js';
 import { arrivalsPhase } from './arrivals.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { recomputeOccupancy } from './occupancy.js';
+import { recomputeVision } from './vision.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget, reverseSquad, clearPathCache } from './movement.js';
 import { drainCommands } from './commands.js';
@@ -45,10 +46,12 @@ export function startBattle(config) {
   clearPathCache();
   const state = createBattleState(config);
   state.grid.rivers = (config.grid?.rivers ?? []).map(([q, r]) => `${q},${r}`);
-  // Both per-hex maps, together, because they are invalidated by exactly the
-  // same event: a site changing hands or coming into existence.
+  // All three per-hex maps, together, because they are invalidated by exactly
+  // the same event: a site changing hands or coming into existence. Vision
+  // is the fog-of-war layer (battle/vision.js) — buildings see, squads do not.
   recomputeInfluence(state);
   recomputeOccupancy(state);
+  recomputeVision(state);
   return state;
 }
 
@@ -174,7 +177,7 @@ function siegePhase(state) {
     }
     recomputeReach(state.sites);
   }
-  if (flipped) { recomputeInfluence(state); recomputeOccupancy(state); }
+  if (flipped) { recomputeInfluence(state); recomputeOccupancy(state); recomputeVision(state); }
 }
 
 // --- phase 6: rally auto-send lives in ./rally.js ---------------------------
@@ -186,6 +189,7 @@ export { arrivalsPhase, fightStack, resolveArrival } from './arrivals.js';
 // --- phase 8: timers --------------------------------------------------------
 
 function timersPhase(state) {
+  let opened = false;
   for (const site of state.sites) {
     if (site.shieldTicks > 0) site.shieldTicks--;
     // SCAFFOLDING BECOMES A BUILDING. It stood at 1 HP the whole time it was
@@ -195,6 +199,7 @@ function timersPhase(state) {
       site.buildTicksLeft--;
       if (site.buildTicksLeft === 0) {
         site.hp = site.hpMax;
+        opened = true;
         pushEvent(state, EVENTS.SITE_BUILT, { siteId: site.id, kind: site.kind });
       }
     }
@@ -208,6 +213,13 @@ function timersPhase(state) {
       }
     }
   }
+  // A BUILD FINISHING IS A VISION EVENT, and it is the fourth one — scaffolding
+  // is blind (battle/vision.js), so the tick a watchtower opens is the tick its
+  // owner can suddenly see four hexes further. The other three call sites all
+  // key off the site LIST or its ownership changing, neither of which happens
+  // here: nothing appears, nothing changes hands, a timer merely runs out. Miss
+  // this and the one building bought purely for sight grants none of it, ever.
+  if (opened) recomputeVision(state);
   for (const f of FACTIONS) {
     if (state.factions[f].trainBoostTicks > 0) state.factions[f].trainBoostTicks--;
   }

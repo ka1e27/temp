@@ -158,6 +158,9 @@ export const SITES = {
                 garrisonMult: 1.30 },
   camp:       { gold: 4.0, train: 1.25, cap: 80, hp: 480, hpRegen: 5.0, defMult: 1.40 },
   castle:     { gold: 4.0, train: 1.25, cap: 80, hp: 480, hpRegen: 5.0, defMult: 1.60 },
+  // FOG OF WAR'S ONE BUILDING, and it ships here and not earlier: the
+  // cheapest cap in the table, useless in a fight, sees past its own doorstep.
+  watchtower: { gold: 0,   train: 0,    cap: 15, hp: 120, hpRegen: 2.5, defMult: 1.10 },
 };
 
 /** Every site kind, in the order they read as a ladder. ONE STATEMENT of the
@@ -231,11 +234,20 @@ export const RECRUIT = {
   marshal: { gold: 250, cooldownSec: 90 },
 };
 
-/** Territory influence radius by site kind, and the movement effect. */
+/** Territory influence radius by site kind, and the movement effect.
+ *  watchtower's CLAIM is a farm's — its sight is the special number below,
+ *  not its footprint. */
 export const INFLUENCE_RADIUS = {
-  farm: 1, trainingGround: 1, stronghold: 2, camp: 3, castle: 3,
+  farm: 1, trainingGround: 1, stronghold: 2, camp: 3, castle: 3, watchtower: 1,
 };
 export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.75 };
+
+/** SIGHT radius by kind (battle/vision.js) — NOT a read of INFLUENCE_RADIUS:
+ *  that would silently hand a camp a 3-hex sightline and a farm 1. Every
+ *  ORDINARY building sees its own doorstep; watchtower sees past it. */
+export const VISION_RADIUS = {
+  farm: 1, trainingGround: 1, stronghold: 1, camp: 1, castle: 1, watchtower: 4,
+};
 
 /** The enemy commander's numbers live in ./ai.data.js and are re-exported here,
  *  so `import { AI, AI_TIERS } from '../content/balance.js'` keeps working and

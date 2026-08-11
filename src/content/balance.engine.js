@@ -134,18 +134,23 @@ export const MAPGEN = {
    *
    *  Thinned along with EXPEDITION above: a foothold should be a foothold, not
    *  a second army. The player's outposts start held rather than garrisoned. */
+  // watchtower is `{}` for all three: `mapgen.js planSites` never places one
+  // (nobody starts with a watchtower, you build them — see BUILD_COSTS), so
+  // this entry is never actually read on the generated path. It exists so
+  // the per-kind tables have no hole for a kind that IS real mid-battle.
   garrison: {
     player: { camp: {}, farm: { militia: 3, spearmen: 1 },
               trainingGround: { militia: 3, spearmen: 1 },
-              stronghold: { militia: 3, spearmen: 2 } },
+              stronghold: { militia: 3, spearmen: 2 }, watchtower: {} },
     enemy: {
       castle: { militia: 4, spearmen: 3 },
       farm: { militia: 4 },
       trainingGround: { militia: 3, spearmen: 2 },
       stronghold: { militia: 3, spearmen: 3 },
+      watchtower: {},
     },
     neutral: { farm: { militia: 3 }, trainingGround: { militia: 2, spearmen: 2 },
-               stronghold: { militia: 2, spearmen: 3 } },
+               stronghold: { militia: 2, spearmen: 3 }, watchtower: {} },
   },
 };
 

@@ -108,7 +108,10 @@ const MAX_LEVEL = SITE_UPGRADE.length; // every step but the last
  *  x1.35 training throughput and the thing you are short of mid-battle is
  *  bodies; the WALL is last of the three, since levelling ground you already
  *  hold is the least urgent thing a level buys. */
-const BUILD_ORDER = { farm: 0, trainingGround: 1, camp: 2, stronghold: 3, castle: 4 };
+// watchtower is last: it buys sight, and this bot never plays for it.
+const BUILD_ORDER = {
+  farm: 0, trainingGround: 1, camp: 2, stronghold: 3, castle: 4, watchtower: 5,
+};
 
 /**
  * Queue at most one site upgrade. `front` is `frontDistance(state)`, passed in

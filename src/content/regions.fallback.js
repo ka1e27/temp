@@ -28,6 +28,7 @@ export const BASE_GARRISON = Object.freeze({
   trainingGround: { spearmen: 2, militia: 2 },
   farm: { militia: 3 },
   camp: {},
+  watchtower: {}, // never placed by mapgen either; see balance.engine.js MAPGEN.garrison
 });
 /** Neutral sites are lightly held — they are the opening move, not a wall. */
 export const NEUTRAL_GARRISON = Object.freeze({ militia: 2 });

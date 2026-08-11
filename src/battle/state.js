@@ -6,14 +6,30 @@
 // determinism tests.
 // PURE.
 import {
-  SITES, SITE_LEVELS, SITE_UPGRADE, BOOSTERS, UNIT_IDS, RALLY_KEEP, MOVEMENT, BUILD_COSTS,
+  SITES, SITE_LEVELS, BOOSTERS, RALLY_KEEP, MOVEMENT,
 } from '../content/balance.js';
 import { distance } from '../core/hex.js';
 // The per-hex layer. state.js owns the SHAPE of a battle; occupancy.js owns the
 // questions you ask about one hex of it, so `isBlocked` lives there now and is
 // re-exported here for the consumers that have always imported it from state.
 import { recomputeOccupancy, blockedSet, isBlocked } from './occupancy.js';
+import { recomputeVision } from './vision.js';
 export { blockedSet, isBlocked, recomputeOccupancy };
+// The small readouts below (siteById, armySize, rally helpers, ...) split out
+// to ./siteinfo.js for the line budget, the same way isBlocked did to
+// ./occupancy.js above; re-exported so nothing that imports them from here
+// has to know that file exists. `clampRallyKeep` is imported (not just
+// re-exported) because `createBattleState` below calls it directly.
+import {
+  siteById, hexKey, armySize, sitesOwned, siteControlFraction, castleSealed,
+  effectiveLevel, upgradeProgress, buildProgress, clampRallyKeep, rallyKeepOf,
+  rallyTargetsOf, ralliesTo,
+} from './siteinfo.js';
+export {
+  siteById, hexKey, armySize, sitesOwned, siteControlFraction, castleSealed,
+  effectiveLevel, upgradeProgress, buildProgress, clampRallyKeep, rallyKeepOf,
+  rallyTargetsOf, ralliesTo,
+};
 import { emptyComp, addComp } from './combat.js';
 import { TICK_HZ } from '../core/loop.js';
 
@@ -219,6 +235,23 @@ export function createBattleState(config) {
      *  wrote it. */
     influenceVersion: 0,
 
+    /** FOG OF WAR — the sight half. `{ player: {hexKey: 1, ...}, enemy: {...} }`,
+     *  built by battle/vision.js `recomputeVision` at the same three events
+     *  influence and occupancy above are (a site changes hands, is built, or
+     *  the battle starts). Buildings see; squads do not — see that file. Left
+     *  empty here rather than computed, matching `influence`'s own pattern:
+     *  `createBattleState` is called directly by fixtures that never touch
+     *  `startBattle`, and an empty sight map is the honest answer for a state
+     *  nothing has painted yet. */
+    vision: { player: {}, enemy: {} },
+    /** FOG OF WAR — the memory half. `{ player: {siteId: owner}, enemy: {...} }`,
+     *  the LAST-KNOWN owner of every site either side has ever actually seen.
+     *  Unlike every other derived map on this object, `recomputeVision` does
+     *  NOT rebuild this from scratch — it only ever adds an entry or updates
+     *  one currently in sight, so a site that drops out of vision keeps
+     *  whatever was last true of it instead of vanishing or flickering. */
+    seen: { player: {}, enemy: {} },
+
     /** UI writes intents here; the sim drains them at the top of each tick.
      *  Presentation can therefore never corrupt the simulation. */
     commands: [],
@@ -277,123 +310,15 @@ export function createBattleState(config) {
   // blocks anything — which fails silently, and did: a test fixture that called
   // this directly marched armies straight through an enemy stronghold.
   recomputeOccupancy(state);
+  // Vision has the identical hazard and fails in a MORE convincing way: the
+  // empty map above is a board where `canSee` is false for every hex, so every
+  // enemy site resolves to a ghost and every enemy squad vanishes. That reads
+  // exactly like fog working perfectly rather than like fog missing, which is
+  // the sort of wrong that survives a review.
+  recomputeVision(state);
   return state;
 }
 
-// --- small shared helpers used across the battle modules ------------------
-
-export const siteById = (state, id) => state.sites.find((s) => s.id === id);
-
-export const hexKey = (hex) => `${hex[0]},${hex[1]}`;
-
-
-/** Total units a faction has anywhere: garrisons, sieges, and squads in flight. */
-export function armySize(state, faction) {
-  let n = 0;
-  const count = (c) => UNIT_IDS.reduce((a, u) => a + (c[u] || 0), 0);
-  for (const s of state.sites) {
-    if (s.owner === faction) n += count(s.garrison);
-    if (s.siege?.owner === faction) n += count(s.siege.comp);
-  }
-  for (const sq of state.squads) if (sq.owner === faction) n += count(sq.comp);
-  return n;
-}
-
-export function sitesOwned(state, faction) {
-  return state.sites.filter((s) => s.owner === faction);
-}
-
-/** Fraction of the region's non-castle sites `faction` currently owns. This
- *  is the territory half of the castle gate (see `castleSealed`): a SITE
- *  count, not painted hexes, so it cannot be nudged by influence radius or
- *  contested bands — you either hold the place or you do not. */
-export function siteControlFraction(state, faction) {
-  const rest = state.sites.filter((s) => s.kind !== 'castle');
-  if (!rest.length) return 1;
-  return rest.filter((s) => s.owner === faction).length / rest.length;
-}
-
-/**
- * Is `castle` currently sealed against whoever is besieging it — i.e. its HP
- * cannot reach 0 no matter how long the siege runs, the same shape as
- * `breachSeconds() === Infinity` for an under-strength siege against a
- * stronghold (see battle/combat.js). A region with no gate (`castleGateFrac`
- * 0, the default) never seals; a castle with no active siege is never
- * "sealed" either, since the question does not apply.
- */
-export function castleSealed(state, castle) {
-  if (castle.kind !== 'castle' || !castle.siege) return false;
-  const need = state.rules.castleGateFrac ?? 0;
-  if (need <= 0) return false;
-  return siteControlFraction(state, castle.siege.owner) < need;
-}
-
-/** Effective per-level spec for a site, accounting for an in-progress upgrade
- *  (which produces at the OLD level until it completes). */
-export function effectiveLevel(site) {
-  return site.upgradeTicksLeft > 0 ? Math.max(1, site.level - 1) : site.level;
-}
-
-/**
- * How far an in-progress site upgrade has got, 0..1 — and 0 when nothing is
- * building.
- *
- * The DENOMINATOR is the interesting part and it is why this is a function
- * rather than a division at each call site: the site only stores ticks
- * REMAINING, and `cmdUpgrade` raises `site.level` at the moment it starts the
- * build, so the step being paid for is always `SITE_UPGRADE[level - 2]`. Two
- * surfaces draw this (the panel bar and the board's build ring) and a second
- * copy of that off-by-two is exactly the kind of thing that goes wrong once the
- * ladder is extended — which it already has been.
- */
-export function upgradeProgress(site) {
-  const left = site?.upgradeTicksLeft ?? 0;
-  if (left <= 0) return 0;
-  const spec = SITE_UPGRADE[site.level - 2];
-  const total = spec ? sec(spec.sec) : 0;
-  return total > 0 ? Math.max(0, Math.min(1, 1 - left / total)) : 0;
-}
-
-/** How far a BUILD has got, 0..1 — 0 once nothing is going up. Same shape as
- *  `upgradeProgress`: the denominator (`BUILD_COSTS[kind].sec`) lives in
- *  content, not on the site, so this stays the one place it is divided. */
-export function buildProgress(site) {
-  const left = site?.buildTicksLeft ?? 0;
-  if (left <= 0) return 0;
-  const spec = BUILD_COSTS[site?.kind];
-  const total = spec ? sec(spec.sec) : 0;
-  return total > 0 ? Math.max(0, Math.min(1, 1 - left / total)) : 0;
-}
-
-/**
- * Coerce a rally hold-back to a legal value: a whole number inside the
- * RALLY_KEEP band. A missing value — a site resumed from a save written before
- * the field existed — falls back to the default, which is the old global, so
- * an old battle picks up exactly where it left off.
- */
-export function clampRallyKeep(n) {
-  if (n === null || n === undefined) return RALLY_KEEP.default;
-  const v = Math.round(Number(n));
-  if (!Number.isFinite(v)) return RALLY_KEEP.default;
-  return Math.min(RALLY_KEEP.max, Math.max(RALLY_KEEP.min, v));
-}
-
-/** How many troops a rallied site keeps at home before forwarding the rest. */
-export const rallyKeepOf = (site) => clampRallyKeep(site.rallyKeep);
-
-/**
- * A site's rally destinations, as an array, whatever shape it is stored in.
- *
- * Tolerant of the single-`rallyTarget` shape this replaced. A resume blob from
- * the older contract is discarded rather than migrated (meta/resume.js), so this
- * is not load-bearing for saves — it is here so that a hand-built test fixture
- * or an older snapshot reads as a one-target rally instead of as no rally at
- * all, which would fail silently rather than loudly.
- */
-export function rallyTargetsOf(site) {
-  if (Array.isArray(site?.rallyTargets)) return site.rallyTargets;
-  return site?.rallyTarget ? [site.rallyTarget] : [];
-}
-
-/** Is `id` one of this site's rally destinations? */
-export const ralliesTo = (site, id) => rallyTargetsOf(site).includes(id);
+// The small shared readouts used across the battle modules — siteById,
+// armySize, the rally helpers, and friends — live in ./siteinfo.js now; see
+// the import/re-export pair at the top of this file.

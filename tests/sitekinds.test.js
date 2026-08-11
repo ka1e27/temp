@@ -10,12 +10,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  SITES, SITE_KINDS, INFLUENCE_RADIUS, MAPGEN, AI, UNITS,
+  SITES, SITE_KINDS, INFLUENCE_RADIUS, VISION_RADIUS, MAPGEN, AI, UNITS,
 } from '../src/content/balance.js';
 import { BASE_GARRISON } from '../src/content/regions.rules.js';
 import { power, resolveField, emptyComp } from '../src/battle/combat.js';
 import { garrisonMultOf } from '../src/battle/terrain.js';
-import { generateBattleMap } from '../src/battle/mapgen.js';
+import { generateBattleMap, KIND_TAG } from '../src/battle/mapgen.js';
+import { SITE_R, SITE_TIER, SHAPES, TRIM_PATH } from '../src/render/siteShapes.js';
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
@@ -48,24 +49,50 @@ test('kinds: every per-kind table lists every kind', () => {
   // The site version of the gotcha that shipped three units with a JS hue and no
   // CSS variable: a table with a hole in it does not throw, it silently returns
   // undefined and something downstream reads it as a zero or a default.
-  const tables = {
-    INFLUENCE_RADIUS,
-    'AI.siteValue': AI.siteValue,
-    'MAPGEN.trainType': MAPGEN.trainType,
-  };
-  for (const [name, table] of Object.entries(tables)) {
+  //
+  // This used to genuinely walk three tables and SPOT-CHECK two more (only
+  // `trainingGround`, in `MAPGEN.garrison`/`BASE_GARRISON`) — which is exactly
+  // how a kind added carelessly could render as a circle with `undefined` in
+  // its generated id and nothing fail: the render tables and `mapgen`'s own
+  // id tag were never walked at all. Every table below is now walked over
+  // every kind; the EXEMPT function is the one place a deliberate hole is
+  // written down, so a real hole (an oversight) still fails loudly.
+  const no = () => false;
+  const tables = [
+    ['INFLUENCE_RADIUS', INFLUENCE_RADIUS, no],
+    ['VISION_RADIUS', VISION_RADIUS, no],
+    ['AI.siteValue', AI.siteValue, no],
+    ['render SITE_R', SITE_R, no],
+    ['render SITE_TIER', SITE_TIER, no],
+    ['mapgen KIND_TAG', KIND_TAG, no],
+    ['BASE_GARRISON', BASE_GARRISON, no],
+    // A stronghold is a wall and a watchtower is a sentry — neither is a
+    // yard, and that is the rule rather than an omission.
+    ['MAPGEN.trainType', MAPGEN.trainType, (k) => k === 'stronghold' || k === 'watchtower'],
+    // A farm has no polygon to slice (render/siteShapes.js says why) and
+    // reads as a bare circle instead — the one deliberate hole in either.
+    ['render SHAPES', SHAPES, (k) => k === 'farm'],
+    ['render TRIM_PATH', TRIM_PATH, (k) => k === 'farm'],
+  ];
+  for (const [name, table, exempt] of tables) {
     for (const kind of SITE_KINDS) {
-      // A stronghold has no train type BECAUSE it cannot train — the one
-      // deliberate hole, and it is the rule rather than an omission.
-      if (name === 'MAPGEN.trainType' && kind === 'stronghold') continue;
+      if (exempt(kind)) continue;
       assert.ok(table[kind] !== undefined, `${name} has no entry for "${kind}"`);
     }
   }
+
+  // MAPGEN.garrison: camp is the player's home and only ever the player's;
+  // castle is the enemy's and only ever the enemy's — the two deliberate
+  // holes. Every OTHER kind must be listed for every faction, which is what
+  // turns the old "just check trainingGround" spot check into a real walk.
+  const home = { player: 'camp', enemy: 'castle', neutral: null };
   for (const faction of ['player', 'enemy', 'neutral']) {
     const held = MAPGEN.garrison[faction];
-    assert.ok(held.trainingGround, `MAPGEN.garrison.${faction} has no training ground`);
+    for (const kind of SITE_KINDS) {
+      if ((kind === 'camp' || kind === 'castle') && kind !== home[faction]) continue;
+      assert.ok(held[kind] !== undefined, `MAPGEN.garrison.${faction} has no entry for "${kind}"`);
+    }
   }
-  assert.ok(BASE_GARRISON.trainingGround, 'BASE_GARRISON has no training ground');
 });
 
 // ---------------------------------------------------------------------------

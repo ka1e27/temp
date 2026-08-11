@@ -16,11 +16,12 @@ import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { REGIONS } from '../src/content/regions.data.js';
 import {
   BUILD_COSTS, BUILDABLE_KINDS, BUILD_RANGE_HEXES, BUILD_MIN_SEPARATION,
-  SITES, SITE_KINDS, CENTIGOLD,
+  SITES, SITE_KINDS, CENTIGOLD, VISION_RADIUS,
 } from '../src/content/balance.js';
 import { siteTrainRate } from '../src/battle/training.js';
 import { siteGoldPerSec, goldOf } from '../src/battle/economy.js';
 import { distance } from '../src/core/hex.js';
+import { canSee } from '../src/battle/vision.js';
 import { total } from '../src/battle/combat.js';
 
 /** A real battle for `id`, on the real path, with the enemy AI held off unless
@@ -255,4 +256,52 @@ test('build: a raised site is shaped exactly like a generated one', () => {
   }
   assert.ok(SITES[made.kind].train === 0 || made.trainType,
     'a yard was raised with nothing to build');
+});
+
+test('build: SCAFFOLDING IS BLIND, and the tick it opens is a vision event', () => {
+  // Vision is the WHOLE of what a watchtower produces, so leaving it ungated
+  // would make its build timer decorative: 120 gold buys an instant reveal and
+  // the bar is a formality. The rule is the one every other output already
+  // follows — a site under construction earns no gold and trains nothing.
+  //
+  // Occupancy is deliberately NOT gated the same way, and the contrast is the
+  // point: a half-dug foundation is physically in the way from the moment it is
+  // paid for. Presence is not production.
+  //
+  // It also adds a FOURTH vision-invalidation event. The other three key off the
+  // site list or its ownership changing; this one is a timer running out, where
+  // nothing appears and nothing changes hands. Miss it and the one building
+  // bought purely for sight never grants any.
+  const b = battleFor();
+  const at = legalHexes(b)[0];
+  // The hex to watch has to be DARK to begin with, and picking the first one at
+  // some fixed distance is not enough: a build hex sits within
+  // `BUILD_RANGE_HEXES` of a site the player already holds, so plenty of its
+  // neighbourhood is already lit and the naive pick failed on exactly that. An
+  // already-lit hex would also pass against an engine that never recomputed
+  // anything, which is the whole thing under test. It must additionally be
+  // further out than an ORDINARY building's radius 1, or a farm would do.
+  const R = VISION_RADIUS.watchtower;
+  assert.ok(R >= 3, 'a watchtower that sees no further than a farm is not a watchtower');
+  const far = gridHexes(b.grid.cols, b.grid.rows).find((h) => {
+    const d = distance(h, at);
+    return d >= 2 && d <= R && !canSee(b, 'player', h.q, h.r);
+  });
+  assert.ok(far, 'nowhere dark inside the tower\'s reach — this proves nothing');
+
+  b.commands.push({ t: 'BUILD', kind: 'watchtower', hex: [at.q, at.r] });
+  step(b);
+  const site = b.sites.find((s) => s.hex[0] === at.q && s.hex[1] === at.r);
+  assert.ok(site && site.buildTicksLeft > 0, 'the tower did not go up');
+  assert.equal(canSee(b, 'player', far.q, far.r), false,
+    'scaffolding is seeing four hexes — it produces nothing until it opens');
+  // ...and it IS in the way already, which is the half that is not gated.
+  assert.equal(b.occupancy[`${at.q},${at.r}`], 'player',
+    'a foundation is physically there even while it is blind');
+
+  const total0 = site.buildTicksLeft;          // read once — it counts down
+  for (let i = 0; i < total0 + 2; i++) step(b);
+  assert.equal(site.buildTicksLeft, 0);
+  assert.equal(canSee(b, 'player', far.q, far.r), true,
+    'the tower opened and still sees nothing — a build finishing must recompute vision');
 });

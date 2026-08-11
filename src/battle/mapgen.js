@@ -190,8 +190,9 @@ function pickHex(rng, cands, placed, wide, near = null) {
   return pool[0];
 }
 
-const KIND_TAG = {
-  farm: 'f', trainingGround: 'y', stronghold: 's', camp: 'c', castle: 'k',
+// Exported so tests/sitekinds.test.js can walk it directly.
+export const KIND_TAG = {
+  farm: 'f', trainingGround: 'y', stronghold: 's', camp: 'c', castle: 'k', watchtower: 'w',
 };
 
 /**

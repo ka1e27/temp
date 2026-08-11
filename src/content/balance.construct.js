@@ -32,6 +32,10 @@ export const BUILD_COSTS = Object.freeze({
   farm:           { gold: 200, sec: 25 },
   trainingGround: { gold: 350, sec: 35 },
   stronghold:     { gold: 500, sec: 50 },
+  // Cheapest thing on the menu, on purpose: the point of a watchtower is
+  // putting one where you want to see, which means an ordinary player has to
+  // be able to afford it on a whim rather than save for it.
+  watchtower:     { gold: 120, sec: 15 },
 });
 
 /** Kinds a faction may raise. Derived, so the table above is the one statement

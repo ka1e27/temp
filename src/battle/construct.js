@@ -28,6 +28,7 @@ import { goldOf, applyGold } from './economy.js';
 import { isBlocked, recomputeReach, clampRallyKeep } from './state.js';
 import { recomputeOccupancy } from './occupancy.js';
 import { recomputeInfluence } from './influence.js';
+import { recomputeVision } from './vision.js';
 import { siteMaxHp, emptyComp } from './combat.js';
 import { trainableUnit } from './training.js';
 
@@ -131,15 +132,18 @@ export function cmdBuild(state, cmd, by) {
   // be fixed for the whole battle; occupancy decides what may be marched
   // through, and a building that did not deny its hex would be scenery.
   //
-  // INFLUENCE IS THE THIRD AND IT WAS MISSED. The comment here said "both" and
+  // INFLUENCE WAS ONCE THE THIRD AND MISSED. The comment here said "both" and
   // fixed two of three, so a farm you raised painted no territory at all until
   // some unrelated capture elsewhere happened to re-trigger the flood — the
-  // board simply did not show the ground you had just paid for. The three are
-  // invalidated by exactly the same events and belong at the same call sites;
-  // `sim.js siegePhase` runs the same trio on a flip.
+  // board simply did not show the ground you had just paid for. VISION IS NOW
+  // A FOURTH, and the same bug aimed squarely at its flagship use: miss it
+  // here and a watchtower you BUILD grants no sight until an unrelated capture
+  // happens. All four are invalidated by exactly the same events and belong at
+  // the same call sites; `sim.js siegePhase` runs the same set on a flip.
   recomputeReach(state.sites);
   recomputeOccupancy(state);
   recomputeInfluence(state);
+  recomputeVision(state);
   return null;
 }
 
