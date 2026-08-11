@@ -23,6 +23,7 @@ import {
 import { rallyPhase } from './rally.js';
 import { arrivalsPhase } from './arrivals.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
+import { recomputeOccupancy } from './occupancy.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget, clearPathCache } from './movement.js';
 import { drainCommands } from './commands.js';
@@ -44,7 +45,10 @@ export function startBattle(config) {
   clearPathCache();
   const state = createBattleState(config);
   state.grid.rivers = (config.grid?.rivers ?? []).map(([q, r]) => `${q},${r}`);
+  // Both per-hex maps, together, because they are invalidated by exactly the
+  // same event: a site changing hands or coming into existence.
   recomputeInfluence(state);
+  recomputeOccupancy(state);
   return state;
 }
 
@@ -111,7 +115,7 @@ function siegePhase(state) {
       site.hp = Math.min(site.hpMax, site.hp + regen);
     }
   }
-  if (flipped) recomputeInfluence(state);
+  if (flipped) { recomputeInfluence(state); recomputeOccupancy(state); }
 }
 
 // --- phase 6: rally auto-send lives in ./rally.js ---------------------------

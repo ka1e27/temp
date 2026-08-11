@@ -13,7 +13,6 @@ import {
 import { siteById, castleSealed } from './state.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget } from './movement.js';
-import { recomputeInfluence } from './influence.js';
 import { pushEvent, EVENTS } from './events.js';
 
 const modOf = (state, faction, key, fallback = 1) => state.mods[faction]?.[key] ?? fallback;

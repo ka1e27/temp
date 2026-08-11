@@ -12,7 +12,6 @@ import { MAPGEN, SITES, SITE_LEVELS, UNIT_IDS } from '../content/balance.js';
 import {
   carveRivers, scatterMountains, raiseHighlands, openGroundTest, shuffle,
 } from './terrain.js';
-import { buildAdjacency } from './mapgraph.js';
 import { shapeMask } from './mapshape.js';
 
 // --- grid geometry (offset <-> axial). mapgen owns the grid's shape, so the
@@ -186,11 +185,16 @@ function repairConnectivity(grid, blocked, siteHexes, outside) {
   }
 }
 
-// --- the site graph --------------------------------------------------------
+// --- the site graph is GONE ------------------------------------------------
 //
-// Moved to ./mapgraph.js for the line budget and re-exported here, so mapgen
-// stays the one front door and every existing import keeps working.
-export { buildAdjacency };
+// `buildAdjacency` drew a planar-ish graph of edges and a send was legal only
+// along one. Armies march freely now, so there is no graph to draw: the ground
+// itself decides what connects to what, and `verifyReachable` below is promoted
+// from a belt-and-braces check to THE connectivity invariant of a map.
+//
+// `config.adjacency` is still accepted and validated by the contract — a
+// fixture written before this may keep supplying one — and is simply ignored.
+// `battle/state.js recomputeReach` derives `site.adj` from hex distance instead.
 
 
 // --- entry point -----------------------------------------------------------
@@ -285,7 +289,7 @@ export function generateBattleMap(regionSpec, seed) {
     .map((s) => s.split(',').map(Number))
     .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
 
-  return { grid, sites, adjacency: buildAdjacency(sites) };
+  return { grid, sites, adjacency: [] };
 }
 
 /** True when every site can reach every other over unblocked hexes. Exported

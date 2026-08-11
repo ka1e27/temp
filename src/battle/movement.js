@@ -11,10 +11,19 @@ import { UNITS, UNIT_IDS, MOVEMENT } from '../content/balance.js';
 import { siteById, isBlocked } from './state.js';
 import { inGrid } from './mapgen.js';
 import { speedMultiplierFor, asHex } from './influence.js';
+import { passableFor } from './occupancy.js';
 import { emptyComp, addComp } from './combat.js';
 
-// Blocked hexes never change mid-battle, so a site-pair path is computed once
-// per battle. Keyed by battleId so two battles in one process never share.
+// A path is memoised per (battle, faction, pair, map version).
+//
+// This cache used to be keyed on the site pair alone, on the premise — stated
+// right here — that "blocked hexes never change mid-battle". That premise died
+// with free movement: a base denies its hex, ownership flips constantly, and the
+// route that was open a moment ago now runs through somebody's farm. So the key
+// carries BOTH the faction (a hex hostile to you is open to them) and
+// `influenceVersion`, which `recomputeOccupancy` bumps on every flip. Stale
+// entries are simply never looked at again; `clearPathCache` still empties it
+// between battles.
 /** @type {Record<string, any>} */
 const pathCache = {};
 
@@ -24,15 +33,24 @@ export function clearPathCache() {
 
 const resolve = (state, s) => (typeof s === 'string' ? siteById(state, s) : s);
 
-/** Inclusive hex path between two sites, or null if terrain seals them off. */
-export function pathBetween(state, from, to) {
+/**
+ * Inclusive hex path between two sites, or null when nothing gets through.
+ *
+ * `faction` is who is marching. Omit it and you get the old terrain-only answer,
+ * which is what map generation and `verifyReachable` want — they ask whether the
+ * GROUND connects, not whether an army may cross it today.
+ */
+export function pathBetween(state, from, to, faction = null) {
   const a = resolve(state, from);
   const b = resolve(state, to);
   if (!a || !b) return null;
-  const ck = `${state.battleId}|${a.id}>${b.id}`;
+  const ck = `${state.battleId}|${faction ?? '-'}|${a.id}>${b.id}|${state.influenceVersion || 0}`;
   if (ck in pathCache) return pathCache[ck];
-  const passable = (h) => inGrid(state.grid, h) && !isBlocked(state, h.q, h.r);
-  const path = findPath(asHex(a.hex), asHex(b.hex), passable);
+  const goal = asHex(b.hex);
+  const passable = faction
+    ? passableFor(state, faction, goal)
+    : (h) => inGrid(state.grid, h) && !isBlocked(state, h.q, h.r);
+  const path = findPath(asHex(a.hex), goal, passable);
   pathCache[ck] = path;
   return path;
 }
@@ -55,7 +73,7 @@ export function travelTicks(state, from, to, comp, faction) {
   const a = resolve(state, from);
   const b = resolve(state, to);
   if (!a || !b) return MOVEMENT.minTicks;
-  const path = pathBetween(state, a, b);
+  const path = pathBetween(state, a, b, faction);
   const hexes = path ? path.length - 1 : distance(asHex(a.hex), asHex(b.hex));
   if (hexes <= 0) return MOVEMENT.minTicks;
 
@@ -71,52 +89,21 @@ export function travelTicks(state, from, to, comp, faction) {
 }
 
 /**
- * Ticks to march a whole chain of sites, and the cumulative fraction of the
- * journey completed at the end of each leg.
- *
- * A chained send is ONE squad with a longer path, not a relay of squads that
- * stop and re-form: `arriveTick` is still computed once at spawn and the sim
- * still only ever asks "is arriveTick === tick?". The legs exist purely so the
- * renderer can pace a piece along a polyline instead of a single arc — which is
- * why `ends` is stored rather than recomputed per frame.
- *
- * @returns {{ticks:number, ends:number[]}} PURE.
- */
-export function routeTicks(state, route, comp, faction) {
-  const legs = [];
-  let ticks = 0;
-  for (let i = 0; i < route.length - 1; i++) {
-    const t = travelTicks(state, route[i], route[i + 1], comp, faction);
-    legs.push(t);
-    ticks += t;
-  }
-  ticks = Math.max(MOVEMENT.minTicks, ticks);
-  const ends = [];
-  let acc = 0;
-  for (const t of legs) { acc += t; ends.push(acc / ticks); }
-  if (ends.length) ends[ends.length - 1] = 1;   // exact, never 0.9999
-  return { ticks, ends };
-}
-
-/**
  * Create a squad. `arriveTick` may be requested (the AI synchronizes a wave,
  * and so does the Rally booster) but never brought FORWARD — a wave can only
  * ever hold back for its slowest element, so this cannot become a cheat.
  *
- * `via` is an ordered list of intermediate site ids for a chained send. The
- * squad keeps `from`/`to` as the first and last stop, so retreat, arrival and
- * the AI all keep working on it without knowing chains exist.
+ * There is no `via` any more. A chained send existed to express several legal
+ * adjacent hops as one order, because a send could not otherwise cross ground
+ * it did not border; free movement makes that a plain march, so the route, the
+ * per-leg fractions and the whole validation ladder behind them are gone.
  */
 export function spawnSquad(state, {
-  owner, from, to, comp, retreating = false, arriveTick = 0, via = null,
+  owner, from, to, comp, retreating = false, arriveTick = 0,
 }) {
   const a = resolve(state, from);
   const b = resolve(state, to);
-  const stops = via && via.length
-    ? [a ? a.id : String(from), ...via, b ? b.id : String(to)]
-    : null;
-  const plan = stops ? routeTicks(state, stops, comp, owner) : null;
-  const natural = state.tick + (plan ? plan.ticks : travelTicks(state, a, b, comp, owner));
+  const natural = state.tick + travelTicks(state, a, b, comp, owner);
   const squad = {
     id: state.nextSquadId++,
     owner,
@@ -127,7 +114,6 @@ export function spawnSquad(state, {
     arriveTick: Math.max(natural, arriveTick | 0),
     retreating: !!retreating,
   };
-  if (stops) { squad.route = stops; squad.legEnds = plan.ends; }
   state.squads.push(squad);
   return squad;
 }
@@ -188,20 +174,6 @@ export function reverseSquad(state, squad) {
   let back = travelled;
   if (home.id !== squad.from && origin) {
     back += travelTicks(state, origin, home, squad.comp, squad.owner);
-  }
-
-  // A chained squad running for its own start point retreats back down the road
-  // it came in on. Anywhere else and the chain is meaningless, so it is dropped
-  // and the squad falls back to the plain two-point reversal.
-  if (squad.route) {
-    if (home.id === squad.route[0]) {
-      const back2 = squad.route.slice().reverse();
-      squad.legEnds = routeTicks(state, back2, squad.comp, squad.owner).ends;
-      squad.route = back2;
-    } else {
-      delete squad.route;
-      delete squad.legEnds;
-    }
   }
 
   squad.from = abandoned ? abandoned.id : squad.from;

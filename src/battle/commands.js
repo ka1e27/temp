@@ -14,7 +14,7 @@ import {
 } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
 import { siteById, clampRallyKeep, rallyTargetsOf, ralliesTo } from './state.js';
-import { spawnSquad, retreatTarget, reverseSquad } from './movement.js';
+import { spawnSquad, retreatTarget, reverseSquad, pathBetween } from './movement.js';
 import { isTrainable } from './training.js';
 import { applyGold, goldOf } from './economy.js';
 import { pushEvent, EVENTS } from './events.js';
@@ -39,51 +39,19 @@ export function filterComp(comp, filter) {
 
 // --- individual orders -----------------------------------------------------
 
-/**
- * Validate an optional chain of intermediate stops for a SEND.
- *
- * Sends are adjacency-only, which is the rule that makes the site graph mean
- * something. A chain does not break it — it just lets one order express several
- * legal hops instead of making the player issue them one at a time and babysit
- * each arrival. So EVERY leg must still be adjacent, and every stop in between
- * must be ground the sender already holds: you may march THROUGH your own
- * territory, never through someone else's.
- *
- * @returns {string[]|string|null} the via list, a rejection reason, or null.
- */
-function checkVia(state, cmd, from, to, by) {
-  const via = cmd.via;
-  if (via === undefined || via === null) return null;
-  if (!Array.isArray(via) || !via.length) return 'malformed';
-
-  const stops = [from.id, ...via, to.id];
-  const seen = new Set();
-  for (let i = 0; i < stops.length; i++) {
-    // A repeated stop is a route that doubles back on itself — always a misdrag.
-    // It is also what bounds the chain: no repeats means no route can be longer
-    // than the site count, so no arbitrary MAX_CHAIN constant is needed.
-    if (seen.has(stops[i])) return 'chain-repeats';
-    seen.add(stops[i]);
-    if (i === 0) continue;
-    const prev = siteById(state, stops[i - 1]);
-    const cur = siteById(state, stops[i]);
-    if (!cur) return 'unknown-site';
-    if (!prev.adj.includes(cur.id)) return 'not-adjacent';
-    // The final stop is the objective and may be hostile; everything the
-    // column merely passes through has to be ours.
-    if (i < stops.length - 1 && cur.owner !== by) return 'chain-not-yours';
-  }
-  return via;
-}
-
 function cmdSend(state, cmd, by) {
   const from = siteById(state, cmd.from);
   const to = siteById(state, cmd.to);
   if (!from || !to) return 'unknown-site';
   if (from.owner !== by) return 'not-your-site';
-  const via = checkVia(state, cmd, from, to, by);
-  if (typeof via === 'string') return via;
-  if (!via && !from.adj.includes(to.id)) return 'not-adjacent';
+  if (from.id === to.id) return 'same-site';
+  // THE RULE THAT REPLACED ADJACENCY. A send used to be legal only along an
+  // authored edge; now it is legal wherever an army can actually walk, and the
+  // only thing that stops one is a base in the way — see ./occupancy.js for why
+  // a building denies exactly its own hex and no more. `pathBetween` answers it
+  // with the same A* the travel time is already computed from, so the rule the
+  // player is refused by and the route they are charged for cannot disagree.
+  if (!pathBetween(state, from, to, by)) return 'no-route';
   const frac = Math.min(1, Math.max(0, Number(cmd.fraction ?? 1)));
   if (!(frac > 0)) return 'bad-fraction';
 
@@ -92,7 +60,7 @@ function cmdSend(state, cmd, by) {
 
   from.garrison = subComp(from.garrison, send);
   const squad = spawnSquad(state, {
-    owner: by, from: from.id, to: to.id, comp: send, arriveTick: cmd.arriveTick | 0, via,
+    owner: by, from: from.id, to: to.id, comp: send, arriveTick: cmd.arriveTick | 0,
   });
   pushEvent(state, EVENTS.SQUAD_SENT, {
     squadId: squad.id, owner: by, from: from.id, to: to.id, arriveTick: squad.arriveTick,
@@ -198,7 +166,12 @@ function cmdRally(state, cmd, by) {
   if (targetId == null) { setTargets(site, []); return null; }
   const target = siteById(state, targetId);
   if (!target) return 'unknown-target';
+  // A rally target has to be somewhere the surplus can actually GET to. Reach
+  // (`site.adj`) keeps it a local decision — a standing order to the far side of
+  // the map is a slow leak, not a plan — and the path check is what the send
+  // itself will be judged by.
   if (!site.adj.includes(target.id)) return 'not-adjacent';
+  if (!pathBetween(state, site, target, by)) return 'no-route';
 
   const current = rallyTargetsOf(site);
   const has = current.includes(target.id);

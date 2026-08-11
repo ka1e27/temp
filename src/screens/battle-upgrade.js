@@ -15,7 +15,10 @@ import { goldOf } from '../battle/economy.js';
 export const REJECTIONS = Object.freeze({
   'unknown-site': 'That site is gone.',
   'not-your-site': 'You do not hold that site.',
-  'not-adjacent': 'Sends only reach adjacent sites.',
+  // Adjacency is gone; a base in the way is what refuses a march now.
+  'no-route': 'No way through — an enemy base blocks every route.',
+  'same-site': 'That is where they already are.',
+  'not-adjacent': 'That is out of reach.',
   'bad-fraction': 'Nothing selected to send.',
   'empty-send': 'That garrison is empty — nothing to send.',
   'site-cannot-train': 'Farms cannot train troops.',
