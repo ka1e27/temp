@@ -192,12 +192,15 @@ had room: `gallowmoor 3.26→3.12`, `karrowmere 3.82→3.68`, `blackspire 3.92�
 4.37/4.44/4.48 against nightharrow's 4.36 — so there is nothing to pay a shape with, and
 widowsgate is additionally the incursion arena, where a `choke` took the ladder from
 94/88/75/38/19 to 81/56/50/13/0 across depths 1–30. Reverting the three restored their
-**exact** pre-shape win rates (26/29/26) and left the ladder untouched. If a future pass
-wants tier 6 shaped, the prerequisite is dial headroom, not a gentler mask.
+**exact** pre-shape win rates (26/29/26) and the ladder to 94/88/75/38/19 with the same
+win-medians, verified after the fact. If a future pass wants tier 6 shaped, the prerequisite
+is dial headroom, not a gentler mask.
 
-*(Pre-existing and not caused by this pass: `highmarch` reads 65% at n=96 against a 66%
-floor, in the baseline too. It cannot be dialled down — kaldan sits at 2.75 and highmarch at
-2.76 — so it is a 1-point miss inside n=96 noise.)*
+*(One pre-existing miss surfaced and was fixed on the way: `highmarch` read 65% against a
+66% floor — on the unshaped baseline too, and stably so at n=240, so not noise. `enemyMult`
+had 0.01 of room (kaldan 2.75, highmarch 2.76), so the answer was `develop` 1.35 → 1.25,
+the one column with headroom between kaldan's 1 and greywater's 1.5. 73% at n=96, 68% at
+n=240.)*
 
 ### Rendering
 
@@ -294,21 +297,23 @@ tier 2 played exactly as easy as tier 1. `src/content/regions.data.js` was retun
 it; the reasoning is in that file's third load-bearing rule.
 
 That table has since been retuned again, for the *uphill raid* pass (a smaller landing
-force, an enemy warm-up, and a shop with no ceiling). **The current measured curve, n=240:**
+force, an enemy warm-up, and a shop with no ceiling). **The current measured curve:**
 
 ```
-tier 1   89 84 84 84        tier 4   52 34 52 47
-tier 2   80 70 72 78 72     tier 5   22 23 36    (34 on nightharrow at n=240)
-tier 3   55 69 53 59 69     tier 6   36 27 19    (21 25 21 at n=240)
+tier 1   88 85 86 83        tier 4   56 40 42 40
+tier 2   82 73 75 74 76     tier 5   24 23 30
+tier 3   67 53 54 66 53     tier 6   26 29 26
 ```
 
-n=64 with the band edges confirmed at n=240. All twenty-four report `ok` against their
-tier's band *and* their advertised length. Nothing is frozen any more: the expedition
-re-base changed regions 1–5 by construction, so they were solved with the rest. What
-replaced the freeze is the per-tier `WIN_BAND`.
+n=96, re-taken end to end for the region-shape pass, which changed eighteen of the
+twenty-four maps; band edges confirmed at n=240. All twenty-four report `ok` against
+their tier's band *and* their advertised length. Nothing is frozen any more: the
+expedition re-base changed regions 1–5 by construction, so they were solved with the
+rest, and the shape pass re-solved most of tiers 3–4 on top. What replaced the freeze is
+the per-tier `WIN_BAND`.
 
-**Tiers 1–5 are byte-for-byte what they were before tier 6 shipped**, which is a
-guarantee rather than a happy result — see the fourth expedition segment below.
+**Tier 6 is byte-for-byte what it shipped as**, twice over — see the fourth expedition
+segment below, and the region-shape section for why that tier stayed unshaped.
 
 ## A raid stays a raid: the starting-footprint pass
 

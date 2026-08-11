@@ -100,22 +100,23 @@
 // +0.50, so anything past tier 2 must be moved in steps of 0.05 and re-measured,
 // never extrapolated.
 //
-// THE CURRENT MEASURED CURVE, in campaign order, at n=64 with the band edges
-// confirmed at n=240:
+// THE CURRENT MEASURED CURVE, at n=96, re-taken end to end for the SHAPE pass:
 //
-//     tier 1   89 84 84 84        tier 4   52 34 52 47
-//     tier 2   80 70 72 78 72     tier 5   22 23 36    (34 on nightharrow at n=240)
-//     tier 3   55 69 53 59 69     tier 6   36 27 19    (21 25 21 at n=240)
+//     tier 1   88 85 86 83        tier 4   56 40 42 40
+//     tier 2   82 73 75 74 76     tier 5   24 23 30
+//     tier 3   67 53 54 66 53     tier 6   26 29 26
 //
-// TIERS 1-5 ARE BYTE-FOR-BYTE WHAT THEY WERE BEFORE TIER 6 SHIPPED, and that is
-// the property the fourth expedition segment exists to guarantee rather than a
-// happy result: `EXPEDITION.finalAfter` is 20, which is the conquest count region
-// 21 is attacked with, so nothing tier 6 was paid for can reach backwards. The
-// tier-6 rows were solved against that.
+// All twenty-four report `ok`, on win rate and on length. Highmarch was the last
+// holdout and a PRE-EXISTING one: 65% against a 66% floor on the unshaped
+// baseline too, and stable at n=240, so not noise. `enemyMult` cannot answer it
+// (kaldan 2.75, highmarch 2.76 — 0.01 of room), so the fix is `develop` 1.35 ->
+// 1.25, the only column with headroom. 73% at n=96, 68% at n=240.
 //
-// Every one of the twenty-four reports `ok` against its tier's WIN_BAND and its
-// advertised length. Nothing is balance-frozen any more — the expedition re-base
-// changed regions 1-5 by construction, so they are solved with the rest.
+// TIER 6 IS BYTE-FOR-BYTE WHAT IT SHIPPED AS, twice over: `EXPEDITION.finalAfter`
+// is 20, the conquest count region 21 is attacked with, so nothing tier 6 was
+// paid for can reach backwards — and it is the one tier the shape pass left
+// unshaped, for want of dial headroom (see SHAPE_RULE). Nothing is
+// balance-frozen any more; every row above is solved with the rest.
 //
 // NOTE THE DIAL RAMP STEEPENED AT TIER 3 (+0.21 a region against tier 4's
 // +0.08), and that is the second load-bearing rule doing its job rather than an

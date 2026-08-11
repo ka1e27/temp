@@ -79,7 +79,7 @@ export const REGIONS = Object.freeze([
     2.75, 15, 11, [9, 5, 4], 1, 0, 4, 14,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    2.76, 15, 11, [10, 5, 4], 1.35, 0.15, 5.5, 15,
+    2.76, 15, 11, [10, 5, 4], 1.25, 0.15, 5.5, 15,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.',
     'choke'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
