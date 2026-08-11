@@ -13,8 +13,8 @@ export { spendCrowns, fieldedUnits };
 // The site-upgrade ladder moved to ./simbuild.js for the line budget and is
 // re-exported here, so `import { upgradeTurn } from './simplayer.js'` keeps
 // working.
-import { rearOf, upgradeTurn, constructTurn, buildHexes } from './simbuild.js';
-export { rearOf, upgradeTurn, constructTurn };
+import { rearOf, upgradeTurn, constructTurn, buildHexes, scoutTurn } from './simbuild.js';
+export { rearOf, upgradeTurn, constructTurn, scoutTurn };
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
@@ -147,13 +147,11 @@ export function advanceDistance(state) {
  * competent-but-unremarkable player cannot clear a region, that region is
  * mis-tuned.
  *
- * `opts.upgrades: false` reverts to the pre-upgrade bot. That exists so the
- * cost of the mechanic stays MEASURABLE after it is switched on — the delta in
- * CLAUDE.md was taken with `--noupgrades`, and re-taking it is one flag rather
- * than a fork of this file.
- *
- * FOG OF WAR: blinded like the AI (battle/belief.js) via `opts.sightedBot`,
- * the measurement-only escape hatch (`--sighted`, tools/simrunner.js).
+ * `opts.upgrades: false` reverts to the pre-upgrade bot; `opts.scout: false`
+ * to one with no answer to fog (simbuild.js `scoutTurn`) — both exist so a
+ * mechanic's cost stays MEASURABLE after it ships, one flag rather than a
+ * fork of this file. FOG OF WAR itself: blinded like the AI (battle/belief.js)
+ * via `opts.sightedBot`, the measurement-only escape hatch (`--sighted`).
  */
 export function playerTurn(state, opts = {}) {
   const view = opts.sightedBot ? state : beliefFor(state, 'player');
@@ -297,6 +295,10 @@ export function playerTurn(state, opts = {}) {
     if (s.trainType !== want) state.commands.push({ t: 'TRAIN', site: s.id, unit: want });
   }
 
+  // SIGHT OF THE OBJECTIVE — see simbuild.js scoutTurn. Ahead of the ladder
+  // and not gated by --noupgrades: seeing the win condition is not a spend.
+  if (opts.scout !== false) scoutTurn(view, buildHexes(view));
+
   // Build the country behind the line. Last, so the treasury it reads has
   // already been reasoned about by everything that spends from it.
   //
@@ -307,9 +309,7 @@ export function playerTurn(state, opts = {}) {
   // measuring a spender rather than an ordinary player.
   if (opts.upgrades === false) return;
   upgradeTurn(view, front);
-  if (opts.construct !== false) {
-    constructTurn(view, front, buildHexes(view));
-  }
+  if (opts.construct !== false) constructTurn(view, front, buildHexes(view));
 }
 
 /**

@@ -225,25 +225,53 @@ test('tier 1 still keeps its rear army at home — the opening region is meant t
 test('...and on a real region the enemy interior really does reach the fighting', () => {
   // The integrated version of the same claim, played out on the map and the
   // economy the balance table is measured against rather than on a fixture.
+  //
+  // THREE SEEDS, NOT ONE, and that is the whole repair rather than a number
+  // being nudged. This asserted `>= 30` on seed 4242 alone, and the count it
+  // measures has a THIRTEEN-FOLD spread across layouts — measured on kaldan,
+  // 28 / 55 / 55 / 379 / 38 with the enemy blinded and 49 / 34 / 45 / 168 / 69
+  // with it sighted. A single-seed threshold on a quantity like that is a coin
+  // flip wearing a guarantee's clothes, and it duly came up 28 when fog landed.
+  //
+  // The tell that it was the TEST and not the mechanic: blinding the enemy
+  // raised the five-seed total from 365 to 555. Its interior marches more, not
+  // less — an army that cannot see the front commits earlier and less
+  // efficiently, which is a different thing from an army that stays home. So
+  // lowering the threshold to 28 would have bought one green run and left the
+  // next structural change to trip over the same coin.
+  //
+  // Two floors, because there are two ways for this to fail. A per-seed one
+  // catches a layout where the interior is frozen outright; a total catches a
+  // campaign-wide trickle that no single seed would flag.
   const before = REGION_IDS.slice(0, REGIONS.findIndex((r) => r.id === 'kaldan'));
-  const battle = startRun('kaldan', 4242, before, 10);
   const interior = (s, id) => {
     const site = s.sites.find((x) => x.id === id);
     return site && site.owner === 'enemy'
       && !site.adj.some((n) => s.sites.find((x) => x.id === n)?.owner !== 'enemy');
   };
 
-  let departures = 0;
-  let nextThink = 0;
-  while (battle.status === 'running' && battle.tick < 4000) {
-    if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
-    const seen = new Set(battle.squads.map((q) => q.id));
-    step(battle);
-    for (const q of battle.squads) {
-      if (q.owner === 'enemy' && !seen.has(q.id) && interior(battle, q.from)) departures++;
+  const sortiesOn = (seed) => {
+    const battle = startRun('kaldan', seed, before, 10);
+    let departures = 0;
+    let nextThink = 0;
+    while (battle.status === 'running' && battle.tick < 4000) {
+      if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
+      const seen = new Set(battle.squads.map((q) => q.id));
+      step(battle);
+      for (const q of battle.squads) {
+        if (q.owner === 'enemy' && !seen.has(q.id) && interior(battle, q.from)) departures++;
+      }
     }
+    return departures;
+  };
+
+  const counts = [4242, 1000, 8919].map(sortiesOn);
+  for (let i = 0; i < counts.length; i++) {
+    assert.ok(counts[i] >= 10,
+      `the interior never marched on seed ${[4242, 1000, 8919][i]}: ${counts[i]} departures`);
   }
-  assert.ok(departures >= 30, `the interior never marched: ${departures} departures`);
+  const all = counts.reduce((a, b) => a + b, 0);
+  assert.ok(all >= 90, `the interior only trickled forward: ${counts.join(' + ')} = ${all}`);
 });
 
 // ---------------------------------------------------------------------------

@@ -8,11 +8,12 @@
 import { goldOf } from '../src/battle/economy.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
 import {
-  SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS, BUILD_RANGE_HEXES,
+  SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS, BUILD_RANGE_HEXES, VISION_RADIUS,
 } from '../src/content/balance.js';
 import { distance as hexDistance } from '../src/core/hex.js';
 import { buildBlocker } from '../src/battle/commands.js';
 import { gridHexes } from '../src/battle/mapgen.js';
+import { canSee } from '../src/battle/vision.js';
 
 /**
  * Candidate hexes for a build, cached per battle.
@@ -214,4 +215,61 @@ const hexDist = (site, h) => hexDistance({ q: site.hex[0], r: site.hex[1] }, h);
 function nearestAdvance(state, h) {
   const goal = state.sites.find((s) => s.kind === 'castle' && s.owner !== 'player');
   return goal ? hexDistance({ q: goal.hex[0], r: goal.hex[1] }, h) : 0;
+}
+
+/**
+ * SIGHT OF THE OBJECTIVE, WHEN THE BOT HAS NONE OF ITS OWN.
+ *
+ * CLAUDE.md's most-repeated lesson, applied to fog: a mechanic the harness
+ * cannot play is a mechanic nobody has measured. `beliefFor` can hand the bot
+ * an accurate throne OWNER now (belief.js), but everything else about that
+ * castle — garrison, level, hp — stays a presumption for as long as nothing
+ * of the player's ever sees it, and a presumption is not a plan. The
+ * watchtower is the game's own answer to "I cannot see the throne and need
+ * to" — `BUILD_COSTS` prices it as the cheapest thing on the menu FOR this
+ * reason ("an ordinary player has to be able to afford it on a whim rather
+ * than save for it") — so this is that whim, scripted.
+ *
+ * THE RULE IS THE SMALLEST ONE THAT IS STILL HONEST PLAY: no vision of the
+ * castle, nothing already being built or upgraded (the same one-at-a-time
+ * convention `upgradeTurn`/`constructTurn` already keep), afford 120 gold
+ * outright, raise a tower at the legal hex nearest the castle that would
+ * actually reveal it. Nothing more elaborate, and nothing that nudges any
+ * other decision this file makes — a real player who cannot see the throne
+ * reaches for the cheapest fix, not a scouting doctrine.
+ *
+ * DOES NOT SHARE `upgradeTurn`'s reserve, ON PURPOSE. 120 gold is a rounding
+ * error against a battle treasury (300 starting, 10-80/s), so gating this
+ * behind the same `RESERVE_SEC`-scaled reserve the upgrade ladder protects
+ * would make the one thing that answers fog compete for budget with a
+ * mechanic that has nothing to do with it. "Can afford it outright" is the
+ * whole gate, and it is why this is checked ahead of `upgradeTurn` below
+ * rather than after: seeing the win condition is not one more spending
+ * decision to queue behind the ladder.
+ *
+ * CHECKED AGAINST CURRENT VISION ONLY (`canSee`), not `state.seen`'s
+ * last-known memory — a stale sighting answers "have I ever", and the
+ * question this function exists to ask is "can I RIGHT NOW".
+ */
+export function scoutTurn(state, hexes) {
+  if (state.sites.some((s) => s.owner === 'player'
+    && (s.buildTicksLeft > 0 || s.upgradeTicksLeft > 0))) return;
+
+  const castle = state.sites.find((s) => s.kind === 'castle');
+  if (!castle) return;
+  const at = { q: castle.hex[0], r: castle.hex[1] };
+  if (canSee(state, 'player', at.q, at.r)) return; // already answered
+
+  const gold = goldOf(state.factions.player) / CENTIGOLD;
+  if (gold < BUILD_COSTS.watchtower.gold) return;
+
+  let best = null;
+  let bestScore = Infinity;
+  for (const h of hexes) {
+    if (hexDistance(h, at) > VISION_RADIUS.watchtower) continue; // must actually SEE it
+    if (buildBlocker(state, 'player', h)) continue;
+    const score = hexDistance(h, at);
+    if (score < bestScore) { bestScore = score; best = h; }
+  }
+  if (best) state.commands.push({ t: 'BUILD', kind: 'watchtower', hex: [best.q, best.r] });
 }
