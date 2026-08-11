@@ -8,6 +8,8 @@
 //   node tools/simrunner.js --all --sighted=ai    # measure the fog off the AI alone
 //   node tools/simrunner.js --all --sighted=bot   # ...and off the harness bot alone
 //   node tools/simrunner.js --all --noscout       # the bot with no answer to fog
+//   node tools/simrunner.js --all --noreinforce   # ...one that never relieves a stalled siege
+//   node tools/simrunner.js --all --nomicrosend   # ...one held to the blanket 5-body floor
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -134,6 +136,11 @@ for (const id of regionIds) {
   // --noscout reverts to the bot with no answer to fog at all (simbuild.js
   // `scoutTurn`) — same reason: the cost of teaching it to look stays a flag
   // flip rather than something remembered.
+  // --noreinforce and --nomicrosend revert the two assault-scan escape
+  // hatches in simtactics.js `bestAssaultTarget` independently, so a stalled
+  // siege getting reinforced and a below-floor send getting through a thin
+  // target stay two separately re-measurable deltas rather than one bundled
+  // "and now it works".
   // `--legacy=30` measures a SECOND RUN — the same campaign for a player who has
   // abdicated once. Zero, and therefore absent from the table, unless asked for.
   // `--relics=40` measures a player who has been paid for the ground they took
@@ -141,6 +148,7 @@ for (const id of regionIds) {
   // own, and therefore the one the measured table says nothing about.
   const opts = {
     upgrades: !args.noupgrades, construct: !args.noconstruct, scout: !args.noscout,
+    reinforce: !args.noreinforce, microsend: !args.nomicrosend,
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
     sightedAi: SIGHTED.ai, sightedBot: SIGHTED.bot,

@@ -19,59 +19,21 @@ import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome, incomePerSec } from '../src/meta/idle.js';
-import { breachSeconds, total, resolveField } from '../src/battle/combat.js';
+import { total } from '../src/battle/combat.js';
 import { distance as hexDistance } from '../src/core/hex.js';
-import { groundOf, siteDefMultOf, garrisonMultOf } from '../src/battle/terrain.js';
-import { siteControlFraction } from '../src/battle/state.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { goldOf } from '../src/battle/economy.js';
 import { UNIT_IDS, CENTIGOLD, SITES } from '../src/content/balance.js';
-import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
+import {
+  assaultFilter, riderTurn, COLUMN_FILTER, PRIORITY, bestAssaultTarget,
+} from './simtactics.js';
+export { PRIORITY };
 import { beliefFor } from '../src/battle/belief.js';
 
-/**
- * WHAT TO TAKE NEXT: THE WALL, NOT THE FIELD.
- *
- * This said `farm: 0` — "farms first, economy wins fights" — and that was true
- * while a site had `targetAvgDegree` 2.8 neighbours to choose between: half the
- * time there was no farm in reach and the bot took the stronghold in front of
- * it. Hex reach puts about eight sites in range, so there is ALWAYS a farm going
- * spare and the 25-second head start below became an absolute veto.
- *
- * Measured on gallowmoor with the enemy AI switched off, so nothing could take
- * anything back: the bot ended on THIRTEEN farms and TWO training sites, sat on
- * 17,000 unspent gold with a training bill of 15 gold a second, and fielded a
- * 72-man army. The pre-reach bot on the same map and seed held six trainers, ran
- * its treasury at zero, and fielded 979. Farms have `train: 0` — every soldier
- * in the game comes out of a camp, a castle or a stronghold — so an economy with
- * nowhere to spend is not an economy, and the bot had optimised itself into one.
- * Flipping the two is worth 0% -> 75% on gallowmoor and 8% -> 50% on thanescar.
- *
- * IT WAS FIRST WRITTEN AS A CONDITION AND THE CONDITION NEVER ONCE WENT THE
- * OTHER WAY. The idea was that gold piling up above `upgradeTurn`'s own training
- * reserve is what tells you the next farm is worth nothing — which reads well
- * and is exactly what an ordinary player sees on the HUD. Instrumented over
- * whole battles on riverfen, gallowmoor, karrowmere and widowsgate it was true
- * on every think of every one of them: 1,091 thinks, zero on the other branch.
- * A landing force arrives with a shop-fed treasury and no yards running yet, and
- * from there the reserve is never the binding constraint. So the "default" order
- * was unreachable code wearing the clothes of a decision, and this project has
- * refunded four upgrades for less. One order, and it is the measured one.
- *
- * SINCE THE YARD/WALL SPLIT IT IS THE YARD THAT SITS AT THE TOP, not the
- * stronghold. The rule was never "prefer forts", it was "prefer the thing that
- * makes soldiers", and until the split those were the same building. A
- * stronghold trains nothing now, so leaving it first would have aimed the whole
- * measured improvement below at the one target that does not fix what it was
- * fixing. It still outranks a farm: it is the wall between you and the throne,
- * and a farm you can always come back for.
- */
-export const PRIORITY = { trainingGround: 0, stronghold: 1, farm: 2, castle: 3, camp: 4 };
 // Keep a real home guard, but not so large that the opening push never fires —
 // the expedition exists to be spent, and the first minute is when enemy sites
 // are still thinly held.
 const HOME_FLOOR = 5;
-const ATTACK_MARGIN = 1.5; // overkill to survive the defender's reinforcement
 
 /**
  * HOW FAR EACH OWNED SITE IS FROM THE FIGHTING, in hexes to the nearest site
@@ -192,41 +154,12 @@ export function playerTurn(state, opts = {}) {
     for (const u of UNIT_IDS) {
       send[u] = filter.includes(u) ? Math.floor((src.garrison[u] || 0) * fraction) : 0;
     }
-    if (total(send) < 5) continue;
 
-    let best = null;
-    let bestScore = Infinity;
-    for (const id of src.adj) {
-      const t = view.sites.find((x) => x.id === id);
-      if (!t || t.owner === 'player' || t.siege?.owner === 'player') continue;
-      // The castle gate is VISIBLE (see screens/battle-panel.js) precisely so a
-      // competent player does not commit an army to a siege that cannot
-      // finish — a sealed castle would otherwise soak up a wave every turn and
-      // starve every other front while it sits there doing nothing. A real
-      // player reads "SEALED" and goes to take the countryside instead; this
-      // bot does the same read directly off the territory fraction.
-      if (t.kind === 'castle'
-        && siteControlFraction(view, 'player') < (view.rules.castleGateFrac ?? 0)) continue;
-
-      // Terrain through the sim's own functions, not a hardcoded table: the
-      // game shows the player an EXACT preview, so a competent player reads the
-      // mountains around a fort. A harness that could not would systematically
-      // throw armies at walls and report the region as too hard.
-      const ground = groundOf(view, t);
-      const field = resolveField(send, t.garrison, {
-        siteDefMult: siteDefMultOf(view, t), garrisonMult: garrisonMultOf(view, t), ground,
-      });
-      // Demand a real margin, not a bare win. The defender reinforces while our
-      // squad is in transit, so a coin-flip on paper is a loss on arrival —
-      // this is the "if unreinforced" caveat the HUD warns about.
-      if (!field.win || field.attPower < field.defPower * ATTACK_MARGIN) continue;
-      const secs = breachSeconds(field.attSurvivors, t.hp, t.kind, t.level, 1, 1, ground);
-      if (!Number.isFinite(secs) || secs > 90) continue; // a siege we cannot finish
-
-      const score = secs + PRIORITY[t.kind] * 25 - (t.kind === 'castle' ? 120 : 0);
-      if (score < bestScore) { bestScore = score; best = t; }
-    }
-
+    // The scan itself — castle gate, the reinforce-a-stalled-siege escape
+    // hatch, and the below-floor-but-still-sufficient escape hatch — lives in
+    // simtactics.js `bestAssaultTarget` now; both hatches are documented
+    // there, alongside `opts.reinforce` / `opts.microsend`.
+    const best = bestAssaultTarget(view, src, send, opts);
     if (best) state.commands.push({ t: 'SEND', from: src.id, to: best.id, fraction, filter });
   }
 
