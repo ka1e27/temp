@@ -814,6 +814,90 @@ It is violently non-linear, as the surge was: `finalBonus 210 / perRegionFinal 3
   widowsgate read a 16.0m win median at n=48 and 9.6m at n=240, so a table tuned on the
   small sample would have told the player a region takes half again as long as it does.
 
+## Fog of war: buildings see, squads do not
+
+`battle/vision.js`, and the rule is the whole feature: **sight comes from what you HOLD,
+never from what you are moving.** An army marching through open country is blind for the
+entire march. That is the mechanic, not an oversight — and it is also the only reason the
+feature is cheap. A squad's position changes every tick and could never follow
+`recomputeInfluence`'s pattern of rebuilding on ownership change; a site's owner changes
+only on capture or construction, which are exactly the events influence and occupancy
+already key off. So vision is a **third derived per-hex map** rebuilt beside the other two,
+sparse plain JSON, never touched per tick or per frame.
+
+**The ground is always visible; the people are not.** Terrain, rivers, the shape mask and
+the grid draw everywhere from tick 0. Hiding the terrain too was rejected: it turns the
+opening into an exploration phase, and this is a ten-minute real-time battle whose opening
+is already a land grab — it would also make the pre-battle preview a lie. A site's
+**position, kind and `adj` are common knowledge** for the same reason: a building on
+visible terrain is visible, you simply cannot see whose flag is on it or how many are
+inside. That is also what stops this becoming an AI rewrite — `aicore.js frontDistance`
+and `aihome.js reach` are pure whole-map geometry, and fogging site EXISTENCE would force
+a planner that reasons about a map with holes in it.
+
+**`state.seen` is the memory half, and it is the one derived map NOT rebuilt from
+scratch** — it only ever gains an entry or updates one, because its whole purpose is to
+remember what fog has since hidden. It records exactly one fact per site per faction: who
+held it the last time that side actually looked. Nothing else. A remembered garrison or HP
+bar would be fog leaking the only numbers that matter, and both are simply *wrong* once
+stale rather than uncertain. Owner is the single field whose staleness is INFORMATIVE —
+"it was theirs last time I looked" is a true statement a player can act on. Without it the
+board's ownership colouring flickers on and off as vision comes and goes, which is worse
+than fog: it is noise. Rejected alongside it — a timestamp, a confidence value, a frozen
+snapshot — each is a second thing to keep correct and none earns its keep.
+
+**SCAFFOLDING IS BLIND**, for the same reason it earns no gold and trains nothing. Vision
+is the *whole* of what a watchtower produces, so leaving it ungated makes the 15-second
+timer decorative: 120 gold buys an instant reveal and the build bar is a formality.
+Occupancy is deliberately NOT gated the same way and the contrast is the point — a
+half-dug foundation is physically in the way from the moment it is paid for. **Presence is
+not production.**
+
+**That gate creates a FOURTH invalidation event, and the other three do not cover it.**
+`startBattle`, `siegePhase`'s flip branch and `cmdBuild` all key off the site list or its
+ownership changing. A build finishing is a timer running out: nothing appears, nothing
+changes hands. Miss it and the one building bought purely for sight grants none of it,
+ever. Two more holes of the same shape were closed with it:
+
+- **`createBattleState` builds the map itself**, exactly as it already does for occupancy —
+  and the empty default fails in a *more convincing* way than occupancy's did. `canSee`
+  reads a missing `state.vision` through optional chaining and returns false for every hex,
+  so every enemy site resolves to a ghost and every enemy squad vanishes. That reads like
+  fog working perfectly rather than like fog missing. `vision.js` takes `siteById` from its
+  real home in `siteinfo.js` so the import back does not close a cycle; `occupancy.js` and
+  `influence.js` touch `state.js` for the same reason: not at all.
+- **`recomputeVision` bumps `influenceVersion`.** `signature()` notices a per-hex map moving
+  only when a SITE moved — an owner flipped, a level rose, the list grew. A watchtower
+  opening moves none of those, so the background would go on drawing the country as it
+  looked before the tower opened.
+
+**One resolver, three consumers.** The canvas renderer and the DOM panel/preview each
+resolved `state.sites.find(...)` independently, so hiding a glyph on the board would still
+leave the same site fully inspectable by clicking it — one bug fixed and two left live.
+`perceivedSite` / `perceivedSquads` are the one resolver all of them call.
+`squadHex` is exported for the same reason: squads store no position, so "is this army
+visible" needs the derivation from `spawnTick`/`arriveTick`, and two copies of it disagree
+about exactly which tick a marching column appears — a bug nobody will ever reproduce from
+a report.
+
+**The watchtower ships here and not one release earlier.** It is a building that does
+nothing until fog exists, which is precisely the "sold and did nothing" mistake this
+project has already refunded four upgrades for.
+
+```
+kind         gold  train  cap  hp   regen  defMult  vision
+watchtower   0     0      15   120   2.5    1.10      4
+farm         2.0   0      30   100   2.0    1.00      1
+```
+
+Cheapest thing on the build menu, useless in a fight, and the only thing on the board that
+sees past its own doorstep. `VISION_RADIUS` is deliberately **not** a read of
+`INFLUENCE_RADIUS` — that would silently hand a camp a 3-hex sightline and a farm 1.
+
+**Contract v9, and it is v8's lesson a second time: no CROWN-line field changed.**
+`SITE_KINDS` gained a kind and state gained the `vision`/`seen` pair, so a v8 blob resumed
+here is a board both sides could see all of, handed a fog it was never played with.
+
 ## The endless ladder: incursions
 
 `content/incursion.data.js` + `meta/incursion.js`. One battle per **rung**: a fixed
