@@ -62,33 +62,43 @@ test('preview: the raid — 4 raiders take a farm but cannot breach it fast', ()
 test('preview: the siege two-punch — 12 militia + 1 ram lose the field', () => {
   const st = fixture([
     { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 12, rams: 1 }, hp: 600, hpMax: 600 },
-    { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'enemy', garrison: { spearmen: 6, militia: 4 }, hp: 250, hpMax: 250 },
+    { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'enemy', garrison: { spearmen: 6, militia: 4 }, hp: 340, hpMax: 340 },
     { id: 'cas', kind: 'castle', hex: [4, 0], owner: 'enemy', garrison: {}, hp: 600, hpMax: 600 },
   ], [['camp', 'hold'], ['hold', 'cas']]);
 
   const pv = computePreview(st, 'camp', 'hold', { fraction: 1, travelSeconds: eta });
+  // AP = 12 militia (12*4*1.45, spearmen are 60% of the foe) + 1 ram (1*6*1.96)
+  // = 69.6 + 11.76 = 81.36 — unaffected by the stronghold split, because AP
+  // never reads a site's own numbers.
   near(pv.ap, 81.36, 1e-9);
-  near(pv.dp, 120, 1e-9);
+  // DP = (6 spearmen*8*1.75 bulwark + 4 militia*3) * 1.55 defMult * 1.30
+  // garrisonMult = 96 * 2.015 = 193.44 — the NEW term. A stronghold's garrison
+  // now fights behind its walls AND dug in on its own ground, which is exactly
+  // what makes it a different building from a training ground.
+  near(pv.dp, 193.44, 1e-9);
   assert.equal(pv.win, false);
   assert.equal(pv.verdict, 'LOSE FIELD');
-  assert.equal(previewLine(pv), 'AP 81.4 / DP 120.0 · LOSE FIELD · ETA 4.2s');
+  assert.equal(previewLine(pv), 'AP 81.4 / DP 193.4 · LOSE FIELD · ETA 4.2s');
 });
 
 test('preview: a token force is told plainly that it cannot breach', () => {
   const st = fixture([
-    { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 8 }, hp: 600, hpMax: 600 },
-    { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'neutral', garrison: {}, hp: 250, hpMax: 250 },
+    { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 12 }, hp: 600, hpMax: 600 },
+    { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'neutral', garrison: {}, hp: 340, hpMax: 340 },
     { id: 'cas', kind: 'castle', hex: [4, 0], owner: 'enemy', garrison: {}, hp: 600, hpMax: 600 },
   ], [['camp', 'hold'], ['hold', 'cas']]);
 
   const pv = computePreview(st, 'camp', 'hold', { fraction: 1, travelSeconds: eta });
   assert.equal(pv.win, true);
-  // 8 militia siege at 4.8/s against a stronghold repairing at 4.0/s: it does
-  // breach, but only just. Drop to 4 militia and the walls simply win.
+  // 12 militia siege at 7.2/s against a stronghold repairing at 5.5/s: net 1.7
+  // -> 340/1.7 = 200s. It does breach, but calling three minutes and twenty
+  // seconds a breach is generous — it is barely above the threshold. Drop to a
+  // quarter of that army and the walls simply win.
   assert.ok(Number.isFinite(pv.breachSec));
+  near(pv.breachSec, 200, 1e-6);
 
   const pv2 = computePreview(st, 'camp', 'hold', { fraction: 0.25, travelSeconds: eta });
-  assert.equal(pv2.sendN, 2);
+  assert.equal(pv2.sendN, 3);
   assert.equal(pv2.insufficient, true);
   assert.equal(pv2.breachSec, Infinity);
   assert.match(previewLine(pv2), /BREACH ∞/);
@@ -160,20 +170,26 @@ test('preview: an unknown or self-targeted order yields nothing to show', () => 
 });
 
 test('preview: in-progress training is projected forward deterministically', () => {
+  // A STRONGHOLD DOES NOT TRAIN ANY MORE — a `trainingGround` does (see
+  // content/balance.js SITES) — so this fixture uses the yard, the same way a
+  // real garrison-in-training would.
   const st = fixture([
     { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 4 }, hp: 600, hpMax: 600 },
-    { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'enemy', garrison: { militia: 2 }, hp: 250, hpMax: 250 },
+    { id: 'hold', kind: 'trainingGround', hex: [1, 0], owner: 'enemy', garrison: { militia: 2 }, hp: 180, hpMax: 180 },
     { id: 'cas', kind: 'castle', hex: [4, 0], owner: 'enemy', garrison: {}, hp: 600, hpMax: 600 },
   ], [['camp', 'hold'], ['hold', 'cas']]);
   const hold = st.sites[1];
   hold.trainType = 'militia';
   hold.trainProgress = 0.9;
 
-  // Militia train in 8s and arrive 2 per cycle: 0.9 + 8/8 = 1.9 cycles -> +2.
-  assert.equal(projectGarrison(st, hold, 8).militia, 4);
+  // The yard trains at 1.30x: 0.9 + (8*1.30)/8 = 2.2 cycles -> floor 2, and
+  // militia arrive 2 per cycle, so +4.
+  assert.equal(projectGarrison(st, hold, 8).militia, 6);
   assert.equal(projectGarrison(st, hold, 0).militia, 2);
   const pv = computePreview(st, 'camp', 'hold', { fraction: 1, travelSeconds: () => 8 });
-  near(pv.dp, 4 * 3 * 1.25, 1e-9);
+  // 6 defenders * 3 def * 1.05 (the yard's defMult; no garrisonMult — that term
+  // is the wall's alone) = 18.9.
+  near(pv.dp, 6 * 3 * 1.05, 1e-9);
 });
 
 test('preview: hp regen while the squad is in flight is shown, not hidden', () => {

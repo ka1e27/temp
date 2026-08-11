@@ -248,7 +248,12 @@ export const AI = {
   maxSources: 3,
   garrisonFloor: 3,         // never strip a front site below this
   reliefMarginSec: 10,      // breach must beat relief by this much or pull out
-  siteValue: { farm: 100, stronghold: 150, camp: 400, castle: 400 },
+  /** Every kind is listed, with no reliance on the `?? 100` at the call site: a
+   *  kind that falls through scores as a farm, which is exactly how a training
+   *  ground — the thing replacing the army you are killing — would quietly
+   *  become the least urgent target on the map. The yard outranks the wall
+   *  because taking it is what stops the bleeding; the wall is only ground. */
+  siteValue: { farm: 100, trainingGround: 190, stronghold: 150, camp: 400, castle: 400 },
   consolidationBonus: 0.15, // per adjacent site already held
   sampleDecay: 0.7,         // exponential decay on the observed player army
   // BOTH of these are SHARES OF PRODUCTION, converged on every think — see

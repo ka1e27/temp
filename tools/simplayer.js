@@ -21,11 +21,11 @@ import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome, incomePerSec } from '../src/meta/idle.js';
 import { breachSeconds, total, resolveField } from '../src/battle/combat.js';
 import { distance as hexDistance } from '../src/core/hex.js';
-import { groundOf, siteDefMultOf } from '../src/battle/terrain.js';
+import { groundOf, siteDefMultOf, garrisonMultOf } from '../src/battle/terrain.js';
 import { siteControlFraction } from '../src/battle/state.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { goldOf } from '../src/battle/economy.js';
-import { UNIT_IDS, CENTIGOLD } from '../src/content/balance.js';
+import { UNIT_IDS, CENTIGOLD, SITES } from '../src/content/balance.js';
 import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
 
 /**
@@ -56,8 +56,16 @@ import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
  * from there the reserve is never the binding constraint. So the "default" order
  * was unreachable code wearing the clothes of a decision, and this project has
  * refunded four upgrades for less. One order, and it is the measured one.
+ *
+ * SINCE THE YARD/WALL SPLIT IT IS THE YARD THAT SITS AT THE TOP, not the
+ * stronghold. The rule was never "prefer forts", it was "prefer the thing that
+ * makes soldiers", and until the split those were the same building. A
+ * stronghold trains nothing now, so leaving it first would have aimed the whole
+ * measured improvement below at the one target that does not fix what it was
+ * fixing. It still outranks a farm: it is the wall between you and the throne,
+ * and a farm you can always come back for.
  */
-export const PRIORITY = { stronghold: 0, farm: 1, castle: 2, camp: 3 };
+export const PRIORITY = { trainingGround: 0, stronghold: 1, farm: 2, castle: 3, camp: 4 };
 // Keep a real home guard, but not so large that the opening push never fires —
 // the expedition exists to be spent, and the first minute is when enemy sites
 // are still thinly held.
@@ -203,7 +211,7 @@ export function playerTurn(state, opts = {}) {
       // throw armies at walls and report the region as too hard.
       const ground = groundOf(state, t);
       const field = resolveField(send, t.garrison, {
-        siteDefMult: siteDefMultOf(state, t), ground,
+        siteDefMult: siteDefMultOf(state, t), garrisonMult: garrisonMultOf(state, t), ground,
       });
       // Demand a real margin, not a bare win. The defender reinforces while our
       // squad is in transit, so a coin-flip on paper is a loss on arrival —
@@ -267,11 +275,17 @@ export function playerTurn(state, opts = {}) {
   }
 
   // Train rams once something nearby is too tough to crack with bodies alone.
+  //
+  // Asked of `SITES[kind].train` rather than of the kind, because the two came
+  // apart: a stronghold trains nothing now, and this loop naming it would have
+  // ordered a build at a site that cannot build and skipped every yard that can.
+  // The wall threshold moved with it — a training ground is 180 HP, so `> 200`
+  // no longer means "too tough for bodies", it means "not a farm".
   for (const s of mine) {
-    if (s.kind !== 'stronghold' && s.kind !== 'camp') continue;
+    if (!SITES[s.kind].train) continue;
     const wantsSiege = s.adj.some((id) => {
       const t = state.sites.find((x) => x.id === id);
-      return t && t.owner !== 'player' && t.hpMax > 200;
+      return t && t.owner !== 'player' && t.hpMax > SITES.trainingGround.hp;
     });
     const want = wantsSiege && state.mods.player.unlockedUnits.includes('rams')
       ? 'rams' : 'militia';

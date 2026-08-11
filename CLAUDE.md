@@ -68,9 +68,12 @@ home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data
 `regions.rules.js`, `sim.js`←`rally.js`, `commands.js`←`boosters.js`,
 `battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`, `mainmenu.js`←
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
-`simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`, `sim.js`←`arrivals.js`,
-`store.js`←`refund.js`, `mapgen.js`←`mapgraph.js` (mapgen decides where the sites
-are; mapgraph decides which of them are neighbours).
+`simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`/`simbuild.js`,
+`sim.js`←`arrivals.js`, `store.js`←`refund.js`, `ai.js`←`aicore.js`/`aihome.js`/
+`aiadapt.js`, `regions.rules.js`←`regions.fallback.js`, `core/hex.js`→`mapgen.js`
+(the offset↔axial arithmetic lives in core and mapgen re-exports it, because
+`contract.js` has to ask "is this hex on the board" and the seam may not import
+map generation).
 
 **`regions.rules.js` now also holds the two load-bearing rules of the region table**
 (a region's step must be the size of the player's step into it; the player's step
@@ -97,8 +100,16 @@ simulation run headless with zero mocking.
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **7**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **8**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly.
+
+**v8 changed NO FIELD AT ALL, and that is the point of it.** The site kinds split
+(`trainingGround` is new; `stronghold` stopped training and became a wall), so a blob
+written under v7 is a board where the player's strongholds *are* their army's
+production. Resume it here and those buildings quietly stop producing, mid-siege, with
+no event and no explanation. The rule everybody checks is "changing a field requires a
+bump" and this slips straight past it — **the version tracks what the engine will DO
+with a blob, not the blob's field list.**
 
 **v7 is `FactionMods.unitMult` — the per-troop attack/defence multipliers the relic
 lines buy.** It is the one shop feature in this project's history that could not ride a
@@ -133,6 +144,116 @@ from `core/rng.js`; combat resolution uses none at all.
   `state.commands[]`; the sim drains them.
 - **Squads store no position.** `arriveTick` is computed once at spawn; renderers derive
   position from `tick` and interpolation alpha.
+
+### Free movement, and the four bounds the site graph was supplying by accident
+
+An army marches anywhere it can find a hex path to. **A building denies exactly the hex
+it stands on, to everyone but its owner** — `battle/occupancy.js`, a sparse plain-JSON
+`hexKey → owner` map rebuilt beside `recomputeInfluence`. One ring per building instead
+of one hex was measured and rejected: it seals the late maps outright (riverfen 78% of
+the board denied; gallowmoor, thanescar and widowsgate **100%**, which is a battle where
+nothing can move). Per hex the same maps deny 3–16%.
+
+`buildAdjacency` and the authored edge list are **gone**. `site.adj` kept its name and
+its ~30 consumers and changed meaning: **every site within `MOVEMENT.reachHexes` (4)**.
+That is a scan bound for the AI and the harness, not a promise to anybody — `cmdSend`
+requires only that a path exists, and the board no longer draws the graph (deleting the
+lines was the point: they advertised a rule the engine had given up enforcing, and a
+screenshot found it because every one of them still drew correctly).
+
+**The old graph ran at `targetAvgDegree` 2.8, and four separate mechanics were
+calibrated against that number without anyone writing it down.** Reach-4 gives 4.7 on
+the smallest map and 8.8 on the biggest, so all four came off at once and the campaign
+read 100% at tiers 1–2 and **ZERO** from gallowmoor on. The tell was that *no AI knob
+moved gallowmoor at all* — not `concurrent`, not `commitRatio`, not `economyMult`, not
+the region dial. That is what says a collapse is structural rather than difficulty.
+
+| Bound | Where | What was holding it |
+|---|---|---|
+| `AI.maxSources` (3) | `aicore.js adjacentSources` | the graph's degree — one assault drew from 3× the ground |
+| `AI.freeLunchHexes` (3) | `ai.js freeLunch` | that phase spends no concurrency slot ON PURPOSE (free ground is free), so the doorstep was the only bound. A tier whose `concurrent` is 2 opened at **five** targets |
+| `advanceDistance` | `tools/simplayer.js` | hops-to-the-front happened to point at the enemy |
+| `PRIORITY` | `tools/simplayer.js` | half the time there was no farm in reach, so the bot took the wall in front of it |
+
+The two bot ones were both it **quietly declining to play**, and the cleanest measurement
+was with the enemy AI switched off entirely: it took 19 of 28 sites, held a site TWO
+HEXES from the castle with a clear route from every site it owned, and never attacked it
+once in seventeen minutes — seven of its sites scored an identical `frontDistance`, so
+"forward" pointed nowhere and a 128-man army sat in nineteen piles. It also finished on
+thirteen farms and two training sites with **17,000 unspent gold** against a 15 gold/s
+training bill; farms have `train: 0`, so it had optimised itself into an economy with
+nothing to spend on. Flipping `PRIORITY` is worth 0% → 75% on gallowmoor and 8% → 50% on
+thanescar.
+
+**`frontDistance` and `advanceDistance` answer different questions and must stay
+separate.** "Where is the fighting" is LOCAL and is right for deciding where you feel
+safe enough to build. "Which way is the war" is GLOBAL and needs one sink or an army
+diffuses instead of massing; `victory: capture-castle` means that sink is not a heuristic.
+
+**`PRIORITY` was first written as a condition and the condition never once went the other
+way** — instrumented over whole battles on four regions it was true on every think of
+every one: 1,091 thinks, zero on the other branch. A landing force arrives with a
+shop-fed treasury and no yards running, and from there the reserve is never binding. Both
+orders shipping would have been unreachable code wearing the clothes of a decision.
+
+**A site off the map is now a contract error.** Four hand-built fixtures sat outside their
+own declared grid and every one passed, because a send was legal on an authored EDGE and
+`travelTicks` fell back to raw hex distance when pathing failed. Free movement has no
+edges to lie with. `grid` is an OFFSET rectangle, so a 9×9 grid holds no negative `r` at
+all — reading it as "q and r both 0..8" is the mistake all four made.
+
+### The yard and the wall
+
+`stronghold` used to be the only thing that trained and, apart from the two thrones, the
+only thing that defended — so there was never a decision on the map: whatever you took
+for one reason you got the other for free.
+
+```
+kind             gold  train   cap   hp   regen  defMult  garrisonMult
+farm             2.0   0        30   100   2.0    1.00     -
+trainingGround   0     1.30     45   180   3.0    1.05     -
+stronghold       0     0        60   340   5.5    1.55     1.30
+camp / castle    4.0   1.25     80   480   5.0    1.40 / 1.60
+```
+
+**`garrisonMult` is the one defensive term `sunder` cannot strip**, and that separation
+is the whole reason a stronghold is a different building rather than a farm with a bigger
+`defMult`. Halberds cut a wall out from under its garrison; they do nothing about a
+garrison that is dug in. So the wall has an answer — bodies, and engines to out-pace its
+regen — and it is not the answer that already works on everything else. `terrain.js
+garrisonMultOf` is its one source, mirroring `siteDefMultOf`, and terrain deliberately
+does NOT apply to it: mountains make a wall harder to storm, not its garrison braver.
+
+Measured breach times, and the ladder they make (`breachSeconds`, level 1):
+
+```
+                4 militia   12    20    40   1 ram   2 rams
+farm               250s     19s   10s    5s    10s      5s
+trainingGround    never     43s   20s    9s    20s      9s
+stronghold        never    200s   52s   18s    52s     18s
+castle            never    218s   69s   25s    69s     25s
+```
+
+**`mapgen.js planSites` now shapes the enemy's country**: a ring of war around the throne
+and farmland beyond it. Walls and yards take the narrow `holdBandFrac` beside the castle
+AND stay inside `holdRadius` of it; farms are pushed OUTSIDE that ring and sweep from its
+edge out to `farmBandFrac`. **A band alone could not do this** — a band is a vertical
+STRIPE, so on a 16-wide board a 30% band is five columns by twelve rows and a site in it
+can sit eight hexes from a castle in the same one. Measured before the radius existed:
+gallowmoor's holds landed at 3/5/6/8 hexes while its farms averaged *closer*. The ring is
+what makes it true by construction rather than on average.
+
+**`fortsAmong` guarantees at least one yard wherever there are holds at all.** Not
+fussiness: rounding alone gave riverfen's enemy one hold and made it a fort, so the
+tier-1 enemy would have fought the campaign opener on castle production alone and nothing
+would have failed.
+
+**The campaign is UNTUNED against all of this** and that is deliberate — the map redesign
+re-authors `siteCounts` for every row, so tuning before it lands is thrown away. The
+enemy also lost half its production to the split, so everything got easier. Battle
+lengths roughly halved campaign-wide (gallowmoor 3.9m against a 7m advertised length),
+because an army marches straight at the throne instead of chaining through the
+countryside: **`targetLengthMin` needs re-authoring too, not just `enemyMult`.**
 
 ### Two-stage capture
 
@@ -221,6 +342,22 @@ frame; `siteGlyphs`/`siteShapes`/`terrain`/`hexGeom`/`formation`/`routes` are it
 Army size is always drawn as **individual troop pieces**, never a size-scaled glyph —
 marching columns and dug-in siege crescents use the same per-piece length so the two are
 directly comparable.
+
+**The link graph is gone, and a screenshot is what found it.** `drawLinks` drew one line
+per `site.adj` entry, and its own comment said why: *"sends go to adjacent sites only, so
+the graph is drawn explicitly — the rule should never be something the player has to
+infer from a rejection."* That rule stopped existing with free movement, and `adj` became
+reach — so at reach-4 a late map drew forty-odd lines into a cobweb connecting nearly
+everything to nearly everything, advertising a constraint the engine had given up
+enforcing. No test could catch it: every line still drew correctly. What replaces it is
+the ground, which was always already on screen — mountains, the shape mask, and the bases
+that deny their own hex.
+
+**Five site shapes, chosen to differ in the two things the eye resolves first at 20px:
+outline profile and area.** farm = small circle, `trainingGround` = low gabled hut,
+`stronghold` = shield, camp = peaked tent, castle = crenellated keep. Camp and castle are
+a matched pair at twice a farm's radius because "take the castle, don't lose the camp" is
+the whole win condition and both ends should be findable without searching.
 
 ### Tuning
 
@@ -1025,6 +1162,22 @@ by signature rather than by class name.
 
 ## Gotchas that have already cost time
 
+- **`grid` is an OFFSET rectangle, not an axial one.** `axialFromOffset(col,row) =
+  {q: col - floor(row/2), r: row}`, so a 9×9 grid holds **no negative `r` at all** and
+  `q` runs from `-floor(r/2)` upward. Four hand-built fixtures read it as "q and r both
+  0..8" and put sites off the map; all four passed, because a send was legal on an
+  authored EDGE. `assertBattleConfig` rejects it now.
+- **A site kind is not just a row in `SITES`.** It needs `INFLUENCE_RADIUS`,
+  `AI.siteValue` (list it — the `?? 100` fallback silently prices a training ground as a
+  farm), `MAPGEN.garrison` per faction, `BASE_GARRISON`, `mapgen KIND_TAG`, four render
+  tables and `simbuild BUILD_ORDER`. `SITE_KINDS` is derived from `SITES` and
+  `contract.js` imports it rather than repeating the list, which is one of the eight
+  fixed. `tests/sitekinds.test.js` walks the rest.
+- **A behavioural check on `kind` is usually a check on the wrong thing.** Three places
+  named `stronghold` to mean "can train" and one to mean "is a real wall"; the split made
+  every one of them wrong in a different direction. Ask `SITES[kind].train`,
+  `site.trainType` or `hpMax` instead. `tools/mobile.mjs` was clicking a site with no
+  training fan and reporting the layout fine.
 - **`h(tag, props, ...children)`** — the second argument is *always* props. Passing an
   element there silently drops it. Pass `{}` when there are no props.
 - **`state.rules` is a hand-picked SUBSET of `config.rules`, not a copy.** A field both
@@ -1128,6 +1281,33 @@ activating focused buttons.
 
 ### Still open, and why
 
+- **THE CAMPAIGN IS UNTUNED, on purpose, and this is the biggest open item.** Free
+  movement plus the yard/wall split moved every number, and the map redesign will move
+  them again by construction — `siteCounts` becomes a mix rather than a flat count.
+  Tuning between those two is work thrown away. Measured at n=12 after the split:
+
+  ```
+  tier 1  100 100 100  83     tier 4  67 83 75 50
+  tier 2   92 100  83  75 75  tier 5  33 58 75
+  tier 3   75  58  92  75 67  tier 6  58 42 33
+  ```
+
+  Everything got easier because the enemy lost half its production to the split, and
+  **battle lengths roughly halved** (gallowmoor 3.9m against 7m advertised) because an
+  army marches straight at the throne now. `targetLengthMin` needs re-authoring across
+  the whole table, not just `enemyMult`.
+- **In-battle construction is not built yet, and half the design depends on it.** The
+  premise is that you BUILD your economy and defences where you choose; today you can
+  still only capture them. It shows in the numbers: since every enemy training ground
+  sits in the ring around its throne there are five or six on a whole map, all at the far
+  end, and the harness bot holds the two it landed with for eight minutes on karrowmere.
+  `tests/harness.test.js` says so in a comment rather than asserting the strong version,
+  because the strong version is a claim about a game that is not finished.
+- **Fog of war and watchtowers are phase 2 and untouched.** `state.vision`, radius 1 for
+  an ordinary building ("the 6 around it") and 3–4 for a watchtower, both sides blind,
+  the AI on a belief model. `watchtower` is deliberately NOT shipped early: it would be a
+  building that does nothing until fog lands, which is precisely the "sold and did
+  nothing" mistake this project has already refunded four upgrades for.
 - **The loadout has a dominant answer: bring only militia.** Measured at n=48 on matched
   seeds — gallowmoor 58% → **98%**, widowsgate 25% → **94%** — which is wider than the
   entire difficulty range of the campaign, and four clicks away on the loadout screen.

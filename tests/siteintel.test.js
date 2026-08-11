@@ -43,7 +43,7 @@ function fixture(o = {}) {
     sites: o.sites ?? [
       { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 4 }, hp: 600, hpMax: 600 },
       { id: 'f1', kind: 'farm', hex: [1, 0], owner: 'player', garrison: {}, hp: 100, hpMax: 100 },
-      { id: 'hold', kind: 'stronghold', hex: [2, 0], owner: 'player', garrison: {}, hp: 250, hpMax: 250 },
+      { id: 'hold', kind: 'trainingGround', hex: [2, 0], owner: 'player', garrison: {}, hp: 180, hpMax: 180 },
       { id: 'cas', kind: 'castle', hex: [5, 0], owner: 'enemy', garrison: { militia: 6 }, hp: 600, hpMax: 600 },
     ],
     adjacency: o.adjacency ?? [['camp', 'f1'], ['f1', 'hold']],
@@ -126,8 +126,10 @@ test('a site\'s training spend is the gold runTraining actually takes', () => {
   const hold = at(s, 'hold');
   const ticks = 30;
   const claim = siteTrainCostPerSec(s, hold);
-  // militia: 12g x batch 2 over 8s = 3.0 gold/sec at a level-1 stronghold.
-  near(claim, (UNITS.militia.gold * UNITS.militia.batch) / UNITS.militia.trainSec, 1e-12);
+  // militia: 12g x batch 2 over 8s = 3.0 gold/sec nominal, x1.30 for the
+  // training ground's own rate (content/balance.js SITES) = 3.9 gold/sec.
+  near(claim, (UNITS.militia.gold * UNITS.militia.batch) / UNITS.militia.trainSec
+    * SITES.trainingGround.train, 1e-12);
 
   const before = goldOf(s.factions.player);
   for (let i = 0; i < ticks; i++) runTraining(s);
@@ -141,21 +143,26 @@ test('the production rate is the units the site really delivers', () => {
   const hold = at(s, 'hold');
   const intel = siteIntel(s, hold);
   near(intel.trainRate, siteTrainRate(s, hold));
-  near(intel.cycleSec, UNITS.militia.trainSec, 1e-12);
+  // A yard trains at 1.30x, so its cycle is SHORTER than the unit's own
+  // trainSec, not equal to it: 8s / 1.30 = ~6.15s.
+  near(intel.cycleSec, UNITS.militia.trainSec / SITES.trainingGround.train, 1e-9);
   assert.equal(intel.batch, UNITS.militia.batch);
-  // 0.25 units/sec x an 8s cycle == one batch of 2. The rate is a promise:
+  // 0.325 units/sec x a ~6.15s cycle == one batch of 2. The rate is a promise:
   near(intel.trainRate * intel.cycleSec, UNITS.militia.batch, 1e-9);
 
-  // One cycle's worth of ticks (+1, because 80 x 0.0125 lands a float hair
-  // under 1) must deliver exactly that batch and no more.
+  // A NOMINAL cycle's worth of ticks (+1 for float safety) is now well PAST
+  // the yard's real, faster cycle (~61.5 of these 80 ticks) but still short of
+  // a second one (~123) — one batch, and still exactly one, just delivered
+  // early rather than in the last instant.
   for (let i = 0; i <= UNITS.militia.trainSec * TICK_HZ; i++) runTraining(s);
   assert.equal(total(hold.garrison), UNITS.militia.batch);
 });
 
-test('switching what a stronghold trains moves the spend the panel shows', () => {
-  // Every unit is deliberately 3.0-4.5 gold/sec, and the two starting units are
-  // both exactly 3.0 — so the readout can only be seen to move once the shop has
-  // unlocked something dearer. rams are 4.0.
+test('switching what a training ground trains moves the spend the panel shows', () => {
+  // Every unit is deliberately 3.0-4.5 gold/sec nominal, and the two starting
+  // units are both exactly 3.0 — so the readout can only be seen to move once
+  // the shop has unlocked something dearer. rams are 4.0 nominal, x1.30 for
+  // the yard's own rate (content/balance.js SITES).
   const s = fixture({ unlocked: ['militia', 'spearmen', 'rams'] });
   soloTrainer(s, 'hold');
   const hold = at(s, 'hold');
@@ -170,7 +177,8 @@ test('switching what a stronghold trains moves the spend the panel shows', () =>
 
   const after = siteTrainCostPerSec(s, hold);
   assert.notEqual(after, before);
-  near(after, (UNITS.rams.gold * UNITS.rams.batch) / UNITS.rams.trainSec, 1e-12);
+  near(after, (UNITS.rams.gold * UNITS.rams.batch) / UNITS.rams.trainSec
+    * SITES.trainingGround.train, 1e-12);
   assert.equal(siteIntel(s, hold).unit, 'rams');
   near(goldFlow(s, 'player').net, netBefore - (after - before), 1e-9);
 
@@ -218,7 +226,8 @@ test('net gold/sec is the gold a real step() adds to the treasury', () => {
 
 test('training more than you earn shows a NEGATIVE net, not a hidden one', () => {
   const s = fixture();
-  // Two more strongholds on rams: 4 g/s each against 6 g/s of income.
+  // camp and the training ground both on rams: 5.0 + 5.2 g/s (4.0 nominal x
+  // each site's own train rate) against 6.0 g/s of income.
   for (const id of ['camp', 'hold']) at(s, id).trainType = 'rams';
   const flow = goldFlow(s, 'player');
   assert.ok(flow.spend > flow.income, 'this loadout must actually be a loss');
@@ -243,7 +252,8 @@ test('a brownout is reported at the rate the site is really running', () => {
   // treasury cannot fund.
   const claimed = siteTrainCostPerSec(s, hold);
   near(claimed, (siteIntel(s, hold).spend), 1e-12);
-  const full = (UNITS.militia.gold * UNITS.militia.batch) / UNITS.militia.trainSec;
+  const full = (UNITS.militia.gold * UNITS.militia.batch) / UNITS.militia.trainSec
+    * SITES.trainingGround.train;
   assert.ok(claimed < full);
   near(claimed, full * hold.brownout, 1e-9);
 });
@@ -268,18 +278,19 @@ test('an enemy site is priced with the AI economy handicap the sim applies', () 
 
 test('the panel lines say the numbers out loud', () => {
   const s = fixture();
-  // A farm only earns; a stronghold only spends; a camp does both, so only the
-  // camp needs the net spelled out.
+  // A farm only earns; a training ground only spends; a camp does both, so
+  // only the camp needs the net spelled out.
   assert.equal(goldLine(siteIntel(s, at(s, 'f1'))), '+2.0/s gold');
-  assert.equal(goldLine(siteIntel(s, at(s, 'hold'))), '-3.0/s training');
+  assert.equal(goldLine(siteIntel(s, at(s, 'hold'))), '-3.9/s training');
   assert.equal(goldLine(siteIntel(s, at(s, 'camp'))),
     '+4.0/s gold · -3.8/s training · net +0.3/s');
-  assert.equal(trainLine(siteIntel(s, at(s, 'hold'))), 'militia x2 every 8s · 0.25/s');
+  assert.equal(trainLine(siteIntel(s, at(s, 'hold'))), 'militia x2 every 6.2s · 0.33/s');
   assert.equal(trainLine(siteIntel(s, at(s, 'camp'))), 'militia x2 every 6.4s · 0.31/s');
   assert.equal(trainLine(siteIntel(s, at(s, 'f1'))), '', 'a farm trains nothing');
-  // camp 4.0 + farm 2.0 in; camp 3.75 + stronghold 3.0 out.
-  assert.equal(flowLine(goldFlow(s, 'player')), '+6.0/s income · -6.8/s training');
-  near(goldFlow(s, 'player').net, 6 - 6.75, 1e-9);
+  // camp 4.0 + farm 2.0 in; camp 3.75 + the training ground's 3.9 out (3.0
+  // nominal x1.30 for the yard's own rate).
+  assert.equal(flowLine(goldFlow(s, 'player')), '+6.0/s income · -7.7/s training');
+  near(goldFlow(s, 'player').net, 6 - 7.65, 1e-9);
 });
 
 // ---------------------------------------------------------------------------
@@ -290,19 +301,19 @@ test('the panel lines say the numbers out loud', () => {
 // (the ladder has already grown from 3 to 5 levels once) moves both sides of
 // the assertion together instead of leaving a stale literal behind.
 
-test('upgradePreview: a stronghold at L1 previews L2 — HP, regen, cap and train, no gold', () => {
+test('upgradePreview: a training ground at L1 previews L2 — HP, regen, cap and train, no gold', () => {
   const s = fixture();
-  const hold = at(s, 'hold'); // stronghold: earns nothing, trains, starts at L1
+  const hold = at(s, 'hold'); // trainingGround: earns nothing, trains, starts at L1
   const p = upgradePreview(hold);
 
   const a = SITE_LEVELS[0];
   const b = SITE_LEVELS[1];
-  assert.equal(p.earns, false, 'a stronghold has no gold column to preview');
+  assert.equal(p.earns, false, 'a training ground has no gold column to preview');
   assert.equal(p.trains, true);
-  near(p.hp.cur, SITES.stronghold.hp * a.hp);
-  near(p.hp.next, SITES.stronghold.hp * b.hp);
-  near(p.regen.cur, SITES.stronghold.hpRegen * a.regen);
-  near(p.regen.next, SITES.stronghold.hpRegen * b.regen);
+  near(p.hp.cur, SITES.trainingGround.hp * a.hp);
+  near(p.hp.next, SITES.trainingGround.hp * b.hp);
+  near(p.regen.cur, SITES.trainingGround.hpRegen * a.regen);
+  near(p.regen.next, SITES.trainingGround.hpRegen * b.regen);
   assert.equal(p.cap.cur, a.cap);
   assert.equal(p.cap.next, b.cap);
   near(p.trainMult.cur, a.train);
@@ -337,7 +348,7 @@ test('upgradePreview: an in-progress upgrade previews the level it is ACTUALLY a
   hold.level = 2;
   hold.upgradeTicksLeft = 100; // still building L2 -> L3
   const p = upgradePreview(hold);
-  near(p.hp.cur, SITES.stronghold.hp * SITE_LEVELS[0].hp); // still effectively L1
-  near(p.hp.next, SITES.stronghold.hp * SITE_LEVELS[1].hp);
+  near(p.hp.cur, SITES.trainingGround.hp * SITE_LEVELS[0].hp); // still effectively L1
+  near(p.hp.next, SITES.trainingGround.hp * SITE_LEVELS[1].hp);
 });
 

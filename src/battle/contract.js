@@ -11,7 +11,7 @@
 // PURE.
 import { fnv1a, stableStringify } from '../core/hash.js';
 import { inGrid } from '../core/hex.js';
-import { UNIT_IDS } from '../content/balance.js';
+import { UNIT_IDS, SITE_KINDS as SITE_KIND_LIST } from '../content/balance.js';
 
 // v2: FactionMods gained `features` (shop unlocks that change battle or HUD
 // behaviour), and `boosters` is now validated. Before v2, five purchasable
@@ -52,7 +52,17 @@ import { UNIT_IDS } from '../content/balance.js';
 // consumers that must tell one rung from another: meta/rewards.js (an incursion
 // pays a depth-scaled lump and must never be mistaken for a raid on the same
 // region), the results screen, and the HUD.
-export const CONTRACT_VERSION = 7;
+//
+// v8: NO FIELD CHANGED AT ALL, and that is exactly why the bump is needed.
+// `SITE_KINDS` gained `trainingGround` and `stronghold` stopped being the same
+// building — it trained and now trains nothing. The blob shape is byte-
+// identical, so "changing a field requires a bump" misses it entirely; what the
+// version guards is the v5 sentence above, a blob "the current engine would step
+// with the wrong shape". A v7 save is a board whose strongholds ARE the player's
+// production, and resuming it here stops them mid-siege with no event and no
+// explanation. THE VERSION TRACKS WHAT THE ENGINE WILL DO WITH A BLOB, NOT THE
+// BLOB'S FIELD LIST.
+export const CONTRACT_VERSION = 8;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];
@@ -75,7 +85,7 @@ export const FEATURE_IDS = [
   'doubleSpeed',    // Tactician — battle speeds past 2x
 ];
 
-/** @typedef {'farm'|'stronghold'|'camp'|'castle'} SiteKind */
+/** @typedef {'farm'|'trainingGround'|'stronghold'|'camp'|'castle'} SiteKind */
 /** @typedef {'player'|'enemy'|'neutral'} Faction */
 /** @typedef {'militia'|'spearmen'|'raiders'|'rams'|'marshal'} UnitId */
 /** @typedef {Record<UnitId, number>} Composition */
@@ -169,7 +179,13 @@ export function hashBattleConfig(cfg) {
 // names the module at fault instead of surfacing 40 frames later.
 // --------------------------------------------------------------------------
 
-const SITE_KINDS = ['farm', 'stronghold', 'camp', 'castle'];
+// DERIVED, not repeated. This was a second hand-written list of the site kinds
+// and the two had to be kept in step by somebody remembering — which is the
+// same shape as the unit colour declared in two tables that shipped the three
+// specialists drawing correctly on the board and grey in every DOM surface.
+// A kind that exists in `SITES` and not here is not a validation gap, it is a
+// contract that rejects every config the game generates.
+const SITE_KINDS = SITE_KIND_LIST;
 const FACTIONS = ['player', 'enemy', 'neutral'];
 const NUMERIC_MODS = Object.keys(DEFAULT_MODS).filter(
   (k) => typeof DEFAULT_MODS[k] === 'number',

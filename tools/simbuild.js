@@ -79,9 +79,11 @@ export const RESERVE_FLOOR = 120;   // ...and never less than this, early on
 const MAX_LEVEL = SITE_UPGRADE.length; // every step but the last
 /** Ties are broken by role, and cheap steps tie constantly (every L1 site costs
  *  150). Farms first: the L1->L2 gold jump is the biggest single multiplier on
- *  the table (x1.75) and income compounds, which is the same reasoning that
- *  puts farms at the top of PRIORITY above. */
-const BUILD_ORDER = { farm: 0, camp: 1, stronghold: 2, castle: 3 };
+ *  the table (x1.75) and income compounds. Then the YARD, because a level is
+ *  x1.35 training throughput and the thing you are short of mid-battle is
+ *  bodies; the WALL is last of the three, since levelling ground you already
+ *  hold is the least urgent thing a level buys. */
+const BUILD_ORDER = { farm: 0, trainingGround: 1, camp: 2, stronghold: 3, castle: 4 };
 
 /**
  * Queue at most one site upgrade. `front` is `frontDistance(state)`, passed in

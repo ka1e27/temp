@@ -257,11 +257,11 @@ export function derive(c) {
   // token's nominal alpha: at full strength it turned the board into a
   // spreadsheet and buried the one line that matters, the front.
   p.grid = withAlpha(mix(c.line, c.bg, 0.45), c.gridAlpha * 0.62);
-  // The adjacency graph. You may only send between adjacent sites, so this is
-  // load-bearing rules information and is drawn as a road, not a hint: a dark
-  // casing under a light core keeps it legible over any colour of ground.
+  // What was the adjacency graph's colour. The graph itself is gone with the
+  // rule it drew (see battleView.js), but `link` survives as routes.js's
+  // fallback stroke for a squad whose owner has no colour — one live consumer,
+  // and a neutral grey is exactly right for it.
   p.link = withAlpha(c.textDim, 0.55);
-  p.linkCase = withAlpha('#000000', 0.4);
   p.plate = withAlpha(c.surface, 0.85);
   // --a-blocked controls how completely a mountain masks the territory
   // underneath: below 1 the flood bleeds through, so terrain still reads as

@@ -37,33 +37,86 @@ const k = (h) => key(h.q, h.r);
 
 // --- site placement --------------------------------------------------------
 
-/** Which kinds go where, in a fixed order so placement is reproducible. */
+/**
+ * How many of `holds` are walls. THE REST ARE YARDS, AND THERE IS ALWAYS AT
+ * LEAST ONE.
+ *
+ * Not fussiness: a stronghold trains nothing now, so a faction whose only
+ * non-farm holding is a wall cannot replace a single casualty for the whole
+ * battle. Rounding alone produced exactly that — riverfen's enemy gets four
+ * extra sites, `enemyStrongholdShare` 0.34 rounds to one hold, and a 50% fort
+ * share rounds that one to a fort. The tier-1 enemy would have fought the whole
+ * campaign opener on castle production alone, and nothing would have failed.
+ */
+const fortsAmong = (holds) => (holds <= 1 ? 0
+  : Math.min(holds - 1, Math.round(holds * MAPGEN.fortShareOfHolds)));
+
+/**
+ * Which kinds go where, in a fixed order so placement is reproducible.
+ *
+ * THE ENEMY'S COUNTRY HAS A SHAPE NOW: a ring of war around the throne and
+ * farmland beyond it. It used to be flat — every enemy holding drew from one
+ * band `ownBandFrac` wide, so a region read as a uniform scatter of sites that
+ * happened to be red, and no part of the map was more the enemy's than any
+ * other.
+ *
+ * Three rules, and each is one line below:
+ *
+ *  - THE WAR MACHINE SITS ON THE THRONE'S DOORSTEP. Strongholds and training
+ *    grounds take the narrow `holdBandFrac` beside the castle AND stay inside
+ *    `holdRadius` of it. A handful of each, and taking them is the campaign —
+ *    a wall you have to crack and a yard that stops replacing what you kill.
+ *  - THE FARMS ARE OUTSIDE THAT RING, AND THIN AS THEY GO. Farm `i` of `n` may
+ *    reach from the edge of the hold band out to `farmBandFrac`, so the belt
+ *    nearest the ring is crowded and the marches are sparse. The ring is what
+ *    makes "the war machine is nearer the throne than the farmland" true by
+ *    construction rather than on average — see `pickHex`, and the riverfen
+ *    measurement in it for what happened when it was only on average.
+ *  - THE PLAYER LANDS WITH A YARD, NOT A WALL. A stronghold trains nothing now,
+ *    so a beachhead of camp-plus-strongholds would be an army that cannot
+ *    replace itself. Alternating farm and training ground is a foothold that
+ *    works on the day you land; the walls are what you build.
+ */
 function planSites(spec) {
   const plan = [{ owner: 'player', kind: 'camp', band: [0, MAPGEN.homeBandFrac] },
     { owner: 'enemy', kind: 'castle', band: [1 - MAPGEN.homeBandFrac, 1] }];
 
   const playerExtra = Math.max(0, (spec.playerSites ?? 2) - 1);
   for (let i = 0; i < playerExtra; i++) {
-    const kind = (i + 1) % MAPGEN.playerStrongholdEvery === 0 ? 'stronghold' : 'farm';
+    const kind = (i + 1) % MAPGEN.playerStrongholdEvery === 0 ? 'trainingGround' : 'farm';
     plan.push({ owner: 'player', kind, band: [0, MAPGEN.ownBandFrac] });
   }
 
   const enemyExtra = Math.max(0, (spec.enemySites ?? 6) - 1);
-  const enemyForts = Math.min(enemyExtra, Math.max(1, Math.round(enemyExtra * MAPGEN.enemyStrongholdShare)));
+  const holds = Math.min(enemyExtra,
+    Math.max(1, Math.round(enemyExtra * MAPGEN.enemyStrongholdShare)));
+  const forts = fortsAmong(holds);
+  const farms = Math.max(1, enemyExtra - holds);
   for (let i = 0; i < enemyExtra; i++) {
-    plan.push({
-      owner: 'enemy', kind: i < enemyForts ? 'stronghold' : 'farm',
-      band: [1 - MAPGEN.ownBandFrac, 1],
-    });
+    if (i < holds) {
+      plan.push({
+        owner: 'enemy', kind: i < forts ? 'stronghold' : 'trainingGround',
+        band: [1 - MAPGEN.holdBandFrac, 1], near: 'in',
+      });
+    } else {
+      // 0 for the first farm, 1 for the last. The ceiling sweeps from where the
+      // holds STOP out to the marches, rather than from the throne — a farm belt
+      // that started at the castle would put the innermost farms closer in than
+      // the walls, which is the shape this is meant to invert. Measured on
+      // riverfen when it did: one hold at 4 hexes, three farms averaging 2.7.
+      const out = ((i - holds) + 1) / farms;
+      const reach = MAPGEN.holdBandFrac + (MAPGEN.farmBandFrac - MAPGEN.holdBandFrac) * out;
+      plan.push({ owner: 'enemy', kind: 'farm', band: [1 - reach, 1], near: 'out' });
+    }
   }
 
   const neutral = spec.neutralSites ?? 0;
-  const neutralForts = Math.round(neutral * MAPGEN.neutralStrongholdShare);
+  const neutralHolds = Math.round(neutral * MAPGEN.neutralStrongholdShare);
+  const neutralForts = fortsAmong(neutralHolds);
   for (let i = 0; i < neutral; i++) {
-    plan.push({
-      owner: 'neutral', kind: i < neutralForts ? 'stronghold' : 'farm',
-      band: MAPGEN.neutralBand,
-    });
+    const kind = i < neutralForts ? 'stronghold'
+      : (i < neutralHolds ? 'trainingGround' : 'farm');
+    plan.push({ owner: 'neutral', kind, band: MAPGEN.neutralBand });
   }
   return plan;
 }
@@ -86,10 +139,38 @@ function bandCandidates(grid, [lo, hi], outside) {
   return out.length ? out : gridHexes(grid.cols, grid.rows).filter((h) => !outside.has(k(h)));
 }
 
-/** First hex of a shuffled band that clears every placed site, relaxing the
- *  separation rather than failing — placement must always terminate. */
-function pickHex(rng, cands, placed, wide) {
-  const pool = shuffle(rng, cands);
+/**
+ * First hex of a shuffled band that clears every placed site, relaxing the
+ * separation rather than failing — placement must always terminate.
+ *
+ * `near` is an anchor hex and a radius, and it is what actually puts the war
+ * machine on the throne's doorstep. A `band` cannot: it is a vertical STRIPE of
+ * the map, so on a 16-wide board a band 30% wide is five columns by twelve rows
+ * and a site inside it can sit eight hexes from a castle inside the same one.
+ * Measured on gallowmoor before this existed, the enemy's holds landed at 3, 5,
+ * 6 and 8 hexes from the throne while its farms averaged CLOSER — the exact
+ * opposite of the intended shape.
+ *
+ * A FILTER rather than a sort. Sorting the pool by distance would pack every
+ * hold into one ring at exactly `minSeparation` and make the shuffle
+ * decorative; filtering keeps the placement as varied as it ever was and only
+ * says where it may happen. It falls back to the whole band when the disc has
+ * no room left, because a map that fails to place a site is worse than a map
+ * whose last stronghold sits a little further out than it wanted to.
+ *
+ * `near.side` cuts the SAME circle both ways, and that is what makes "the war
+ * machine is nearer the throne than the farmland" true by construction instead
+ * of on average. Bands alone could not: on an 11-wide riverfen a 30% band is
+ * three columns, holds and the innermost farms drew from the same three, and
+ * with one hold on the map the "gradient" was a single coin flip — measured, the
+ * farms came out NEARER on half the seeds.
+ */
+function pickHex(rng, cands, placed, wide, near = null) {
+  const ring = near
+    ? cands.filter((h) => (near.side === 'out'
+      ? distance(h, near.at) > near.radius : distance(h, near.at) <= near.radius))
+    : cands;
+  const pool = shuffle(rng, ring.length ? ring : cands);
   for (let sep = MAPGEN.minSeparation; sep >= MAPGEN.minSeparationFloor; sep--) {
     for (const h of pool) {
       if (placed.every((p) => distance(p, h) >= sep)) return h;
@@ -101,7 +182,9 @@ function pickHex(rng, cands, placed, wide) {
   return pool[0];
 }
 
-const KIND_TAG = { farm: 'f', stronghold: 's', camp: 'c', castle: 'k' };
+const KIND_TAG = {
+  farm: 'f', trainingGround: 'y', stronghold: 's', camp: 'c', castle: 'k',
+};
 
 /**
  * How built the enemy's country is. The region's `develop` is a position on the
@@ -132,7 +215,7 @@ function developLevels(plan, develop) {
   const clamp = (n) => Math.max(1, Math.min(SITE_LEVELS.length, n));
   // Forts and farms are promoted as separate pools so a region is never all
   // castle and no countryside, or the other way round.
-  for (const group of [['castle', 'stronghold'], ['farm']]) {
+  for (const group of [['castle', 'stronghold', 'trainingGround'], ['farm']]) {
     const pool = plan.filter((e) => e.owner === 'enemy' && group.includes(e.kind));
     const floor = group[0] === 'farm' ? base - 1 : base;
     const up = Math.round(share * pool.length);
@@ -222,9 +305,17 @@ export function generateBattleMap(regionSpec, seed) {
   const sites = [];
   const counters = {};
 
+  // The throne is placed second, before anything that wants to sit near it.
+  let throneAt = null;
+  const holdRadius = Math.max(MAPGEN.minSeparation + 1,
+    Math.round(cols * MAPGEN.holdRadiusFrac));
+
   for (const entry of plan) {
-    const hex = pickHex(rng, bandCandidates(grid, entry.band, outside), placed, wide);
+    const near = entry.near && throneAt
+      ? { at: throneAt, radius: holdRadius, side: entry.near } : null;
+    const hex = pickHex(rng, bandCandidates(grid, entry.band, outside), placed, wide, near);
     placed.push(hex);
+    if (entry.kind === 'castle') throneAt = hex;
     const n = (counters[entry.kind] = (counters[entry.kind] ?? 0) + 1);
     const id = entry.kind === 'camp' ? 'camp'
       : entry.kind === 'castle' ? 'castle'

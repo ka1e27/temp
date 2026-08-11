@@ -34,6 +34,10 @@ import { metaFor } from '../tools/simplayer.js';
 // ===========================================================================
 
 function oneSite(kind = 'stronghold', gold = 100000) {
+  // Level 1's own max HP, not a fixed 250 — that number was the OLD
+  // stronghold's whole max and is wrong (over-full or under-full) for every
+  // other kind this helper is asked to build (content/balance.js SITES).
+  const hp = siteMaxHp(kind);
   return createBattleState({
     contractVersion: CONTRACT_VERSION,
     battleId: 'prog',
@@ -41,7 +45,7 @@ function oneSite(kind = 'stronghold', gold = 100000) {
     grid: { cols: 9, rows: 9, blocked: [] },
     sites: [
       { id: 'camp', kind: 'camp', hex: [1, 4], owner: 'player', garrison: { militia: 2 }, hp: 480, hpMax: 480 },
-      { id: 'x', kind, hex: [3, 4], owner: 'player', garrison: { militia: 2 }, hp: 250, hpMax: 250 },
+      { id: 'x', kind, hex: [3, 4], owner: 'player', garrison: { militia: 2 }, hp, hpMax: hp },
       // [6,4] and not [7,4]: `grid` is an OFFSET rectangle, so a 9-wide row 4
       // holds q up to 6 and [7,4] was one column OFF THE MAP. Harmless while a
       // send was legal on an authored edge; under free movement an off-map site
@@ -87,7 +91,11 @@ test('the two level arrays are the single source of truth and agree with each ot
 });
 
 test('a site can be built all the way up, and every step changes the simulation', () => {
-  const state = oneSite('stronghold');
+  // A `trainingGround`, not a `stronghold` — a wall trains nothing at all now
+  // (content/balance.js SITES), so `trainMultiplier` would sit at zero on every
+  // level and the loop below would be asserting that 0 > 0. HP, cap and regen
+  // scale with level on ANY kind; training only does on one that trains.
+  const state = oneSite('trainingGround');
   const site = state.sites.find((s) => s.id === 'x');
   let gold = siteGoldPerSec(state, site);
   let train = trainMultiplier(state, site);
@@ -134,13 +142,16 @@ test('a fully built site is a real fortress: a token force can no longer breach 
   // the ladder buys immunity to small raids and nothing else does.
   const state = oneSite('stronghold');
   const site = state.sites.find((s) => s.id === 'x');
-  const raid = { ...emptyComp(), militia: 8 };
-  const raidDps = 8 * 0.6;
-  assert.ok(raidDps > siteRegen('stronghold', 1), 'eight militia must crack a bare stronghold');
+  // 12, not 8: a bare stronghold now repairs at 5.5/s (content/balance.js
+  // SITES, up from 4.0), so 8 militia's 4.8 dps no longer clears the threshold
+  // at all. 12 still reads as a raiding party, not a siege train.
+  const raid = { ...emptyComp(), militia: 12 };
+  const raidDps = 12 * 0.6;
+  assert.ok(raidDps > siteRegen('stronghold', 1), 'a raiding party must crack a bare stronghold');
   for (let lvl = 2; lvl <= SITE_LEVELS.length; lvl++) upgradeOnce(state);
   assert.ok(raidDps < siteRegen('stronghold', site.level),
     'a fully built stronghold must out-repair a raiding party');
-  assert.equal(total(raid), 8);
+  assert.equal(total(raid), 12);
 });
 
 test('a captured site loses its levels — upgrades are an investment in ground you hold', () => {

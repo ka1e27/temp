@@ -97,7 +97,12 @@ function battle({ gold = 1000, unlocked = ['militia', 'spearmen', 'marshal'] } =
     grid: { cols: 9, rows: 9, blocked: [] },
     sites: [
       { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 4 }, hp: 480, hpMax: 480 },
-      { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'player', garrison: { spearmen: 3 }, hp: 250, hpMax: 250 },
+      // A `trainingGround`, not a `stronghold` — a wall trains nothing at all
+      // now (content/balance.js SITES), and commissioning is gated on the same
+      // `SITES[kind].train` check training is (battle/commands.js `cmdRecruit`).
+      // A stronghold here would make every `order(s, 'hold')` below fail with
+      // `site-cannot-train`, which is a real rejection, not the one under test.
+      { id: 'hold', kind: 'trainingGround', hex: [1, 0], owner: 'player', garrison: { spearmen: 3 }, hp: 180, hpMax: 180 },
       { id: 'farm', kind: 'farm', hex: [2, 0], owner: 'player', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
       { id: 'foe', kind: 'farm', hex: [3, 0], owner: 'enemy', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
     ],

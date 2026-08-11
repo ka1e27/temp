@@ -1,7 +1,7 @@
 // The battle board renderer. TWO CANVASES, deliberately:
 //
-//   #board-bg  terrain, the territory flood, the adjacency graph and site base
-//              shapes. Repainted ONLY when the background is dirty — an
+//   #board-bg  terrain, the territory flood and site base shapes. Repainted
+//              ONLY when the background is dirty — an
 //              ownership or level change, i.e. roughly once a second, not
 //              sixty times.
 //   #board-fx  everything that moves: squads, garrison bars, HP rings, siege
@@ -40,7 +40,6 @@ const OWNERS3 = ['player', 'enemy', 'neutral'];
 const OWNERS2 = ['player', 'enemy'];
 
 const _a = { x: 0, y: 0 };
-const _b = { x: 0, y: 0 };
 const _bounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
 /** Space the HUD occupies over the board: the gold/clock row on top and the
@@ -190,7 +189,6 @@ export function createBattleView(opts) {
     drawGridLines(ctx, board);
     board.lineWidth = 2.5 / camera.zoom;
     drawFrontLine(ctx, board);
-    drawLinks(ctx, state, 1 / camera.zoom);
     for (let i = 0; i < state.sites.length; i++) {
       const s = state.sites[i];
       sitePos(s, _a);
@@ -198,25 +196,24 @@ export function createBattleView(opts) {
     }
   }
 
-  /** Sends go to adjacent sites only, so the graph is drawn explicitly — the
-   *  rule should never be something the player has to infer from a rejection. */
-  function drawLinks(ctx, state, px) {
-    ctx.beginPath();
-    for (let i = 0; i < state.sites.length; i++) {
-      const s = state.sites[i];
-      sitePos(s, _a);
-      for (let j = 0; j < s.adj.length; j++) {
-        const o = byId(s.adj[j]);
-        if (!o || o.id < s.id) continue;
-        sitePos(o, _b);
-        ctx.moveTo(_a.x, _a.y);
-        ctx.lineTo(_b.x, _b.y);
-      }
-    }
-    ctx.strokeStyle = p.link;
-    ctx.lineWidth = px * 2.5;
-    ctx.stroke();
-  }
+  // THE LINK GRAPH IS GONE, and deleting it was the point rather than a tidy-up.
+  //
+  // It drew one line per `site.adj` entry, and its own comment said why: "sends
+  // go to adjacent sites only, so the graph is drawn explicitly — the rule
+  // should never be something the player has to infer from a rejection." That
+  // rule no longer exists. An army marches anywhere it can find a path to, and
+  // `adj` was redefined as REACH — every site within `MOVEMENT.reachHexes` —
+  // which is a scan bound for the AI and the harness, not a promise to anybody.
+  //
+  // So the lines had stopped being information and become an anti-explanation:
+  // at hex reach a late map draws forty-odd of them into a cobweb that connects
+  // nearly everything to nearly everything, and what it tells the player is a
+  // constraint the engine gave up enforcing. A screenshot found this; no test
+  // could, because every one of them still drew correctly.
+  //
+  // What replaces it is the ground itself — the mountains, the shape mask and
+  // the bases that deny their own hex are all already drawn, and they are what
+  // actually decides where an army can go.
 
   // ---- per-frame ----------------------------------------------------------
 

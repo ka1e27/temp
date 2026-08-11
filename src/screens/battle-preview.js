@@ -13,7 +13,7 @@ import { UNIT_IDS, UNITS, SITES, SITE_LEVELS } from '../content/balance.js';
 import { resolveField, breachSeconds, projectHp, scaleComp, total, emptyComp }
   from '../battle/combat.js';
 import { travelTicks } from '../battle/movement.js';
-import { groundOf, siteDefMultOf } from '../battle/terrain.js';
+import { groundOf, siteDefMultOf, garrisonMultOf } from '../battle/terrain.js';
 import { TICK_HZ } from '../core/loop.js';
 import { fixed, duration, plural } from '../ui/format.js';
 
@@ -94,6 +94,10 @@ export function computePreview(state, fromId, toId, o = {}) {
   const defenders = relieving ? to.siege.comp : projectGarrison(state, to, eta);
   const res = resolveField(send, defenders, {
     siteDefMult: relieving ? 1 : siteDefMultOf(state, to),
+    // Same conditional as siteDefMult, same reason: relief is fought in the
+    // open, so the garrison's own-site bonus does not apply either. Diverging
+    // from arrivals.js here is exactly the drift this file exists to prevent.
+    garrisonMult: relieving ? 1 : garrisonMultOf(state, to),
     defenderOwnsSite: !relieving,
     attMult: mods.player?.unitAtkMult ?? 1,
     defMult: mods[relieving ? to.siege.owner : to.owner]?.unitDefMult ?? 1,

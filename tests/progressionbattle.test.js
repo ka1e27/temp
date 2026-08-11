@@ -169,7 +169,10 @@ test('every CROWN line rides a contract field that already existed', () => {
   // took a field — and took a version bump with it, which is what makes
   // meta/resume.js discard a mid-battle blob the current engine would step
   // wrongly. That is the process working, not a loophole in it.
-  assert.equal(CONTRACT_VERSION, 7);
+  // ...and v8 is the exception to the EXCEPTION: a bump with no field change at
+  // all, because `stronghold` stopped meaning what it meant. The rule everyone
+  // checks is "changing a field requires a bump", and that one slips past it.
+  assert.equal(CONTRACT_VERSION, 8);
   const cfg = configWith({ arms: 3, warChest: 3, drill: 3, standingArmy: 2, siegeworks: 3 });
   for (const k of ['unitAtkMult', 'unitDefMult', 'goldRateMult', 'trainCostMult',
     'siegeDmgMult', 'structureRegenMult', 'marchSpeedMult', 'farmYieldMult']) {

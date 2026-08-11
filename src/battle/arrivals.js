@@ -11,7 +11,7 @@ import {
   resolveField, siegeDps, emptyComp, addComp, total,
 } from './combat.js';
 import { siteById, castleSealed } from './state.js';
-import { groundOf, siteDefMultOf } from './terrain.js';
+import { groundOf, siteDefMultOf, garrisonMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget } from './movement.js';
 import { pushEvent, EVENTS } from './events.js';
 
@@ -137,6 +137,7 @@ export function resolveArrival(state, group) {
     // part of how hard it is to take, and sim/preview/AI/harness all read the
     // same function rather than each drifting their own way.
     siteDefMult: siteDefMultOf(state, site),
+    garrisonMult: garrisonMultOf(state, site),
     defenderOwnsSite: true,
     attMult: modOf(state, owner, 'unitAtkMult'),
     defMult: modOf(state, site.owner, 'unitDefMult'),

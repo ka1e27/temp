@@ -20,7 +20,7 @@ import { TICK_HZ } from '../core/loop.js';
 /**
  * @typedef {object} Site
  * @property {string} id
- * @property {'farm'|'stronghold'|'camp'|'castle'} kind
+ * @property {'farm'|'trainingGround'|'stronghold'|'camp'|'castle'} kind
  * @property {[number,number]} hex
  * @property {'player'|'enemy'|'neutral'} owner
  * @property {number} level                1..3

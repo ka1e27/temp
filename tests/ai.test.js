@@ -24,7 +24,12 @@ const MAP = [
   // five hexes out, and was a "neighbour" only because the fixture authored an
   // adjacency EDGE saying so. `site.adj` is hex reach now, so a fixture has to
   // put things where it claims they are.
-  { id: 'es2', kind: 'stronghold', hex: [0, 4], owner: 'enemy', garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen' },
+  //
+  // It is also a YARD rather than a second wall, so this map has one of each.
+  // `adapt` only ever orders `trainingGround`s about — a stronghold trains
+  // nothing since the kinds split — and a fixture of two strongholds would have
+  // made every counter-training assertion below pass by ordering nothing.
+  { id: 'es2', kind: 'trainingGround', hex: [0, 4], owner: 'enemy', garrison: { militia: 20 }, hp: 180, hpMax: 180, trainType: 'spearmen' },
   { id: 'castle', kind: 'castle', hex: [9, 0], owner: 'enemy', garrison: { militia: 20 }, hp: 600, hpMax: 600 },
 ];
 
@@ -206,8 +211,13 @@ function wallMap(walls) {
   const adjacency = [['camp', 'pf']];
   for (let i = 0; i < walls; i++) {
     sites.push({
-      id: `es${i}`, kind: 'stronghold', hex: [6, i], owner: 'enemy',
-      garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen',
+      // A YARD, not a wall. These are the sites `adapt` retrains, and since the
+      // site kinds split it is `trainingGround` that trains — a stronghold
+      // produces nothing at all. Left as `stronghold` this whole fixture kept
+      // building maps the adaptation phase could not see, and every assertion
+      // below quietly became "the enemy ordered nothing, so it never disarmed".
+      id: `es${i}`, kind: 'trainingGround', hex: [6, i], owner: 'enemy',
+      garrison: { militia: 20 }, hp: 180, hpMax: 180, trainType: 'spearmen',
     });
     adjacency.push(['pf', `es${i}`], [`es${i}`, 'castle']);
   }
@@ -243,7 +253,7 @@ test('the enemy always keeps a spear backbone, at every tier and every wall coun
       s.sites.find((x) => x.id === 'pf').siege = { owner: 'enemy', comp: comp({ militia: 8 }) };
       // The steady state a real battle reaches: the yards it wanted on rams are
       // ALREADY on rams, so this think issues no ram order for them at all.
-      const forts = s.sites.filter((x) => x.kind === 'stronghold');
+      const forts = s.sites.filter((x) => x.kind === 'trainingGround');
       const wantRams = Math.max(1, Math.round(forts.length * AI.ramTrainShare
         * AI_TIERS[tier - 1].ramAppetite));
       for (const f of forts.slice(forts.length - wantRams)) f.trainType = 'rams';
@@ -275,7 +285,7 @@ test('a counter-pick the player has stopped fielding is walked back', () => {
   // that were converted while they were still the enemy's answer. This is the
   // shape the real obsidian battle reaches, and it is more than the counter
   // quota, which is what leaves orphans behind when the pick changes.
-  const walls = () => s.sites.filter((x) => x.kind === 'stronghold');
+  const walls = () => s.sites.filter((x) => x.kind === 'trainingGround');
   for (const w of walls()) w.trainType = 'militia';
 
   // Now the player is all militia; the answer to that is raiders, and the

@@ -18,7 +18,7 @@ import { total } from '../battle/combat.js';
 import { rallyKeepOf, rallyTargetsOf, upgradeProgress } from '../battle/state.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
-import { duration } from '../ui/format.js';
+import { duration, spaceCase } from '../ui/format.js';
 import { siteOf } from './battle-preview.js';
 import { createFollower } from './battle-follow.js';
 import { createFillBar, createCompBar } from './battle-bars.js';
@@ -213,7 +213,7 @@ export function createSitePanel(o) {
     // The same condition statusLine() already used to say "UNDER SIEGE" —
     // escalated here into the whole panel's chrome instead of one line.
     const hostile = !!(site.siege || intel?.gate?.sealed);
-    wrote |= set.title(`${site.kind.toUpperCase()} · L${site.level}`);
+    wrote |= set.title(`${spaceCase(site.kind).toUpperCase()} · L${site.level}`);
     wrote |= set.sub('');
 
     // Bar fills never change the panel's own BOX size (fixed height, content

@@ -100,7 +100,7 @@ function fixture() {
     sites: [
       { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 4 }, hp: 600, hpMax: 600 },
       { id: 'f1', kind: 'farm', hex: [1, 0], owner: 'player', garrison: {}, hp: 100, hpMax: 100 },
-      { id: 'hold', kind: 'stronghold', hex: [2, 0], owner: 'player', garrison: {}, hp: 250, hpMax: 250 },
+      { id: 'hold', kind: 'trainingGround', hex: [2, 0], owner: 'player', garrison: {}, hp: 180, hpMax: 180 },
       { id: 'cas', kind: 'castle', hex: [5, 0], owner: 'enemy', garrison: { militia: 6 }, hp: 600, hpMax: 600 },
     ],
     adjacency: [['camp', 'f1'], ['f1', 'hold']],
@@ -135,7 +135,7 @@ const select = (view, id) => { view.selection.length = 0; view.selection.push(id
 test('the upgrade preview bubbles render for a player site with a level left to buy', () => {
   const s = fixture();
   const { panel, view } = mountPanel(s);
-  select(view, 'hold'); // stronghold, L1, does not earn gold
+  select(view, 'hold'); // trainingGround, L1, trains but does not earn gold
   panel.update(s);
 
   const labels = panel.el.find('hud-upgrade-preview').findAll('chip-name').map((c) => c.textContent);
@@ -143,7 +143,7 @@ test('the upgrade preview bubbles render for a player site with a level left to 
   assert.ok(labels.some((t) => t.startsWith('REGEN +')), `no REGEN bubble in ${labels}`);
   assert.ok(labels.some((t) => t.startsWith('CAP +')), `no CAP bubble in ${labels}`);
   assert.ok(labels.some((t) => t.startsWith('TRAIN +')), `no TRAIN bubble in ${labels}`);
-  assert.ok(!labels.some((t) => t.startsWith('GOLD')), 'a stronghold has nothing to preview for gold');
+  assert.ok(!labels.some((t) => t.startsWith('GOLD')), 'a training ground has nothing to preview for gold');
 });
 
 test('the upgrade preview disappears at max level — nothing left to buy, nothing to promise', () => {

@@ -13,7 +13,7 @@ import { UNIT_IDS, SITES, SEND_FRACTIONS, BOOSTERS } from '../content/balance.js
 import { UNITS_UI } from '../content/strings.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
-import { compact, clock, percent, rate } from '../ui/format.js';
+import { compact, clock, percent, rate, spaceCase } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
 import { siteOf, computePreview } from './battle-preview.js';
 import { goldFlow, flowLine } from './battle-econ.js';
@@ -264,11 +264,11 @@ export function createBattleHud(o) {
     // event types, so the enemy could take a stronghold off you and leave no
     // trace but a ring in their colour on a 41px glyph.
     off(bus.on('battle:site-captured', (ev) => {
-      if (ev.from === 'player') alert.show(`LOST — ${ev.kind} taken`, now(), 'danger');
-      else if (ev.to === 'player') alert.show(`TAKEN — ${ev.kind}`, now(), 'good');
+      if (ev.from === 'player') alert.show(`LOST — ${spaceCase(ev.kind).toLowerCase()} taken`, now(), 'danger');
+      else if (ev.to === 'player') alert.show(`TAKEN — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'good');
     }));
     off(bus.on('battle:siege-begun', (ev) => {
-      if (ev.owner === 'enemy') alert.show(`UNDER SIEGE — ${ev.kind}`, now(), 'danger');
+      if (ev.owner === 'enemy') alert.show(`UNDER SIEGE — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'danger');
     }));
   }
 

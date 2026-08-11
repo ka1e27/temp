@@ -134,10 +134,37 @@ export const UNIT_SLOTS = {
  *  stronghold — without an arbitrary "minimum N troops" rule. */
 export const SITES = {
   farm:       { gold: 2.0, train: 0,    cap: 30, hp: 100, hpRegen: 2.0, defMult: 1.00 },
-  stronghold: { gold: 0,   train: 1.00, cap: 45, hp: 250, hpRegen: 4.0, defMult: 1.25 },
+  // THE YARD AND THE WALL ARE TWO BUILDINGS NOW.
+  //
+  // `stronghold` used to be both — the only thing that trained and, apart from
+  // the two thrones, the only thing that defended. So there was never a
+  // decision: whatever you took for one reason you got the other for free, and
+  // the map had exactly one interesting site on it repeated fifteen times.
+  //
+  // A `trainingGround` is a barracks and nothing else. It trains FASTER than the
+  // old stronghold did, because that is all it does, and it is soft — 180 HP at
+  // a defence multiplier barely above bare ground. Taking one is cheap and
+  // losing one hurts.
+  //
+  // A `stronghold` trains nothing at all and is a genuine wall: two thirds again
+  // the HP, a defMult between a camp and a throne, and `garrisonMult`, which is
+  // the part that is not just a bigger number in the same column — see
+  // combat.js `power`. It is what "high defence targets with troops in it
+  // getting a buff" means, and it is deliberately the one defensive term the
+  // halberds' `sunder` cannot strip: they crack masonry, not the men behind it.
+  trainingGround:
+              { gold: 0,   train: 1.30, cap: 45, hp: 180, hpRegen: 3.0, defMult: 1.05 },
+  stronghold: { gold: 0,   train: 0,    cap: 60, hp: 340, hpRegen: 5.5, defMult: 1.55,
+                garrisonMult: 1.30 },
   camp:       { gold: 4.0, train: 1.25, cap: 80, hp: 480, hpRegen: 5.0, defMult: 1.40 },
   castle:     { gold: 4.0, train: 1.25, cap: 80, hp: 480, hpRegen: 5.0, defMult: 1.60 },
 };
+
+/** Every site kind, in the order they read as a ladder. ONE STATEMENT of the
+ *  list: `contract.js SITE_KINDS` and the render tables derive from it rather
+ *  than repeating it, because a kind that exists in four tables and not the
+ *  fifth is how the specialists shipped with no CSS colour. */
+export const SITE_KINDS = Object.freeze(Object.keys(SITES));
 
 /**
  * Per-level multipliers for in-battle site upgrades (index 0 = level 1).
@@ -198,7 +225,9 @@ export const RECRUIT = {
 };
 
 /** Territory influence radius by site kind, and the movement effect. */
-export const INFLUENCE_RADIUS = { farm: 1, stronghold: 2, camp: 3, castle: 3 };
+export const INFLUENCE_RADIUS = {
+  farm: 1, trainingGround: 1, stronghold: 2, camp: 3, castle: 3,
+};
 export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.75 };
 
 /** The enemy commander's numbers live in ./ai.data.js and are re-exported here,

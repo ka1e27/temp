@@ -61,15 +61,23 @@ export function clearBubbles(...hosts) {
 export function updateTerrainBubbles(host, intel) {
   const g = intel.ground;
   const list = [];
-  if (!isOpen(g)) {
+  // Same gate as battle-econ.js `terrainLine`, and for the same reason: a
+  // stronghold's garrison bonus applies on flat open ground too, so a gate that
+  // only asked about terrain would hide it exactly where nothing else hints at
+  // it. `DUG IN` is the label when the ground itself has nothing to add.
+  const dug = (intel.garrisonMult ?? 1) > 1;
+  if (!isOpen(g) || dug) {
     list.push({
-      label: terrainName(g).toUpperCase(), hue: 'var(--c-water)',
-      note: 'The ground this site stands on.',
+      label: isOpen(g) ? 'DUG IN' : terrainName(g).toUpperCase(), hue: 'var(--c-water)',
+      note: isOpen(g)
+        ? 'A stronghold. Its garrison fights harder for standing behind its walls — '
+          + 'and halberds cannot cut that away, only the walls themselves.'
+        : 'The ground this site stands on.',
     });
     list.push({
       label: `DEF ×${fixed(intel.defMult, 2)}`, hue: 'var(--c-accent)',
       note: 'The defence multiplier this fight will actually use — the site\'s '
-        + 'own fortification, made harder by the ground around it.',
+        + 'own fortification, the troops dug in behind it, and the ground around it.',
     });
     const best = tellingUnitOf(g);
     if (best) {

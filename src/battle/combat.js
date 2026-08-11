@@ -88,7 +88,7 @@ export function groundMult(spec, ground) {
 export function power(comp, foe, opts = {}) {
   const {
     defending = false, onOwnSite = false, siteDefMult = 1, statMult = 1, ground = null,
-    unitMult = null,
+    unitMult = null, garrisonMult = 1,
   } = opts;
   const foeN = total(foe);
   let p = 0;
@@ -119,6 +119,17 @@ export function power(comp, foe, opts = {}) {
   }
   if ((comp.marshal || 0) > 0) p *= 1 + UNITS.marshal.banner;
   if (defending) p *= siteDefMult;
+  // THE MEN, NOT THE MASONRY. `SITES.stronghold.garrisonMult` is the one
+  // defensive term `sunderedDefMult` does not touch, and that separation is the
+  // whole reason a stronghold is a different building rather than a farm with a
+  // bigger `defMult`. Halberds cut a wall out from under its garrison; they do
+  // nothing about a garrison that is dug in. So a stronghold has an answer —
+  // bodies, and engines to out-pace its regen — and it is not the answer that
+  // works on everything else.
+  //
+  // Applied after `siteDefMult` and outside the per-unit loop, so it scales the
+  // whole defence exactly once, whatever the stack is made of.
+  if (defending && onOwnSite) p *= garrisonMult;
   return p * statMult;
 }
 
@@ -185,7 +196,7 @@ export function repairMult(comp) {
  */
 export function resolveField(attackers, defenders, opts = {}) {
   const {
-    siteDefMult = 1, defenderOwnsSite = true,
+    siteDefMult = 1, garrisonMult = 1, defenderOwnsSite = true,
     attMult = 1, defMult = 1, shielded = false, ground = null,
     attUnitMult = null, defUnitMult = null,
   } = opts;
@@ -201,6 +212,9 @@ export function resolveField(attackers, defenders, opts = {}) {
     defending: true,
     onOwnSite: defenderOwnsSite,
     siteDefMult: sunderedDefMult(attackers, siteDefMult),
+    // ...and `garrisonMult` goes past it untouched, which is the whole of what
+    // makes a stronghold a different building. See `power`.
+    garrisonMult,
     statMult: defMult,
     unitMult: defUnitMult,
     ground,

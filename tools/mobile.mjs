@@ -275,7 +275,12 @@ try {
     const at = await page.eval(() => {
       const g = window.__game;
       const b = g.state.battle;
-      const s = b.sites.find((x) => x.owner === 'player' && (x.kind === 'camp' || x.kind === 'stronghold'));
+      // Asked of `trainType`, not of the kind. A stronghold trains nothing since
+      // the yard/wall split — mapgen gives it no train type at all — so naming
+      // kinds here would have had the audit clicking a site with no fan and
+      // reporting the layout fine. This is the same class of miss as a smoke
+      // selector that names a container: it keeps passing once the thing moves.
+      const s = b.sites.find((x) => x.owner === 'player' && x.trainType);
       if (!s) return null;
       const p = g.view?.board?.siteScreen?.(s, { x: 0, y: 0 })
         ?? g.board?.siteScreen?.(s, { x: 0, y: 0 });

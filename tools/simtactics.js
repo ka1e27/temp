@@ -54,7 +54,7 @@
 
 import { UNIT_IDS, UNITS, MOVEMENT } from '../src/content/balance.js';
 import { total, resolveField, breachSeconds } from '../src/battle/combat.js';
-import { groundOf, siteDefMultOf } from '../src/battle/terrain.js';
+import { groundOf, siteDefMultOf, garrisonMultOf } from '../src/battle/terrain.js';
 
 /**
  * Units that must never share a squad with anything slower than themselves.
@@ -192,7 +192,7 @@ export function riderTurn(state, src, front) {
     if (t.kind === 'castle') continue; // not a rider's target at any margin
     const ground = groundOf(state, t);
     const field = resolveField(send, t.garrison, {
-      siteDefMult: siteDefMultOf(state, t), ground,
+      siteDefMult: siteDefMultOf(state, t), garrisonMult: garrisonMultOf(state, t), ground,
     });
     if (!field.win || field.attPower < field.defPower * RIDER_MARGIN) continue;
     const secs = breachSeconds(field.attSurvivors, t.hp, t.kind, t.level, 1, 1, ground);

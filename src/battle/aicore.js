@@ -13,7 +13,7 @@ import {
 import { siteById, effectiveLevel } from './state.js';
 import { distance } from '../core/hex.js';
 import { asHex } from './influence.js';
-import { groundOf, siteDefMultOf } from './terrain.js';
+import { groundOf, siteDefMultOf, garrisonMultOf } from './terrain.js';
 import { travelTicks } from './movement.js';
 import { attritionMods } from './economy.js';
 
@@ -75,6 +75,7 @@ export function defenceOf(state, site, attComp) {
     defending: true,
     onOwnSite: true,
     siteDefMult: siteDefMultOf(state, site),
+    garrisonMult: garrisonMultOf(state, site),
     statMult: state.mods[site.owner]?.unitDefMult ?? 1,
     unitMult: state.mods[site.owner]?.unitMult, ground: groundOf(state, site),
   });

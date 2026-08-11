@@ -77,7 +77,14 @@ export function adapt(state, knobs, out) {
   // They are also worthless on defence, so the appetite only applies while there
   // is a wall to knock down — when the siege ends, the yards go back to spears.
   const sieging = state.sites.some((s) => s.siege?.owner === ME);
-  const strongholds = trainers.filter((s) => s.kind === 'stronghold');
+  // THE YARDS, and they are `trainingGround` now rather than `stronghold`. The
+  // two used to be one building, so "the sites that adapt" and "the sites that
+  // defend" were the same list by accident. A stronghold trains nothing at all
+  // any more, and this filter reading `stronghold` after the split would have
+  // left the whole adaptation phase quietly ordering zero sites about — the
+  // counter-pick, the ram appetite and the spear backbone, all silently off, on
+  // exactly the tiers whose difficulty they carry.
+  const yards = trainers.filter((s) => s.kind === 'trainingGround');
   // THE SPEAR BACKBONE IS RESERVED BEFORE EITHER PASS SPENDS ANYTHING. Rams and
   // the counter-pick are two independent shares of the same strongholds, and
   // nothing used to add them up: measured on obsidian, a 50% ram appetite over
@@ -86,16 +93,16 @@ export function adapt(state, knobs, out) {
   // them a wall. Reserving one first is a cap on the SUM, which is the only
   // place the guarantee can live; `retrain` walks the surplus back to spearmen
   // on its own, so this also un-does a backbone an earlier think spent.
-  const spendable = Math.max(0, strongholds.length - (strongholds.length >= 2 ? 1 : 0));
+  const spendable = Math.max(0, yards.length - (yards.length >= 2 ? 1 : 0));
   let rams = 0;
   if (unlocked.includes('rams')) {
     // A share, but never a share that rounds to nothing: on a small map two
     // strongholds times 0.4 is zero engines, and "the enemy brings its own
     // rams" would silently be false for exactly the maps you can see it on.
     const want = sieging
-      ? Math.max(1, strongholds.length * AI.ramTrainShare * knobs.ramAppetite) : 0;
+      ? Math.max(1, yards.length * AI.ramTrainShare * knobs.ramAppetite) : 0;
     rams = Math.min(Math.round(want), spendable);
-    retrain(out, strongholds, 'rams', rams);
+    retrain(out, yards, 'rams', rams);
   }
 
   if (!(knobs.counterShare > 0)) return;
@@ -113,7 +120,7 @@ export function adapt(state, knobs, out) {
   // was ordered this think: filtering only on `out` let the two passes consume
   // the same wall between them. The ram pass frees them again when the siege
   // ends, by ordering them back to spearmen.
-  const pool = strongholds.filter((s) => s.trainType !== 'rams'
+  const pool = yards.filter((s) => s.trainType !== 'rams'
     && !out.some((c) => c.t === 'TRAIN' && c.site === s.id));
   // Same floor as the ram appetite, and for the same reason — but it does not
   // get to spend the wall the ram appetite left standing.
@@ -125,7 +132,7 @@ export function adapt(state, knobs, out) {
   // answer is ORPHANED and that yard builds it forever. Measured on obsidian:
   // two captured forts sat on militia long after the spearmen they answered
   // were gone, which is how seven strongholds ended up with no spearwall.
-  for (const s of strongholds) {
+  for (const s of yards) {
     const ordered = out.find((c) => c.t === 'TRAIN' && c.site === s.id);
     const unit = ordered ? ordered.unit : s.trainType;
     const back = MAPGEN.trainType[s.kind];

@@ -91,7 +91,11 @@ export function noteEvent(latch, type, ev) {
   if (type === 'siege-begun' && ev?.owner === 'player') latch.siegeBegun = true;
   else if (type === 'site-captured' && ev?.to === 'player') {
     latch.captured = true;
-    if (ev.kind === 'stronghold') latch.tookStronghold = true;
+    // A stronghold trains nothing now — content/balance.js split it into a
+    // pure wall plus trainingGround, the pure barracks — so "pick what this
+    // trains" (COACH.strongholdTaken) is only ever a true statement about the
+    // barracks half. Field/beat names are unchanged; only the trigger moved.
+    if (ev.kind === 'trainingGround') latch.tookStronghold = true;
   } else if (type === 'site-captured' && ev?.from === 'player') latch.lostSite = true;
   else if (type === 'squad-sent' && ev?.owner === 'player') latch.sentSquad = true;
   return latch;
@@ -107,6 +111,19 @@ export function readSignals({ battle = null, meta = null, latch = emptyLatch() }
     captured: !!latch.captured,
     gold: latch.gold ?? 0,
     castleAdjacent: !!latch.castleAdjacent,
+    // THESE THREE WERE LATCHED AND NEVER PUBLISHED, so the three beats whose
+    // `when` reads them could not fire at any point in any battle: the training
+    // tip, the stalled-siege tip and the retreat tip — which are, again, the
+    // three that teach what people actually lose to.
+    //
+    // It is the same bug the tutorial already had once and the same reason it
+    // survived: `tests/coach.test.js` was strengthened to fail if a COACH line
+    // reaches no BEAT, and every one of these has a beat. Nothing asked whether
+    // the beat's own predicate could ever see a true value. It can now, and the
+    // test asserts the join rather than either half.
+    tookStronghold: !!latch.tookStronghold,
+    siegeStalled: !!latch.siegeStalled,
+    lostSite: !!latch.lostSite,
     tutorialSeen: !!meta?.tutorialSeen,
   };
 }

@@ -141,6 +141,19 @@ export function plural(n, one, many) {
 }
 
 /**
+ * 'trainingGround' -> 'training Ground'. Site kind ids are camelCase; every
+ * place that shows one to the player wants words, not a raw identifier run
+ * together. Every kind id but this one is already a single lowercase word,
+ * so this is a no-op for `farm`/`stronghold`/`camp`/`castle` — it only does
+ * anything the day a second multi-word kind id exists. Casing is left to the
+ * caller: the site panel title wants it upper, the HUD alert line wants it
+ * lower, and both already apply their own case to the single-word kinds.
+ */
+export function spaceCase(id) {
+  return String(id).replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+}
+
+/**
  * Interned small-integer strings. `String(n)` inside a per-frame canvas text
  * loop is the last remaining allocation in the draw path; a lazy table removes
  * it for the range that garrison and squad counts ever occupy.

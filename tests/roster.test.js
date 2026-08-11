@@ -118,7 +118,11 @@ function battle(roster) {
     grid: { cols: 9, rows: 9, blocked: [] },
     sites: [
       { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 4 }, hp: 480, hpMax: 480 },
-      { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'player', garrison: {}, hp: 250, hpMax: 250, trainType: 'raiders' },
+      // A `trainingGround`, not a `stronghold` — a wall trains nothing at all
+      // now (content/balance.js SITES), so a real TRAIN order sent to one would
+      // be refused as `site-cannot-train` before the roster gate this file is
+      // actually about ever gets a say.
+      { id: 'hold', kind: 'trainingGround', hex: [1, 0], owner: 'player', garrison: {}, hp: 180, hpMax: 180, trainType: 'raiders' },
       { id: 'foe', kind: 'farm', hex: [2, 0], owner: 'enemy', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
     ],
     adjacency: [['camp', 'hold'], ['hold', 'foe']],
@@ -134,7 +138,7 @@ const order = (s, unit) => {
   return s.events.filter((e) => e.type === 'command-rejected').map((e) => e.reason);
 };
 
-test('roster: a stronghold refuses a troop the army did not bring', () => {
+test('roster: a training site refuses a troop the army did not bring', () => {
   const s = battle(['militia', 'spearmen']);
   s.sites[1].trainType = 'militia';        // the fixture's alien type is the OTHER test's
   assert.deepEqual(order(s, 'raiders'), ['unit-locked']);

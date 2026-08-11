@@ -235,30 +235,45 @@ test('harness: advanceDistance measures the throne, and only for sites you hold'
     + 'would have nowhere to march');
 });
 
-test('harness: it takes the WALL, not another field', () => {
+test('harness: it never trades its production away for more farmland', () => {
   // Farms have `train: 0`. Every soldier comes out of a camp, a castle or a
-  // stronghold, so an economy with nothing to spend on is not an economy — and
-  // an absolute "farms first" order at hex reach means there is ALWAYS another
-  // farm and the bot never takes a wall. Measured on gallowmoor with the AI off:
-  // thirteen farms, two training sites, 17,000 unspent gold, a 15 gold/second
-  // training bill and a 72-man army, against a pre-reach bot that held six
-  // trainers, ran its treasury at zero and fielded 979.
+  // training ground, so an economy with nothing to spend on is not an economy —
+  // and an absolute "farms first" order at hex reach means there is ALWAYS
+  // another farm and the bot never takes a yard. Measured on gallowmoor with the
+  // AI off: thirteen farms, two training sites, 17,000 unspent gold, a 15
+  // gold/second training bill and a 72-man army, against a pre-reach bot that
+  // held six trainers, ran its treasury at zero and fielded 979.
   //
-  // Behavioural, and about the RATIO rather than a raw count, because a count is
-  // just the map's stronghold share wearing a different hat.
+  // WHAT THIS CAN CLAIM TODAY IS DELIBERATELY THE WEAKER HALF, and the reason is
+  // worth writing down rather than tuning around. Since the yard/wall split the
+  // enemy's training grounds all sit in the ring around its throne, so there are
+  // five or six on a whole map and the player lands nowhere near any of them:
+  // measured on karrowmere, the bot holds the two it landed with for eight
+  // minutes and reaches three at ten. "It should hold several" is therefore a
+  // claim about a game that is not finished — in-battle construction is what
+  // closes it, because you are meant to BUILD yards rather than only capture
+  // them. When that lands, this test should get its teeth back.
+  //
+  // What it still catches is the original bug exactly: a bot that spends its
+  // army on farmland loses the yards it landed with and never replaces them.
   const isTrainer = (s) => SITES[s.kind].train > 0;
+  let gained = 0;
   for (const id of ['gallowmoor', 'karrowmere', 'obsidian']) {
-    const { battle } = midBattle(id, 1000);
+    const opening = startRun(id, 1000, before(id), 10);
+    const landed = opening.sites.filter((s) => s.owner === 'player' && isTrainer(s)).length;
+    assert.ok(landed >= 1, `${id}: the landing itself has no production — mapgen is wrong`);
+
+    const { battle } = midBattle(id, 1000, 3600);
     const mine = battle.sites.filter((s) => s.owner === 'player');
     const held = mine.filter(isTrainer).length;
-    // What was on offer: everything it started with, plus everything it took.
-    const onMap = battle.sites.filter(isTrainer).length;
-    assert.ok(held >= 3,
-      `${id}: three minutes in it holds ${held} training site(s) of ${mine.length} — `
-      + `a farm belt, with ${onMap} yards on the map`);
-    assert.ok(held / mine.length > 0.15,
-      `${id}: only ${held} of ${mine.length} held sites can build a soldier`);
+    assert.ok(held >= landed,
+      `${id}: landed holding ${landed} training site(s) and is down to ${held} six minutes `
+      + `in, across ${mine.length} sites — it is spending its army on farmland`);
+    if (held > landed) gained++;
   }
+  assert.ok(gained > 0,
+    'not one of the sampled regions saw the bot capture a single training ground — '
+    + 'it is ignoring production entirely, not merely finding it scarce');
 });
 
 test('harness: the build order prefers production, and that is the whole rule', () => {
@@ -266,10 +281,18 @@ test('harness: the build order prefers production, and that is the whole rule', 
   // the bot ends up holding yards proves nothing if the table quietly went back
   // to ranking farms first — which is exactly how a dead filter passes an
   // inertness test (see tools/simtactics.js).
+  //
+  // THE YARD, not the wall. Until the site kinds split those were one building,
+  // so "prefer the fort" and "prefer the thing that makes soldiers" were the
+  // same sentence; they are not any more, and a stronghold trains nothing.
+  assert.ok(PRIORITY.trainingGround < PRIORITY.farm,
+    'the yard must outrank the field, or every measured number here describes a farm belt');
+  assert.ok(PRIORITY.trainingGround < PRIORITY.stronghold,
+    'production before ground: a wall you can come back for, an army you cannot');
   assert.ok(PRIORITY.stronghold < PRIORITY.farm,
-    'the wall must outrank the field, or every measured number here describes a farm belt');
-  // The castle stays ahead of both — `playerTurn` subtracts a flat bonus for it
-  // — and your own camp is never a target.
+    'the wall between you and the throne still outranks another farm');
+  // The castle stays ahead of all of them — `playerTurn` subtracts a flat bonus
+  // for it — and your own camp is never a target.
   assert.ok(PRIORITY.camp > PRIORITY.farm && PRIORITY.camp > PRIORITY.stronghold,
     'your own camp is never a target worth ranking above the enemy country');
 });

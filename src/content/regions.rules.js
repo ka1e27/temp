@@ -244,25 +244,22 @@ export const ENEMY_UNITS_BY_TIER = Object.freeze([
  */
 export const ENEMY_MARSHALS_BY_TIER = Object.freeze([0, 0, 0, 1, 1, 2]);
 
-/** Starting garrisons the meta layer writes into a generated map, before
- *  enemy scaling. Battle never invents troops; the config says what is there. */
-export const BASE_GARRISON = Object.freeze({
-  castle: { spearmen: 4, militia: 4 },
-  stronghold: { spearmen: 3, militia: 2 },
-  farm: { militia: 3 },
-  camp: {},
-});
-/** Neutral sites are lightly held — they are the opening move, not a wall. */
-export const NEUTRAL_GARRISON = Object.freeze({ militia: 2 });
-/** Player-held outposts at the start of a region. */
-export const PLAYER_SITE_GARRISON = Object.freeze({ militia: 2 });
+// --- The meta layer's own fallback map --------------------------------------
+// BASE_GARRISON, NEUTRAL_GARRISON, PLAYER_SITE_GARRISON and FALLBACK_MAP moved
+// to ./regions.fallback.js when this file needed the line budget back, the
+// same way the two clamps below arrived FROM regions.data.js. Re-exported
+// here so every existing `import { BASE_GARRISON } from
+// '../content/regions.rules.js'` — direct, or via regions.data.js's own
+// re-export — keeps resolving. They are DEAD ON THE REAL PATH (see that
+// file's header for what that means and why it is what makes them one group);
+// `BATTLE_START` stays here because it is not one of them — modifiers.js
+// reads it on every battle, real generator or not.
+export {
+  BASE_GARRISON, NEUTRAL_GARRISON, PLAYER_SITE_GARRISON, FALLBACK_MAP,
+} from './regions.fallback.js';
 
 /** Opening battle-gold pools. You are ~1.9x behind on paper and win on tempo. */
 export const BATTLE_START = Object.freeze({ playerGold: 300, enemyGold: 200 });
-
-/** Tuning for meta's own fallback layout, used only when battle/mapgen.js is
- *  not injected. Degree 3 keeps the site graph planar-ish with real front lines. */
-export const FALLBACK_MAP = Object.freeze({ blockedFrac: 0.08, degree: 3 });
 
 // --- The two clamps every row goes through --------------------------------
 // Moved here from ./regions.data.js when tier 5 shipped: both are statements

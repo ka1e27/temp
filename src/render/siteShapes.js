@@ -2,13 +2,18 @@
 //
 // THE RULE: SITE KIND IS SHAPE AND SIZE, OWNERSHIP IS COLOUR. Kind must be
 // readable in a black-and-white print of the board, which is why nothing here
-// touches a hue — and why the four shapes are chosen to differ in the two
+// touches a hue — and why the five shapes are chosen to differ in the two
 // things the eye resolves first at 20px: OUTLINE PROFILE and AREA.
 //
-//   farm       small circle        round, passive, the low tier
-//   stronghold shield              flat top, pointed foot — a military post
-//   camp       peaked tent         the player's home: canvas, temporary
-//   castle     crenellated keep    the enemy's home and the whole objective
+//   farm           small circle        round, passive, the low tier
+//   trainingGround low gabled hut      a plain barracks — soft, unfortified
+//   stronghold     shield              flat top, pointed foot — a military post
+//   camp           peaked tent         the player's home: canvas, temporary
+//   castle         crenellated keep    the enemy's home and the whole objective
+//
+// trainingGround is the barracks half of what used to be one building
+// (content/balance.js): a plain single-peak roof over short walls, squatter
+// than either shield or tent, with no taper, pennant or comb to borrow.
 //
 // Camp and castle are a matched pair — both twice a farm's radius, four times
 // its area — because "take the castle, don't lose the camp" is the entire
@@ -19,6 +24,13 @@
 import { SITE_LEVELS } from '../content/balance.js';
 
 const TAU = Math.PI * 2;
+
+/** A low gabled hut: short walls, one shallow roof-peak, no taper or comb —
+ *  noticeably squatter than SHIELD or TENT_BODY, so it reads as the lesser,
+ *  softer building next to the wall it used to be part of. */
+const BARRACKS = new Float64Array([
+  -0.95, 0.88, -0.95, 0.42, -0.40, -0.30, 0, -0.62, 0.40, -0.30, 0.95, 0.42, 0.95, 0.88,
+]);
 
 /** Flat top, straight shoulders, tapered foot. */
 const SHIELD = new Float64Array([
@@ -53,7 +65,9 @@ const KEEP = new Float64Array([
   0.72, -0.46, 0.72, -0.95, 1, -0.95, 1, 0.88,
 ]);
 
-const SHAPES = { stronghold: SHIELD, camp: TENT, castle: KEEP };
+const SHAPES = {
+  trainingGround: BARRACKS, stronghold: SHIELD, camp: TENT, castle: KEEP,
+};
 /** Where the garrison core uses a simpler outline than the body. */
 const CORE_SHAPES = { camp: TENT_BODY };
 
@@ -63,12 +77,13 @@ const run = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from +
 
 /**
  * The sub-chain of each kind's own CORE outline picked out as its "gilded
- * trim" once a site is upgraded — both shoulders and the flat top of a
- * shield, the two roof slopes of a tent meeting at the peak, the whole
- * crenellated comb of a keep. Each is a vertex-index PATH (not necessarily
- * ascending — a shield's trim wraps shoulder -> top -> shoulder) into the
- * SAME point array a storey is traced from (see coreShapeOf), so the gold can
- * never land anywhere the silhouette itself does not already reach.
+ * trim" once a site is upgraded — both roof slopes of a training ground's
+ * hut or a tent meeting at the peak, both shoulders and the flat top of a
+ * shield, the whole crenellated comb of a keep. Each is a vertex-index PATH
+ * (not necessarily ascending — a shield's trim wraps shoulder -> top ->
+ * shoulder) into the SAME point array a storey is traced from (see
+ * coreShapeOf), so the gold can never land anywhere the silhouette itself
+ * does not already reach.
  *
  * A farm has no polygon to slice, so it is absent here on purpose — siteGild.js
  * gives it a cap arc across the top of the disc instead. Actually drawing the
@@ -77,6 +92,7 @@ const run = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from +
  * storeys off stroked outlines.
  */
 export const TRIM_PATH = {
+  trainingGround: [2, 3, 4], // both roof slopes, corner to peak to corner
   stronghold: [6, 0, 1, 2],  // left shoulder -> flat top -> right shoulder
   camp: [2, 3, 4],           // both roof slopes, corner to peak to corner
   castle: run(1, 18),        // the entire battlement top, towers and merlons
@@ -91,10 +107,17 @@ export const coreShapeOf = (kind) => CORE_SHAPES[kind] || SHAPES[kind];
  * The spread is deliberately wide. The old set ran 0.46 -> 0.62, which is
  * inside the noise floor at real zoom: every site looked like the same dot.
  */
-export const SITE_R = { farm: 0.38, stronghold: 0.54, camp: 0.74, castle: 0.78 };
+export const SITE_R = {
+  farm: 0.38, trainingGround: 0.46, stronghold: 0.54, camp: 0.74, castle: 0.78,
+};
 
-/** Attention tier — how heavily a kind is outlined. 0 ambient, 2 objective. */
-export const SITE_TIER = { farm: 0, stronghold: 1, camp: 2, castle: 2 };
+/**
+ * Attention tier — how heavily a kind is outlined. 0 ambient, 2 objective.
+ * trainingGround joins stronghold at 1: a real martial site with a garrison,
+ * not passive income — shape and SITE_R already say "softer than a
+ * stronghold", so tier only has to say "still matters, unlike a farm".
+ */
+export const SITE_TIER = { farm: 0, trainingGround: 1, stronghold: 1, camp: 2, castle: 2 };
 
 export const siteRadius = (kind, hexSize) => (SITE_R[kind] ?? 0.5) * hexSize;
 export const siteTier = (kind) => SITE_TIER[kind] ?? 0;
