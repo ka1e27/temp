@@ -13,8 +13,8 @@ export { spendCrowns, fieldedUnits };
 // The site-upgrade ladder moved to ./simbuild.js for the line budget and is
 // re-exported here, so `import { upgradeTurn } from './simplayer.js'` keeps
 // working.
-import { RESERVE_SEC, RESERVE_FLOOR, rearOf, upgradeTurn } from './simbuild.js';
-export { rearOf, upgradeTurn };
+import { rearOf, upgradeTurn, constructTurn } from './simbuild.js';
+export { rearOf, upgradeTurn, constructTurn };
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
@@ -27,6 +27,28 @@ import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { goldOf } from '../src/battle/economy.js';
 import { UNIT_IDS, CENTIGOLD, SITES } from '../src/content/balance.js';
 import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
+import { buildBlocker } from '../src/battle/commands.js';
+import { gridHexes } from '../src/battle/mapgen.js';
+
+/**
+ * Candidate hexes for a build, cached per battle.
+ *
+ * `gridHexes` allocates the whole board, and `constructTurn` runs on every think
+ * of every battle in a 240-run sweep — so this is the difference between a
+ * harness that measures construction and one that spends its time rebuilding an
+ * array that cannot change. The grid is fixed for a battle's whole life, which
+ * is what makes caching it safe; a WeakMap keyed on the grid object means a
+ * second battle in the same process misses and rebuilds.
+ */
+const HEX_CACHE = new WeakMap();
+function buildHexes(state) {
+  let hexes = HEX_CACHE.get(state.grid);
+  if (!hexes) {
+    hexes = gridHexes(state.grid.cols, state.grid.rows);
+    HEX_CACHE.set(state.grid, hexes);
+  }
+  return hexes;
+}
 
 /**
  * WHAT TO TAKE NEXT: THE WALL, NOT THE FIELD.
@@ -294,7 +316,17 @@ export function playerTurn(state, opts = {}) {
 
   // Build the country behind the line. Last, so the treasury it reads has
   // already been reasoned about by everything that spends from it.
-  if (opts.upgrades !== false) upgradeTurn(state, front);
+  //
+  // Levelling what you hold comes BEFORE raising something new, and they never
+  // both fire in a turn: one treasury, one decision. A cheap upgrade that is
+  // already affordable is the thing a player reaches for first, and a bot that
+  // raised a 350-gold yard while a 150-gold farm upgrade sat unbought would be
+  // measuring a spender rather than an ordinary player.
+  if (opts.upgrades === false) return;
+  upgradeTurn(state, front);
+  if (opts.construct !== false) {
+    constructTurn(state, front, true, buildBlocker, buildHexes(state));
+  }
 }
 
 /**

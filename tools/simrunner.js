@@ -88,6 +88,7 @@ const WIN_BAND = [[78, 92], [66, 84], [50, 72], [34, 56], [22, 42], [18, 36]];
 if (args.incursion) {
   runLadder(args.incursion, {
     n: N, idleMin: Number(args.idle ?? 30), weights: WEIGHTS, upgrades: !args.noupgrades,
+    construct: !args.noconstruct,
   });
   process.exit(0);
 }
@@ -106,15 +107,19 @@ for (const id of regionIds) {
 
   const runs = [];
   const idleMin = Number(args.idle ?? 10);
-  // --noupgrades reverts to the bot that never touched SITE_LEVELS, so the
-  // worth of the mechanic stays measurable rather than remembered.
+  // --noupgrades reverts to the bot that never touched SITE_LEVELS, and
+  // --noconstruct to the one that never raised a building, so BOTH deltas stay
+  // measurable rather than remembered. Construction measured at n=40:
+  // karrowmere 83% -> 95%, widowsgate 18% -> 23%, gallowmoor 98% -> 93%. A real
+  // option rather than a dominant one, which is the shape a verb should have.
   // `--legacy=30` measures a SECOND RUN — the same campaign for a player who has
   // abdicated once. Zero, and therefore absent from the table, unless asked for.
   // `--relics=40` measures a player who has been paid for the ground they took
   // and spent it on troop lines — the one lever the harness cannot earn on its
   // own, and therefore the one the measured table says nothing about.
   const opts = {
-    upgrades: !args.noupgrades, weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
+    upgrades: !args.noupgrades, construct: !args.noconstruct,
+    weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
   };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));

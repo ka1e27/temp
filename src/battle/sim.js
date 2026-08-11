@@ -18,14 +18,14 @@ import {
 } from './combat.js';
 import {
   createBattleState, siteById, effectiveLevel, armySize, sitesOwned, castleSealed,
-  clampRallyKeep,
+  clampRallyKeep, recomputeReach,
 } from './state.js';
 import { rallyPhase } from './rally.js';
 import { arrivalsPhase } from './arrivals.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { recomputeOccupancy } from './occupancy.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
-import { spawnSquad, retreatTarget, clearPathCache } from './movement.js';
+import { spawnSquad, retreatTarget, reverseSquad, clearPathCache } from './movement.js';
 import { drainCommands } from './commands.js';
 import { runEconomy, attritionMods } from './economy.js';
 import { runTraining, garrisonCap } from './training.js';
@@ -58,9 +58,34 @@ const vetOf = (state, faction) => state.mods[faction]?.unitMult;
 
 // --- phase 5: siege damage & HP regen --------------------------------------
 
+/**
+ * SCAFFOLDING YOU SEIZE IS RUBBLE, not a building.
+ *
+ * A site still going up sits at 1 HP with an empty garrison, so it is trivially
+ * takeable — which is the whole risk of building forward. What it must not do is
+ * hand the captor the finished article: `buildTicksLeft` is a timer on the site,
+ * not on its owner, so before this the enemy could walk onto a half-dug yard and
+ * have `timersPhase` complete it for them thirty seconds later. Observed exactly
+ * that on gallowmoor — the site went to 0 HP under an enemy siege and came out
+ * the far side at 180/180.
+ *
+ * Razing rather than cancelling, because cancelling leaves them a real building
+ * at 1 HP that simply regenerates: still a gift, just a slower one. You lose the
+ * gold and nobody gets a yard.
+ * @returns {boolean} true when the site should be struck from the board
+ */
+const razedByCapture = (site) => site.buildTicksLeft > 0;
+
 function capture(state, site) {
   const from = site.owner;
   const to = site.siege.owner;
+  if (razedByCapture(site)) {
+    site.siege = null;
+    site.razed = true;                   // struck from state.sites by siegePhase
+    pushEvent(state, EVENTS.SITE_RAZED, { siteId: site.id, kind: site.kind, from, to });
+    state.meta.lastFlipTick = state.tick;
+    return;
+  }
   site.owner = to;
   site.garrison = addComp(emptyComp(), site.siege.comp);
   site.siege = null;
@@ -91,8 +116,17 @@ function siegePhase(state) {
     // Sappers repair what they garrison (combat.js `repairMult`), on the same
     // term `structureRegenMult` already uses — so `breachSeconds`, which the AI
     // and the preview both call, sees it without learning about the unit.
-    const regen = siteRegen(site.kind, effectiveLevel(site),
-      regenMult * repairMult(site.garrison)) / TICK_HZ;
+    //
+    // SCAFFOLDING DOES NOT REPAIR ITSELF. A site still going up sits at 1 HP
+    // for the whole build (battle/construct.js), and that fragility is the risk
+    // the purchase carries — building forward is a bet. Left to regenerate, it
+    // healed out of being a soft target on its own: measured, a training ground
+    // was at 1.57 HP two ticks after it was paid for and would have been safe
+    // long before the timer ran out. `buildTicksLeft` is only ever set on a site
+    // the player raised, so every generated map is untouched by this.
+    const regen = site.buildTicksLeft > 0 ? 0
+      : siteRegen(site.kind, effectiveLevel(site),
+        regenMult * repairMult(site.garrison)) / TICK_HZ;
 
     if (site.siege && site.siege.owner !== site.owner) {
       // Terrain is part of the siege, not just the field battle: rams work at a
@@ -115,6 +149,31 @@ function siegePhase(state) {
       site.hp = Math.min(site.hpMax, site.hp + regen);
     }
   }
+  // A razed site is removed AFTER the loop, never during it — splicing the array
+  // being iterated is how a site next to a razed one silently gets skipped.
+  if (state.sites.some((s) => s.razed)) {
+    const gone = new Set(state.sites.filter((s) => s.razed).map((s) => s.id));
+    // TURN THE COLUMN AROUND FIRST, while the site it was marching to still
+    // exists. `resolveArrival` returns early when `siteById` finds nothing, and
+    // the squads have already been taken off the board by then — so an army in
+    // the air toward a razed site would simply cease to exist, with no event and
+    // no body count. Reversing needs the old target to compute the trip home,
+    // which is why it happens before the filter rather than after.
+    for (const sq of state.squads) {
+      if (!gone.has(sq.to) || sq.retreating) continue;
+      if (!reverseSquad(state, sq)) sq.arriveTick = Infinity; // nowhere to run: it holds
+    }
+    state.squads = state.squads.filter((sq) => Number.isFinite(sq.arriveTick));
+    state.sites = state.sites.filter((s) => !s.razed);
+    for (const s of state.sites) {
+      // Anything pointing at ground that no longer exists: a standing rally
+      // order outlives its target otherwise, and `rallyPhase` would send into a
+      // hole every tick for the rest of the battle.
+      s.rallyTargets = s.rallyTargets.filter((id) => state.sites.some((x) => x.id === id));
+      if (s.rallyCursor >= s.rallyTargets.length) s.rallyCursor = 0;
+    }
+    recomputeReach(state.sites);
+  }
   if (flipped) { recomputeInfluence(state); recomputeOccupancy(state); }
 }
 
@@ -129,6 +188,16 @@ export { arrivalsPhase, fightStack, resolveArrival } from './arrivals.js';
 function timersPhase(state) {
   for (const site of state.sites) {
     if (site.shieldTicks > 0) site.shieldTicks--;
+    // SCAFFOLDING BECOMES A BUILDING. It stood at 1 HP the whole time it was
+    // going up (battle/construct.js), which is the risk the purchase carries;
+    // finishing is what makes it worth defending.
+    if (site.buildTicksLeft > 0) {
+      site.buildTicksLeft--;
+      if (site.buildTicksLeft === 0) {
+        site.hp = site.hpMax;
+        pushEvent(state, EVENTS.SITE_BUILT, { siteId: site.id, kind: site.kind });
+      }
+    }
     if (site.upgradeTicksLeft > 0) {
       site.upgradeTicksLeft--;
       if (site.upgradeTicksLeft === 0) {

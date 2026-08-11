@@ -31,6 +31,7 @@ node --test tests/combat.test.js          # one file
 node --test --test-name-pattern="siege"   # one test by name
 node tools/simrunner.js --region=kaldan --n=50
 node tools/simrunner.js --all --n=96 --noupgrades   # the pre-upgrade-ladder bot
+node tools/simrunner.js --all --n=96 --noconstruct  # ...and the one that could not build
 node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a specialist
 node tools/simrunner.js --incursion=1-14 --n=32     # the endless ladder, by rung
 node tools/simrunner.js --incursion=40,55 --idle=600  # ...for a player who has idled
@@ -254,6 +255,63 @@ enemy also lost half its production to the split, so everything got easier. Batt
 lengths roughly halved campaign-wide (gallowmoor 3.9m against a 7m advertised length),
 because an army marches straight at the throne instead of chaining through the
 countryside: **`targetLengthMin` needs re-authoring too, not just `enemyMult`.**
+
+### Building on the ground you took
+
+`battle/construct.js` — `cmdBuild`, one verb, modelled on `cmdUpgrade` throughout
+because it is the same shape of purchase: spend gold now, wait out a timer, get a
+stronger board. Two things make it different, and both are the point.
+
+**It needs a place to stand.** `buildBlocker(state, faction, hex)` returns the reason
+or null, and it is exported so the board can paint a legal hex while the player is
+still choosing — a build preview that disagreed with the command would be the same
+class of bug as a battle preview that disagrees with the simulation. The rule is a
+hex within `BUILD_RANGE_HEXES` (4) of a site you hold and at least
+`BUILD_MIN_SEPARATION` (2) from every site on the map.
+
+**Those two numbers have an ordering constraint, and it is not a margin.** The range
+must be ≥ the separation or there is no legal hex anywhere: below it you are asking
+for a hex simultaneously within 2 of your farm and at least 3 from it. Set to 2
+against `MAPGEN.minSeparation`'s 3 first, and all 192 hexes of gallowmoor were
+refused with nothing failing. The separation is also deliberately *looser* than the
+generator's — 3 is a legibility rule for a scatter nobody chose, and holding a
+deliberate placement to it is what made the verb unusable exactly where it matters.
+
+```
+kind             gold  sec
+farm              200   25
+trainingGround    350   35
+stronghold        500   50
+```
+
+Priced against the upgrade ladder, which is the only other thing battle gold buys
+(`SITE_UPGRADE[0]` is 150g/20s). `camp` and `castle` are absent by rule: being able
+to raise either would mean building your way out of losing one.
+
+**A site goes up at 1 HP, produces nothing, and does not repair itself** — that
+fragility IS the risk the purchase carries, so building forward is a bet and
+building at home is slow. Left regenerating it healed out of being a soft target on
+its own (measured: 1.57 HP two ticks after it was paid for).
+
+**Scaffolding you seize is RUBBLE.** `buildTicksLeft` is a timer on the site, not on
+its owner, so before `razedByCapture` the enemy could walk onto a half-dug yard and
+have `timersPhase` finish it for them — observed on gallowmoor, 0 HP under an enemy
+siege and out the far side at 180/180. Razing rather than cancelling, because
+cancelling leaves them a real building at 1 HP that simply regenerates. Two knock-ons
+the removal needs: an army in the air toward it is **turned around** first, while its
+target still exists (`resolveArrival` returns early on a missing site and the squads
+are already off the board by then, so they would cease to exist with no event), and
+the removal happens **after** the site loop, never during it.
+
+**The harness plays it** — `tools/simbuild.js constructTurn`, `--noconstruct` to
+revert. Same lesson as `upgradeTurn` one release later: a mechanic the harness cannot
+play is a mechanic nobody has measured. Four rules — the yard first and only while
+short of one, behind the line on the same `rearOf` gradient, out of the same surplus
+`upgradeTurn` reasons about and never in the same turn, and nearest the throne among
+the legal hexes. Measured at n=40: **karrowmere 83% → 95%, widowsgate 18% → 23%,
+gallowmoor 98% → 93%.** A real option rather than a dominant one, which is the shape
+a verb should have. (n=16 read +13 / +12 / −6 — same signs, and widowsgate's was
+half noise, which is the usual reason to re-take a number before writing it down.)
 
 ### Two-stage capture
 
@@ -1296,13 +1354,20 @@ activating focused buttons.
   **battle lengths roughly halved** (gallowmoor 3.9m against 7m advertised) because an
   army marches straight at the throne now. `targetLengthMin` needs re-authoring across
   the whole table, not just `enemyMult`.
-- **In-battle construction is not built yet, and half the design depends on it.** The
-  premise is that you BUILD your economy and defences where you choose; today you can
-  still only capture them. It shows in the numbers: since every enemy training ground
-  sits in the ring around its throne there are five or six on a whole map, all at the far
-  end, and the harness bot holds the two it landed with for eight minutes on karrowmere.
-  `tests/harness.test.js` says so in a comment rather than asserting the strong version,
-  because the strong version is a claim about a game that is not finished.
+- **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
+  rule — a yard while it holds fewer than three, a farm after that — and never a
+  stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
+  razed, while its army collapsed. An ordinary player under that much pressure builds a
+  wall or nothing. The fix is a pressure term in the kind choice, and it wants a
+  measurement rather than an opinion — `--noconstruct` is what keeps that re-takeable.
+- **Nothing weighs a build against an upgrade.** `upgradeTurn` simply runs first and
+  construction gets the leftovers, never in the same turn. That is defensible as
+  ORDINARY play — a cheap upgrade already on the panel is what a player reaches for —
+  but the other order has not been measured.
+- **The ENEMY does not build**, exactly as it does not upgrade, and for the same reason:
+  it already receives developed country free at mapgen through `develop`, so teaching it
+  to build would double-count the same mechanic and silently re-tune every region. If
+  that is ever wanted it is a balance pass, not a bug fix.
 - **Fog of war and watchtowers are phase 2 and untouched.** `state.vision`, radius 1 for
   an ordinary building ("the 6 around it") and 3–4 for a watchtower, both sides blind,
   the AI on a belief model. `watchtower` is deliberately NOT shipped early: it would be a

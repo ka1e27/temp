@@ -50,6 +50,10 @@ export const goldOf = (faction) => faction.goldCg + (faction.goldFracCg ?? 0);
 export function siteGoldPerSec(state, site) {
   const base = SITES[site.kind].gold;
   if (!base || (site.owner !== 'player' && site.owner !== 'enemy')) return 0;
+  // A farm that paid for itself while it was still being dug would make the
+  // build timer decorative. Only ever set on a site battle/construct.js raised,
+  // so every generated map is untouched by this line.
+  if (site.buildTicksLeft > 0) return 0;
   const mods = state.mods[site.owner];
   const lvl = SITE_LEVELS[effectiveLevel(site) - 1];
   const farm = site.kind === 'farm' ? (mods.farmYieldMult ?? 1) * attritionMods(state).farmMult : 1;

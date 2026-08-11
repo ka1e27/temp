@@ -23,6 +23,15 @@ export const EVENTS = Object.freeze({
   SIEGE_ABANDONED: 'siege-abandoned',
   SITE_CAPTURED: 'site-captured',
   SITE_UPGRADED: 'site-upgraded',
+  /** A building the player RAISED has finished going up. Carries `kind`, like
+   *  SITE_CAPTURED and (since it was found missing one) SIEGE_BEGUN — the whole
+   *  point of the event is which building it was. */
+  SITE_BUILT: 'site-built',
+  /** ...and one that was taken while it was still scaffolding. It is struck from
+   *  the board rather than changing hands, so this is NOT a capture and must not
+   *  be reported as one: nobody holds it afterwards. Carries `from`/`to` all the
+   *  same, because "who took it off you" is the interesting half. */
+  SITE_RAZED: 'site-razed',
   UNITS_TRAINED: 'units-trained',
   GARRISON_RETREATED: 'garrison-retreated',
   SKIRMISH_ESCAPE: 'skirmish-escape',

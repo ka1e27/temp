@@ -7,7 +7,10 @@
 // a rear region builds behind the fighting.
 import { goldOf } from '../src/battle/economy.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
-import { SITE_UPGRADE, CENTIGOLD } from '../src/content/balance.js';
+import {
+  SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS, BUILD_RANGE_HEXES,
+} from '../src/content/balance.js';
+import { distance as hexDistance } from '../src/core/hex.js';
 
 /**
  * Which owned sites count as "behind the line", RELATIVE to the rest.
@@ -112,4 +115,78 @@ export function upgradeTurn(state, front) {
     if (score < bestScore) { bestScore = score; best = s; }
   }
   if (best) state.commands.push({ t: 'UPGRADE', site: best.id });
+}
+
+/**
+ * WHERE AN ORDINARY PLAYER RAISES A BUILDING, AND WHAT.
+ *
+ * The same lesson as `upgradeTurn`, one release later and with the receipts
+ * already in: a mechanic the harness cannot play is a mechanic nobody has
+ * measured, and every region priced against a bot that never built one would be
+ * priced against a player who ignores the headline verb. Construction is a
+ * bigger version of that gap, because the yard/wall split put every enemy
+ * training ground in the ring around its throne — five or six on a whole map,
+ * all at the far end — so a bot that cannot build is a bot whose production is
+ * capped at what it landed with.
+ *
+ * Four rules, and each is a thing a real player does at the board:
+ *
+ *   1. THE YARD FIRST, AND ONLY WHEN SHORT OF ONE. Bodies are what you run out
+ *      of; a farm you can capture. So it builds a training ground while it holds
+ *      fewer than `WANT_YARDS`, and otherwise a farm — and it never builds a
+ *      stronghold at all, because levelling ground you already hold is cheaper
+ *      per point of defence than raising a wall from nothing. That is a claim
+ *      about ordinary play, not about optimal play, and it is the line this
+ *      function is here to draw.
+ *   2. BEHIND THE LINE, on the same `rearOf` gradient the upgrade ladder uses.
+ *      A site goes up at 1 HP and stays there for the whole build — see
+ *      battle/construct.js — so raising one where the fighting is means paying
+ *      for a building the enemy razes before it opens.
+ *   3. OUT OF THE SAME SURPLUS `upgradeTurn` reasons about, and never in the
+ *      same turn as an upgrade. One treasury, one decision, and the reserve is
+ *      the empire's ACTUAL training bill rather than a magic number.
+ *   4. NEAREST THE FRONT OF THE REAR. Among the legal hexes it takes the one
+ *      closest to the throne, so the country grows toward the war instead of
+ *      backfilling ground already three sites deep.
+ */
+const WANT_YARDS = 3;
+
+export function constructTurn(state, front, advance, blocker, hexes) {
+  if (state.sites.some((s) => s.owner === 'player'
+    && (s.buildTicksLeft > 0 || s.upgradeTicksLeft > 0))) return;
+
+  const mine = state.sites.filter((s) => s.owner === 'player');
+  const yards = mine.filter((s) => SITES[s.kind].train > 0).length;
+  const kind = yards < WANT_YARDS ? 'trainingGround' : 'farm';
+  const spec = BUILD_COSTS[kind];
+
+  const gold = goldOf(state.factions.player) / CENTIGOLD;
+  const reserve = Math.max(RESERVE_FLOOR, factionTrainCostPerSec(state, 'player') * RESERVE_SEC);
+  if (gold < spec.gold + reserve) return;
+
+  // Rule 2, expressed against the sites rather than the hexes: a candidate hex
+  // is only as safe as the site that legitimises it, so it inherits that site's
+  // place on the front gradient.
+  const isRear = rearOf(front, mine.map((s) => s.id));
+  const rear = mine.filter((s) => isRear(s.id));
+  if (!rear.length) return;
+
+  let best = null;
+  let bestScore = Infinity;
+  for (const h of hexes) {
+    if (blocker(state, 'player', h)) continue;
+    // It has to be MY rear that reaches it, not merely any site I hold.
+    const anchor = rear.find((s) => hexDist(s, h) <= BUILD_RANGE_HEXES);
+    if (!anchor) continue;
+    const score = advance ? nearestAdvance(state, h) : hexDist(rear[0], h);
+    if (score < bestScore) { bestScore = score; best = h; }
+  }
+  if (best) state.commands.push({ t: 'BUILD', kind, hex: [best.q, best.r] });
+}
+
+const hexDist = (site, h) => hexDistance({ q: site.hex[0], r: site.hex[1] }, h);
+/** Hexes from this hex to the enemy throne — rule 4's "toward the war". */
+function nearestAdvance(state, h) {
+  const goal = state.sites.find((s) => s.kind === 'castle' && s.owner !== 'player');
+  return goal ? hexDistance({ q: goal.hex[0], r: goal.hex[1] }, h) : 0;
 }

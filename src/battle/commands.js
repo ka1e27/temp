@@ -19,6 +19,12 @@ import { isTrainable } from './training.js';
 import { applyGold, goldOf } from './economy.js';
 import { pushEvent, EVENTS } from './events.js';
 import { BOOST } from './boosters.js';
+// Raising a building lives in ./construct.js for the line budget. Imported AND
+// re-exported: a bare `export ... from` would not bind the name locally, and
+// HANDLERS below needs it.
+import { cmdBuild, buildBlocker, buildingFor } from './construct.js';
+
+export { cmdBuild, buildBlocker, buildingFor };
 
 const sec = (s) => Math.round(s * TICK_HZ);
 
@@ -316,6 +322,7 @@ const HANDLERS = {
   TRAIN: cmdTrain,
   RECRUIT: cmdRecruit,
   UPGRADE: cmdUpgrade,
+  BUILD: cmdBuild,
   RALLY: cmdRally,
   RALLY_KEEP: cmdRallyKeep,
   BOOSTER: cmdBooster,

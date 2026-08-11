@@ -166,6 +166,13 @@ export const SITES = {
  *  fifth is how the specialists shipped with no CSS colour. */
 export const SITE_KINDS = Object.freeze(Object.keys(SITES));
 
+/** What may be RAISED mid-battle, and where. Split to ./balance.construct.js for
+ *  the line budget; re-exported so this file stays the one front door. */
+export {
+  BUILD_COSTS, BUILDABLE_KINDS, BUILD_RANGE_HEXES, BUILD_MIN_SEPARATION,
+} from './balance.construct.js';
+
+
 /**
  * Per-level multipliers for in-battle site upgrades (index 0 = level 1).
  *

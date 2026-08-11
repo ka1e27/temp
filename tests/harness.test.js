@@ -276,6 +276,53 @@ test('harness: it never trades its production away for more farmland', () => {
     + 'it is ignoring production entirely, not merely finding it scarce');
 });
 
+test('harness: it RAISES production, not only captures it', () => {
+  // The half the test above had to defer, and could not make until the verb
+  // existed. Every enemy training ground sits in the ring around its throne, so
+  // there are five or six on a whole map and all of them are at the far end —
+  // a bot that can only capture is a bot whose production is capped at what it
+  // landed with, and that is a claim about a game rather than about a region.
+  //
+  // Asserted on the EVENT, so it is about the bot raising one rather than about
+  // the board happening to contain one.
+  let raised = 0;
+  let anyYard = 0;
+  for (const id of ['gallowmoor', 'karrowmere', 'widowsgate']) {
+    const battle = startRun(id, 1000, before(id), 10);
+    let nextThink = 0;
+    while (battle.status === 'running' && battle.tick < 4800) {
+      if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
+      step(battle);
+      for (const e of battle.events) {
+        if (e.type !== 'site-built') continue;
+        raised++;
+        if (SITES[e.kind].train > 0) anyYard++;
+      }
+    }
+  }
+  assert.ok(raised > 0,
+    'the bot never finished a single building in three whole battles — `constructTurn` '
+    + 'is queuing nothing, or everything it queues is being refused');
+  assert.ok(anyYard > 0,
+    `${raised} buildings went up and not one of them was a training ground — the bot is `
+    + 'raising farmland while its army is what it runs out of');
+});
+
+test('harness: --noconstruct really is the bot that could not build', () => {
+  // The guard on the escape hatch, exactly as `--noupgrades` has one. The delta
+  // (karrowmere +13, widowsgate +12, gallowmoor -6 at n=16) is only worth
+  // recording while it stays re-measurable.
+  const battle = startRun('karrowmere', 1000, before('karrowmere'), 10);
+  let nextThink = 0;
+  let built = 0;
+  while (battle.status === 'running' && battle.tick < 4800) {
+    if (battle.tick >= nextThink) { playerTurn(battle, { construct: false }); nextThink = battle.tick + 20; }
+    for (const c of battle.commands) if (c.t === 'BUILD') built++;
+    step(battle);
+  }
+  assert.equal(built, 0, 'the opt-out still issued BUILD commands');
+});
+
 test('harness: the build order prefers production, and that is the whole rule', () => {
   // The negative control. `PRIORITY` is plain data, so a behavioural test that
   // the bot ends up holding yards proves nothing if the table quietly went back

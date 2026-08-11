@@ -120,9 +120,9 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
   // The regression this exists for. `ramTrainShare` and `counterTrainShare` are
   // SHARES of production; rolled per think against every eligible site — which
   // is how the ram appetite was originally written — they ratchet to 100%,
-  // because a stronghold that flips never flips back. Rams defend at 2 and a
+  // because a yard that flipped never flipped back. Rams defend at 2 and a
   // counter-picked raider at 4, against the 8-with-a-1.75-bulwark of the
-  // spearmen they replace, so after a few minutes every wall in the region was
+  // spearmen they replace, so after a few minutes every yard in the region was
   // paper. Only tiers 3+ adapt, so the effect landed precisely on the regions
   // meant to be hardest: at n=48 with the tail dial already re-curved, obsidian
   // won 83% in 5.0 minutes against tier-2 highmarch's 8%.
@@ -132,14 +132,23 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
   // battle/ai.js `adapt` reserves before either share spends anything.
   // MEASURED AS A SUSTAINED STATE, not an instantaneous worst, and the reason is
   // that the bug this exists for was PERMANENT. A ratchet cannot repair itself —
-  // "a stronghold that flips never flips back" — so it shows up as thousands of
+  // "a yard that flipped never flipped back" — so it shows up as thousands of
   // consecutive ticks. What an instantaneous worst ALSO catches, now that the
   // player lands with a real army, is the half-second after they capture the
-  // enemy's spear forts and before its next think re-orders one back. Measured
+  // enemy's spear yards and before its next think re-orders one back. Measured
   // on nightharrow: the enemy is spear-less for 6 ticks out of 3600 (0.2%), in
   // one unbroken run of 0.6 seconds. Failing on that would be asserting that the
   // AI reacts within one tick of losing a site, which is not a thing this game
   // claims and not what the regression was.
+  //
+  // `kind === 'trainingGround'`, not `'stronghold'` — a wall trains nothing at
+  // all now (content/balance.js SITES) and `adapt` never orders one about, so
+  // its `trainType` is whatever `normalizeSites` stamped on at creation
+  // ('spearmen' for an enemy site) and never moves again. Measuring strongholds
+  // here would watch a number that cannot change and call the silence a pass:
+  // `worst.rams` and `worst.spearlessRun` would both read a permanent zero,
+  // which is exactly this file's own definition of a bug hiding in a green
+  // suite (see the header on tests/terrain.test.js for the general rule).
   const i = REGIONS.length - 1;
   const battle = startBattle(configFor(i));
   let nextThink = 0;
@@ -148,7 +157,7 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
   for (let t = 0; t < 3600 && battle.status === 'running'; t++) {
     if (battle.tick >= nextThink) { playerTurn(battle); nextThink = battle.tick + 20; }
     step(battle);
-    const forts = battle.sites.filter((s) => s.owner === 'enemy' && s.kind === 'stronghold');
+    const forts = battle.sites.filter((s) => s.owner === 'enemy' && s.kind === 'trainingGround');
     if (forts.length < 4) continue;                   // too few left to say anything
     const share = (u) => forts.filter((s) => s.trainType === u).length / forts.length;
     worst.rams = Math.max(worst.rams, share('rams'));
@@ -156,12 +165,12 @@ test('campaign: the enemy never disarms itself over a long battle', () => {
     worst.spearlessRun = Math.max(worst.spearlessRun, run);
   }
   assert.ok(worst.rams <= 0.75,
-    `${(worst.rams * 100).toFixed(0)}% of the enemy's strongholds were building siege engines`
+    `${(worst.rams * 100).toFixed(0)}% of the enemy's training grounds were building siege engines`
     + ' — the ram appetite has ratcheted again');
   assert.ok(worst.spearlessRun <= 30,
-    `the enemy held no spear fort at all for ${(worst.spearlessRun / 10).toFixed(1)}s straight —`
-    + ' a wall of def-2 rams and def-4 raiders is not a wall, and the backbone'
-    + ' reserve in battle/ai.js `adapt` is no longer repairing it');
+    `the enemy held no spear yard at all for ${(worst.spearlessRun / 10).toFixed(1)}s straight —`
+    + ' a yard of def-2 rams and def-4 raiders is not a backbone, and the reserve'
+    + ' in battle/ai.js `adapt` is no longer repairing it');
 });
 
 test('campaign: the throne is the last fight, not the last speed bump', () => {

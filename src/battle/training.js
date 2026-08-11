@@ -106,6 +106,11 @@ function blockedFor(state, site, unit) {
 export function trainJob(state, site) {
   if (site.owner !== 'player' && site.owner !== 'enemy') return null;
   if (!SITES[site.kind].train) return null;
+  // Scaffolding builds nothing. `buildTicksLeft` is only ever set on a site
+  // battle/construct.js raised, so this is a no-op for every generated map —
+  // but a yard that trained while it was still going up would make the timer
+  // decorative and the purchase instant.
+  if (site.buildTicksLeft > 0) return null;
   const mods = state.mods[site.owner];
   const unit = trainableUnit(site, mods);
   if (!unit) return null;
