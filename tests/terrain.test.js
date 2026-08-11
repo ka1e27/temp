@@ -276,6 +276,14 @@ test('the preview reports the terrain-adjusted fight, not the flat-ground one', 
     const s = ground({ grid });
     const camp = s.sites.find((x) => x.id === 'camp');
     camp.garrison = comp({ militia: 30, raiders: 6 });
+    // FOG. This test is about the TERRAIN adjustment the preview makes, not
+    // about fog — battle-preview.js only computes a real fight for a site
+    // the player has actually scouted (decision 10), and the fixture puts
+    // the fort 5+ hexes from camp on purpose, for the ring maths every other
+    // test in this file depends on. Poking state.vision directly is what
+    // scouts it without moving a site.
+    const fort = s.sites.find((x) => x.id === 'fort');
+    s.vision.player[`${fort.hex[0]},${fort.hex[1]}`] = 1;
     return s;
   };
   const flat = build({});
