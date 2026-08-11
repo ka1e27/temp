@@ -337,8 +337,9 @@ export function createBattleHud(o) {
     const fromId = view.dragFrom || view.armed || view.selection[0];
     const toId = view.dragTo || (view.hoverId !== fromId ? view.hoverId : null);
     const from = fromId ? siteOf(state, fromId) : null;
+    // Free movement: legal is just "ours, distinct" — pathBetween in cmdSend is the real check.
     const legal = from && toId && !view.armedBooster
-      && from.owner === 'player' && from.adj.includes(toId);
+      && from.owner === 'player' && from.id !== toId;
     const pv = legal
       ? computePreview(state, fromId, toId, {
         fraction: view.fraction,

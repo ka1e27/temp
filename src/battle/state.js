@@ -9,6 +9,11 @@ import {
   SITES, SITE_LEVELS, SITE_UPGRADE, BOOSTERS, UNIT_IDS, RALLY_KEEP, MOVEMENT,
 } from '../content/balance.js';
 import { distance } from '../core/hex.js';
+// The per-hex layer. state.js owns the SHAPE of a battle; occupancy.js owns the
+// questions you ask about one hex of it, so `isBlocked` lives there now and is
+// re-exported here for the consumers that have always imported it from state.
+import { recomputeOccupancy, blockedSet, isBlocked } from './occupancy.js';
+export { blockedSet, isBlocked, recomputeOccupancy };
 import { emptyComp, addComp } from './combat.js';
 import { TICK_HZ } from '../core/loop.js';
 
@@ -178,7 +183,7 @@ export function createBattleState(config) {
     if (home) home.garrison = addComp(home.garrison, config[faction].expedition ?? emptyComp());
   }
 
-  return {
+  const state = {
     contractVersion: config.contractVersion,
     battleId: config.battleId,
     configHash: config.configHash ?? null,
@@ -267,6 +272,12 @@ export function createBattleState(config) {
 
     meta: { lastFlipTick: 0, attritionStage: 0 },
   };
+  // BUILT HERE, not only in `startBattle`. Occupancy is derived from the sites
+  // this function just created, and a state without it is a battle where no base
+  // blocks anything — which fails silently, and did: a test fixture that called
+  // this directly marched armies straight through an enemy stronghold.
+  recomputeOccupancy(state);
+  return state;
 }
 
 // --- small shared helpers used across the battle modules ------------------
@@ -275,28 +286,6 @@ export const siteById = (state, id) => state.sites.find((s) => s.id === id);
 
 export const hexKey = (hex) => `${hex[0]},${hex[1]}`;
 
-/**
- * Impassable terrain — mountains and the region's shape mask.
- *
- * Backed by a Set rather than the array's own `includes`, and the reason is A*:
- * `findPath` asks this once per NEIGHBOUR per expansion, so a linear scan over a
- * few hundred strings was the inner loop of every path in the game. The cache is
- * keyed on the `blocked` ARRAY's identity, which is exactly right — mapgen
- * assigns it once and nothing mutates it in place, so a new array (a resumed
- * battle, a second battle in one process) misses and rebuilds.
- *
- * WeakMap'd rather than stored on state, because state is pure JSON: a Set on it
- * would not survive `JSON.stringify`, which is the whole save format.
- */
-const blockedCache = new WeakMap();
-export function blockedSet(state) {
-  const list = state.grid.blocked;
-  let set = blockedCache.get(list);
-  if (!set) { set = new Set(list); blockedCache.set(list, set); }
-  return set;
-}
-
-export const isBlocked = (state, q, r) => blockedSet(state).has(`${q},${r}`);
 
 /** Total units a faction has anywhere: garrisons, sieges, and squads in flight. */
 export function armySize(state, faction) {

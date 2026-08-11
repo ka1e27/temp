@@ -19,7 +19,12 @@ const MAP = [
   { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 20 }, hp: 600, hpMax: 600 },
   { id: 'pf', kind: 'farm', hex: [3, 0], owner: 'player', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
   { id: 'es', kind: 'stronghold', hex: [6, 0], owner: 'enemy', garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen' },
-  { id: 'es2', kind: 'stronghold', hex: [1, 5], owner: 'enemy', garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen' },
+  // 4 hexes from `pf`, where `es` is 3 — so a synchronised wave still has a
+  // near element and a far one to hold it back for. It used to sit at [1,5],
+  // five hexes out, and was a "neighbour" only because the fixture authored an
+  // adjacency EDGE saying so. `site.adj` is hex reach now, so a fixture has to
+  // put things where it claims they are.
+  { id: 'es2', kind: 'stronghold', hex: [0, 4], owner: 'enemy', garrison: { militia: 20 }, hp: 250, hpMax: 250, trainType: 'spearmen' },
   { id: 'castle', kind: 'castle', hex: [9, 0], owner: 'enemy', garrison: { militia: 20 }, hp: 600, hpMax: 600 },
 ];
 

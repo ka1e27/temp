@@ -51,9 +51,6 @@ export function createView(init = {}) {
      *  order, and it should not look like a squad leaving now. */
     rallyFrom: null,
     rallyTo: null,
-    /** Sites the current drag is routing THROUGH, in order, excluding both the
-     *  source and the destination. Empty for an ordinary one-hop order. */
-    chain: [],
     pointer: { x: 0, y: 0 },
     box: null,
     trainPickerFor: null,

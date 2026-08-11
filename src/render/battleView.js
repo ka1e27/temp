@@ -27,7 +27,7 @@ import {
 import { siteHeadYAt } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
 import {
-  drawSquads, drawSquadLabels, drawDragArc, drawBox, drawChainLegs, drawSquadRoutes,
+  drawSquads, drawSquadLabels, drawDragArc, drawBox, drawSquadRoutes,
 } from './routes.js';
 import { drawRallies, drawRallyDrag } from './rallyLines.js';
 import { drawStaticFormation } from './formation.js';
@@ -239,11 +239,9 @@ export function createBattleView(opts) {
       const from = byId(view.dragFrom);
       const to = view.dragTo ? byId(view.dragTo) : null;
       if (from) {
-        // Committed hops first, then the live leg from wherever they ended —
-        // so a chained drag reads as one road being drawn, not as an arc that
-        // keeps jumping its origin.
-        const head = drawChainLegs(ctx, from, view.chain, px, geo) || from;
-        drawDragArc(ctx, head, to, view.pointer, px, geo);
+        // One arc, straight from the source: free movement means a send is
+        // never routed through a waypoint drawn on the way, only aimed.
+        drawDragArc(ctx, from, to, view.pointer, px, geo);
         if (to) {
           sitePos(to, _a);
           drawSelection(ctx, to, _a.x, _a.y, siteRadius(to.kind, hexSize), p, px, 1);
@@ -254,8 +252,7 @@ export function createBattleView(opts) {
       const from = byId(view.rallyFrom);
       const to = view.rallyTo ? byId(view.rallyTo) : null;
       if (from) {
-        const head = drawChainLegs(ctx, from, view.chain, px, geo) || from;
-        drawRallyDrag(ctx, head, to, view.pointer, px, geo);
+        drawRallyDrag(ctx, from, to, view.pointer, px, geo);
         if (to && to.id !== from.id) {
           sitePos(to, _a);
           drawSelection(ctx, to, _a.x, _a.y, siteRadius(to.kind, hexSize), p, px, 1);

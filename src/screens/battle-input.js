@@ -46,7 +46,6 @@ export function createBattleInput(o) {
     view.dragTo = null;
     view.rallyFrom = null;
     view.rallyTo = null;
-    view.chain.length = 0;
     view.box = null;
     canvas.classList.remove('is-dragging');
   }
@@ -76,7 +75,7 @@ export function createBattleInput(o) {
     // CLEARED the rally you were trying to set. A right-click that never moves
     // still runs the old select-then-click path on release.
     // `view.rallyMode` routes a PLAIN drag down this exact path, so the mode
-    // gets the chain and the toggle for free rather than reimplementing either.
+    // gets the toggle for free rather than reimplementing it.
     // An armed booster still wins: aiming is a one-shot and outranks a mode.
     if (ev.button === 2 || (view.rallyMode && !view.armedBooster)) {
       rally = { fromId: hit?.owner === 'player' ? hit.id : null, sx: s.x, sy: s.y, moved: false };
@@ -137,12 +136,9 @@ export function createBattleInput(o) {
       if (view.rallyFrom) {
         const from = ord.site(view.rallyFrom);
         if (from) {
-          growChain(from, board.siteAt(getState(), w.x, w.y));
-          const head = view.chain.length
-            ? ord.site(view.chain[view.chain.length - 1]) || from : from;
           // Snapped target may BE the source — that is how you clear a rally, so
           // it is kept rather than nulled, and the renderer says so.
-          const t = ord.snapTarget(head, w.x, w.y);
+          const t = ord.snapTarget(from, w.x, w.y);
           view.rallyTo = t ? t.id : null;
         }
       }
@@ -158,13 +154,7 @@ export function createBattleInput(o) {
     if (view.dragFrom) {
       const from = ord.site(view.dragFrom);
       if (from) {
-        growChain(from, hover);
-        // Legs are measured from the HEAD of the chain, not the source, so the
-        // preview leans toward what is reachable from where the column has got
-        // to rather than from where it set out.
-        const head = view.chain.length
-          ? ord.site(view.chain[view.chain.length - 1]) || from : from;
-        const t = ord.snapTarget(head, w.x, w.y);
+        const t = ord.snapTarget(from, w.x, w.y);
         view.dragTo = t && t.id !== from.id ? t.id : null;
       }
     } else if (view.box) {
@@ -173,36 +163,10 @@ export function createBattleInput(o) {
     }
   }
 
-  /**
-   * Grow (or retrace) the chain of sites a drag is routing THROUGH.
-   *
-   * A waypoint needs a DIRECT HIT — `hover`, not `snapTarget`. snapTarget leans
-   * generously toward the nearest adjacent site so a rough drag still lands an
-   * order, and that is exactly wrong here: dragging in a straight line past a
-   * site would silently turn an ordinary two-site send into a chain. You have
-   * to actually drag over a site to route through it.
-   *
-   * Dragging back over a stop you already passed TRUNCATES there, so a wrong
-   * turn is undone by retracing it rather than by starting the drag again.
-   */
-  function growChain(from, hover) {
-    if (!hover || hover.id === from.id) return;
-    const i = view.chain.indexOf(hover.id);
-    if (i >= 0) { view.chain.length = i + 1; return; }
-    const head = view.chain.length
-      ? ord.site(view.chain[view.chain.length - 1]) || from : from;
-    // Only ground we hold can be marched through; the objective is chosen by
-    // where the drag is RELEASED, so a hostile site is never a waypoint.
-    if (hover.owner !== 'player' || !head.adj.includes(hover.id)) return;
-    view.chain.push(hover.id);
-  }
-
-  /** The waypoints for a send that ends at `toId` — the chain up to it, so a
-   *  release ON a waypoint makes that waypoint the destination instead. */
-  function chainFor(toId) {
-    const i = view.chain.indexOf(toId);
-    return i >= 0 ? view.chain.slice(0, i) : view.chain.slice();
-  }
+  // growChain/chainFor used to track which sites a drag routed THROUGH, so one
+  // gesture could express several adjacent hops. Free movement means a send is
+  // legal wherever a path exists, so a drag is just "picked up here, released
+  // there" now — the pathfinder walks whatever ground is in between on its own.
 
   function onUp(ev) {
     const rec = pointers.get(ev.pointerId);
@@ -218,17 +182,10 @@ export function createBattleInput(o) {
         // SOURCE clears, and that reads as deliberate.
         const from = ord.site(rally.fromId);
         const to = view.rallyTo ? ord.site(view.rallyTo) : null;
-        // A chained rally sets a rally on EVERY site along the road, because
-        // rallies already cascade — so the chain is expressed with the orders
-        // the sim already has rather than a new multi-hop concept.
-        if (from && to) {
-          const chain = chainFor(to.id);
-          // Toggle, not set: one link has three states (off, this way, that
-          // way) and the drag cycles them, so undoing never needs a second
-          // gesture. See battle-orders.js toggleRally.
-          if (chain.length) ord.issueRallyChain(from, chain, to);
-          else ord.toggleRally(from, to);
-        }
+        // Toggle, not set: one link has three states (off, this way, that
+        // way) and the drag cycles them, so undoing never needs a second
+        // gesture. See battle-orders.js toggleRally.
+        if (from && to) ord.toggleRally(from, to);
       } else {
         ord.setRally(w.x, w.y);   // click form: whatever is selected
       }
@@ -257,7 +214,7 @@ export function createBattleInput(o) {
     if (from && press.moved) {
       // Drag order. Releasing back on the source is an explicit cancel.
       const to = view.dragTo ? ord.site(view.dragTo) : null;
-      if (to && to.id !== from.id) ord.issueSend(from, to, chainFor(to.id));
+      if (to && to.id !== from.id) ord.issueSend(from, to);
       ord.selectOnly(from.id);
       view.armed = from.id;
     } else if (view.box && press.moved) {

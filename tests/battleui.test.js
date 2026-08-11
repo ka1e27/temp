@@ -36,7 +36,7 @@ function fixture(o = {}) {
     contractVersion: CONTRACT_VERSION,
     battleId: 'test',
     seed: 1,
-    grid: { cols: 11, rows: 9, blocked: [] },
+    grid: o.grid ?? { cols: 11, rows: 9, blocked: [] },
     sites: o.sites ?? [
       { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 10 }, hp: 600, hpMax: 600 },
       { id: 'farm', kind: 'farm', hex: [1, 0], owner: 'player', garrison: { militia: 4 }, hp: 100, hpMax: 100 },
@@ -267,7 +267,8 @@ test('rejections: every reason commands.js can produce has player-facing words',
   // Scraped from battle/commands.js: if a reason is added there without a line
   // here, the player sees a raw slug. This list is the contract.
   const produced = [
-    'unknown-site', 'not-your-site', 'not-adjacent', 'bad-fraction', 'empty-send',
+    'unknown-site', 'not-your-site', 'no-route', 'same-site', 'not-adjacent',
+    'bad-fraction', 'empty-send',
     'site-cannot-train', 'unknown-unit', 'unit-locked', 'already-upgrading', 'max-level',
     'insufficient-gold', 'unknown-target', 'nowhere-to-retreat', 'nothing-to-retreat',
     'unknown-squad', 'not-your-squad', 'already-retreating', 'not-your-battle',
@@ -281,18 +282,36 @@ test('rejections: every reason commands.js can produce has player-facing words',
 test('rejections: the message names the booster that failed', () => {
   assert.equal(rejectionText({ reason: 'no-charges', cmd: { t: 'BOOSTER', id: 'rally' } }),
     'RALLY: No charges left.');
-  assert.equal(rejectionText({ reason: 'not-adjacent' }), 'Sends only reach adjacent sites.');
+  assert.match(rejectionText({ reason: 'no-route' }), /blocks every route/);
   assert.match(rejectionText({ reason: 'brand-new-reason' }), /brand-new-reason/);
   assert.match(rejectionText(null), /unknown/);
 });
 
 test('rejections: a silently dropped order really does leave a reason behind', () => {
-  const state = fixture();
-  state.commands.push(cmd.send('camp', 'cas', 1, UNIT_IDS));   // not adjacent
+  // A WALL, not a missing edge. This used to send `camp -> cas` and rely on the
+  // two not being adjacent; armies march anywhere now, so the only thing that
+  // refuses a send is a base standing in the way — which is what this builds.
+  // The corridor is one hex tall, so `hold` at [1,0] seals it completely.
+  const state = fixture({
+    sites: [
+      { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 10 }, hp: 600, hpMax: 600 },
+      { id: 'hold', kind: 'stronghold', hex: [1, 0], owner: 'enemy', garrison: { militia: 6 }, hp: 250, hpMax: 250 },
+      { id: 'cas', kind: 'castle', hex: [2, 0], owner: 'enemy', garrison: {}, hp: 600, hpMax: 600 },
+    ],
+    grid: { cols: 3, rows: 1, blocked: [] },
+  });
+  state.commands.push(cmd.send('camp', 'cas', 1, UNIT_IDS));
   drainCommands(state);
   const ev = state.events.find((e) => e.type === EVENTS.COMMAND_REJECTED);
-  assert.equal(ev.reason, 'not-adjacent');
-  assert.equal(rejectionText(ev), 'Sends only reach adjacent sites.');
+  assert.equal(ev.reason, 'no-route');
+  assert.match(rejectionText(ev), /blocks every route/);
+
+  // The negative control, and it is the whole point: the SAME send to the base
+  // that is doing the blocking is legal, because a goal hex is always reachable.
+  state.events = [];
+  state.commands.push(cmd.send('camp', 'hold', 1, UNIT_IDS));
+  drainCommands(state);
+  assert.equal(state.events.filter((e) => e.type === EVENTS.COMMAND_REJECTED).length, 0);
 });
 
 // ---------------------------------------------------------------------------

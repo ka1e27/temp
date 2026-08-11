@@ -85,7 +85,7 @@ function departures(s, n) {
 // 1. Come home
 // ---------------------------------------------------------------------------
 
-test('the AI reinforces a threatened castle from beyond its own adjacency', () => {
+test('the AI reinforces a threatened castle from anywhere it holds', () => {
   const state = board();
   // Nothing is moving and nothing is besieged: the ONLY thing the AI can see is
   // a player army standing next door. Under the old commander that was not a
@@ -96,8 +96,14 @@ test('the AI reinforces a threatened castle from beyond its own adjacency', () =
   run(state, 6);
   const relief = squadsFrom(state, 'rear').filter((q) => q.to === 'castle');
   assert.equal(relief.length, 1, 'the rear stronghold must march to the castle');
-  assert.deepEqual(relief[0].route, ['rear', 'mid', 'castle'],
-    'and it must chain THROUGH its own ground, the same order a player has');
+  // It used to assert the exact chain `['rear','mid','castle']`, because a send
+  // could only cross ground it bordered and the AI had to walk a parent-pointer
+  // BFS to build one. Free movement retired both: the relief marches straight
+  // home and the pathfinder routes it round anything in the way. What the test
+  // is really about survives — the rear stronghold, which borders nothing it can
+  // attack, still gets its army to the fight.
+  assert.equal(relief[0].from, 'rear');
+  assert.equal(relief[0].route, undefined, 'and it carries no chain any more');
   assert.ok(total(relief[0].comp) >= 10, `sent a token force: ${total(relief[0].comp)}`);
 
   // ...and it must actually arrive and be standing in the castle.
@@ -266,7 +272,7 @@ test('the new knobs are wired to the tiers, not to a literal', () => {
     assert.ok(typeof t.stagingRatio === 'number' && t.stagingRatio >= 0);
     assert.ok(t.stagingKeep > 0 && t.stagingKeep <= 1);
   }
-  assert.ok(AI.homeRadius >= 1 && AI.homeGuardMargin > 1 && AI.surplusPress > 0);
+  assert.ok(AI.homeRadiusHexes >= 1 && AI.homeGuardMargin > 1 && AI.surplusPress > 0);
   // Tiers 3-4 keep the drain-to-the-floor staging they always had.
   assert.ok(AI_TIERS[2].stagingKeep < 0.2 && AI_TIERS[3].stagingKeep < 0.2);
 });

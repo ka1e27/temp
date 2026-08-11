@@ -20,7 +20,7 @@ import {
   pieceCount, formationFiles, formationRanks, planUnits, wobble,
   beginPieces, addPiece, flushPieces, ownerIndex,
 } from './formation.js';
-import { loadStops, legIndex, legSpan, routeAt, tracePolyline } from './routePath.js';
+import { loadStops, legSpan, routeAt, tracePolyline } from './routePath.js';
 
 const _a = { x: 0, y: 0 };
 const _b = { x: 0, y: 0 };
@@ -146,8 +146,7 @@ export function drawSquads(ctx, state, t, px, g) {
 
     const f = squadProgress(sq, t);
     const bow = squadBow(sq);
-    // A chained send has more than two stops, so position comes from the
-    // polyline rather than one arc. loadStops() fills the shared scratch.
+    // loadStops() fills the shared scratch with the squad's two endpoints.
     const stops = loadStops(sq, g);
     if (!stops) continue;
 
@@ -163,17 +162,11 @@ export function drawSquads(ctx, state, t, px, g) {
     const rg = ret ? rankGap * 1.25 : rankGap;
 
     // Rank spacing in route-parameter terms, capped so a very short link is
-    // never wholly swallowed by a very deep column. On a chain the head's own
-    // leg sets the scale, so a column crossing a short hop mid-route keeps its
-    // depth instead of concertinaing.
-    const headLeg = legIndex(sq, stops, f > 0 ? (f < 1 ? f : 1) : 0);
-    // `f` is GLOBAL across the whole chain, so a pixel gap converts through the
-    // head leg's pixels-per-global-parameter — not through its raw length, which
-    // on a four-stop route would be a quarter of the scale it needs to be.
-    const paramSpan = stops > 2 && sq.legEnds
-      ? Math.max(1e-6, sq.legEnds[headLeg] - (headLeg > 0 ? sq.legEnds[headLeg - 1] : 0))
-      : 1;
-    const span = legSpan(headLeg) / paramSpan;
+    // never wholly swallowed by a very deep column. A trip is one leg now, so
+    // its own pixel length converts a global progress fraction directly — no
+    // per-leg parameter span to normalise through, the way a multi-stop chain
+    // needed.
+    const span = legSpan();
     const dt = Math.min(rg / span, 0.44 / (ranks > 1 ? ranks - 1 : 1));
 
     let slot = 0;
@@ -224,9 +217,9 @@ export function drawSquadLabels(ctx, state, t, px, g, owner) {
 }
 
 /**
- * The road a chained squad is walking, drawn faintly behind it. Without this a
- * column crossing a site it is only passing THROUGH looks like it is arriving
- * there, which is the one thing chaining must never be ambiguous about.
+ * The road every squad is walking, drawn faintly behind it — without it a
+ * squad crossing paths with another looked like it had appeared out of
+ * nowhere, with nothing tying it back to where it left from.
  */
 export function drawSquadRoutes(ctx, state, px, g) {
   DASH[0] = px * 2;
@@ -235,11 +228,6 @@ export function drawSquadRoutes(ctx, state, px, g) {
   ctx.lineWidth = px * 1.5;
   for (let i = 0; i < state.squads.length; i++) {
     const sq = state.squads[i];
-    // NO EARLY BAIL. `sq.route` is only set for CHAINED sends, so every
-    // ordinary one-hop squad — which is nearly all of them — drew no line
-    // between where it left and where it is going. `loadStops` already handles
-    // the two-stop case; this was one line standing between the board and its
-    // cheapest piece of legibility.
     const stops = loadStops(sq, g);
     if (!stops) continue;
     tracePolyline(ctx, stops, squadBow(sq));
@@ -252,36 +240,11 @@ export function drawSquadRoutes(ctx, state, px, g) {
 }
 
 /**
- * The live drag arc. Solid and accent-coloured once it has snapped to a legal
- * adjacent target, dashed and grey while it has not — so the adjacency rule is
+ * The live drag arc. Solid and accent-coloured once it has snapped to a
+ * target, dashed and grey while it has not — so where a send would land is
  * learned by feel rather than read in a tooltip.
  * @returns {object|null} the snapped target site
  */
-/**
- * The confirmed legs of a chained drag, behind the live head arc.
- *
- * Solid and accent-coloured because these hops are already committed — the only
- * undecided leg is the one still following the pointer. `chain` is the ordered
- * list of ids the drag has routed through, excluding the source.
- */
-export function drawChainLegs(ctx, from, chain, px, g) {
-  if (!chain || !chain.length) return null;
-  let prev = from;
-  ctx.strokeStyle = g.palette.selection;
-  ctx.lineWidth = px * 3;
-  ctx.lineCap = 'round';
-  for (let i = 0; i < chain.length; i++) {
-    const next = g.byId(chain[i]);
-    if (!next) break;
-    g.pos(prev, _a);
-    g.pos(next, _b);
-    arcPath(ctx, _a.x, _a.y, _b.x, _b.y, 1);
-    ctx.stroke();
-    prev = next;
-  }
-  return prev;   // the head the live leg should start from
-}
-
 export function drawDragArc(ctx, from, to, pointer, px, g) {
   const p = g.palette;
   g.pos(from, _a);
