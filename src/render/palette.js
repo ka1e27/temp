@@ -268,6 +268,11 @@ export function derive(c) {
   // being INSIDE someone's ground.
   p.blocked = withAlpha(mix(c.bg, c.line, 0.8), c.blockedAlpha);
   p.blockedEdge = withAlpha(c.textDim, 0.55);
+  // FOG OF WAR (render/fog.js): a flat dark wash over ground outside current
+  // sight, no hue of its own — it must read as "unknown", never as a third
+  // faction's colour, so it has to sit over the plate shading, the flood,
+  // rivers and mountains without fighting any of them for attention.
+  p.fogVeil = withAlpha('#000000', 0.5);
   // WATER. ONE flat translucent fill, nothing else — the third pass at this
   // (see river.js for the full history). The first two both shaded it: a
   // four-layer stack of a darkened valley, a darkened bed, the water and a

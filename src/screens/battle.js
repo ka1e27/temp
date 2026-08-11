@@ -116,7 +116,12 @@ export function createBattleScene(ctx) {
         volume: () => ctx.state?.meta?.settings?.volume ?? 0.7,
       });
       fx = createFx();
-      board = createBattleView({ bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx });
+      // The board is always drawn for the PLAYER — there is no spectator or
+      // enemy-eye view — but named rather than left implicit, so the renderer
+      // itself never has to assume who it is fogging the board for.
+      board = createBattleView({
+        bg: qs('#board-bg'), fx: qs('#board-fx'), fxLayer: fx, viewFaction: 'player',
+      });
       const presentation = createView();
       input = createBattleInput({
         canvas: qs('#board-fx'), board, view: presentation, getState, bus: ctx.bus,

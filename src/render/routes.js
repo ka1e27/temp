@@ -122,9 +122,13 @@ export function chevron(ctx, x, y, ang, size, color, hollow = 0) {
  * RANK, never one per piece — a formation is at most six ranks deep, so the
  * curve costs twelve evaluations for a 30-piece army.
  *
+ * `squads` is already the PERCEIVED list (battle/vision.js
+ * `perceivedSquads`) — own squads always, the enemy's only where currently
+ * seen — so this never has to ask the question itself; a squad that left
+ * vision is simply not in the array, gone without a trace.
  * @param {object} g geometry bundle {pos(site,out), byId(id), hexSize, palette}
  */
-export function drawSquads(ctx, state, t, px, g) {
+export function drawSquads(ctx, squads, t, px, g) {
   const hs = g.hexSize;
   // One piece is one soldier, so a piece is the SAME size at every stack size
   // and mass is the only thing that changes. The floors are in screen pixels,
@@ -135,8 +139,8 @@ export function drawSquads(ctx, state, t, px, g) {
   const rankGap = Math.min(hs * 0.32, Math.max(hs * 0.2, px * 5.4));
 
   beginPieces();
-  for (let i = 0; i < state.squads.length; i++) {
-    const sq = state.squads[i];
+  for (let i = 0; i < squads.length; i++) {
+    const sq = squads[i];
     const from = g.byId(sq.from);
     const to = g.byId(sq.to);
     if (!from || !to) continue;
@@ -201,10 +205,11 @@ export function drawSquads(ctx, state, t, px, g) {
 /** Squad head-counts, drawn inside the renderer's single text pass. Below the
  *  subitizing limit the pieces ARE the number, so the label would only repeat
  *  what the formation already said; above it, it is the exact figure the
- *  compressed piece count deliberately stops carrying. */
-export function drawSquadLabels(ctx, state, t, px, g, owner) {
-  for (let i = 0; i < state.squads.length; i++) {
-    const sq = state.squads[i];
+ *  compressed piece count deliberately stops carrying. `squads` is the
+ *  PERCEIVED list — see drawSquads. */
+export function drawSquadLabels(ctx, squads, t, px, g, owner) {
+  for (let i = 0; i < squads.length; i++) {
+    const sq = squads[i];
     if (sq.owner !== owner) continue;
     let n = 0;
     for (let k = 0; k < UNIT_IDS.length; k++) n += sq.comp[UNIT_IDS[k]] || 0;
@@ -219,15 +224,17 @@ export function drawSquadLabels(ctx, state, t, px, g, owner) {
 /**
  * The road every squad is walking, drawn faintly behind it — without it a
  * squad crossing paths with another looked like it had appeared out of
- * nowhere, with nothing tying it back to where it left from.
+ * nowhere, with nothing tying it back to where it left from. `squads` is the
+ * PERCEIVED list — see drawSquads; a squad out of vision leaves no route
+ * either, or the line would still betray where it went.
  */
-export function drawSquadRoutes(ctx, state, px, g) {
+export function drawSquadRoutes(ctx, squads, px, g) {
   DASH[0] = px * 2;
   DASH[1] = px * 7;
   ctx.setLineDash(DASH);
   ctx.lineWidth = px * 1.5;
-  for (let i = 0; i < state.squads.length; i++) {
-    const sq = state.squads[i];
+  for (let i = 0; i < squads.length; i++) {
+    const sq = squads[i];
     const stops = loadStops(sq, g);
     if (!stops) continue;
     tracePolyline(ctx, stops, squadBow(sq));
