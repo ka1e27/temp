@@ -898,6 +898,87 @@ sees past its own doorstep. `VISION_RADIUS` is deliberately **not** a read of
 `SITE_KINDS` gained a kind and state gained the `vision`/`seen` pair, so a v8 blob resumed
 here is a board both sides could see all of, handed a fog it was never played with.
 
+### Drawing it, and the three surfaces that kept talking
+
+**The territory flood was the leak nobody would look for.** `state.influence` is computed
+from every site regardless of who has ever looked at it, because the sim needs the TRUE
+front line for the castle gate, territory score and march speed — so painting it straight
+onto the board colours in the enemy's whole country from tick 0. `render/fog.js`
+`perceivedInfluence` re-runs the *same* algorithm against a site list resolved through
+`perceivedSite` first, on a **throwaway object**, so the sim's own influence is never
+touched. Unscouted ground contributes nothing by construction: a ghost's owner is `null`
+and `recomputeInfluence` already skips any owner that is not player/enemy/neutral. A ghost
+also projects at the BASE weight — painting today's true level over a stale sighting would
+leak an upgrade back in through the flood's own strength.
+
+**Fog on the canvas is worth nothing while some other surface goes on narrating**, and
+three did. All three were found by review rather than by a failing test, and they share a
+shape: a surface that never asked about vision because, before fog, there was nothing to
+ask.
+
+- **The effect layer was the big one.** Measured on gallowmoor over a whole battle,
+  **85% of all combat and economy effects fired on ground the player cannot see** — 385
+  gold `+N` floats over the enemy's training grounds alone, plus every siege, field battle
+  and capture. That is a live readout of the enemy's whole economy and it tells you exactly
+  where to look; it also defeats `state.seen`, whose one job is that you learn an owner by
+  LOOKING. Sound went through the same gate, because hearing a battle you cannot see is the
+  same claim as drawing it. After: 427 suppressed, 80 played.
+
+  **`fxVisible` reads the event's own ACTOR fields, not the site's current owner**, and
+  that is the half the obvious implementation gets wrong: by the time events are drained
+  the capture has already happened, so a site you have just *lost* belongs to the enemy and
+  a gate asking "is this mine" answers no to the one event you most need. You always know
+  what your own men are doing, wherever they are. The **bus stays outside the gate** — it
+  feeds game logic, not the screen, and starving a coach beat of the fact that something
+  happened is a different bug from drawing it. An event naming no site is not a positional
+  claim and passes through untouched.
+
+- **A rally line has two ends.** The source was checked and the destination was not — and
+  `byId` resolves through `perceivedSite`, so an unscouted target came back as a GHOST,
+  which is **truthy**, and the bare `!o` check drew a dashed line with two arrowheads
+  pointing straight at ground the player had never seen. It announced both that something
+  was there and that the enemy was reinforcing toward it.
+
+- **A squad outside vision is not drawn, so it must not be clickable.** `squadAt` scanned
+  the raw list, leaving an invisible column pickable out of empty dark — a worse tell than
+  drawing it would have been, because the player finds the army with the cursor. A SITE is
+  deliberately left alone: its position and kind are common knowledge, so clicking a ghost
+  to aim a blind attack is intended. For the same reason the build-target tint is *not* a
+  leak, though it looks like one — a hole in the wash around an unscouted site reveals only
+  what the ghost silhouette already shows.
+
+**A spotted column's route is drawn in FULL, including the part in fog.** That is a
+deliberate call rather than an oversight: the entire value of spotting an army is knowing
+where it is going, and a route clipped to visible hexes is a stub that says nothing. The
+cost is that it also reveals where the column came from.
+
+**Fog is free, and this was measured rather than assumed.** The house rule forbids
+per-frame allocation, and the veil is a full-board path plus one `perceivedSquads` call
+every frame — so it looked like exactly the sort of thing that had already cost this
+project 60fps → 31 once. It does not:
+
+```
+region        fps    board        lit          squads
+gallowmoor   59.7    192 hexes    28 (85% veiled)     6
+widowsgate   59.2    336 hexes    35 (90% veiled)    38
+```
+
+against a pre-fog baseline of 59.6. The expensive half — the perceived flood and the veil
+buffer — sits in the BACKGROUND path, which repaints only when `signature()` moves, and
+every event that changes vision already bumps `influenceVersion`. Do not optimise the
+per-frame half without a measurement showing it matters; the tick-keyed cache that suggests
+itself buys nothing and adds a staleness bug of exactly the class this project keeps
+hitting.
+
+**A battle opens 85–90% dark, and that is worth knowing before playtest.** Every ordinary
+building sees radius 1 — its own doorstep, exactly as the brief asked — so a beachhead of
+three or four sites lights ~28 hexes of 192. What makes that playable rather than blind is
+decision 9: every site's POSITION and KIND are common knowledge from tick 0, so the player
+always knows where to go and only ever has to guess at what is inside. If a playtest says
+the opening feels blind, the knob is `VISION_RADIUS` for `camp`/`castle` — but raising it
+takes differentiation away from the watchtower, which is the one building that exists to
+answer this question.
+
 ## The endless ladder: incursions
 
 `content/incursion.data.js` + `meta/incursion.js`. One battle per **rung**: a fixed
