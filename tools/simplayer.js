@@ -10,121 +10,125 @@ import { generateBattleMap } from '../src/battle/mapgen.js';
 // re-exported here, so this file stays the harness's one front door.
 import { spendCrowns, fieldedUnits } from './simshop.js';
 export { spendCrowns, fieldedUnits };
+// The site-upgrade ladder moved to ./simbuild.js for the line budget and is
+// re-exported here, so `import { upgradeTurn } from './simplayer.js'` keeps
+// working.
+import { RESERVE_SEC, RESERVE_FLOOR, rearOf, upgradeTurn } from './simbuild.js';
+export { rearOf, upgradeTurn };
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome, incomePerSec } from '../src/meta/idle.js';
 import { breachSeconds, total, resolveField } from '../src/battle/combat.js';
+import { distance as hexDistance } from '../src/core/hex.js';
 import { groundOf, siteDefMultOf } from '../src/battle/terrain.js';
 import { siteControlFraction } from '../src/battle/state.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { goldOf } from '../src/battle/economy.js';
-import { UNIT_IDS, SITE_UPGRADE, CENTIGOLD } from '../src/content/balance.js';
+import { UNIT_IDS, CENTIGOLD } from '../src/content/balance.js';
 import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
 
-/** Farms first (economy wins fights), then the war machine, then the prize. */
-const PRIORITY = { farm: 0, stronghold: 1, castle: 2, camp: 3 };
+/**
+ * WHAT TO TAKE NEXT: THE WALL, NOT THE FIELD.
+ *
+ * This said `farm: 0` — "farms first, economy wins fights" — and that was true
+ * while a site had `targetAvgDegree` 2.8 neighbours to choose between: half the
+ * time there was no farm in reach and the bot took the stronghold in front of
+ * it. Hex reach puts about eight sites in range, so there is ALWAYS a farm going
+ * spare and the 25-second head start below became an absolute veto.
+ *
+ * Measured on gallowmoor with the enemy AI switched off, so nothing could take
+ * anything back: the bot ended on THIRTEEN farms and TWO training sites, sat on
+ * 17,000 unspent gold with a training bill of 15 gold a second, and fielded a
+ * 72-man army. The pre-reach bot on the same map and seed held six trainers, ran
+ * its treasury at zero, and fielded 979. Farms have `train: 0` — every soldier
+ * in the game comes out of a camp, a castle or a stronghold — so an economy with
+ * nowhere to spend is not an economy, and the bot had optimised itself into one.
+ * Flipping the two is worth 0% -> 75% on gallowmoor and 8% -> 50% on thanescar.
+ *
+ * IT WAS FIRST WRITTEN AS A CONDITION AND THE CONDITION NEVER ONCE WENT THE
+ * OTHER WAY. The idea was that gold piling up above `upgradeTurn`'s own training
+ * reserve is what tells you the next farm is worth nothing — which reads well
+ * and is exactly what an ordinary player sees on the HUD. Instrumented over
+ * whole battles on riverfen, gallowmoor, karrowmere and widowsgate it was true
+ * on every think of every one of them: 1,091 thinks, zero on the other branch.
+ * A landing force arrives with a shop-fed treasury and no yards running yet, and
+ * from there the reserve is never the binding constraint. So the "default" order
+ * was unreachable code wearing the clothes of a decision, and this project has
+ * refunded four upgrades for less. One order, and it is the measured one.
+ */
+export const PRIORITY = { stronghold: 0, farm: 1, castle: 2, camp: 3 };
 // Keep a real home guard, but not so large that the opening push never fires —
 // the expedition exists to be spent, and the first minute is when enemy sites
 // are still thinly held.
 const HOME_FLOOR = 5;
 const ATTACK_MARGIN = 1.5; // overkill to survive the defender's reinforcement
 
-/** Hops from each owned site to the nearest one bordering an enemy/neutral. */
+/**
+ * HOW FAR EACH OWNED SITE IS FROM THE FIGHTING, in hexes to the nearest site
+ * somebody else holds.
+ *
+ * It used to be HOPS: a BFS that seeded 0 at every owned site with a hostile
+ * neighbour and walked outward over the site graph. Free movement broke that
+ * outright rather than degrading it. `site.adj` is hex reach now, so on
+ * gallowmoor EVERY player site borders something hostile, every one scored 0,
+ * and two mechanics that gate on the gradient stopped happening at all:
+ * `upgradeTurn` builds only behind the line, and the rear-army column only
+ * pushes toward a lower number. The bot silently stopped upgrading a single
+ * site — the mechanic this project measured at +9 to +25 points — and every
+ * region measured against a player who no longer plays it.
+ *
+ * Hexes instead of hops, so the gradient survives a wider neighbourhood. And
+ * note what it can no longer claim: the old note here said a rear site "cannot
+ * be attacked directly at all" because sends were adjacency-only. Nothing is
+ * safe now. This is a heuristic about where the fighting IS, not a guarantee
+ * about where it cannot reach.
+ */
 export function frontDistance(state) {
   const dist = {};
-  const queue = [];
+  const foes = state.sites.filter((s) => s.owner !== 'player');
   for (const s of state.sites) {
     if (s.owner !== 'player') continue;
-    if (s.adj.some((id) => {
-      const t = state.sites.find((x) => x.id === id);
-      return t && t.owner !== 'player';
-    })) { dist[s.id] = 0; queue.push(s); }
-  }
-  for (let i = 0; i < queue.length; i++) {
-    const cur = queue[i];
-    for (const id of cur.adj) {
-      const n = state.sites.find((x) => x.id === id);
-      if (!n || n.owner !== 'player' || dist[id] !== undefined) continue;
-      dist[id] = dist[cur.id] + 1;
-      queue.push(n);
+    let best = Infinity;
+    for (const f of foes) {
+      const d = hexDistance({ q: s.hex[0], r: s.hex[1] }, { q: f.hex[0], r: f.hex[1] });
+      if (d < best) best = d;
     }
+    dist[s.id] = Number.isFinite(best) ? best : Infinity;
   }
   return dist;
 }
 
 /**
- * WHAT AN ORDINARY PLAYER BUILDS, AND WHEN.
+ * HOW FAR EACH OWNED SITE IS FROM THE OBJECTIVE, in hexes to the enemy throne.
  *
- * The harness used to issue no `UPGRADE` command at all, so `SITE_LEVELS` and
- * every `SITE_UPGRADE` step were unexercised by every balance number this
- * project had ever taken — while the enemy got the same ladder free at mapgen
- * via each region's `develop`. Levelling was tuned in for the defender and
- * tuned out for the attacker, and the gap was worth 27-38 points of win rate.
+ * A DIFFERENT QUESTION FROM `frontDistance`, and conflating the two is what
+ * stopped this bot winning anything. Under the authored site graph one function
+ * answered both by accident: hops-to-the-front formed a monotone gradient that
+ * happened to point at the enemy, because the enemy was the far end of a narrow
+ * graph. Hex reach destroyed that. Measured on gallowmoor with the enemy AI
+ * switched OFF entirely — the cleanest possible test — the bot took 19 of 28
+ * sites, held a site TWO HEXES from the castle, had a clear route to it from
+ * every site it owned, and never attacked it once in seventeen minutes. Seven of
+ * its sites scored an identical `frontDistance` of 2, so the column had nowhere
+ * "forward" to go, and the whole 128-man army sat in nineteen piles of 3 to 19.
  *
- * Turning it on required a design decision, not just a flag, because
- * max-levelling every safe site is OPTIMAL play and the harness is supposed to
- * measure an ORDINARY one. These five rules are that decision. Each is a thing
- * a real player does at the site panel, and each is a place a perfect player
- * would do better:
- *
- *   1. REAR SITES ONLY. You build where you feel safe. `frontDistance` 0 means
- *      the site borders something you do not hold, and nobody sinks 400 gold
- *      into a wall the enemy is walking at. (It is also genuinely safe: sends
- *      are adjacency-only, so a site whose neighbours are all yours cannot be
- *      attacked directly at all.)
- *   2. ONE AT A TIME. You click the button, watch the bar, come back. This is
- *      also what keeps the spend rate honest — the empire cannot convert its
- *      whole treasury into levels in one tick.
- *   3. OUT OF VISIBLE SURPLUS ONLY. You upgrade when gold is piling up, never
- *      out of the money your strongholds are about to spend. The reserve is
- *      `RESERVE_SEC` seconds of the empire's ACTUAL training bill (read from
- *      the sim's own `factionTrainCostPerSec`, not guessed), so it scales with
- *      how much army is being run rather than with a magic number.
- *   4. CHEAPEST STEP FIRST. You buy what is affordable now. The emergent shape
- *      is the ordinary one: everything goes to L2 before anything goes to L3.
- *   5. IT STOPS SHORT OF THE TOP STEP. L4 -> L5 costs 2200 gold and 65 seconds
- *      — a whole-battle commitment that an ordinary player, mid-fight, does not
- *      make. This is the single clearest line between ordinary and optimal, so
- *      it is the one that is drawn explicitly rather than fallen into.
- *
- * `MAX_LEVEL` is expressed against `SITE_UPGRADE.length` rather than written as
- * 4, because balance.js has already extended this ladder once and a hardcoded
- * rung here would silently stop meaning "all but the last step".
+ * "Where is the fighting" is a LOCAL measure and it is the right one for
+ * deciding where you feel safe enough to build. "Which way is the war" is a
+ * GLOBAL one and it needs a single sink, or an army diffuses instead of massing.
+ * `victory: capture-castle` means there is exactly one such sink and it is not a
+ * heuristic: it is the win condition.
  */
-const RESERVE_SEC = 25;
-const RESERVE_FLOOR = 120;   // ...and never less than this, early on
-const MAX_LEVEL = SITE_UPGRADE.length; // every step but the last
-/** Ties are broken by role, and cheap steps tie constantly (every L1 site costs
- *  150). Farms first: the L1->L2 gold jump is the biggest single multiplier on
- *  the table (x1.75) and income compounds, which is the same reasoning that
- *  puts farms at the top of PRIORITY above. */
-const BUILD_ORDER = { farm: 0, camp: 1, stronghold: 2, castle: 3 };
-
-/**
- * Queue at most one site upgrade. `front` is `frontDistance(state)`, passed in
- * rather than recomputed because the caller already has it.
- */
-export function upgradeTurn(state, front) {
-  // Rule 2: one build in flight across the whole empire.
-  if (state.sites.some((s) => s.owner === 'player' && s.upgradeTicksLeft > 0)) return;
-
-  const gold = goldOf(state.factions.player) / CENTIGOLD;
-  // Rule 3: what is left after the army's running costs are covered.
-  const reserve = Math.max(RESERVE_FLOOR, factionTrainCostPerSec(state, 'player') * RESERVE_SEC);
-
-  let best = null;
-  let bestScore = Infinity;
+export function advanceDistance(state) {
+  const goal = state.sites.find((s) => s.kind === 'castle' && s.owner !== 'player')
+    ?? state.sites.find((s) => s.kind === 'castle');
+  if (!goal) return null;
+  const at = { q: goal.hex[0], r: goal.hex[1] };
+  const dist = {};
   for (const s of state.sites) {
-    if (s.owner !== 'player' || s.siege) continue;
-    if (s.level >= MAX_LEVEL) continue;             // rule 5
-    if (front[s.id] === 0) continue;                // rule 1 — on the line
-    const spec = SITE_UPGRADE[s.level - 1];
-    if (!spec || gold < spec.gold + reserve) continue;
-    const score = spec.gold * 10 + BUILD_ORDER[s.kind]; // rule 4, then role
-    if (score < bestScore) { bestScore = score; best = s; }
+    if (s.owner === 'player') dist[s.id] = hexDistance({ q: s.hex[0], r: s.hex[1] }, at);
   }
-  if (best) state.commands.push({ t: 'UPGRADE', site: best.id });
+  return dist;
 }
 
 /**
@@ -217,21 +221,40 @@ export function playerTurn(state, opts = {}) {
 
   // Push the rear army forward.
   //
-  // Sends are adjacency-only, so a camp ringed by your own sites accumulates an
-  // army it can never use — 80 units sitting at cap while the front line holds
-  // with 4. This is what rally points automate for a human player, and it is
-  // the single biggest difference between a stalled game and a won one.
+  // A camp ringed by your own sites accumulates an army it can never use — 80
+  // units sitting at cap while the front line holds with 4. This is what rally
+  // points automate for a human player, and it is the single biggest difference
+  // between a stalled game and a won one.
+  //
+  // FORWARD MEANS TOWARD THE THRONE, and it means the FULLEST staging post
+  // rather than the emptiest. Both halves changed for the same reason and both
+  // were measured. The old rule pushed toward a lower `frontDistance` and
+  // preferred the neighbour with the smallest garrison — a load-balancer, which
+  // is exactly right when a send is adjacency-only and a site has two or three
+  // neighbours to balance across. At hex reach it has eight, and load-balancing
+  // eight ways is a machine for making sure no stack is ever big enough to take
+  // anything: gallowmoor ended with nineteen sites, a 128-man army, and no pile
+  // over 19.
+  //
+  // A gradient needs one sink. Marching at the site already nearest the castle,
+  // and breaking ties on the biggest garrison, gives it one — the army converges
+  // on the staging post for the assault instead of diffusing across the ground
+  // it has already taken. Nothing caps the sink, deliberately: `garrisonCap`
+  // limits TRAINING, not stacking, and the throne is the one target that needs
+  // more bodies than a farm can build.
+  const advance = advanceDistance(state) ?? front;
   for (const src of mine) {
-    const d = front[src.id];
-    if (d === undefined || d === 0) continue; // already on the line
+    const d = advance[src.id];
+    if (d === undefined) continue;
     const garrison = total(src.garrison);
     const floor = src.kind === 'camp' ? HOME_FLOOR : 3;
     if (garrison <= floor + 3) continue;
 
     const forward = src.adj
       .map((id) => state.sites.find((x) => x.id === id))
-      .filter((n) => n && n.owner === 'player' && front[n.id] < d)
-      .sort((a, b) => total(a.garrison) - total(b.garrison))[0];
+      .filter((n) => n && n.owner === 'player' && advance[n.id] < d)
+      .sort((a, b) => advance[a.id] - advance[b.id]
+        || total(b.garrison) - total(a.garrison))[0];
     if (!forward) continue;
     // The column carries everyone, riders included. A specialist that never
     // reaches the line is worth exactly as much as one you did not buy, and

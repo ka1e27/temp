@@ -42,7 +42,11 @@ function oneSite(kind = 'stronghold', gold = 100000) {
     sites: [
       { id: 'camp', kind: 'camp', hex: [1, 4], owner: 'player', garrison: { militia: 2 }, hp: 480, hpMax: 480 },
       { id: 'x', kind, hex: [3, 4], owner: 'player', garrison: { militia: 2 }, hp: 250, hpMax: 250 },
-      { id: 'castle', kind: 'castle', hex: [7, 4], owner: 'enemy', garrison: { militia: 2 }, hp: 480, hpMax: 480 },
+      // [6,4] and not [7,4]: `grid` is an OFFSET rectangle, so a 9-wide row 4
+      // holds q up to 6 and [7,4] was one column OFF THE MAP. Harmless while a
+      // send was legal on an authored edge; under free movement an off-map site
+      // is unroutable and nothing can ever reach it.
+      { id: 'castle', kind: 'castle', hex: [6, 4], owner: 'enemy', garrison: { militia: 2 }, hp: 480, hpMax: 480 },
     ],
     adjacency: [['camp', 'x'], ['x', 'castle']],
     player: makeMods({ expedition: emptyComp(), startGold: gold }),

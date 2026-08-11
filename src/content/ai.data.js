@@ -223,8 +223,29 @@ export const AI_TIERS = [
 /** AI knobs that are the SAME at every tier. Per-tier knobs live in AI_TIERS. */
 export const AI = {
   freeLunchDefence: 25,     // "leave a farm on 3 militia and it will be taken"
+  /**
+   * ...AND HOW CLOSE THE FARM HAS TO BE. See battle/ai.js `freeLunch` for the
+   * measurement. That phase spends no concurrency slot, on purpose — free ground
+   * is free — so the only thing that ever bounded it was the authored site
+   * graph's degree of 2.8, and losing the graph let one think launch at five
+   * targets on a tier whose `concurrent` is 2.
+   *
+   * 3 rather than `MOVEMENT.reachHexes`' 4, and the gap is the whole knob: sites
+   * are placed `MAPGEN.minSeparation` 3 hexes apart, so this is "the next site
+   * over" and nothing beyond it. Anything further away is an ATTACK, costs a
+   * slot, and has to clear `safetyMargin` like every other decision.
+   */
+  freeLunchHexes: 3,
   defendMargin: 1.10,       // reinforce to close the gap x1.1
   threatHorizonTicks: 60,
+  /**
+   * HOW MANY SITES MAY FEED ONE ATTACK. See aicore.js `adjacentSources` for the
+   * measurement — under the old authored graph this was ~2.8 by accident, and
+   * losing the accident took gallowmoor to a 0% win rate. 3 restores the number
+   * the rest of these knobs were calibrated against; raise it and every
+   * `commitRatio`, `safetyMargin` and `concurrent` in AI_TIERS is re-opened.
+   */
+  maxSources: 3,
   garrisonFloor: 3,         // never strip a front site below this
   reliefMarginSec: 10,      // breach must beat relief by this much or pull out
   siteValue: { farm: 100, stronghold: 150, camp: 400, castle: 400 },

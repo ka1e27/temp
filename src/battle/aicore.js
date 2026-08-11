@@ -11,6 +11,8 @@ import {
   power, total, emptyComp, addComp, scaleComp, breachSeconds, siegeDps, siteRegen,
 } from './combat.js';
 import { siteById, effectiveLevel } from './state.js';
+import { distance } from '../core/hex.js';
+import { asHex } from './influence.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
 import { travelTicks } from './movement.js';
 import { attritionMods } from './economy.js';
@@ -141,11 +143,32 @@ export function launch(state, out, sources, target, frac, busy) {
   return parts.length > 0;
 }
 
+/**
+ * The sites that can feed one attack, NEAREST FIRST and capped.
+ *
+ * The cap is the whole of this function's new job, and it is not tuning fussiness
+ * — it is the thing that stopped existing. Under the authored site graph this
+ * was bounded at `targetAvgDegree` 2.8 BY ACCIDENT: `site.adj` was a planar
+ * graph, so "every neighbour that can spare troops" was about three sites, and
+ * every AI knob calibrated against that number without anybody writing it down.
+ *
+ * Hex reach removed the accident. `adj` is now 4.7 sites on the smallest map and
+ * 8.8 on the biggest, so one attack drew from three times the ground it used to
+ * and the enemy concentrated overwhelming force on every target at once.
+ * Measured at n=16: riverfen fell 88% -> 81%, kaldan 82% -> 56% and gallowmoor
+ * 67% -> ZERO. A cliff rather than a slope, and the shape of it is the tell —
+ * the bigger and denser the map, the more sources the AI gained.
+ *
+ * So the bound is explicit and it is a knob. Nearest first, because a relief
+ * force that has to cross the map is not relief.
+ */
 export function adjacentSources(state, site, cap, busy) {
+  const here = asHex(site.hex);
   return site.adj
     .map((id) => siteById(state, id))
     .filter((s) => s && s.owner === ME && !busy.has(s.id))
-    .sort(byId)
+    .sort((a, b) => distance(here, asHex(a.hex)) - distance(here, asHex(b.hex)) || byId(a, b))
+    .slice(0, AI.maxSources)
     .map((s) => sourceFrom(state, s, cap))
     .filter(Boolean);
 }

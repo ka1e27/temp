@@ -19,6 +19,35 @@ export const parseKey = (k) => {
 export const add = (a, b) => ({ q: a.q + b.q, r: a.r + b.r });
 export const equals = (a, b) => a.q === b.q && a.r === b.r;
 
+// --- offset (col,row) <-> axial, and the rectangle they describe -----------
+//
+// These lived in battle/mapgen.js, which owns the grid's SHAPE and was
+// therefore assumed to own its arithmetic too. It is arithmetic, though — no
+// battle knows anything about it — and leaving it there meant the one place
+// that most needed to ask "is this hex even on the board" could not: contract.js
+// validates a config before any battle module is in play, and importing mapgen
+// from the seam would drag map generation into meta/'s import graph for the sake
+// of three lines of division. mapgen.js re-exports all three, so nothing that
+// imported them from there has to change.
+
+/** Offset (col,row) -> axial. Pointy-top, rows shifted every second row. */
+export const axialFromOffset = (col, row) => ({ q: col - Math.floor(row / 2), r: row });
+/** Inverse of axialFromOffset. */
+export const offsetFromAxial = (h) => ({ col: h.q + Math.floor(h.r / 2), row: h.r });
+
+/**
+ * Is this hex inside the rectangular play area?
+ *
+ * The rectangle is in OFFSET space, so the axial hexes it holds are a sheared
+ * parallelogram: a 9x9 grid contains no negative `r` at all, and `q` runs from
+ * `-floor(r/2)` to `cols - floor(r/2)`. Reading it as "q and r both 0..8" is the
+ * mistake four fixtures in this repo made.
+ */
+export function inGrid(grid, h) {
+  const { col, row } = offsetFromAxial(h);
+  return row >= 0 && row < grid.rows && col >= 0 && col < grid.cols;
+}
+
 /** Axial -> cube. Cube's third axis is implied: s = -q - r. */
 export const toCube = ({ q, r }) => ({ x: q, y: -q - r, z: r });
 

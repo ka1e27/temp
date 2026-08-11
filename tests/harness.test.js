@@ -17,10 +17,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { playOne, startRun, playerTurn, frontDistance } from '../tools/simplayer.js';
+import {
+  playOne, startRun, playerTurn, frontDistance, advanceDistance, PRIORITY,
+} from '../tools/simplayer.js';
 import { step } from '../src/battle/sim.js';
+import { distance as hexDistance } from '../src/core/hex.js';
 import { REGIONS, REGION_IDS } from '../src/content/regions.data.js';
-import { SITE_LEVELS, SITE_UPGRADE } from '../src/content/balance.js';
+import { SITE_LEVELS, SITE_UPGRADE, SITES } from '../src/content/balance.js';
 
 const before = (id) => REGION_IDS.slice(0, REGIONS.findIndex((r) => r.id === id));
 
@@ -141,4 +144,132 @@ test('harness: the enemy is deliberately NOT given the same button', () => {
   assert.ok(sawEnemy > 0, 'no enemy site existed at any point — the run proves nothing');
   assert.equal(built.size, 0,
     `enemy site(s) ${[...built].join(', ')} were mid-upgrade — the AI has learned to build`);
+});
+
+// ---------------------------------------------------------------------------
+// Free movement removed two bounds the authored site graph used to supply by
+// accident, and both showed up as the bot quietly declining to play the game.
+// Neither failed anything: it took ground, it just took the wrong ground and
+// never massed enough anywhere to finish.
+// ---------------------------------------------------------------------------
+
+/**
+ * Drive one battle for `ticks`, recording every order the bot issued alongside
+ * the board it issued it on.
+ *
+ * MID-BATTLE ON PURPOSE. The assertions below are about an army that is
+ * fighting, and the end of a battle has none: a win leaves nothing to advance on
+ * and a loss leaves the camp holding nine men. Three minutes in, the bot has
+ * converted its beachhead and is pressing whatever the region's dial says — so
+ * these stay true across a re-tune instead of quietly becoming assertions about
+ * the balance table.
+ */
+function midBattle(id, seed, ticks = 1800) {
+  const battle = startRun(id, seed, before(id), 10);
+  let nextThink = 0;
+  const column = [];   // every send from one player site to another
+  while (battle.status === 'running' && battle.tick < ticks) {
+    if (battle.tick >= nextThink) {
+      playerTurn(battle);
+      const adv = advanceDistance(battle);
+      for (const c of battle.commands) {
+        if (c.t !== 'SEND' || c.by) continue;
+        const to = battle.sites.find((s) => s.id === c.to);
+        if (to?.owner !== 'player') continue;   // an assault, not the column
+        column.push({ tick: battle.tick, from: c.from, to: c.to, at: adv[c.from], onto: adv[c.to] });
+      }
+      nextThink = battle.tick + 20;
+    }
+    step(battle);
+  }
+  return { battle, column };
+}
+
+test('harness: the rear column marches TOWARD THE THRONE, every time', () => {
+  // `advanceDistance` is a global gradient with one sink, and the sink is the
+  // win condition. Before it, the column pushed toward a lower `frontDistance`
+  // and picked the EMPTIEST forward neighbour — a load-balancer, which is right
+  // across two or three graph neighbours and catastrophic across eight hexes'
+  // worth. Measured on gallowmoor with the enemy AI switched off entirely, the
+  // bot finished holding nineteen sites, a 128-man army, no pile bigger than 19,
+  // and a castle two hexes away it had never once attacked. Seven of its sites
+  // scored an identical `frontDistance`, so "forward" pointed nowhere.
+  //
+  // Asserted on the ORDERS rather than on where the troops ended up. The board
+  // is the sum of the bot's orders and the enemy's, and a statistical claim
+  // about the resulting distribution turned out not to survive contact: on
+  // karrowmere the army's centre of mass sits BEHIND the mean of the ground it
+  // holds at three minutes and ahead of it at six. What the code actually
+  // guarantees is the direction of each send, and that is what is pinned.
+  for (const id of ['gallowmoor', 'karrowmere', 'obsidian', 'widowsgate']) {
+    const { column } = midBattle(id, 1000);
+    assert.ok(column.length > 0,
+      `${id}: the bot never once moved troops between its own sites — the column is dead code`);
+    for (const c of column) {
+      assert.ok(c.onto < c.at,
+        `${id}: t${c.tick} sent ${c.from} (${c.at} hexes from the throne) -> ${c.to} `
+        + `(${c.onto}) — the column moved the army sideways or backwards`);
+    }
+  }
+});
+
+test('harness: advanceDistance measures the throne, and only for sites you hold', () => {
+  // The negative control for the test above, and it needs one: "every send went
+  // to a lower number" is trivially true if `advanceDistance` is measuring
+  // something the sends already correlate with, or if it returns a constant.
+  const { battle } = midBattle('gallowmoor', 1000, 600);
+  const adv = advanceDistance(battle);
+  const castle = battle.sites.find((s) => s.kind === 'castle');
+  for (const s of battle.sites) {
+    if (s.owner !== 'player') {
+      assert.equal(adv[s.id], undefined, `${s.id} is not held, so it has no advance distance`);
+      continue;
+    }
+    assert.equal(adv[s.id], hexDistance(
+      { q: s.hex[0], r: s.hex[1] }, { q: castle.hex[0], r: castle.hex[1] },
+    ), `${s.id}: advanceDistance disagrees with the hex distance to the throne`);
+  }
+  const vals = Object.values(adv);
+  assert.ok(new Set(vals).size > 1,
+    'every held site scored the same — a constant is not a gradient and the column '
+    + 'would have nowhere to march');
+});
+
+test('harness: it takes the WALL, not another field', () => {
+  // Farms have `train: 0`. Every soldier comes out of a camp, a castle or a
+  // stronghold, so an economy with nothing to spend on is not an economy — and
+  // an absolute "farms first" order at hex reach means there is ALWAYS another
+  // farm and the bot never takes a wall. Measured on gallowmoor with the AI off:
+  // thirteen farms, two training sites, 17,000 unspent gold, a 15 gold/second
+  // training bill and a 72-man army, against a pre-reach bot that held six
+  // trainers, ran its treasury at zero and fielded 979.
+  //
+  // Behavioural, and about the RATIO rather than a raw count, because a count is
+  // just the map's stronghold share wearing a different hat.
+  const isTrainer = (s) => SITES[s.kind].train > 0;
+  for (const id of ['gallowmoor', 'karrowmere', 'obsidian']) {
+    const { battle } = midBattle(id, 1000);
+    const mine = battle.sites.filter((s) => s.owner === 'player');
+    const held = mine.filter(isTrainer).length;
+    // What was on offer: everything it started with, plus everything it took.
+    const onMap = battle.sites.filter(isTrainer).length;
+    assert.ok(held >= 3,
+      `${id}: three minutes in it holds ${held} training site(s) of ${mine.length} — `
+      + `a farm belt, with ${onMap} yards on the map`);
+    assert.ok(held / mine.length > 0.15,
+      `${id}: only ${held} of ${mine.length} held sites can build a soldier`);
+  }
+});
+
+test('harness: the build order prefers production, and that is the whole rule', () => {
+  // The negative control. `PRIORITY` is plain data, so a behavioural test that
+  // the bot ends up holding yards proves nothing if the table quietly went back
+  // to ranking farms first — which is exactly how a dead filter passes an
+  // inertness test (see tools/simtactics.js).
+  assert.ok(PRIORITY.stronghold < PRIORITY.farm,
+    'the wall must outrank the field, or every measured number here describes a farm belt');
+  // The castle stays ahead of both — `playerTurn` subtracts a flat bonus for it
+  // — and your own camp is never a target.
+  assert.ok(PRIORITY.camp > PRIORITY.farm && PRIORITY.camp > PRIORITY.stronghold,
+    'your own camp is never a target worth ranking above the enemy country');
 });

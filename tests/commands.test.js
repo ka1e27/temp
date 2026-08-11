@@ -51,7 +51,11 @@ const events = (s, type) => s.events.filter((e) => e.type === type);
 
 test('invalid orders are rejected silently, with a reason for the HUD', () => {
   const s = build();
-  s.commands.push({ t: 'SEND', from: 'camp', to: 'sh', fraction: 1 });       // not adjacent
+  // camp->sh used to be refused as 'not-adjacent'; under free movement a hex
+  // path exists (the grid here has nothing blocked) and cmdSend never checks
+  // reach at all — that reason is cmdRally's alone now. An unknown site id is
+  // still genuinely invalid, whatever the movement rule.
+  s.commands.push({ t: 'SEND', from: 'camp', to: 'ghost', fraction: 1 });    // unknown site
   s.commands.push({ t: 'SEND', from: 'sh', to: 'castle', fraction: 1 });     // not yours
   s.commands.push({ t: 'TRAIN', site: 'camp', unit: 'rams' });               // locked
   s.commands.push({ t: 'UPGRADE', site: 'castle' });                         // not yours
@@ -59,7 +63,7 @@ test('invalid orders are rejected silently, with a reason for the HUD', () => {
   step(s);
   const reasons = events(s, 'command-rejected').map((e) => e.reason);
   assert.deepEqual(reasons,
-    ['not-adjacent', 'not-your-site', 'unit-locked', 'not-your-site', 'unknown-command']);
+    ['unknown-site', 'not-your-site', 'unit-locked', 'not-your-site', 'unknown-command']);
   assert.equal(s.squads.length, 0);
   assert.equal(at(s, 'camp').trainType, 'militia');
 });

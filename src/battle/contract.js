@@ -10,6 +10,7 @@
 // ============================================================================
 // PURE.
 import { fnv1a, stableStringify } from '../core/hash.js';
+import { inGrid } from '../core/hex.js';
 import { UNIT_IDS } from '../content/balance.js';
 
 // v2: FactionMods gained `features` (shop unlocks that change battle or HUD
@@ -269,6 +270,19 @@ export function assertBattleConfig(c) {
     if (!FACTIONS.includes(s.owner)) e.push(`sites[${s.id}].owner: unknown "${s.owner}"`);
     if (!Array.isArray(s.hex) || s.hex.length !== 2) {
       e.push(`sites[${s.id}].hex: expected [q,r]`);
+    } else if (!inGrid(c.grid, { q: s.hex[0], r: s.hex[1] })) {
+      // A SITE OFF THE MAP, which used to be survivable and is not any more.
+      //
+      // `grid` is an OFFSET rectangle — `axialFromOffset(col,row) = {q: col -
+      // floor(row/2), r: row}` — so a 9x9 grid holds no negative `r` at all and
+      // only a little negative `q`, and four hand-built fixtures in this repo
+      // sat outside their own. Every one passed: a send was legal on an
+      // AUTHORED EDGE and `travelTicks` fell back to raw hex distance when
+      // pathing failed, so an off-map site behaved like any other. Free
+      // movement has no edges to lie with. There is no path to a hex that is
+      // not on the board, so the site is simply unreachable forever, and the
+      // failure surfaces as a region that cannot be won rather than as an error.
+      e.push(`sites[${s.id}].hex: [${s.hex}] is outside the ${c.grid?.cols}x${c.grid?.rows} grid`);
     }
     if (!(s.hp > 0) || !(s.hpMax > 0)) e.push(`sites[${s.id}]: hp and hpMax must be > 0`);
   }

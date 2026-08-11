@@ -26,13 +26,27 @@ function fixture() {
     sites: [
       { id: 'a', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 40 }, hp: 600, hpMax: 600 },
       { id: 'b', kind: 'farm', hex: [2, 0], owner: 'player', garrison: { militia: 30 }, hp: 100, hpMax: 100 },
-      { id: 'c', kind: 'farm', hex: [4, 0], owner: 'player', garrison: { militia: 4 }, hp: 100, hpMax: 100 },
-      // An enemy castle with NO edges. Without a surviving enemy the battle is
-      // already won and step() returns immediately, so a rally test would sit
-      // watching a frozen board; with no edges the AI cannot reach anything and
-      // cannot perturb what is being measured.
-      { id: 'foe', kind: 'castle', hex: [9, 6], owner: 'enemy', garrison: { militia: 5 }, hp: 480, hpMax: 480 },
+      // 6 hexes from `a` — outside MOVEMENT.reachHexes (4), so a and c stay
+      // unreachable for a rally. Used to sit at [4,0] when that gap was an
+      // authored-graph fact rather than a distance; at 4 hexes it would now
+      // be IN reach and the chain test below needs b->c to stay legal, so c
+      // moved out rather than the reach rule being fudged.
+      { id: 'c', kind: 'farm', hex: [6, 0], owner: 'player', garrison: { militia: 4 }, hp: 100, hpMax: 100 },
+      // An enemy castle far out of reach of everything. Without a surviving
+      // enemy the battle is already won and step() returns immediately, so a
+      // rally test would sit watching a frozen board; 7+ hexes from the nearest
+      // player site is past MOVEMENT.reachHexes, so the AI has nothing in its
+      // candidate set and cannot perturb what is being measured.
+      //
+      // It sat at [9,6] and that was off the map — `grid` is an OFFSET
+      // rectangle, so an 11-wide row 6 holds q up to 7. Being unreachable
+      // BECAUSE IT DOES NOT EXIST is the same symptom for the wrong reason, and
+      // it would have survived any change to the reach rule this test is about.
+      { id: 'foe', kind: 'castle', hex: [7, 6], owner: 'enemy', garrison: { militia: 5 }, hp: 480, hpMax: 480 },
     ],
+    // `adjacency` is dead weight now (createBattleState never reads it; see
+    // battle/state.js recomputeReach), kept only because nothing requires a
+    // fixture to omit a field the contract still tolerates.
     adjacency: [['a', 'b'], ['b', 'c']],
     player: makeMods({ expedition: emptyComp(), startGold: 1000 }),
     enemy: makeMods({ expedition: emptyComp() }),
@@ -179,7 +193,7 @@ test('re-dragging a whole rally chain cancels it', () => {
 test('toggling still refuses what was always illegal', () => {
   const state = fixture();
   const { ord } = harness(state);
-  // a and c are not adjacent.
+  // a and c are 6 hexes apart — outside reach (4).
   assert.equal(ord.toggleRally(siteOf(state, 'a'), siteOf(state, 'c')), false);
   assert.equal(state.commands.length, 0);
 

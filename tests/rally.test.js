@@ -29,9 +29,17 @@ function fixture() {
     sites: [
       { id: 'camp', kind: 'camp', hex: [0, 0], owner: 'player', garrison: { militia: 10 }, hp: 600, hpMax: 600 },
       { id: 'farm', kind: 'farm', hex: [1, 0], owner: 'player', garrison: { militia: 4 }, hp: 100, hpMax: 100 },
-      { id: 'hold', kind: 'stronghold', hex: [2, 0], owner: 'enemy', garrison: { militia: 6 }, hp: 250, hpMax: 250 },
-      { id: 'far', kind: 'farm', hex: [5, 0], owner: 'player', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
+      // 5 hexes from camp (outside MOVEMENT.reachHexes, 4) but only 4 from
+      // farm (right at the edge of it) — camp must be refused as a rally
+      // source here and farm must not, which used to ride an authored edge
+      // and now rides that gap in distance.
+      { id: 'hold', kind: 'stronghold', hex: [5, 0], owner: 'enemy', garrison: { militia: 6 }, hp: 250, hpMax: 250 },
+      // 10 hexes from camp — well outside reach, whatever a hex path would do.
+      { id: 'far', kind: 'farm', hex: [10, 0], owner: 'player', garrison: { militia: 2 }, hp: 100, hpMax: 100 },
     ],
+    // `adjacency` is dead weight now (createBattleState never reads it; see
+    // battle/state.js recomputeReach), kept only because nothing requires a
+    // fixture to omit a field the contract still tolerates.
     adjacency: [['camp', 'farm'], ['farm', 'hold']],
     player: makeMods({ expedition: emptyComp(), startGold: 1000 }),
     enemy: makeMods({ expedition: emptyComp() }),
@@ -88,8 +96,10 @@ test('rally drag: a non-adjacent target issues NOTHING, so an existing rally sur
   ord.issueRally(siteOf(state, 'camp'), siteOf(state, 'farm'));
   drainCommands(state);
 
-  // `far` is a player site with no edge to camp. Refusing must be silent AND
-  // must not clear what is already set — abandoning a drag is not an erase.
+  // `far` is a player site 10 hexes from camp — outside reach, so still
+  // refused even though a hex path plainly exists. Refusing must be silent
+  // AND must not clear what is already set — abandoning a drag is not an
+  // erase.
   assert.equal(ord.issueRally(siteOf(state, 'camp'), siteOf(state, 'far')), false);
   assert.equal(state.commands.length, 0, 'an illegal rally must not reach the queue');
   drainCommands(state);
@@ -133,7 +143,8 @@ test('rally click: sources that cannot legally reach the target are skipped, not
   const state = fixture();
   const { ord, view } = harness(state, siteOf(state, 'hold'));
 
-  // camp->hold is not an edge; farm->hold is. One command, not two, not a crash.
+  // camp is 5 hexes from hold — one past reach; farm is 4, right at the edge
+  // of it. One command, not two, not a crash.
   view.selection.push('camp', 'farm');
   ord.setRally(0, 0);
   assert.equal(state.commands.length, 1);

@@ -6,7 +6,9 @@
 //   1. every site can reach every other site over unblocked hexes;
 //   2. the derived site graph is one connected component.
 // PURE.
-import { distance, findPath, key } from '../core/hex.js';
+import {
+  distance, findPath, key, axialFromOffset, offsetFromAxial, inGrid,
+} from '../core/hex.js';
 import { createRng, deriveSeed } from '../core/rng.js';
 import { MAPGEN, SITES, SITE_LEVELS, UNIT_IDS } from '../content/balance.js';
 import {
@@ -14,19 +16,13 @@ import {
 } from './terrain.js';
 import { shapeMask } from './mapshape.js';
 
-// --- grid geometry (offset <-> axial). mapgen owns the grid's shape, so the
-// --- rest of battle/ imports these rather than re-deriving them. -----------
-
-/** Offset (col,row) -> axial. Pointy-top, rows shifted every second row. */
-export const axialFromOffset = (col, row) => ({ q: col - Math.floor(row / 2), r: row });
-/** Inverse of axialFromOffset. */
-export const offsetFromAxial = (h) => ({ col: h.q + Math.floor(h.r / 2), row: h.r });
-
-/** Is this hex inside the rectangular play area? */
-export function inGrid(grid, h) {
-  const { col, row } = offsetFromAxial(h);
-  return row >= 0 && row < grid.rows && col >= 0 && col < grid.cols;
-}
+// --- grid geometry (offset <-> axial) --------------------------------------
+//
+// Moved to core/hex.js, which is where arithmetic with no battle in it belongs,
+// and re-exported here so that every `import { inGrid } from './mapgen.js'`
+// still resolves. What forced the move: battle/contract.js has to validate that
+// a site is on the board, and the seam may not import map generation.
+export { axialFromOffset, offsetFromAxial, inGrid };
 
 /** Every hex of the grid, row-major — a stable iteration order. */
 export function gridHexes(cols, rows) {
