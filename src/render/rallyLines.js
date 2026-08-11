@@ -42,7 +42,14 @@ export function drawRallies(ctx, state, faction, px, g) {
       const targets = rallyTargetsOf(s);
       for (let t = 0; t < targets.length; t++) {
         const o = g.byId(targets[t]);
-        if (!o) continue;
+        // BOTH ENDS, not just the source. `byId` goes through `perceivedSite`,
+        // so an unscouted destination comes back as a GHOST — which is truthy,
+        // and a bare `!o` check therefore draws a dashed line with two
+        // arrowheads pointing straight at ground the player has never seen,
+        // announcing both that something is there and that the enemy is
+        // reinforcing toward it. A rally is a live order, and live is exactly
+        // the half fog hides.
+        if (!o || o.ghost) continue;
         any = true;
         g.pos(s, _a);
         g.pos(o, _b);
@@ -89,7 +96,7 @@ function drawRallyArrows(ctx, state, faction, px, g, owner) {
     const targets = rallyTargetsOf(s);
     for (let n = 0; n < targets.length; n++) {
       const o = g.byId(targets[n]);
-      if (!o) continue;
+      if (!o || o.ghost) continue;   // the arrowheads leak the same fact the line does
       g.pos(s, _a);
       g.pos(o, _b);
       const dx = _b.x - _a.x;

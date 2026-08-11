@@ -28,7 +28,7 @@
 // Applied to a THROWAWAY object, never to `state` itself, so the sim's real
 // `state.influence` is never touched.
 import { recomputeInfluence } from '../battle/influence.js';
-import { perceivedSite } from '../battle/vision.js';
+import { perceivedSite, canSee } from '../battle/vision.js';
 import {
   hexIndex, hexRow, hexQ, hexCx, hexCy, traceHex,
 } from './hexGeom.js';
@@ -50,6 +50,39 @@ export function perceivedInfluence(state, faction) {
       : site;
   });
   return recomputeInfluence({ sites, grid: state.grid });
+}
+
+// --- effects -----------------------------------------------------------------
+
+/**
+ * Does a sim event reach `faction`'s screen at all?
+ *
+ * THE EFFECT LAYER WAS THE SECOND LEAK, and it was the bigger one: measured on
+ * gallowmoor over a whole battle, **85% of all combat and economy effects fired
+ * on ground the player cannot see** — 385 gold "+N" floats over enemy training
+ * grounds alone, plus every siege, every field battle and every capture. Hiding
+ * a site on the board buys nothing while its yard announces each batch of
+ * troops it finishes; that is a live readout of the enemy's whole economy and
+ * it tells you exactly where to look. It also defeats `state.seen`, whose one
+ * job is that you learn an owner by LOOKING and not before.
+ *
+ * Two ways through, and the second is not a leak but the opposite:
+ *
+ * - the hex is in sight, which is the ordinary case; or
+ * - **the faction is a participant** — its own men training, its own column
+ *   arriving, its own site changing hands. You always know what your own army
+ *   is doing, wherever it is, and a player whose distant farm fell silently
+ *   would be reading a bug rather than fog. That is why this reads the event's
+ *   own actor fields (`owner` / `attacker` / `from` / `to`) instead of asking
+ *   who owns the site NOW: by the time events are drained the capture has
+ *   already happened, so the site the player just lost belongs to the enemy and
+ *   "is it mine" answers no to the one event they most need.
+ */
+export function fxVisible(state, faction, ev, site) {
+  if (ev.owner === faction || ev.attacker === faction
+    || ev.from === faction || ev.to === faction) return true;
+  if (!site) return false;
+  return canSee(state, faction, site.hex[0], site.hex[1]);
 }
 
 // --- the veil ----------------------------------------------------------------

@@ -12,6 +12,7 @@
 // corrupt the sim.
 import { UNIT_IDS } from '../content/balance.js';
 import { squadProgress, squadBow } from '../render/routes.js';
+import { perceivedSquads } from '../battle/vision.js';
 import { loadStops, routeAt } from '../render/routePath.js';
 import { needsTarget } from './battle-keys.js';
 import { createArmedBuild } from './battle-build.js';
@@ -322,8 +323,19 @@ export function createOrders(o) {
     const r = board.hexSize * SQUAD_PICK;
     let best = null;
     let bestD = r * r;
-    for (let i = 0; i < st.squads.length; i++) {
-      const sq = st.squads[i];
+    // FOG, and it follows straight from the comment above: hit-testing reuses
+    // the renderer's geometry so a squad is clickable exactly where it is
+    // DRAWN — and a squad outside vision is not drawn at all. Scanning the raw
+    // list would leave an invisible enemy column pickable out of empty dark,
+    // which is a worse tell than drawing it would have been, because the player
+    // learns the army is there by finding it with the cursor.
+    //
+    // Unlike a SITE, whose position and kind are common knowledge (so clicking
+    // a ghost to aim a blind attack is intended), a squad's existence is
+    // precisely what fog hides.
+    const squads = perceivedSquads(st, 'player');
+    for (let i = 0; i < squads.length; i++) {
+      const sq = squads[i];
       // Through the SAME geometry the renderer walks, so a squad drawn mid-arc
       // is clickable exactly where it is drawn.
       const stops = loadStops(sq, geo);
