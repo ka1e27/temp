@@ -26,6 +26,7 @@ import {
 } from './siteGlyphs.js';
 import { siteHeadYAt } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
+import { drawBuildTargets } from './buildTargets.js';
 import {
   drawSquads, drawSquadLabels, drawDragArc, drawBox, drawSquadRoutes,
 } from './routes.js';
@@ -257,6 +258,9 @@ export function createBattleView(opts) {
       }
     }
     if (view?.box) drawBox(ctx, view.box, px, geo);
+    // Ground, not a site — drawn before the site loop so the pieces sitting
+    // on top of it stay crisp rather than tinted along with the hexes.
+    drawBuildTargets(ctx, state, view, hexSize, p, px);
 
     for (let i = 0; i < state.sites.length; i++) {
       const s = state.sites[i];

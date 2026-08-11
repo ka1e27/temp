@@ -15,7 +15,7 @@
 // Upgrade button and the rally stepper append commands through `input`, exactly
 // like a click on the board does.
 import { total } from '../battle/combat.js';
-import { rallyKeepOf, rallyTargetsOf, upgradeProgress } from '../battle/state.js';
+import { rallyKeepOf, rallyTargetsOf, upgradeProgress, buildProgress } from '../battle/state.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration, spaceCase } from '../ui/format.js';
@@ -30,7 +30,7 @@ import {
   siteIntel, trainLine, gateLine, upgradePreview,
 } from './battle-econ.js';
 import { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
-import { createKeepRow, createRecruitRow } from './battle-actions.js';
+import { createKeepRow, createRecruitRow, createBuildRow } from './battle-actions.js';
 // Re-exported so nothing downstream has to know the actions group moved out.
 export { setKeep, recruit, recruitOffer } from './battle-actions.js';
 
@@ -92,6 +92,7 @@ export function createSitePanel(o) {
   }, 'Upgrade');
   const keep = createKeepRow(getState, input, targetId);
   const hire = createRecruitRow(getState, input, targetId);
+  const builds = createBuildRow(getState, input, view);
   // Four visual groups, so the eye chunks "what this site IS" (head) from
   // "what it's WORTH" (econ) from "why it's hard / what's happening to it"
   // (context) from "what you can do about it" (actions) instead of scanning
@@ -102,7 +103,8 @@ export function createSitePanel(o) {
   const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, buildBar.el, stat);
-  const actions = h('div.hud-site-actions', {}, keep.el, hire.el, upgradePreviewRow, upgrade);
+  const actions = h('div.hud-site-actions', {},
+    keep.el, hire.el, builds.el, upgradePreviewRow, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, and a panel that let clicks through would sit
   // over the board, take a click on its own text as a click on empty ground,
@@ -185,7 +187,7 @@ export function createSitePanel(o) {
     setAnchor(site);
     set.open(!!site);
     if (!site) {
-      setShown(false); keep.show(null); hire.show(null);
+      setShown(false); keep.show(null); hire.show(null); builds.show(null);
       blankVitals(); set.siege(false); return;
     }
 
@@ -205,6 +207,7 @@ export function createSitePanel(o) {
       setShown(false);
       keep.show(null);
       hire.show(null);
+      builds.show(null);
       if (wrote) follower.markDirty();
       return;
     }
@@ -244,19 +247,27 @@ export function createSitePanel(o) {
     wrote |= updateTerrainBubbles(terrain, intel);
     // The bar carries the build now, which also un-masks the status line: a site
     // besieged WHILE it builds used to report "building · 12s left" and never
-    // once say UNDER SIEGE, because the build branch returned first.
-    const building = site.upgradeTicksLeft > 0;
-    if (building) {
+    // once say UNDER SIEGE, because the build branch returned first. A site
+    // still going up (buildTicksLeft) shares this same bar with one being
+    // upgraded (upgradeTicksLeft) — the two never overlap, same as the
+    // board's own bar (render/siteBuild.js).
+    const upgrading = site.upgradeTicksLeft > 0;
+    const constructing = site.buildTicksLeft > 0;
+    if (upgrading) {
       buildBar.update(upgradeProgress(site),
         `L${site.level} · ${duration(site.upgradeTicksLeft / TICK_HZ)}`);
+    } else if (constructing) {
+      buildBar.update(buildProgress(site),
+        `${spaceCase(site.kind).toUpperCase()} · ${duration(site.buildTicksLeft / TICK_HZ)}`);
     }
-    wrote |= buildBar.show(building);
+    wrote |= buildBar.show(upgrading || constructing);
     wrote |= set.stat(statusLine(site, intel));
     set.statWarn(hostile);
     set.siege(hostile);
     // A hold-back only means anything where there is a rally to hold back from.
     wrote |= keep.show(site.owner === 'player' && rallyTargetsOf(site).length ? site : null);
     wrote |= hire.show(site);
+    wrote |= builds.show(site);
 
     const offer = upgradeOffer(state, site);
     wrote |= setShown(site.owner === 'player');
@@ -288,6 +299,7 @@ export function createSitePanel(o) {
     set.siege(false);
     wrote |= keep.show(null);
     wrote |= hire.show(null);
+    wrote |= builds.show(null);
     if (wrote) follower.markDirty();
   }
 

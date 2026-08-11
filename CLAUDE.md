@@ -303,6 +303,22 @@ target still exists (`resolveArrival` returns early on a missing site and the sq
 are already off the board by then, so they would cease to exist with no event), and
 the removal happens **after** the site loop, never during it.
 
+**The interaction is ARM then TARGET, not click-a-site.** A build is the only order
+in the game aimed at a HEX rather than at a site — that is the whole point of it —
+so the panel's three buttons set `view.armedBuild` and the next board click resolves
+the world point through `core/hex.js fromPixel` (which had existed and been unused
+since the day it was written). Escape cancels; pressing the same kind again cancels.
+An armed booster still outranks an armed build, because a one-shot aim beats a
+standing mode — the same precedence rally mode already follows.
+
+While it is armed the legal hexes are tinted (`render/buildTargets.js`, on the
+per-frame canvas), and the tint is `buildBlocker` itself rather than a re-derivation:
+a build preview that disagreed with the command would be the same class of bug as a
+battle preview that disagrees with the simulation. `buildProgress()` sits beside
+`upgradeProgress()` in `state.js` for the same reason that one is a function — the
+denominator lives in exactly one place, because a renderer that re-derived it drew a
+perfectly plausible wrong bar once already.
+
 **The harness plays it** — `tools/simbuild.js constructTurn`, `--noconstruct` to
 revert. Same lesson as `upgradeTurn` one release later: a mechanic the harness cannot
 play is a mechanic nobody has measured. Four rules — the yard first and only while

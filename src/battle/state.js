@@ -6,7 +6,7 @@
 // determinism tests.
 // PURE.
 import {
-  SITES, SITE_LEVELS, SITE_UPGRADE, BOOSTERS, UNIT_IDS, RALLY_KEEP, MOVEMENT,
+  SITES, SITE_LEVELS, SITE_UPGRADE, BOOSTERS, UNIT_IDS, RALLY_KEEP, MOVEMENT, BUILD_COSTS,
 } from '../content/balance.js';
 import { distance } from '../core/hex.js';
 // The per-hex layer. state.js owns the SHAPE of a battle; occupancy.js owns the
@@ -350,6 +350,17 @@ export function upgradeProgress(site) {
   const left = site?.upgradeTicksLeft ?? 0;
   if (left <= 0) return 0;
   const spec = SITE_UPGRADE[site.level - 2];
+  const total = spec ? sec(spec.sec) : 0;
+  return total > 0 ? Math.max(0, Math.min(1, 1 - left / total)) : 0;
+}
+
+/** How far a BUILD has got, 0..1 — 0 once nothing is going up. Same shape as
+ *  `upgradeProgress`: the denominator (`BUILD_COSTS[kind].sec`) lives in
+ *  content, not on the site, so this stays the one place it is divided. */
+export function buildProgress(site) {
+  const left = site?.buildTicksLeft ?? 0;
+  if (left <= 0) return 0;
+  const spec = BUILD_COSTS[site?.kind];
   const total = spec ? sec(spec.sec) : 0;
   return total > 0 ? Math.max(0, Math.min(1, 1 - left / total)) : 0;
 }

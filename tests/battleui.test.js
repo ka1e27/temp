@@ -275,6 +275,10 @@ test('rejections: every reason commands.js can produce has player-facing words',
     'boosters-are-the-players', 'booster-unavailable', 'no-charges', 'unknown-booster',
     'needs-target', 'no-sources', 'nothing-in-flight', 'not-a-target',
     'malformed', 'unknown-command',
+    // buildBlocker's five refusals, plus cmdBuild's own two — the newest
+    // reasons this table exists to cover, added the day they were.
+    'not-buildable', 'already-building', 'off-map', 'blocked-ground',
+    'occupied', 'too-close', 'no-ground',
   ];
   for (const r of produced) assert.ok(REJECTIONS[r], `no message for "${r}"`);
 });

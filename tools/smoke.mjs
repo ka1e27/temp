@@ -73,6 +73,16 @@ async function click(selector, label = selector) {
   return p;
 }
 
+/** Click a raw canvas point rather than a selector — for a gesture that
+ *  targets bare ground, where there is no DOM element for hitPoint() to
+ *  resolve against. */
+async function clickAt(x, y) {
+  await page.mouse('mouseMoved', x, y);
+  await page.mouse('mousePressed', x, y);
+  await page.mouse('mouseReleased', x, y);
+  await page.sleep(320);
+}
+
 /** Advance out of whatever screen we are on until we reach `want`. */
 async function reach(want, maxHops = 6) {
   for (let i = 0; i < maxHops; i++) {
@@ -318,6 +328,65 @@ try {
   // waypoint. Free movement deleted the mechanism: a send is legal wherever a
   // path exists, so a drag is just "picked up here, released there" and the
   // pathfinder covers the ground in between on its own. Nothing left to drive.
+
+  // ---- 5c. building mid-battle: arm, click a hex, a site appears ---------
+  // Arming is a HUD control like any other and goes through click(selector);
+  // the SECOND click lands on bare ground, not a DOM element, so it is driven
+  // at a raw canvas point the way the drag/rally steps above are. The target
+  // hex comes from the REAL buildBlocker — dynamically imported inside the
+  // page, against the REAL live state, the same module the running game
+  // already loaded — rather than a guess, so this step cannot pass by aiming
+  // at a hex that merely looks legal.
+  const build = await page.eval(async () => {
+    const { buildBlocker } = await import('/src/battle/commands.js');
+    const { axialFromOffset, distance } = await import('/src/core/hex.js');
+    const { hexCx, hexCy } = await import('/src/render/hexGeom.js');
+    const g = window.__game;
+    const b = g.state.battle;
+    b.factions.player.goldCg = 1_000_000;   // affordability is not what this tests
+    const camp = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
+    if (!camp) return null;
+    const home = { q: camp.hex[0], r: camp.hex[1] };
+    let best = null;
+    let bestD = -1;
+    for (let r = 0; r < b.grid.rows; r++) {
+      for (let col = 0; col < b.grid.cols; col++) {
+        const hex = axialFromOffset(col, r);
+        if (buildBlocker(b, 'player', hex)) continue;
+        // Farthest from the camp, so the second click below cannot land on
+        // the site panel — anchored on the camp for the whole step.
+        const d = distance(home, hex);
+        if (d > bestD) { bestD = d; best = hex; }
+      }
+    }
+    if (!best) return null;
+    const at = g.__view.siteScreen(camp, {});
+    const to = g.__view.camera.worldToScreen(
+      hexCx(best.q, best.r, g.__view.hexSize), hexCy(best.q, best.r, g.__view.hexSize), {},
+    );
+    return {
+      camp: { x: Math.round(at.x), y: Math.round(at.y) },
+      hex: { x: Math.round(to.x), y: Math.round(to.y) },
+      q: best.q, r: best.r,
+    };
+  });
+  if (!build) throw new Error('no legal build hex found on this map — nothing to click');
+
+  await clickAt(build.camp.x, build.camp.y);      // select a player site, opens the panel
+  await click('.hud-build-farm', 'the Build Farm action');
+  const armed = await page.eval(() => window.__game.__ui?.armedBuild ?? null);
+  if (armed !== 'farm') throw new Error(`Build Farm did not arm: armedBuild=${armed}`);
+
+  await clickAt(build.hex.x, build.hex.y);        // the second click: a hex, not a site
+  await page.sleep(500);
+  const built = await page.eval((q, r) => window.__game.state.battle.sites
+    .find((s) => s.hex[0] === q && s.hex[1] === r) ?? null, build.q, build.r);
+  if (!built || !(built.buildTicksLeft > 0)) {
+    throw new Error(`build did not land at [${build.q},${build.r}]: ${JSON.stringify(built)}`);
+  }
+  const stillArmed = await page.eval(() => window.__game.__ui?.armedBuild ?? null);
+  if (stillArmed) throw new Error(`armedBuild=${stillArmed} after firing — it must self-clear`);
+  step(`build: armed Farm, clicked [${build.q},${build.r}], buildTicksLeft=${built.buildTicksLeft}`);
 
   // ---- 6. effects actually render ----------------------------------------
   let sawFx = false;

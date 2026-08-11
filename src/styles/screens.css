@@ -183,6 +183,18 @@
 .hud-recruit.is-open { display: block; }
 .hud-recruit:disabled { opacity: 0.45; }
 
+/* Raise a building: one row, one button per buildable kind. Full width and
+   stacked, same block shape as Recruit above it — three of them side by side
+   at this panel's width would leave no room to name what each one costs. */
+.hud-build-row { display: none; flex-direction: column; gap: var(--s-2); }
+.hud-build-row.is-open { display: flex; }
+.hud-build { min-height: var(--hit-sm); font-size: var(--t-sm); font-weight: var(--w-bold); }
+.hud-build:disabled { opacity: 0.45; }
+.hud-build.is-armed {
+  background: color-mix(in srgb, var(--c-accent) 24%, var(--c-surface-2));
+  border-color: color-mix(in srgb, var(--c-accent) 55%, transparent);
+}
+
 /* The one button on this panel, so it gets the one warm accent: gold, because
    it is gold this action spends. Ghost/ordinary while unaffordable — the
    colour itself is the affordability tell, same channel the treasury already
@@ -201,7 +213,7 @@
 /* Touch: compact desktop metrics grow to a real thumb target. Moved here with
    the controls they size — the rule and the control belong in one file. */
 @media (pointer: coarse) {
-  .hud-upgrade, .hud-recruit { min-height: var(--hit); }
+  .hud-upgrade, .hud-recruit, .hud-build { min-height: var(--hit); }
 }
 
 /* --- Unit hover card ------------------------------------------------------

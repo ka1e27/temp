@@ -15,7 +15,7 @@
 // fx canvas.
 import { siteFootYAt } from './siteShapes.js';
 import { builtLevel } from './siteGlyphs.js';
-import { upgradeProgress } from '../battle/state.js';
+import { upgradeProgress, buildProgress } from '../battle/state.js';
 
 /** Matches drawTrainBar's geometry exactly — same width, same height, one gap
  *  below it — because the point is that they read as a pair. */
@@ -27,7 +27,13 @@ const WIDTH_R = 0.85;
  * @param {number} r site radius @param {object} p palette @param {number} px
  */
 export function drawBuildBar(ctx, site, cx, cy, r, p, px) {
-  if (!(site.upgradeTicksLeft > 0)) return;
+  // A site being upgraded and one still being RAISED never overlap — an
+  // upgrade needs an existing level to leave, and a raised site sits at level
+  // 1 with hp:1 until `buildTicksLeft` reaches 0 — so one slot carries both,
+  // same as the panel's own bar (screens/battle-panel.js).
+  const upgrading = site.upgradeTicksLeft > 0;
+  const constructing = site.buildTicksLeft > 0;
+  if (!upgrading && !constructing) return;
   const w = r * WIDTH_R;
   const h = px * 2.5;
   // The training bar occupies `+px*2` through `+px*4.5`; this sits one pixel
@@ -39,5 +45,5 @@ export function drawBuildBar(ctx, site, cx, cy, r, p, px) {
   // the training bar is already `p.train`, and two fills in one hue stacked a
   // pixel apart read as one bar glitching rather than two making progress.
   ctx.fillStyle = p.gold;
-  ctx.fillRect(cx - w * 0.5, y, w * upgradeProgress(site), h);
+  ctx.fillRect(cx - w * 0.5, y, w * (upgrading ? upgradeProgress(site) : buildProgress(site)), h);
 }

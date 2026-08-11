@@ -11,6 +11,28 @@ import {
   SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS, BUILD_RANGE_HEXES,
 } from '../src/content/balance.js';
 import { distance as hexDistance } from '../src/core/hex.js';
+import { buildBlocker } from '../src/battle/commands.js';
+import { gridHexes } from '../src/battle/mapgen.js';
+
+/**
+ * Candidate hexes for a build, cached per battle.
+ *
+ * `gridHexes` allocates the whole board, and `constructTurn` runs on every think
+ * of every battle in a 240-run sweep — so this is the difference between a
+ * harness that measures construction and one that spends its time rebuilding an
+ * array that cannot change. The grid is fixed for a battle's whole life, which
+ * is what makes caching it safe; a WeakMap keyed on the grid object means a
+ * second battle in the same process misses and rebuilds.
+ */
+const HEX_CACHE = new WeakMap();
+export function buildHexes(state) {
+  let hexes = HEX_CACHE.get(state.grid);
+  if (!hexes) {
+    hexes = gridHexes(state.grid.cols, state.grid.rows);
+    HEX_CACHE.set(state.grid, hexes);
+  }
+  return hexes;
+}
 
 /**
  * Which owned sites count as "behind the line", RELATIVE to the rest.
@@ -151,7 +173,7 @@ export function upgradeTurn(state, front) {
  */
 const WANT_YARDS = 3;
 
-export function constructTurn(state, front, advance, blocker, hexes) {
+export function constructTurn(state, front, hexes) {
   if (state.sites.some((s) => s.owner === 'player'
     && (s.buildTicksLeft > 0 || s.upgradeTicksLeft > 0))) return;
 
@@ -174,11 +196,11 @@ export function constructTurn(state, front, advance, blocker, hexes) {
   let best = null;
   let bestScore = Infinity;
   for (const h of hexes) {
-    if (blocker(state, 'player', h)) continue;
+    if (buildBlocker(state, 'player', h)) continue;
     // It has to be MY rear that reaches it, not merely any site I hold.
     const anchor = rear.find((s) => hexDist(s, h) <= BUILD_RANGE_HEXES);
     if (!anchor) continue;
-    const score = advance ? nearestAdvance(state, h) : hexDist(rear[0], h);
+    const score = nearestAdvance(state, h);
     if (score < bestScore) { bestScore = score; best = h; }
   }
   if (best) state.commands.push({ t: 'BUILD', kind, hex: [best.q, best.r] });

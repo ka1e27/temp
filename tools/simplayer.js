@@ -13,7 +13,7 @@ export { spendCrowns, fieldedUnits };
 // The site-upgrade ladder moved to ./simbuild.js for the line budget and is
 // re-exported here, so `import { upgradeTurn } from './simplayer.js'` keeps
 // working.
-import { rearOf, upgradeTurn, constructTurn } from './simbuild.js';
+import { rearOf, upgradeTurn, constructTurn, buildHexes } from './simbuild.js';
 export { rearOf, upgradeTurn, constructTurn };
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
@@ -27,28 +27,6 @@ import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { goldOf } from '../src/battle/economy.js';
 import { UNIT_IDS, CENTIGOLD, SITES } from '../src/content/balance.js';
 import { assaultFilter, riderTurn, COLUMN_FILTER } from './simtactics.js';
-import { buildBlocker } from '../src/battle/commands.js';
-import { gridHexes } from '../src/battle/mapgen.js';
-
-/**
- * Candidate hexes for a build, cached per battle.
- *
- * `gridHexes` allocates the whole board, and `constructTurn` runs on every think
- * of every battle in a 240-run sweep — so this is the difference between a
- * harness that measures construction and one that spends its time rebuilding an
- * array that cannot change. The grid is fixed for a battle's whole life, which
- * is what makes caching it safe; a WeakMap keyed on the grid object means a
- * second battle in the same process misses and rebuilds.
- */
-const HEX_CACHE = new WeakMap();
-function buildHexes(state) {
-  let hexes = HEX_CACHE.get(state.grid);
-  if (!hexes) {
-    hexes = gridHexes(state.grid.cols, state.grid.rows);
-    HEX_CACHE.set(state.grid, hexes);
-  }
-  return hexes;
-}
 
 /**
  * WHAT TO TAKE NEXT: THE WALL, NOT THE FIELD.
@@ -325,7 +303,7 @@ export function playerTurn(state, opts = {}) {
   if (opts.upgrades === false) return;
   upgradeTurn(state, front);
   if (opts.construct !== false) {
-    constructTurn(state, front, true, buildBlocker, buildHexes(state));
+    constructTurn(state, front, buildHexes(state));
   }
 }
 

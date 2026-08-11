@@ -14,6 +14,7 @@ import { UNIT_IDS } from '../content/balance.js';
 import { squadProgress, squadBow } from '../render/routes.js';
 import { loadStops, routeAt } from '../render/routePath.js';
 import { needsTarget } from './battle-keys.js';
+import { createArmedBuild } from './battle-build.js';
 
 /** Click slop for picking an in-flight squad off its arc, as a fraction of a
  *  hex. Deliberately tight: a stray click near a route must still deselect. */
@@ -51,6 +52,7 @@ export const cmd = {
   train: (site, unit) => ({ t: 'TRAIN', site, unit }),
   recruit: (site, unit) => ({ t: 'RECRUIT', site, unit }),
   upgrade: (site) => ({ t: 'UPGRADE', site }),
+  build: (kind, hex) => ({ t: 'BUILD', kind, hex }),
   withdraw: () => ({ t: 'WITHDRAW' }),
 };
 
@@ -304,6 +306,13 @@ export function createOrders(o) {
     return true;
   }
 
+  // Armed construction (arm a kind, resolve the next click to a hex, push
+  // BUILD) is the same one-shot shape as an armed booster above but needs
+  // `fromPixel`, so it moved to ./battle-build.js at the 400-line cap.
+  const { armBuild, cancelBuild, fireBuild } = createArmedBuild({
+    view, canvas, bus, board, cancelBooster, pushBuild: (kind, hex) => push(cmd.build(kind, hex)),
+  });
+
   // ---- squads -------------------------------------------------------------
 
   /** Nearest in-flight squad to a world point, so `R` can reach one. Squads are
@@ -354,5 +363,6 @@ export function createOrders(o) {
     issueRally, toggleRally, issueRallyChain, issueRallyKeep,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
+    armBuild, cancelBuild, fireBuild,
   };
 }

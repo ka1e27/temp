@@ -77,7 +77,7 @@ export function createBattleInput(o) {
     // `view.rallyMode` routes a PLAIN drag down this exact path, so the mode
     // gets the toggle for free rather than reimplementing it.
     // An armed booster still wins: aiming is a one-shot and outranks a mode.
-    if (ev.button === 2 || (view.rallyMode && !view.armedBooster)) {
+    if (ev.button === 2 || (view.rallyMode && !view.armedBooster && !view.armedBuild)) {
       rally = { fromId: hit?.owner === 'player' ? hit.id : null, sx: s.x, sy: s.y, moved: false };
       if (rally.fromId) {
         view.rallyFrom = rally.fromId;
@@ -92,9 +92,9 @@ export function createBattleInput(o) {
     view.pointer.x = w.x;
     view.pointer.y = w.y;
 
-    // While a booster is armed the press means "aim here" and nothing else: no
-    // drag order, no box select. The release picks the site.
-    if (view.armedBooster) return;
+    // While a booster OR a build is armed the press means "aim here" and
+    // nothing else: no drag order, no box select. The release resolves it.
+    if (view.armedBooster || view.armedBuild) return;
 
     if (hit && hit.owner === 'player') {
       view.dragFrom = hit.id;
@@ -249,6 +249,10 @@ export function createBattleInput(o) {
       else ord.cancelBooster();
       return;
     }
+    // A build targets a HEX, not a site, so it resolves off the world point
+    // (`w`, the same one screenToWorld just wrote) rather than off `hit` —
+    // the whole point of building is raising one on ground nothing occupies.
+    if (view.armedBuild) { ord.fireBuild(w.x, w.y); return; }
 
     if (!hit) {
       // Nothing under the pointer: an in-flight squad is the next best thing to
@@ -317,6 +321,10 @@ export function createBattleInput(o) {
     cancelBooster: ord.cancelBooster,
     /** Fire the armed booster at a site — the click path, exposed for tests. */
     fireBooster: ord.fireBooster,
+    /** Arms a buildable kind so the next board click resolves a hex and
+     *  raises it there; pressing the same kind again or Esc cancels. */
+    useBuild: ord.armBuild,
+    cancelBuild: ord.cancelBuild,
     setTrain(siteId, unit) { ord.push(cmd.train(siteId, unit)); },
     recruit(siteId, unit) { ord.push(cmd.recruit(siteId, unit)); },
     /** Per-site rally hold-back, from the site panel's stepper. */
