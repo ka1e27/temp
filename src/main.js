@@ -7,7 +7,7 @@ import { createSceneStack } from './core/scenes.js';
 import {
   createStorageAdapter, bootstrapGame, createAutosaver, loadBackup,
 } from './meta/save.js';
-import { tick as tickIdle } from './meta/idle.js';
+import { tickOrCatchUp as tickIdle } from './meta/idle.js';
 import { loadBattle } from './meta/resume.js';
 import { createScreens } from './screens/index.js';
 import { qs } from './ui/dom.js';
@@ -54,11 +54,17 @@ const loop = createLoop({
     //
     // It accrues on the WALL clock, never the simulation clock. The battle
     // speed control makes the loop tick up to 4x as often, and paying per tick
-    // would turn it into a money printer. Clamped because a long stall is the
-    // offline calculation's job, not this one's.
-    const realMs = Math.min(Math.max(0, now - lastIdleAt), 1000);
+    // would turn it into a money printer.
+    //
+    // A LONG STALL IS CREDITED, NOT DISCARDED. This used to clamp the gap to
+    // one second and drop the rest, on the reasoning that a long stall was the
+    // offline calculation's job — but that calculation only ever ran at boot,
+    // so a lid closed mid-session paid one second of an eight-hour absence
+    // while simply closing the tab paid the full cap. `tickOrCatchUp` routes a
+    // real gap through that same closed-form path; see meta/idle.js.
+    const gapMs = Math.max(0, now - lastIdleAt);
     lastIdleAt = now;
-    tickIdle(state, realMs, now, bus);
+    tickIdle(state, gapMs, now, bus);
     scenes.update(dtMs);
     autosaver.update(state, now);
   },

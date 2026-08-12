@@ -9,6 +9,7 @@ import { REGION_BY_ID, REGIONS, fullConquestIncome } from '../src/content/region
 import {
   incomePerSec, baseIncomePerSec, recalcIncome, accrue, tick,
   applyOfflineProgress, offlineCapMs, timeToAfford, projectCrowns,
+  tickOrCatchUp, IDLE_CATCHUP_MS,
 } from '../src/meta/idle.js';
 import { markConquered } from '../src/meta/world.js';
 
@@ -245,4 +246,77 @@ test('income ignores the simulation clock even when the two disagree', () => {
     'accrual must be a function of the wall delta it was handed');
   assert.ok(paid < (s.meta.incomePerSec * SIM_MS) / 1000,
     'and must be strictly less than the sim delta would have paid');
+});
+
+// ---------------------------------------------------------------------------
+// A stall mid-session is an ABSENCE, not a slow frame
+// ---------------------------------------------------------------------------
+
+test('idle: a long gap between frames is credited, not thrown away', () => {
+  // THE BUG THIS PINS. Offline income was reconciled only at boot; within a
+  // running session the gap between two frames was clamped to one second and
+  // the rest discarded, because "a long stall is the offline calculation's
+  // job" — and that calculation had exactly one caller, in the save-load path.
+  // So a laptop lid closed mid-session paid ONE SECOND of an eight-hour
+  // absence, while simply closing the tab paid the full cap. Measured live at
+  // 1 crown/s with the clock stepped forward ten minutes: 1 crown against 600.
+  const s = world(['riverfen'], {}, 0);      // exactly 1.0 crown/sec
+  assert.equal(incomePerSec(s), 1.0);
+  s.lastSeenAt = 0;
+  s.meta.crowns = 0;
+
+  const TEN_MIN = 10 * 60 * 1000;
+  tickOrCatchUp(s, TEN_MIN, TEN_MIN, null);
+  assert.ok(Math.abs(s.meta.crowns - 600) < 1e-6,
+    `ten minutes at 1/s must pay 600 crowns, paid ${s.meta.crowns}`);
+});
+
+test('idle: an ordinary frame still accrues exactly its own gap', () => {
+  // THE CONTROL FOR THE ABOVE. Without it, a `tickOrCatchUp` that sent every
+  // gap through the offline path would pass the first test and quietly change
+  // what a normal frame does — including `stats.playMs`, which the offline
+  // path does not touch.
+  const s = world(['riverfen'], {}, 0);
+  s.lastSeenAt = 0;
+  s.meta.crowns = 0;
+  const before = s.meta.stats.playMs;
+
+  tickOrCatchUp(s, 250, 250, null);
+  assert.ok(Math.abs(s.meta.crowns - 0.25) < 1e-9,
+    `a 250ms frame pays 0.25 crowns, paid ${s.meta.crowns}`);
+  assert.equal(s.meta.stats.playMs, before + 250,
+    'a normal frame must still count as PLAY time — the offline path does not');
+  assert.equal(s.lastSeenAt, 250, 'and it must resync the anchor');
+});
+
+test('idle: a stall is still capped, and still survives a backwards clock', () => {
+  // The whole point of routing through `applyOfflineProgress` rather than
+  // crediting the raw gap is that the cap and the clock-safety come with it.
+  // A stall must not be a way around the offline ceiling.
+  const cap = offlineCapMs(world([]).meta);
+  const s = world(['riverfen'], {}, 0);
+  s.lastSeenAt = 0;
+  s.meta.crowns = 0;
+  const monthMs = 30 * DAY;
+  tickOrCatchUp(s, monthMs, monthMs, null);
+  assert.ok(Math.abs(s.meta.crowns - cap / 1000) < 1e-6,
+    `a 30-day stall must pay exactly the cap (${cap / 1000}), paid ${s.meta.crowns}`);
+
+  // Clock stepped BACKWARD across a stall: no crowns, nothing negative, and the
+  // anchor resyncs so the player is not left owing time.
+  const b = world(['riverfen'], {}, 0);
+  b.lastSeenAt = 10 * HOUR;
+  b.meta.crowns = 0;
+  tickOrCatchUp(b, IDLE_CATCHUP_MS + 1, 1 * HOUR, null);
+  assert.equal(b.meta.crowns, 0, 'a backwards clock must never pay');
+  assert.equal(b.lastSeenAt, 1 * HOUR, 'and must resync rather than strand the anchor');
+});
+
+test('idle: the threshold sits clear of a throttled background tab', () => {
+  // A backgrounded tab is throttled to roughly one frame a second. If the
+  // threshold sat at or below that, ordinary background play would route every
+  // frame through the offline cap — which is a different bug wearing this
+  // fix's clothes.
+  assert.ok(IDLE_CATCHUP_MS >= 2000,
+    `${IDLE_CATCHUP_MS}ms is inside the background-tab throttle band`);
 });

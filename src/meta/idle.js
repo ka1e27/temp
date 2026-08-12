@@ -79,6 +79,57 @@ export function tick(state, dtMs, now, bus) {
 }
 
 /**
+ * A gap this long between two frames is not a slow frame, it is an ABSENCE:
+ * a closed laptop lid, a locked phone, a tab the browser froze. Above it the
+ * heartbeat hands over to the closed-form offline path.
+ *
+ * A backgrounded tab is throttled to roughly one frame a second, so the value
+ * has to sit clear of that or ordinary background play would route through the
+ * offline cap on every frame. Five seconds is far above the throttle and far
+ * below any real absence.
+ */
+export const IDLE_CATCHUP_MS = 5000;
+
+/**
+ * The heartbeat, with a real stall credited instead of thrown away.
+ *
+ * THE BUG THIS EXISTS TO FIX, because it is worth stating plainly: idle income
+ * used to be reconciled ONLY at boot. Within a running session main.js clamped
+ * the gap between two frames to one second and discarded the rest, on the
+ * reasoning that "a long stall is the offline calculation's job" — but the
+ * offline calculation had exactly one caller, in the save-load path, so nothing
+ * reconciled a stall that happened mid-session. Measured in the live game at
+ * 1 crown/s with the clock stepped forward ten minutes: **1 crown credited
+ * against 600 expected.**
+ *
+ * The player-facing shape of that is the part that matters. Closing the tab
+ * credited the full absence up to the cap; leaving it open credited one second.
+ * The game paid you LESS for leaving it running, which is the exact opposite of
+ * the promise an idle game is played for, and it did it silently — no message,
+ * no cap notice, just a number that had not moved.
+ *
+ * Below the threshold the whole gap is credited rather than clamped: it is
+ * bounded by the threshold itself, so there is nothing left for a clamp to
+ * protect against, and every millisecond it used to shave was a millisecond the
+ * player had genuinely waited. Above it, `applyOfflineProgress` does the work it
+ * was always meant to do — same cap, same backwards-clock handling, same resync
+ * — so there is one implementation of "time passed while you were away" rather
+ * than two that can disagree.
+ *
+ * Wall clock only, exactly as `tick` is. The battle speed control makes the loop
+ * run up to 4x as often and paying per frame would make it a money printer;
+ * nothing here is derived from the simulation clock.
+ *
+ * @returns {?object} the offline summary when a stall was credited, else null
+ */
+export function tickOrCatchUp(state, gapMs, now, bus) {
+  const gap = Number.isFinite(gapMs) ? Math.max(0, gapMs) : 0;
+  if (gap >= IDLE_CATCHUP_MS) return applyOfflineProgress(state, now, undefined, bus);
+  tick(state, gap, now, bus);
+  return null;
+}
+
+/**
  * Closed-form offline accrual: min(now - lastSeenAt, cap) x rate.
  *
  * Three cases this has to survive, all covered in tests/idle.test.js:
