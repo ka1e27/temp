@@ -1583,39 +1583,34 @@ activating focused buttons.
 
 ### Still open, and why
 
-- **THE CAMPAIGN IS UNTUNED, on purpose, and this is the biggest open item.** Free
-  movement, the yard/wall split and construction each moved every number, and fog
-  will move them again — the AI goes from knowing the board to believing a stale
-  copy of it. Tuning between two structural changes is work thrown away, so the
-  whole table is solved ONCE, after phase 2.
+- **THE CAMPAIGN RE-TUNE IS THE BIGGEST OPEN ITEM, and it is now unblocked.** Every
+  structural pass it was waiting on has landed — free movement, the yard/wall split,
+  construction, the map redesign, fog, the AI belief model, and the castle-gate fix.
+  Tuning between two structural changes is work thrown away, which is why the table
+  was left alone through all of them; there is nothing left to wait for.
 
-  Measured at n=48 with construction live, which is the number a tuner starts from:
+  The starting position, `--all --n=96`, taken after the gate fix for tiers 4-6 and
+  before it for tiers 1-3 (whose gates barely moved):
 
   ```
-  region        win%  win-med  advertised      region        win%  win-med  advertised
-  riverfen       98%    5.6m      8m           thanescar      85%    3.7m     6.5m
-  ashford        96%    6.7m     10m           blackspire     94%    3.4m     7.5m
-  ironwood       94%    6.9m     12m           ironcrown      88%    3.4m     7.5m
-  saltmere       94%    7.3m     13m           obsidian       75%    4.7m     8.5m
-  kaldan         94%    8.0m     14m           ravensmarch    46%    4.8m       8m
-  highmarch      98%    6.9m     15m           gravenreach    40%    5.8m     8.5m
-  greywater      85%    6.8m   15.5m           nightharrow    52%    3.7m       9m
-  thornmoor      88%    8.1m     16m           stormhalt      58%    5.0m       9m
-  emberholt      96%    5.6m   16.5m           cinderwatch    31%    5.9m     9.5m
-  gallowmoor     92%    2.8m      7m           widowsgate     23%    7.6m      10m
-  sunder         83%    3.4m      7m
-  vaelstrand     94%    3.0m      7m           TWENTY-ONE of 24 read TOO EASY.
-  duskfell       90%    3.6m    8.5m           Only the last three are in band.
-  karrowmere     96%    3.9m    8.5m
+  tier 1   100  99 100  95        tier 4   93 81 90 69
+  tier 2    99  98  85  90  94    tier 5   59 66 91   (n=32)
+  tier 3    99  98  94  93  86    tier 6   78 66 59   (n=32)
   ```
+
+  Twenty-three of twenty-four read TOO EASY. Difficulty has to come back from
+  `enemyMult`, `develop` and the ground, which are the columns meant to carry it —
+  the castle gate was doing it by accident and is now capped (see the gate section).
 
   **The lengths are the bigger story and they are the part a dial cannot fix.**
   Every advertised number is two to three times the real one — emberholt promises
-  16.5 minutes and delivers 5.6 — because an army marches straight at the throne
-  instead of chaining through the countryside. `targetLengthMin` needs re-authoring
-  across the whole table, and doing that by lowering the promise is the wrong
-  answer for the late regions: a tier-6 battle SHOULD be long, so what has to move
-  there is the fight, not the label.
+  16.5 minutes and delivers about five — because an army marches straight at the
+  throne instead of chaining through the countryside. `targetLengthMin` needs
+  re-authoring across the whole table, and doing that by lowering the promise is the
+  wrong answer for the late regions: a tier-6 battle SHOULD be long, so what has to
+  move there is the fight, not the label. `tests/campaignplay.test.js` currently
+  FAILS on thornmoor for exactly this (16m advertised, 5.5m delivered), and that
+  failure gates the Pages deploy.
 - **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
   rule — a yard while it holds fewer than three, a farm after that — and never a
   stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
@@ -1630,11 +1625,11 @@ activating focused buttons.
   it already receives developed country free at mapgen through `develop`, so teaching it
   to build would double-count the same mechanic and silently re-tune every region. If
   that is ever wanted it is a balance pass, not a bug fix.
-- **Fog of war and watchtowers are phase 2 and untouched.** `state.vision`, radius 1 for
-  an ordinary building ("the 6 around it") and 3–4 for a watchtower, both sides blind,
-  the AI on a belief model. `watchtower` is deliberately NOT shipped early: it would be a
-  building that does nothing until fog lands, which is precisely the "sold and did
-  nothing" mistake this project has already refunded four upgrades for.
+- ~~**Fog of war and watchtowers are phase 2 and untouched.**~~ **SHIPPED** — see the fog
+  sections above. Left here as a scar rather than deleted, because a market-research pass
+  found this bullet still claiming the feature was unbuilt *after* it had shipped, and
+  a stale "still open" entry is worse than no list: it sends the next reader to build
+  something twice. **If you close an item, close it here in the same commit.**
 - **The loadout has a dominant answer: bring only militia.** Measured at n=48 on matched
   seeds — gallowmoor 58% → **98%**, widowsgate 25% → **94%** — which is wider than the
   entire difficulty range of the campaign, and four clicks away on the loadout screen.
@@ -1661,16 +1656,51 @@ activating focused buttons.
   holding) is +7 on gallowmoor, `--relics=78` is +25. Both are now re-takeable rather than
   remembered, which is the only part that was ever actionable.
 - Dead seam fields with no reader: `ramImpactHp`, `rules.isRaid`, `rules.targetLengthMs`.
+- **Ownership still has one visual channel, and it is the oldest unbuilt item here.**
+  Player-green against enemy-red measures **ΔE 1.8 at 1.03:1 under protanopia** — one
+  continuous field of ground, on the surface the entire game is read from. The fix is
+  already spec'd two bullets up (a per-faction hatch under the flood, plus a per-owner
+  `setLineDash` on the site stroke, both of which batch by owner and survive greyscale).
+  It is the highest-value thing left that is not balance.
+- **`meta.stats` tracks twelve lifetime counters and no screen shows one of them.** They
+  are written on every battle and carried through abdication; a player has no way to see
+  any of it. `screens/mainmenu-legacy.js` and `mainmenu-settings.js` are the pattern a
+  stats drawer would follow.
+- **The service worker has no install affordance.** The manifest, the icons and the
+  worker are all there, so the browser's own install prompt is the only route in;
+  `beforeinstallprompt` is not captured, so there is no button anywhere that says the
+  game can be installed.
 - `tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 515 lines against a
   400-line cap and `npm run check` reports ok.
-- Neither `tools/smoke.mjs` nor `tools/mobile.mjs` is in CI, and both exist because a
-  release once shipped completely unclickable.
+- ~~Neither `tools/smoke.mjs` nor `tools/mobile.mjs` is in CI~~ — **CLOSED.** Both run in
+  a `browser` job that serves the game and drives real Chrome through `tools/cdp.js`, and
+  the deploy waits on it. `tools/offline.mjs` runs there too, last, because it installs a
+  service worker and must not leave a cache the other two would assert against.
 
 ## Deployment
 
 `.github/workflows/pages.yml` deploys to GitHub Pages on every push to `main`, gated on
-`npm test` and `npm run check`. Live at **https://ka1e27.github.io/temp/**
-(`?dev=1` for the developer overlay).
+**two** jobs. `verify` runs `npm test` and `npm run check`; `browser` serves the game and
+drives real Chrome through `tools/cdp.js` for `smoke.mjs`, `mobile.mjs` and
+`offline.mjs`. Live at **https://ka1e27.github.io/temp/** (`?dev=1` for the developer
+overlay).
+
+**The browser job exists because the unit suite structurally cannot catch the worst bug
+this project has shipped.** `#screen-root` is `pointer-events: none` and every scene opts
+back in; a release once went out with nothing clickable at all and the suite stayed green,
+because a synthetic `el.click()` bypasses hit testing entirely. Only real pointer events
+plus `document.elementFromPoint` find it. Chrome comes from `CHROME_PATH`, checked at the
+step that sets it rather than left to fail later inside a test; the dev server is started
+with `nohup` and a redirect, because a bare `npm start &` holds the step's stdout open and
+dies with it often enough to be a flaky-CI generator.
+
+**The game plays offline** (`sw.js`), which for an idle game is not a nicety: the meta
+layer pays out absences, and before this a player with no connection could not open the
+game to collect any of it. Runtime caching, not a precache list — there is no build step
+to generate one, and a hand-maintained list would go stale silently, still working online
+and failing only offline. Registration is https-only, which also keeps a worker out of the
+dev server and out of `smoke.mjs`/`mobile.mjs`; `offline.mjs` opts in by hand and cleans
+up after itself.
 
 The workflow cannot enable Pages itself — `pages: write` grants permission to deploy to a
 Pages site, not to create one. That was a one-time admin action and it has been done.
