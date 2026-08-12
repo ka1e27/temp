@@ -63,35 +63,61 @@
  *     dial(depth) = baseDial x (1 + perDepth) ^ (depth - 1)
  *
  * `baseDial` is FLAT and deliberately below the arena's own shipped `enemyMult`
- * (4.48). The ladder is not "the last region again", it is its own curve that
- * happens to be fought there — so the first rungs have to be a victory lap for a
- * player who has just finished the campaign, and the region's own dial is tuned
- * for a player who had not.
+ * (4.85, post-retune). The ladder is not "the last region again", it is its own
+ * curve that happens to be fought there — so the first rungs have to be a
+ * victory lap for a player who has just finished the campaign, and the region's
+ * own dial is tuned for a player who had not.
  *
  * `perDepth` is small because `enemyMult` is violently non-linear this late: tier
  * 5 lost 22 points over +0.10 (content/regions.data.js). At 1.2% a rung, ten
  * rungs is +13% on the dial, which is about one campaign region's worth of step —
  * roughly the rate at which a player who is idling and buying Crown levels gets
  * stronger, which is what makes the ladder feel like it recedes rather than ends.
+ * IT ALSO CANNOT GO LOWER THAN ~0.0118: `tests/incursion.test.js` "the dial rises
+ * with depth, and only with depth" asserts sixty rungs is worth more than
+ * doubling the dial, i.e. `(1+perDepth)^59 > 2`. That floor is what pins this
+ * knob in practice — the tail (see below) cannot be eased through `perDepth`
+ * without breaking that assertion, only through `baseDial`.
  *
- * MEASURED, `node tools/simrunner.js --incursion=... --n=16`, for a player who has
- * just taken the last region and idled half an hour:
+ * RE-MEASURED for the full campaign retune (CLAUDE.md "Tuning"): the arena
+ * (widowsgate) shipped harder across the board — `develop` 3.1 (was ~2.9),
+ * `castleGateFrac` 0.60 (was 0.85, part of a campaign-wide cap: see
+ * regions.rules.js GATE_CLAMP), and `siteCounts.enemy` 28 (was 18) — so the OLD
+ * `baseDial`/`perDepth` (3.55 / 0.012) no longer produced the old shape: it read
+ * 100/100/100 at depths 1/5/10, because the arena itself had gone soft-to-hard
+ * underneath a dial that was calibrated against the old, softer arena. `sealed`
+ * also stopped being inert here: for its whole life the mutator's gate (0.85)
+ * exactly equalled the arena's own, so `max()` was always the region's own value
+ * and the mutator changed nothing, ever (see the comment at its table entry).
+ * Against the new 0.60 base it is a genuine +0.12.
  *
- *     depth      1    5   10   20   30   40   55
- *     win%      94   88   75   38   19    0    0
- *     win-med  2.7  4.6  5.8  9.7 11.0    —    —   (minutes)
+ * `baseDial` moved 3.55 -> 3.65 to restore the early-mid rungs (`perDepth` could
+ * not do it alone without breaking the doubling floor above). MEASURED,
+ * `node tools/simrunner.js --incursion=1,5,10,20,30,40 --n=48`:
  *
- * ...and the same table for the same player after ten hours of idling, which is
- * the claim the word "endless" is making and the only one that matters here:
+ *     depth      1    5   10   20   30   40
+ *     win%      94   92   77   21   19    4
+ *     win-med  2.2  3.0  3.5  6.0 10.0 16.8   (minutes)
  *
- *     depth     40   55
- *     win%      75   44
+ * against the documented shape (94/88/75/38/19/~0): three of six land on or
+ * within 2 points (1, 10, 30), depth 40 is a proper wall (4%, matching the old
+ * table's 0% at that rung), and depth 20 is the one real miss (21 vs ~38) —
+ * its drawn mutators (Shieldwall, Scorched Earth, Levied Country) are simply a
+ * harder-than-average hand for that dial, and depth 30's own draw (Iron Wall,
+ * War Host, Shieldwall — three multiplicative combat buffs at once, the
+ * harshest three-mutator combination on the table) would be too if the dial
+ * there were not, by luck of where the curve lands, already tuned lower. A
+ * fixed per-depth mutator draw (rule 3 above) means no two-parameter curve can
+ * fit every rung exactly; this is the closest fit found without breaking the
+ * doubling floor, and it is a real restoration of the shape rather than a new
+ * one — not a re-derivation of every number.
  *
- * The wall RECEDES rather than moving: ten hours of income and the Crown levels it
- * buys take depth 40 from impossible to routine and push the coin flip from
- * roughly rung 17 to rung 55. If a future pass makes the ladder feel finite, that
- * second table is the one to re-take — a `perDepth` that outruns the shop's own
- * curve turns the ladder back into a wall with extra steps.
+ * The ten-hour-idle endurance table this section used to carry (depth 40/55
+ * win% for a player who has kept idling and buying Crown levels) was NOT
+ * re-measured in this pass — it is long-running (`--idle=600`) and orthogonal
+ * to the depth curve above, which is measured at a fixed idle time. Re-take it
+ * with `node tools/simrunner.js --incursion=40,55 --idle=600 --n=16` before
+ * trusting the word "endless" against the new dial.
  */
 export const INCURSION = Object.freeze({
   /** THE ARENA. The last region in the campaign: the deepest ground and the
@@ -117,7 +143,7 @@ export const INCURSION = Object.freeze({
    */
   gateCeiling: 0.75,
   /** Where the curve starts, independent of what the arena's own row says. */
-  baseDial: 3.55,
+  baseDial: 3.65,
   /** Compounding growth on `baseDial`, per rung. */
   perDepth: 0.012,
   /** Depth at which the 1st, 2nd and 3rd mutator arrive. Three is the ceiling

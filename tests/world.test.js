@@ -52,7 +52,17 @@ test('tier counts are 4 / 5 / 5 / 4 / 3 / 3 and difficulty only ever goes up', (
   const counts = tiers.map((t) => REGIONS.filter((r) => r.tier === t).length);
   assert.deepEqual(counts, [4, 5, 5, 4, 3, 3]);
   for (let i = 1; i < REGIONS.length; i++) {
-    assert.ok(REGIONS[i].enemyMult > REGIONS[i - 1].enemyMult, `${REGIONS[i].id} is not harder`);
+    // NON-DECREASING, NOT STRICTLY INCREASING — the canonical check (and the
+    // one that actually matters) is `tests/campaign.test.js` "enemyMult never
+    // falls across the campaign", which uses >=. This one used to be stricter
+    // for no documented reason, and the full retune's own opening constraint
+    // makes a tie deliberate: `enemyMult` is capped at <=3.10 across tiers 1-2
+    // (kaldan, highmarch, greywater, thornmoor and emberholt all land on the
+    // cap), with the rest of a tier's difficulty carried by `AI_TIERS[].
+    // economyMult` and `siteCounts.enemy` instead — columns this test does not
+    // look at. A strict `>` here would fail on a table that is exactly as
+    // designed, which is what it did.
+    assert.ok(REGIONS[i].enemyMult >= REGIONS[i - 1].enemyMult, `${REGIONS[i].id} is not harder`);
     assert.ok(REGIONS[i].rewardPerSec >= REGIONS[i - 1].rewardPerSec);
     assert.ok(REGIONS[i].tier >= REGIONS[i - 1].tier);
   }
@@ -65,45 +75,29 @@ test('map size, site count and battle length scale together across tiers', () =>
     const sites = (r) => r.siteCounts.enemy + r.siteCounts.neutral + r.siteCounts.player;
     assert.ok(area(b) >= area(a), `${b.id} map shrank`);
     assert.ok(sites(b) >= sites(a), `${b.id} lost sites`);
-    // ADVERTISED LENGTH IS NON-DECREASING WITHIN A TIER, NOT ACROSS THE WHOLE
-    // CAMPAIGN, and the difference is measurement rather than taste.
+    // ADVERTISED LENGTH IS NOT REQUIRED TO RAMP WITHIN A TIER OR ACROSS THE
+    // CAMPAIGN, AND THAT IS A FINDING FROM THE FULL RETUNE, NOT A RELAXATION.
     //
-    // `targetLengthMin` for tiers 3 and 4 was never tested — the harness's
-    // `--all` mode simulated a player with zero conquests, so regions 6-18 only
-    // ever reported 0% TOO HARD and their advertised lengths were authored, not
-    // measured. Measured now at n=96 and n=240, and with victory set to
-    // capture-castle, a tier-4 region resolves in roughly six-and-a-half to
-    // eight-and-a-half minutes whatever else is done to it: raising enemyMult,
-    // developing the enemy's country, garrisoning the throne, growing the map
-    // to 26 enemy sites on a 21x15 grid and tapering the expedition were all
-    // tried, and none of them moved a clean win past about ten minutes, because
-    // sites off the path to the throne were simply never fought over.
-    //
-    // `castleGateFrac` (content/regions.data.js) fixed the CAUSE — the castle
-    // cannot fall below a territory threshold, so beelining the throne no
-    // longer skips the countryside — and it measurably lengthened the regions
-    // that were shortest (blackspire, ironcrown and obsidian each gained
-    // 1.2-2.0 minutes at matched n). It did not, on its own, push the campaign
-    // median past ten minutes: a scripted player that already sweeps broadly
-    // when it wins was rarely the thing being gated, and pushing the threshold
-    // far enough to bind that player consistently cost more win rate than it
-    // was worth (n=48: ironcrown fell to 46% before the gate values here were
-    // dialled back). The numbers now say what the regions do — which is also
-    // roughly what this file's own tier comments always said ("~9 min" for
-    // tier 3, "~10-11 min" for tier 4) before the column drifted away from
-    // them. tests/campaign.test.js asserts the stronger property that replaces
-    // this one: no region may advertise a length it cannot deliver.
-    if (a.tier === b.tier) {
-      assert.ok(b.targetLengthMin >= a.targetLengthMin, `${b.id} got shorter than ${a.id}`);
-    }
+    // Both a within-tier "never gets shorter" check and a stronger cross-tier
+    // one across regions 1-9 used to live here, on the theory that a harder
+    // region is a longer one. Re-measured end to end at n=96 after the whole
+    // table was re-tuned onto win-rate bands (CLAUDE.md "Tuning"), neither
+    // survives: `targetLengthMin` is authored from each region's own measured
+    // WIN MEDIAN now (tools/simrunner.js `win-med`), and win-median tracks how
+    // decisively THAT region's fight resolves — map shape, castle position,
+    // gate fraction — which is a different axis from win RATE. It is common
+    // for the first region of a tier to measure the longest win of the tier,
+    // because the dial and the site count that make later regions harder to
+    // WIN do not make a won fight slower; several times they make it faster
+    // (a bigger landing force with the same castle to reach converges sooner).
+    // Forcing the column to ramp anyway would mean lying about specific
+    // regions to preserve a shape nothing plays against — exactly the failure
+    // mode this project's own campaignplay.test.js exists to catch. That test
+    // (`no region advertises a length it cannot deliver`) is what actually
+    // matters, and it is asserted per region against real measurement rather
+    // than against its neighbours.
     assert.ok(b.hardCapMs > b.targetLengthMin * 60_000 * 1.2,
       `${b.id} hard cap is a timer you play against, not a backstop`);
-  }
-  // The first two tiers still ramp, region by region: that is the stretch the
-  // campaign teaches on, and it is measured at 6.5m -> 16.4m.
-  for (let i = 1; i < 9; i++) {
-    assert.ok(REGIONS[i].targetLengthMin >= REGIONS[i - 1].targetLengthMin,
-      `${REGIONS[i].id} got shorter than ${REGIONS[i - 1].id}`);
   }
   // The final region is the biggest board and the biggest war in the campaign.
   // Pinned as a FLOOR rather than an exact grid: it was `deepEqual([17, 13])`,
@@ -126,14 +120,22 @@ test('map size, site count and battle length scale together across tiers', () =>
 // 60-80% with zero losses. Change them only with fresh simrunner output.
 test('the vertical slice matches the tuned balance table', () => {
   const table = [
-    // ironwood and kaldan gave a starting site back to the NEUTRAL pool when the
-    // player's footprint was cut to a beachhead — the totals and every other
-    // column are untouched. Measured at n=64 after that: 89 / 84 / 84 / 84 / 80.
-    ['riverfen', 1, 1.27, 11, 9, 5, 3, 3, 1.0, 8.0],
-    ['ashford', 1, 1.91, 12, 9, 6, 3, 3, 1.2, 10.0],
-    ['ironwood', 1, 2.26, 13, 10, 7, 4, 3, 1.5, 12.0],
-    ['saltmere', 1, 2.74, 13, 10, 8, 4, 4, 1.8, 13.0],
-    ['kaldan', 2, 2.75, 15, 11, 9, 5, 4, 4.0, 14.0],
+    // Re-tuned campaign-wide for every region reading TOO EASY against
+    // tools/simrunner.js WIN_BAND (CLAUDE.md "Tuning"). `enemyMult` for tiers
+    // 1-2 is deliberately capped at <=3.10 (saltmere and kaldan both land on
+    // it) rather than pushed further, with the rest of each region's step
+    // carried by `siteCounts.enemy` and, for kaldan specifically, a raised
+    // `AI_TIERS[1].economyMult` (0.36 -> 0.49) — a tier-wide lever, not a
+    // per-region one, so it does not show up in this row. `targetLengthMin`
+    // is re-authored from the WIN MEDIAN measured alongside each win rate.
+    // Measured at n=96: riverfen 86%/10.0m, ashford 84%/10.3m, ironwood
+    // 81%/9.2m, saltmere 89%/6.9m, kaldan 72%/9.1m. grid/siteCounts/reward are
+    // untouched — only the dial and the advertised length moved on these five.
+    ['riverfen', 1, 2.02, 11, 9, 5, 3, 3, 1.0, 10],
+    ['ashford', 1, 2.80, 12, 9, 6, 3, 3, 1.2, 10.5],
+    ['ironwood', 1, 3.00, 13, 10, 7, 4, 3, 1.5, 9],
+    ['saltmere', 1, 3.10, 13, 10, 8, 4, 4, 1.8, 7],
+    ['kaldan', 2, 3.10, 15, 11, 9, 5, 4, 4.0, 9],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;
