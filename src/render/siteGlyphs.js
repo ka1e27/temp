@@ -33,8 +33,13 @@ import {
   siteRingR, siteRingDy, siteFootYAt,
 } from './siteShapes.js';
 import { drawStoreyGild } from './siteGild.js';
+import { ownerDash, NO_DASH } from './ownerDash.js';
 
 export { SITE_R, siteRadius, traceSiteShape, siteTier } from './siteShapes.js';
+export { ownerDash } from './ownerDash.js';
+// Cursor feedback lives in ./siteCursor.js now; re-exported so battleView and
+// the fog tests keep importing it from the same front door.
+export { drawSelection, drawHover } from './siteCursor.js';
 
 const TAU = Math.PI * 2;
 const TOP = -Math.PI / 2;
@@ -126,11 +131,13 @@ export function drawSiteBase(ctx, site, cx, cy, r, p, px) {
   for (let i = storeyCount(lv) - 1; i >= 0; i--) {
     const cyi = cy - R * storeyRise(i);
     const ri = R * storeyScale(i);
-    block(ctx, site.kind, true, cx, cyi, ri, p, wash, edge, px * (1.3 + tier * 0.75), moat);
+    block(ctx, site.kind, true, cx, cyi, ri, p, wash, edge, px * (1.3 + tier * 0.75), moat,
+      site.owner);
     drawStoreyGild(ctx, site.kind, cx, cyi, ri, i, p, px);
   }
   // Outline weight IS the hierarchy: a farm is hairline, a home base is bold.
-  block(ctx, site.kind, false, cx, cy, R, p, wash, edge, px * (1.7 + tier * 1.15), moat);
+  block(ctx, site.kind, false, cx, cy, R, p, wash, edge, px * (1.7 + tier * 1.15), moat,
+    site.owner);
 }
 
 /**
@@ -142,7 +149,7 @@ export function drawSiteBase(ctx, site, cx, cy, r, p, px) {
  * the storey behind it, so every step is separated by a dark band instead of
  * two outlines meeting and fusing into one blob.
  */
-function block(ctx, kind, upper, cx, cy, r, p, wash, edge, lw, moat) {
+function block(ctx, kind, upper, cx, cy, r, p, wash, edge, lw, moat, owner) {
   const trace = upper ? traceSiteCore : traceSiteShape;
   // The cheapest way to make a piece sit ON the board rather than be a patch OF
   // it — and it gives every adjacency line a visible place to stop instead of
@@ -162,7 +169,11 @@ function block(ctx, kind, upper, cx, cy, r, p, wash, edge, lw, moat) {
   ctx.fill();
   ctx.strokeStyle = edge;
   ctx.lineWidth = lw;
+  // The second ownership channel — see ./ownerDash.js. Always restored: a dash
+  // left on the context leaks into every site that strokes after this one.
+  ctx.setLineDash(ownerDash(owner, lw));
   ctx.stroke();
+  ctx.setLineDash(NO_DASH);
 }
 
 /**
@@ -378,22 +389,4 @@ function drawCompRibbon(ctx, comp, x0, y, w, h, p, px) {
     ctx.fillRect(x, y, Math.max(seg, px), h);
     x += seg;
   }
-}
-
-/** Selection halo. Deliberately the accent hue, never a faction hue. */
-export function drawSelection(ctx, site, cx, cy, r, p, px, pulse) {
-  ctx.beginPath();
-  traceStructure(ctx, site.kind, builtLevel(site), cx, cy, r, px * (7 + pulse * 2.5));
-  ctx.strokeStyle = p.selection;
-  ctx.lineWidth = px * 2;
-  ctx.stroke();
-}
-
-/** Hover affordance — subtler than selection, same shape language. */
-export function drawHover(ctx, site, cx, cy, r, p, px) {
-  ctx.beginPath();
-  traceStructure(ctx, site.kind, builtLevel(site), cx, cy, r, px * 4);
-  ctx.strokeStyle = p.hover || p.selectionFill;
-  ctx.lineWidth = px * 6;
-  ctx.stroke();
 }
