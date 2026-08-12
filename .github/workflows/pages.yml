@@ -66,15 +66,30 @@ jobs:
       # than through Playwright — no dependency, so nothing to install. It
       # takes the binary from CHROME_PATH, and ubuntu-latest ships Chrome.
       - name: Locate Chrome
-        run: echo "CHROME_PATH=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+        run: |
+          BIN="$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)"
+          # Fail HERE rather than three steps later. cdp.js falls back to
+          # /opt/pw-browsers/chromium when CHROME_PATH is empty, which does not
+          # exist on a runner — so an unset variable would surface as a spawn
+          # error inside a test and read like a test failure instead of a
+          # missing browser.
+          if [ -z "$BIN" ]; then echo "no Chrome on this runner"; exit 1; fi
+          echo "CHROME_PATH=$BIN" >> "$GITHUB_ENV"
+          "$BIN" --version
       - name: Serve the game
         run: |
-          npm start &
-          for i in $(seq 1 60); do
-            curl -sf -o /dev/null http://localhost:8080/ && exit 0
+          # nohup + redirected output, NOT a bare `npm start &`. Each step is
+          # its own shell; a plain background job holds the step's stdout open
+          # and dies with it often enough to be a flaky-CI generator. The log
+          # file is also what makes a failure diagnosable rather than silent.
+          nohup npm start > /tmp/serve.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8080/ && break
             sleep 1
           done
-          echo "dev server never came up"; exit 1
+          if ! curl -sf -o /dev/null http://localhost:8080/; then
+            echo "dev server never came up:"; cat /tmp/serve.log; exit 1
+          fi
       - name: Clickable end to end (real hit-tested pointer events)
         run: node tools/smoke.mjs
       - name: Playable at phone size (board share)
