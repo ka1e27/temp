@@ -94,10 +94,28 @@
  * curve turns the ladder back into a wall with extra steps.
  */
 export const INCURSION = Object.freeze({
-  /** THE ARENA. The last region in the campaign: the deepest ground, the biggest
-   *  board, and the only castle gate at the GATE_CLAMP ceiling. Fixed rather than
-   *  rotated — see rule 3 above for the 57-point measurement behind that. */
+  /** THE ARENA. The last region in the campaign: the deepest ground and the
+   *  biggest board. Fixed rather than rotated — see rule 3 above for the
+   *  57-point measurement behind that. */
   regionId: 'widowsgate',
+  /**
+   * THE LADDER'S OWN CASTLE-GATE CEILING, and it is deliberately HIGHER than
+   * the campaign's `GATE_CLAMP` (0.60) rather than shared with it.
+   *
+   * The campaign cap is 0.60 because a region has to be winnable on its own
+   * terms and the player has exactly one route through the table; measured,
+   * anything above that stopped being an anti-rush guarantee and became the
+   * win condition (thirty-seven of thirty-seven timeouts sat under the gate).
+   *
+   * A rung is different in one direction and identical in the other. It is
+   * retried freely, so a hard gate costs a retry rather than a run — that buys
+   * the headroom. But a rung CANNOT BE SKIPPED, so an unwinnable one does not
+   * cost a retry, it ends the ladder permanently at a rung that is not even
+   * the hard one. So the ladder needs a ceiling too; it is simply a different
+   * number, and it is the reason `sealed` sits at 0.72 rather than wherever a
+   * future pass fancies.
+   */
+  gateCeiling: 0.75,
   /** Where the curve starts, independent of what the arena's own row says. */
   baseDial: 3.55,
   /** Compounding growth on `baseDial`, per rung. */
@@ -164,9 +182,24 @@ export const MUTATORS = Object.freeze([
     note: 'Only 82% of your expedition makes the landing. What you brought matters more.',
   },
   {
+    // INERT FROM THE DAY THE ARENA WAS FIXED, AND THAT IS WHY THIS VALUE IS NOT
+    // 0.85 ANY MORE. `incursionRules` takes `max(the region's own gate, this)`,
+    // and the arena is widowsgate, whose gate WAS 0.85 — so the max was always
+    // the region's own and this mutator changed nothing, on any rung, ever. The
+    // note promised "take the countryside" and the rung played identically
+    // without it. That is the fifth piece of inert content this project has
+    // found, and the comment above `incursionRules` warns about exactly this
+    // class two paragraphs before the line that had it.
+    //
+    // The campaign gate now plateaus at 0.60 (regions.rules.js GATE_CLAMP and
+    // the measurement behind it), so there is real headroom here for the first
+    // time. 0.72 against a 0.60 base is a genuine +0.12 that makes the
+    // countryside mandatory the way the note claims, and it stays under
+    // INCURSION_GATE_CEILING — because a rung CANNOT BE SKIPPED, so an
+    // unwinnable one ends the ladder outright rather than costing a retry.
     id: 'sealed', name: 'Sealed Throne', weight: 3, kind: 'gate',
-    value: 0.85,
-    note: 'The throne cannot fall until you hold 85% of the region. Take the countryside.',
+    value: 0.72,
+    note: 'The throne cannot fall until you hold 72% of the region. Take the countryside.',
   },
   {
     id: 'entrenched', name: 'Entrenched', weight: 3, kind: 'develop',

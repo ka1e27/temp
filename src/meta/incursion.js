@@ -194,9 +194,16 @@ export function incursionMods(mods, plan, side) {
 export function incursionRules(rules, plan) {
   const gate = specs(plan).filter((m) => m.kind === 'gate')
     .reduce((a, m) => Math.max(a, m.value), 0);
+  // The LADDER's ceiling, not the campaign's — see INCURSION.gateCeiling for
+  // why the two are different numbers. Using `GATE_CLAMP` here would clamp a
+  // rung to the campaign's 0.60, which is the arena's own base gate, which
+  // would make every gate mutator a no-op. That is not hypothetical: `sealed`
+  // was exactly that for its whole life, because the arena's gate already
+  // equalled its value and the max of the two was always the region's own.
+  const ceiling = Math.max(0, Math.min(1, INCURSION.gateCeiling ?? 0.75));
   return {
     ...rules,
-    castleGateFrac: GATE_CLAMP(Math.max(rules.castleGateFrac ?? 0, gate)),
+    castleGateFrac: Math.min(ceiling, Math.max(rules.castleGateFrac ?? 0, gate)),
     aiTier: Math.min(AI_TIERS.length, plan.aiTier),
     // What crosses the seam: the identity of the rung. The mutators' EFFECTS are
     // already baked into the mods, the sites and the gate — this is so the HUD,

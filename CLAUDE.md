@@ -633,9 +633,12 @@ the original bug was precisely a mechanic nothing ever asked about.
   non-decreasing, so that is a contradiction rather than a tuning problem. Cutting tier 2 to
   six resolved it and bought back the battle length the ladder had eaten (emberholt
   97%/9.8m → 81%/11.9m on that one column, against a 16.5m advertised length).
-- **`castleGateFrac` is not a difficulty knob.** Swept 0.30→0.60 on emberholt it moved the
+- **`castleGateFrac` is not a difficulty knob** — swept 0.30→0.60 on emberholt it moved the
   win rate *one point*, because this bot already sweeps the countryside when winning. It
-  buys the guarantee against a rush strategy. That is all it buys.
+  buys the guarantee against a rush strategy, and that is all it buys.
+  **⚠ That was true at tiers 1–3 and became FALSE at 4–6, and the ladder is now capped at
+  0.60 because of it — see the gate section below.** The claim is kept here because the
+  *reason* it stopped being true is the useful part.
 - **`enemyMult` is violently non-linear past tier 2.** Gallowmoor loses 31 points over
   +0.26; thanescar 43 over +0.50. Move it in steps of ≤0.05 late and re-measure — never
   extrapolate. A castle promotion via `develop` is worse: 25–40 points on one rung.
@@ -813,6 +816,57 @@ It is violently non-linear, as the surge was: `finalBonus 210 / perRegionFinal 3
   tier-6 number in the table is an n=240 number, including the advertised lengths:
   widowsgate read a 16.0m win median at n=48 and 9.6m at n=240, so a table tuned on the
   small sample would have told the player a region takes half again as long as it does.
+
+## The castle gate stopped being a guarantee and became the win condition
+
+`castleGateFrac` is the share of a region's **non-castle** sites you must hold before a
+siege of the throne can complete. Every note ever written about it — in this file, in
+`regions.data.js`, at `GATE_CLAMP` — said the same three things: it is not a difficulty
+knob, it is worth about a point, and all it buys is the guarantee against a rush. Every
+one of those was measured, and every one was true when measured.
+
+**They stopped being true, and nothing noticed because nothing ever re-asked.** The
+beachhead pass put a large *neutral* pool on every board, and `castleSealed` counts
+non-castle sites — so every one of those neutrals landed in the denominator. Free movement
+changed what a bot can sweep, and the map redesign re-authored where sites land. The gate
+column never moved; the thing it measures moved underneath it.
+
+Re-measured, splitting runs by **outcome** — which is the only honest way to ask, because
+peak control on a run the player *lost* is low by definition and says nothing about
+whether the gate was reachable:
+
+```
+region        gate   timeouts below gate   control on wins
+nightharrow   0.80        8 of 8           0.80 0.81 0.80 0.80
+stormhalt     0.82        6 of 6           0.83 0.82 0.82 0.82
+cinderwatch   0.84        8 of 8           0.85 0.85
+widowsgate    0.85        9 of 9           (no wins in 12)
+```
+
+**Thirty-seven of thirty-seven timeouts sat below the gate, and every win landed on it.**
+That is not a rush guarantee — it means the gate *was* the win condition. The battle was
+decided by whether the last few percent of countryside could be scraped up, and the throne
+fell as a formality the moment it opened. Widowsgate could not be won at all.
+
+The ladder now rises through tiers 2–3 and **plateaus at 0.60** for the whole back half,
+and `GATE_CLAMP`'s ceiling came down 0.85 → 0.60 to meet it. 0.60 is high enough that a
+late region still cannot be ended by beelining the throne — the whole and only thing this
+column was meant to buy — and low enough that the castle assault is a fight again rather
+than a lap of honour. Difficulty goes back to `enemyMult`, `develop`, the ground and the
+AI tier.
+
+**The clamp is a hard ceiling rather than a note on purpose.** The old 0.85 was *also*
+documented as a safety limit — "a region whose gate rounds up to all of them is unwinnable
+at any skill" — and the table walked straight up to it anyway, one region at a time, each
+step defensible on its own.
+
+*Two process notes, both of which cost time here.* The first probe measured peak control
+across all runs and reported three gates "unreachable on every seed" — wrong, because it
+was mostly measuring runs the bot lost. Split by outcome or do not bother. And the reason
+this was worth chasing at all is that `state.rules` is a hand-picked subset of
+`config.rules`: the first hypothesis was that the gate had never crossed the seam and was
+dead code, which is exactly the shape of bug this project has shipped before
+(`rallyKeepDefault`). It is wired correctly — checked before any of the above was trusted.
 
 ## Fog of war: buildings see, squads do not
 

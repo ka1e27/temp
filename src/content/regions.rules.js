@@ -327,17 +327,41 @@ export const DEVELOP_CLAMP = (n) => Math.max(1, Math.min(5, Number(n) || 1));
  * "longer battle" instead of "more scenery to walk past".
  *
  * 0 for tier 1 and kaldan: regions 1-5 are balance-frozen and rushing the
- * castle is supposed to work early. It rises through tiers 2-5 so a late clear
- * genuinely requires converting real ground first, not just the shortest path
- * to the throne. Tuned against tools/simrunner.js at n>=96 (n=240 spot check on
- * tiers 3-5): every region stays winnable inside its hard cap.
+ * castle is supposed to work early. It rises through tiers 2-3 and then sits
+ * on a PLATEAU at 0.60 for the whole back half of the campaign.
  *
- * The 0.85 ceiling is not decoration. `castleSealed` counts NON-CASTLE sites,
- * and a region whose gate rounds up to "all of them" is one where a single
- * unreachable farm in a mountain pocket makes the throne uncapturable and the
- * battle unwinnable at any skill.
+ * THE PLATEAU IS THE POINT, AND THE CEILING CAME DOWN FROM 0.85 TO MEET IT.
+ * Every note ever written about this column — here, in regions.data.js, in
+ * CLAUDE.md — said it is not a difficulty knob, is worth about a point, and
+ * buys only the guarantee against a rush. True when measured; false now. The
+ * beachhead pass put a large NEUTRAL pool on every board and `castleSealed`
+ * counts non-castle sites, so every one of those is in the denominator.
+ *
+ * Re-measured, splitting runs by OUTCOME — the only honest way to ask, since
+ * peak control on a run the player LOST is low by definition:
+ *
+ *   region        gate   timeouts below gate   control on wins
+ *   nightharrow   0.80        8 of 8           0.80 0.81 0.80 0.80
+ *   stormhalt     0.82        6 of 6           0.83 0.82 0.82 0.82
+ *   cinderwatch   0.84        8 of 8           0.85 0.85
+ *   widowsgate    0.85        9 of 9           (no wins in 12)
+ *
+ * THIRTY-SEVEN of thirty-seven timeouts sat below the gate and every win landed
+ * on it. The gate WAS the win condition: the battle was decided by scraping up
+ * the last few percent of countryside, and the throne fell as a formality the
+ * moment it opened. Widowsgate could not be won at all.
+ *
+ * 0.60 is high enough that a late region still cannot be ended by beelining the
+ * throne — the whole and only thing this column was meant to buy — and low
+ * enough that the castle assault is a fight again rather than a lap of honour.
+ * Difficulty returns to the columns meant to carry it: `enemyMult`, `develop`,
+ * the ground, the AI tier.
+ *
+ * The clamp is a HARD ceiling rather than a note because the old 0.85 was also
+ * documented as a safety limit — "unwinnable at any skill" — and the table
+ * walked straight up to it anyway.
  */
-export const GATE_CLAMP = (n) => Math.max(0, Math.min(0.85, Number(n) || 0));
+export const GATE_CLAMP = (n) => Math.max(0, Math.min(0.60, Number(n) || 0));
 
 /**
  * THE SHAPE COLUMN, and the rule it obeys.

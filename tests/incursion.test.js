@@ -136,8 +136,18 @@ test('incursion: every mutator in the table actually changes the config it names
       assert.ok(total(withIt.player.expedition) < total(plain.player.expedition),
         `${m.id}: the landing force is the same size`);
     } else if (m.kind === 'gate') {
-      assert.ok(withIt.rules.castleGateFrac >= m.value - 1e-9,
-        `${m.id}: the castle gate is ${withIt.rules.castleGateFrac}`);
+      // AGAINST `plain`, LIKE EVERY OTHER KIND HERE — and this branch was the
+      // one that did not, which is exactly how `sealed` shipped inert. It read
+      // `castleGateFrac >= m.value`, comparing the mutator against ITSELF: the
+      // arena is widowsgate, whose own gate was 0.85, `incursionRules` takes
+      // `max(region gate, mutator value)`, and the mutator value was also 0.85.
+      // So the max was always the region's own, the rung played identically
+      // with and without it, and this assertion passed on every run for the
+      // mutator's entire life. The test was the only thing that could have
+      // caught it and it was asking the wrong question.
+      assert.ok(withIt.rules.castleGateFrac > plain.rules.castleGateFrac + 1e-9,
+        `${m.id}: the castle gate is ${withIt.rules.castleGateFrac} with the mutator and `
+        + `${plain.rules.castleGateFrac} without it — it changes nothing`);
     } else if (m.kind === 'develop') {
       // MEAN fort level, not the maximum, and the difference is the mechanic:
       // `developLevels` promotes `round(share x pool)` forts BEST FIRST, so a
