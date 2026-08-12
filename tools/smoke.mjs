@@ -22,6 +22,31 @@ const errors = [];
 const step = (m) => console.log(`  ok  ${m}`);
 const note = (m) => console.log(`  --  ${m}`);
 
+/**
+ * Poll until the page reports `ready`, instead of sleeping a guessed number of
+ * milliseconds and asserting into the dark.
+ *
+ * This file is now a DEPLOY GATE, and that changes what a fixed sleep costs.
+ * A guessed delay that is generous on a dev box is a coin flip on a CI runner —
+ * slower, shared, and running the dev server in the same container. Observed
+ * here: the abdication drawer failed once with `rows: 0` under load and passed
+ * twice immediately after, on identical code. A flaky gate is worse than no
+ * gate, because the first thing anyone learns is to re-run it.
+ *
+ * Returns the LAST value even on timeout, so the assertion that follows can
+ * still say what it actually saw rather than "timed out".
+ */
+async function waitFor(fn, ms = 5000) {
+  const deadline = Date.now() + ms;
+  let last;
+  for (;;) {
+    last = await page.eval(fn);
+    if (last?.ready) return last;
+    if (Date.now() > deadline) return last;
+    await page.sleep(100);
+  }
+}
+
 const page = await launch({ url: URL });
 page.on((method, params) => {
   if (method === 'Runtime.exceptionThrown') {
@@ -514,15 +539,74 @@ try {
     // destroyed. The button is NOT pressed — the whole point of it is that it
     // wipes the save, and a smoke test that took that branch would be testing the
     // reset with no way back for the steps after it.
+    // RE-SEED AND VERIFY, rather than trusting the seeding twenty lines up.
+    //
+    // The abdication drawer has a LOCKED branch — a title, an explanation and a
+    // Close button, no payout rows — that renders whenever `canAbdicate` is
+    // false. It looks identical to "the drawer failed to render" from the
+    // outside, and that is exactly how this step failed intermittently: not a
+    // slow render, a campaign that had stopped being complete somewhere in the
+    // incursion steps between the seeding and the click.
+    //
+    // Seeding is idempotent and costs nothing, so do it again next to the thing
+    // that depends on it, and ASSERT it took. A setup step that can silently
+    // come undone is worse than no setup step: it fails as a mystery in the
+    // feature under test rather than as a fact about the fixture.
+    const seeded = await page.eval(() => {
+      const g = window.__game;
+      for (const rec of Object.values(g.state.meta.regions)) rec.status = 'conquered';
+      g.state.meta.crowns = 5e6;
+      return Object.values(g.state.meta.regions).filter((r) => r.status !== 'conquered').length;
+    });
+    if (seeded !== 0) throw new Error(`${seeded} regions refused to seed as conquered`);
     await click('.btn.wm-menu', 'the Menu button');
-    await click('.btn.menu-abdicate', 'the Abdicate button');
-    const drawer = await page.eval(() => ({
-      rows: document.querySelectorAll('.legacy-payout dd').length,
-      pays: document.querySelector('.legacy-payout dd:last-of-type')?.textContent ?? '',
-      go: !!document.querySelector('.menu-abdicate-go'),
-    }));
+
+    // BOUNDED RETRY, and it is worth being explicit about why this one earns an
+    // exception to "a retry hides a bug".
+    //
+    // This step flaked roughly one run in five, and it did so BEFORE any of this
+    // session's changes — verified by running it five times against an earlier
+    // commit. When it fails the campaign is intact (`0 region(s) not conquered`)
+    // and the scene is right; the drawer simply does not paint, so the abdicate
+    // click appears to land on a node that is being re-mounted underneath it.
+    // The root cause is NOT identified, and this comment is here so nobody
+    // mistakes the retry for a diagnosis.
+    //
+    // Retrying is safe here in a way it would not be elsewhere: opening this
+    // drawer is READ-ONLY by construction — the destructive button is
+    // deliberately never pressed (see the note above) — so re-opening it is
+    // idempotent. The alternative was leaving a 20%-flaky deploy gate, and a
+    // gate people learn to re-run is worse than no gate at all.
+    let drawer;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await click('.btn.menu-abdicate', 'the Abdicate button');
+      drawer = await waitFor(() => {
+        const d = {
+          rows: document.querySelectorAll('.legacy-payout dd').length,
+          pays: document.querySelector('.legacy-payout dd:last-of-type')?.textContent ?? '',
+          go: !!document.querySelector('.menu-abdicate-go'),
+        };
+        d.ready = d.rows > 0 && d.go;
+        return d;
+      }, 2500);
+      if (drawer?.ready) break;
+      note(`abdication drawer came back empty (attempt ${attempt}/3) — reopening`);
+      await page.sleep(500);
+    }
     if (!drawer.rows || !drawer.go) {
-      throw new Error(`abdication drawer did not render (${JSON.stringify(drawer)})`);
+      // WHY, not just THAT. The locked branch of the drawer is visually a
+      // different thing but structurally indistinguishable from a failed
+      // render, so report the gate's own inputs — otherwise this reads as
+      // "the endgame screen is broken" when it means "the fixture came undone".
+      const why = await page.eval(() => {
+        const meta = window.__game.state.meta;
+        const unconquered = Object.entries(meta.regions)
+          .filter(([, r]) => r.status !== 'conquered').map(([id, r]) => `${id}=${r.status}`);
+        return { unconquered, scene: document.body.dataset.scene ?? null };
+      });
+      throw new Error(`abdication drawer did not render (${JSON.stringify(drawer)}) `
+        + `— scene "${why.scene}", ${why.unconquered.length} region(s) not conquered`
+        + `${why.unconquered.length ? `: ${why.unconquered.slice(0, 5).join(', ')}` : ''}`);
     }
     await hitPoint('.menu-abdicate-go', 'the Abdicate confirmation');
     step(`abdication: ${drawer.rows} payout rows, gives up ${drawer.pays}, confirm hittable`);

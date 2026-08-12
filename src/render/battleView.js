@@ -69,7 +69,6 @@ export function createBattleView(opts) {
   const bgCache = createBgCache({ el: opts.bg, camera });
   let autoFit = true;
 
-  const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   let lastSig = NaN;
   let owners = new Uint8Array(0);
   let veil = new Uint8Array(0);
@@ -224,6 +223,13 @@ export function createBattleView(opts) {
       drawSiteBase(ctx, s, _a.x, _a.y, siteRadius(s.kind, hexSize), p, 1 / camera.zoom);
       if (s.ghost) ctx.globalAlpha = 1;
     }
+    // THE VEIL (moved here from drawFrame — see the perf report). Vision
+    // changes exactly on the events that already force a repaint here
+    // (recomputeVision bumps `influenceVersion`, folded into `signature()`),
+    // so this stays as stale-free as the per-frame version, without paying
+    // #board-fx's per-frame recomposite — filling ~90% of a late board
+    // translucent 60x/s, measured as most of a throttled frame's cost.
+    drawVeil(ctx, veil, board.cols, board.rows, hexSize, p);
   }
 
   // THE LINK GRAPH IS GONE, and deleting it was the point rather than a tidy-up.
@@ -264,9 +270,8 @@ export function createBattleView(opts) {
     // function. A capture wash drawn on top reads as a filter over the board;
     // drawn underneath it reads as the ground itself changing hands.
     opts.fxLayer?.drawGround(ctx, p, px);
-    // The veil: over the ground and the background's own ghost silhouettes,
-    // under everything this frame draws for real (render/fog.js).
-    drawVeil(ctx, veil, state.grid.cols, state.grid.rows, hexSize, p);
+    // The veil now paints onto #board-bg, in redrawBg — see the comment
+    // there for why this moved off the per-frame canvas.
     drawRallies(ctx, state, viewFaction, px, geo);
     drawSquadRoutes(ctx, visSquads, px, geo);
     drawHighlights(ctx, state, view, px, pulse);
