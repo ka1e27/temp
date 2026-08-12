@@ -64,7 +64,8 @@ All tuning numbers live in `src/content/balance.js` — a balance pass is a one-
 
 ## Play it
 
-Deployed to GitHub Pages on every push to `main`, gated on the test suite:
+Deployed to GitHub Pages on every push to `main`, gated on the unit test suite AND a
+real-Chrome smoke/mobile/offline check (see CLAUDE.md → Deployment):
 
 **https://ka1e27.github.io/temp/**
 

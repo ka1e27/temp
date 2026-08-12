@@ -1,5 +1,21 @@
+import { BOOSTERS } from './balance.js';
+
 // The upgrade shop. PURE DATA — meta/upgrades.js contains the arithmetic and
 // none of the numbers.
+//
+// BOOSTER COPY IS DERIVED FROM `BOOSTERS`, NEVER RETYPED, and that is a repair
+// rather than a flourish. The relic pass strengthened every booster and updated
+// none of these strings, so the shop spent that whole time advertising the OLD
+// numbers: Rally sold as "2 hops, 50%" while delivering 3 and 65%, Bombardment
+// as "a quarter of a garrison and 60 structure" while doing a third and 110,
+// the Tithe as 15 seconds of training while granting 22. Every one of them
+// UNDERSOLD what the player was buying, which is why nothing ever complained.
+//
+// It is the same failure this project keeps paying for — a second copy of a
+// number that quietly stops matching the first — and the fix is the same one
+// that worked elsewhere: have one source and read from it. A future tuning pass
+// can now move a booster without remembering that a sentence somewhere quotes
+// it. tests/shopcopy.test.js pins it with a negative control.
 //
 // SIX LINES THAT NEVER END, plus the handful of one-off unlocks.
 //
@@ -52,6 +68,9 @@ export const OFFLINE = Object.freeze({
 });
 
 const H2 = 2 * 60 * 60 * 1000;
+
+/** Percentages the way a player reads them: 0.65 -> "65%". */
+const pct = (f) => `${Math.round(f * 100)}%`;
 
 const U = (id, group, name, maxLevel, base, rate, effects, desc) =>
   ({ id, group, name, maxLevel, cost: { base, rate }, effects, desc, currency: 'crowns' });
@@ -163,11 +182,14 @@ export const UPGRADES = Object.freeze([
 
   // --- Booster unlocks (charges are bought separately, see BOOSTER_SHOP) ----
   U('boosterRally', 'boosters', 'Rally', 1, 300, 1, [unlock('booster', 'rally')],
-    'Every site within 2 hops sends 50%, all sharing one arrival tick.'),
+    `Every site within ${BOOSTERS.rally.radius} hops sends `
+    + `${pct(BOOSTERS.rally.fraction)}, all sharing one arrival tick.`),
   U('boosterTithe', 'boosters', 'War Tithe', 1, 700, 1, [unlock('booster', 'tithe')],
-    'Instant battle gold plus 15s of +50% training throughput.'),
+    `${BOOSTERS.tithe.gold} battle gold at once, plus ${BOOSTERS.tithe.sec}s of `
+    + `+${Math.round((BOOSTERS.tithe.trainMult - 1) * 100)}% training throughput.`),
   U('boosterBombard', 'boosters', 'Bombardment', 1, 900, 1, [unlock('booster', 'bombard')],
-    'Kills a quarter of a garrison and 60 structure HP. Never captures.',
+    `Kills ${pct(BOOSTERS.bombard.garrisonFrac)} of a garrison and `
+    + `${BOOSTERS.bombard.hp} structure HP. Never captures.`,
   ),
 
   // --- The Crown: four more endless lines, for a treasury the campaign cannot

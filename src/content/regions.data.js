@@ -242,9 +242,14 @@ export const REGIONS = Object.freeze([
   //      1 and 8 points — that is the size of this half of the step, and it is
   //      already paid for by the time a player arrives here.
   //
-  // `castleGateFrac` runs 0.74-0.80 and is NOT doing the work (it is worth
-  // about a point — see the note above tier 3). It is here so the last three
-  // regions cannot be rushed, which is the guarantee it was added for.
+  // `castleGateFrac` sits on the 0.60 PLATEAU here, and the note that used to
+  // be at this spot — "runs 0.74-0.80 and is NOT doing the work, worth about a
+  // point" — was measured true and then quietly stopped being true. The
+  // beachhead pass put a large neutral pool on every board and `castleSealed`
+  // counts non-castle sites, so all of it landed in the denominator. Re-measured
+  // by outcome: THIRTY-SEVEN of thirty-seven timeouts sat below the gate and
+  // every win landed on it. The gate had become the win condition, with the
+  // throne falling as a formality. See GATE_CLAMP in ./regions.rules.js.
   //
   // The band is WIN_BAND[4] = [22, 42]: these are meant to cost a good player
   // several attempts. Measured at n=240, in campaign order: see CLAUDE.md.
@@ -299,9 +304,11 @@ export const REGIONS = Object.freeze([
   //      is stack-local: it makes ONE line of the countryside genuinely
   //      expensive rather than making the whole map slightly harder.
   //
-  // `castleGateFrac` runs 0.82-0.85 and is still not doing the work (about a
-  // point, as everywhere else). 0.85 is the GATE_CLAMP ceiling and the last
-  // region sits on it: the final throne cannot be rushed at all.
+  // `castleGateFrac` sits on the 0.60 plateau, as it does from tier 4 on. It
+  // used to read 0.82-0.85 here with the last region on the old 0.85 ceiling,
+  // and widowsgate could not be won AT ALL in twelve attempts as a result — the
+  // countryside, not the throne, was the whole battle. 0.60 still forbids a
+  // rush, which is the only thing this column was ever meant to buy.
   //
   // The band is WIN_BAND[5] = [18, 36]. These are the last three regions in the
   // game and they are meant to cost a good player several attempts each, with

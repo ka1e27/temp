@@ -17,6 +17,31 @@ multiplier and starts the campaign again.
 straight to the browser. Adding a dependency breaks the core promise of the project —
 don't, without asking.
 
+## Where to start, by what you're touching
+
+This file is read end to end at least once, but it is 1700+ lines and gets opened
+under time pressure after that. If you already know the shape of your change:
+
+- **A balance number** → `Tuning`, then whichever pass section covers your region
+  (harness-bot upgrades, starting-footprint, uphill-raid, Tier 5, Tier 6, the castle
+  gate). **A retune is in progress right now** — see "Still open" →
+  "THE CAMPAIGN RE-TUNE" — so treat every win-rate percentage below that marker as
+  provisional until it lands, and re-derive from `npm run sim` rather than trust one
+  already written down.
+- **The simulation** (`src/battle/`) → Architecture → The four invariants → Simulation
+  model, then the mechanic-specific section (Free movement, The yard and the wall,
+  Building on the ground you took, Two-stage capture, Region shapes, Fog of war).
+- **The renderer** (`src/render/`) → Rendering, the fog "Drawing it" subsection, and
+  the Gotchas entries on `h(tag, props, ...children)` and the doubled unit-colour table.
+- **The meta layer** (shop, idle, save, prestige, relics) → Abdication, Relics, The
+  Crown tier, and the Gotchas entries on `state.rules` and the two `localStorage` keys.
+- **Tooling or CI** → Commands, then Deployment.
+- **This file itself** → read "Gotchas" first, then verify a claim against the code or
+  a fresh measurement before repeating it — a claim here has gone stale silently more
+  than once (`castleGateFrac` outliving the pass that made it the actual win condition,
+  an inert enemy Marshal documented as real). A wrong correction is worse than leaving
+  a claim unverified.
+
 ## Commands
 
 ```bash
@@ -91,18 +116,24 @@ The endgame layer is `content/incursion.data.js` + `meta/incursion.js` (the ladd
 Everything else is negotiable. These are not.
 
 **1. Directory-level purity.** `core`, `battle`, `meta`, `content` may never touch
-`document`, `window`, `localStorage`, `Math.random`, `Date.now`, `performance`, `fetch`,
-`requestAnimationFrame`, or `getComputedStyle`. Inject the dependency instead of reaching
-for a global. `tools/checkpure.js` enforces this mechanically. This is what lets the whole
-simulation run headless with zero mocking.
+`document`, `window`, `localStorage`, `sessionStorage`, `Math.random`, `Date.now`,
+`performance`, `fetch`, `requestAnimationFrame`, or `getComputedStyle`. Inject the
+dependency instead of reaching for a global. `tools/checkpure.js` enforces this
+mechanically. This is what lets the whole simulation run headless with zero mocking.
 
 **2. `battle/` and `meta/` never import each other** — except through
 `src/battle/contract.js`, and `src/screens/battle.js` is the only broker.
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **8**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **9**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly.
+
+**v9 is fog of war's foundation** — `SITE_KINDS` gained `watchtower` and state gained
+the `vision`/`seen` pair nothing before this had a use for. Same lesson as v8 a second
+time: no CONFIG field changed, but a resumed v8 blob is missing both, and `canSee`
+reads the missing map through optional chaining as `false` for every hex — not "no
+fog", but a blackout neither side was playing with. Full story at "Fog of war" below.
 
 **v8 changed NO FIELD AT ALL, and that is the point of it.** The site kinds split
 (`trainingGround` is new; `stronghold` stopped training and became a wall), so a blob
@@ -601,10 +632,19 @@ starting site is an economy that compounds over ten minutes; a body in the landi
 a one-time deposit — they do not trade one for one until the stack is big enough to take
 ground with.
 
-That forced a **third expedition segment** (`surgeAfter: 8`, `perRegionSurge: 23`): the
-campaign needs +3 slots a region at tier 2 and +23 at tier 5, and one rate for both either
-starves the endgame or hands tier 2 a walkover (measured — the uniform rate that cleared
-thanescar put emberholt at 85%, one point past its ceiling).
+That forced a **third expedition segment** (`surgeAfter: 8`, `perRegionSurge: 23` at
+first): the campaign needs +3 slots a region at tier 2 and +23 at tier 5, and one rate
+for both either starves the endgame or hands tier 2 a walkover (measured — the uniform
+rate that cleared thanescar put emberholt at 85%, one point past its ceiling).
+
+**That single rate did not survive its own knock-on effect (next bullet) and was split
+again, one commit later.** `EXPEDITION` now reads `surgeAfter: 8, surgeBonus: 232,
+perRegionSurge: 14` — a one-time step at the tier-3 boundary (the LEVEL a beachhead
+needs to contest the neutral pool at all) plus a gentler ongoing rate (the SLOPE),
+because one number tried to set both, which is exactly what steepened tier 3 below.
+The tier-3 slope figure in the next bullet describes the pre-split, single-rate shape
+and is due a re-measure against the current constants — same as everything downstream
+of `regions.data.js` while the campaign retune (see "Still open") is in flight.
 
 **Two knock-on effects worth knowing:**
 
@@ -747,11 +787,12 @@ the marshal is paid for, not absorbed.**
 **What makes tier 5 hard is not a new unit.** The roster runs out at tier 4, so
 `ENEMY_UNITS_BY_TIER` repeats itself — a tier whose identity is a new unit is a tier that
 cannot be tuned, because a unit is a cliff and the dial is a slope. Three things carry it:
-`AI_TIERS[4]` (the first commander that thinks more than once a second, commits under a
-1.10 margin, and runs **four** simultaneous attacks — `concurrent` is the knob the player
-feels, because the answer to two threats is one relief force and the answer to four is that
-there is no reserve); the ground (19×15, `develop` 2.6→3.1); and the marshal on a level-4
-castle.
+`AI_TIERS[4]` (the fastest-thinking commander yet — `reactionTicks` 15, 1.5s between
+thinks against tier 4's 1.9s, still short of once a second — commits under a 1.10
+margin, and runs **four** simultaneous attacks — `concurrent` is the knob the player
+feels, because the answer to two threats is one relief force and the answer to four is
+that there is no reserve); the ground (19×15, `develop` 2.6→3.1); and the marshal on a
+level-4 castle.
 
 **Three measured facts from the tune, all of which cost time to learn:**
 
@@ -1032,6 +1073,20 @@ always knows where to go and only ever has to guess at what is inside. If a play
 the opening feels blind, the knob is `VISION_RADIUS` for `camp`/`castle` — but raising it
 takes differentiation away from the watchtower, which is the one building that exists to
 answer this question.
+
+**The harness plays it** — same lesson as construction and upgrades, repeated a third
+time: a mechanic the harness cannot answer is a mechanic nobody has measured. A blinded
+bot with no way to convert gold into information is not a measurement of fog, it is a
+measurement of a bot that cannot play the release. `tools/simbuild.js scoutTurn` builds
+a watchtower when the player cannot see the enemy castle and gold allows, on a retry
+cooldown; `--noscout` reverts it, joining `--noupgrades`/`--noconstruct` so the delta
+stays re-takeable — `tests/scout.test.js` pins both directions off one shared
+tower-counting helper, plus a longer-running check that the same answer reaches a
+late-tier throne and not only an early one. `--sighted`, `--sighted=ai`, `--sighted=bot`
+is a separate, purely diagnostic escape hatch in `tools/simrunner.js` (unfog one side,
+both, or neither) for comparing the four-way table by hand; **omitted, both sides are
+blind, which is the shipped behaviour and what every balance number in this file is
+measured against.**
 
 ## The endless ladder: incursions
 
@@ -1575,7 +1630,8 @@ an instruction now stays until the player does the thing.
 named, focus is moved into every dialog, `prefers-reduced-motion` collapses at the token,
 targets pass 2.5.8 everywhere. The board is a canvas with no name, no role, no keyboard
 path and one visual channel — and player-green vs enemy-red measures **ΔE 1.8 at 1.03:1
-under protanopia**, i.e. one continuous field of ground. Fixed here: locked regions at
+under protanopia**, i.e. one continuous field of ground (the site-stroke half of this was
+answered later — see "Still open"). Fixed here: locked regions at
 1.62:1, filter chips at 1.65:1, empty boosters at 1.88:1 (the *default* look of a fresh
 save), a world-map focus ring that `clip-path` painted and discarded (0 of 67,344 pixels
 changed on a real Tab), a treasury live region announcing 3× a second, and Space not
@@ -1588,6 +1644,13 @@ activating focused buttons.
   construction, the map redesign, fog, the AI belief model, and the castle-gate fix.
   Tuning between two structural changes is work thrown away, which is why the table
   was left alone through all of them; there is nothing left to wait for.
+
+  **It is in progress as this is written** — HEAD is a commit titled "WIP: measured
+  `enemyMult` column applied (19 of 24 bisected, tier 5-6 tail seeded)", touching
+  `regions.data.js`, `ai.data.js` and `incursion.data.js`. Every win-rate percentage
+  below this bullet, and in `Tuning`, the harness-bot section, the starting-footprint
+  pass, the uphill-raid pass, Tier 5 and Tier 6, predates that pass. Re-take with
+  `npm run sim` before trusting one of them.
 
   The starting position, `--all --n=96`, taken after the gate fix for tiers 4-6 and
   before it for tiers 1-3 (whose gates barely moved):
@@ -1640,11 +1703,15 @@ activating focused buttons.
   balance pass with a re-measure, not a bolt-on. The cause underneath is that militia is
   best-in-class on both currencies at once — 4.00 atk/slot AND 3.00 def/slot AND 1.50
   gold per point of attack — and counters the one unit the enemy always fields.
-- **Ownership needs a second channel.** The proposal that fits this renderer: a
-  per-faction hatch under the flood (`terrain.js makeHatch` already builds one and
-  `battleView` already keeps it screen-stable), plus a per-owner `setLineDash` on the
-  site stroke — player solid, enemy dashed, neutral dotted. Both batch by owner, both
-  survive greyscale.
+- **Ownership's second channel is half-built.** `render/ownerDash.js` shipped the
+  site-stroke half of the fix for the ΔE 1.8 measurement above: `ctx.setLineDash`
+  sized off line width, solid for yours, dashed for theirs, fine dotted for nobody's
+  (and for a fogged ghost, which must read as "nobody's, as far as you know" rather
+  than fall through to solid). Still open: the other half of the same proposal. The
+  territory FLOOD is most of what the board actually is, and it is still hue-only for
+  player vs enemy — `terrain.js makeHatch` is already wired into `drawFlood`, but only
+  for the CONTESTED band. A per-faction hatch under the flood itself, batched by owner
+  the same way the fill already is, is the highest-value visual-accessibility gap left.
 - **`breachSeconds` stopped binding around region 8.** 33 militia out-pace a level-5
   castle's repair, and landing budgets reach 703 slots, so the mechanism the whole design
   rests on no longer gates anything late. This is why rams measure as a straight loss.
@@ -1656,13 +1723,7 @@ activating focused buttons.
   holding) is +7 on gallowmoor, `--relics=78` is +25. Both are now re-takeable rather than
   remembered, which is the only part that was ever actionable.
 - Dead seam fields with no reader: `ramImpactHp`, `rules.isRaid`, `rules.targetLengthMs`.
-- **Ownership still has one visual channel, and it is the oldest unbuilt item here.**
-  Player-green against enemy-red measures **ΔE 1.8 at 1.03:1 under protanopia** — one
-  continuous field of ground, on the surface the entire game is read from. The fix is
-  already spec'd two bullets up (a per-faction hatch under the flood, plus a per-owner
-  `setLineDash` on the site stroke, both of which batch by owner and survive greyscale).
-  It is the highest-value thing left that is not balance.
-- **`meta.stats` tracks twelve lifetime counters and no screen shows one of them.** They
+- **`meta.stats` tracks thirteen lifetime counters and no screen shows one of them.** They
   are written on every battle and carried through abdication; a player has no way to see
   any of it. `screens/mainmenu-legacy.js` and `mainmenu-settings.js` are the pattern a
   stats drawer would follow.
@@ -1670,7 +1731,7 @@ activating focused buttons.
   worker are all there, so the browser's own install prompt is the only route in;
   `beforeinstallprompt` is not captured, so there is no button anywhere that says the
   game can be installed.
-- `tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 515 lines against a
+- `tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 625 lines against a
   400-line cap and `npm run check` reports ok.
 - ~~Neither `tools/smoke.mjs` nor `tools/mobile.mjs` is in CI~~ — **CLOSED.** Both run in
   a `browser` job that serves the game and drives real Chrome through `tools/cdp.js`, and
