@@ -40,8 +40,54 @@ jobs:
       - name: File size and purity gates
         run: npm run check
 
+  # THE TWO TESTS THAT EXIST BECAUSE A RELEASE ONCE SHIPPED COMPLETELY
+  # UNCLICKABLE, and which until now ran only when somebody remembered.
+  #
+  # `#screen-root` is `pointer-events: none` and every scene has to opt back
+  # in; a whole release went out with nobody able to click anything, and the
+  # unit suite was green throughout, because a synthetic `el.click()` bypasses
+  # hit testing entirely. smoke.mjs dispatches REAL pointer events and asserts
+  # `document.elementFromPoint` lands on the target first, which is the only
+  # kind of check that can catch it. mobile.mjs is the other half: it measures
+  # how much of the screen the board actually gets at phone size, after an
+  # audit that reported a clean bill of health on a layout that was unplayable.
+  #
+  # Neither can run in the `verify` job: they need the game SERVED (ES modules
+  # cannot load from file://) and a real browser. So they get their own job,
+  # and the deploy waits on both.
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # tools/cdp.js drives Chrome over the DevTools Protocol directly rather
+      # than through Playwright — no dependency, so nothing to install. It
+      # takes the binary from CHROME_PATH, and ubuntu-latest ships Chrome.
+      - name: Locate Chrome
+        run: echo "CHROME_PATH=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+      - name: Serve the game
+        run: |
+          npm start &
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:8080/ && exit 0
+            sleep 1
+          done
+          echo "dev server never came up"; exit 1
+      - name: Clickable end to end (real hit-tested pointer events)
+        run: node tools/smoke.mjs
+      - name: Playable at phone size (board share)
+        run: node tools/mobile.mjs
+      # LAST on purpose: this one installs a service worker to prove the game
+      # works offline, and cleans up after itself. Running it ahead of the other
+      # two would risk them asserting against a cache it left behind, which is
+      # the hidden state index.html's https-only registration exists to avoid.
+      - name: Playable offline (service worker installs and caches)
+        run: node tools/offline.mjs
+
   deploy:
-    needs: verify
+    needs: [verify, browser]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

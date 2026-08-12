@@ -67,5 +67,29 @@ if (location.protocol === 'file:') {
     <div id="screen-root"></div>
   </div>
   <script type="module" src="./src/main.js"></script>
+  <script>
+    // OFFLINE PLAY — see sw.js for why an idle game needs it and why the
+    // worker caches at runtime rather than from a precache list.
+    //
+    // HTTPS ONLY, which also means "not the dev server", and that is the point
+    // rather than a side effect. `npm start` serves plain http on localhost, so
+    // a worker never installs during development or under tools/smoke.mjs and
+    // tools/mobile.mjs — neither of which should be asserting against a cache
+    // some earlier run happened to leave behind. Service workers are permitted
+    // on localhost precisely so they CAN be tested there; opting out is a
+    // deliberate trade of that for a dev loop and a CI run with no hidden state
+    // in them.
+    //
+    // Registered after main.js and behind `load`, so it can never delay first
+    // paint or contend with the module graph the game actually needs.
+    if (location.protocol === 'https:' && 'serviceWorker' in navigator) {
+      addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {
+          // A refused registration is not worth a console error: the game works
+          // perfectly without one, it simply will not open on a train.
+        });
+      });
+    }
+  </script>
 </body>
 </html>

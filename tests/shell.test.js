@@ -142,3 +142,61 @@ test('shell: the page says what the game is, for a scraper and for a human', () 
   assert.ok(title.length > 14 && title.startsWith('Hex Dominion'),
     `"${title}" is a filename, not a title`);
 });
+
+// ---------------------------------------------------------------------------
+// Offline play
+// ---------------------------------------------------------------------------
+
+test('shell: the service worker exists, is referenced, and is scoped to the app', () => {
+  // The manifest and the icons shipped first, so the game was INSTALLABLE and
+  // then dead the moment the connection went — which is the worst of both, and
+  // is precisely the shape of gap this file exists to catch: a shell asset that
+  // is present, looks right, and does nothing because nothing points at it.
+  //
+  // It matters more here than in most games. The whole premise of the idle half
+  // is that you come back later; meta/idle.js pays out an absence up to
+  // `OFFLINE.baseCapMs`, and a player with no connection could not open the
+  // game to collect any of it.
+  assert.ok(existsSync(`${root}sw.js`), 'sw.js does not exist');
+  const sw = read('sw.js');
+
+  assert.match(html, /navigator\.serviceWorker\.register\(\s*'\.\/sw\.js'\s*\)/,
+    'index.html never registers the worker, so the file is decoration');
+  // RELATIVE, because the game is served from a subpath (/temp/ on Pages). An
+  // absolute '/sw.js' would 404 there and take the whole feature with it, and
+  // it would work perfectly on localhost — the failure only ever shows up in
+  // production, which is the worst place to find it.
+  assert.ok(!/register\(\s*['"]\/sw\.js/.test(html),
+    'an absolute /sw.js path 404s under a subpath deploy');
+
+  // Registered only over https, which is also what keeps it out of the dev
+  // server and out of tools/smoke.mjs — those must not assert against a cache
+  // an earlier run left behind.
+  assert.match(html, /location\.protocol === 'https:'/,
+    'the worker would install on the dev server and hide state from the browser tests');
+
+  // The two rules that make a runtime cache safe rather than a permanent trap.
+  assert.match(sw, /res\.ok/,
+    'caching a non-ok response would pin a 404 under a real module URL, forever');
+  assert.match(sw, /caches\.delete/,
+    'without an activate-time purge, an old cache version is never reclaimed');
+});
+
+test('shell: the worker never caches a save, and never a cross-origin response', () => {
+  // COMMENTS STRIPPED FIRST, because the claim is about what the worker DOES.
+  // The first cut of this matched the raw file and duly failed on sw.js's own
+  // comment explaining that it leaves the save alone — a test that reads prose
+  // as behaviour, which is the exact failure mode this repo keeps writing down.
+  const sw = read('sw.js')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+  // localStorage is where the campaign lives and the Cache API cannot reach
+  // it — but a future edit that started proxying requests through some storage
+  // shim could. Assert the worker stays a plain GET/same-origin cache, which is
+  // the property that makes "clear your cache" a safe thing to tell a player.
+  assert.ok(!/localStorage|hexdominion\./.test(sw),
+    'the worker must not touch the save; a cache purge cannot be allowed to cost a campaign');
+  assert.match(sw, /req\.method !== 'GET'/, 'non-GET requests must pass straight through');
+  assert.match(sw, /origin !== self\.location\.origin/,
+    'a cross-origin response caches opaquely — status unreadable, bucket filled');
+});
