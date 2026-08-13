@@ -15,12 +15,21 @@
 //   - the gap CLOSES  -> somebody fixed it. Good. Re-take the numbers, retire
 //                        this file's framing, and delete the bullet in CLAUDE.md.
 //
-// WHY IT IS MILITIA AND NOT "MONO ARMIES ARE GOOD": at slot cost 1 it is the
-// highest combined stat per slot in the game (atk 4 + def 3 = 7.00/slot, against
-// spearmen 6.50, raiders 5.67, rams 1.60). Concentration itself buys nothing:
-// mono-spearmen measures BELOW the default spread. The third test is that
-// control, and without it this file would pass just as happily against a game
-// where every one-note army won.
+// IT USED TO BE SPECIFICALLY MILITIA, AND IT IS NOT ANY MORE. At slot cost 1
+// militia is the highest combined stat per slot in the game (atk 4 + def 3 =
+// 7.00/slot, against spearmen 6.50, raiders 5.67, rams 1.60), and the original
+// third test in this file was the control proving concentration alone bought
+// nothing: mono-spearmen measured BELOW the default spread.
+//
+// That control FIRED, which is the whole reason it existed. Once marches were
+// slowed (MOVEMENT.hexSecondsPerSpeed 38 -> 76) mono-spearmen measured 67%
+// against the default's 58% on the same region -- every one-note army now wins.
+// The mechanism is `slowestSpeed`, a MIN over the stack: the default spread
+// marches at the pace of its 23 rams, and doubling the march doubled that
+// penalty in absolute seconds. The dominant answer is no longer "bring militia",
+// it is "leave the rams at home" -- a wider hole, and one that compounds with
+// rams already measuring as a straight loss because `breachSeconds` stopped
+// binding. The third test now pins that as arithmetic rather than as a win rate.
 //
 // ** DO NOT "FIX" THIS BY NERFING MILITIA. IT IS MEASURED, AND IT BACKFIRES. **
 // Three probes on gallowmoor at n=24, matched seeds (default -> mono, gap):
@@ -53,6 +62,8 @@ import assert from 'node:assert/strict';
 
 import { playOne, startRun } from '../tools/simplayer.js';
 import { REGIONS } from '../src/content/regions.data.js';
+import { MOVEMENT, UNITS } from '../src/content/balance.js';
+import { slowestSpeed } from '../src/battle/movement.js';
 import { TICK_HZ } from '../src/core/loop.js';
 
 // Gallowmoor: tier 3, mid-campaign, and the region every historical measurement
@@ -149,23 +160,50 @@ test('loadout: bringing only militia converts a real fight into a walkover', { t
     + 'advertised length -- if this stopped being true the exploit changed shape');
 });
 
-test('loadout: concentration is not the exploit -- militia is', { timeout: 240_000 }, () => {
-  // THE CONTROL THAT MAKES THE FILE MEAN SOMETHING. If a one-note army simply
-  // beat a mixed one -- fewer counters to spread thin, one training queue --
-  // then the finding above would be a statement about `distributeExpedition`
-  // and the fix would be in composition code. It is not: spearmen are the
-  // enemy's own staple, they land in the same numbers, and they measure AT OR
-  // BELOW the default spread.
+test('the mixed spread marches at RAM speed, and that is now the exploit', () => {
+  // THIS TEST USED TO ASSERT THE OPPOSITE and the change is the finding.
   //
-  // But the lever is NOT militia's stat line -- see the three probes at the head
-  // of this file, where every nerf widened the gap. What separates the two arms
-  // is tempo, and the only mechanisms that can bite one and not the other are
-  // ones sensitive to CONCENTRATION rather than to the unit.
-  const spread = measure(null);
-  const spears = measure(MONO_SPEARMEN);
-  assert.ok(spears.pct <= spread.pct + 5,
-    `mono-spearmen measured ${spears.pct}% against the default's ${spread.pct}% `
-    + '-- if EVERY one-note army now wins, the problem stopped being militia\'s '
-    + 'stat line and became something about composition itself, and the fix in '
-    + 'CLAUDE.md is aimed at the wrong file');
+  // It was "concentration is not the exploit -- militia is", and its control was
+  // that mono-spearmen measured BELOW the default spread. That was true and is
+  // no longer: on the same region, mono-spearmen now measures ABOVE it. The
+  // assertion fired exactly as it was written to, saying that if every one-note
+  // army wins then the problem stopped being militia's stat line.
+  //
+  // It has. `slowestSpeed` is a MIN over the stack, so the default spread
+  // marches at the pace of its rams -- and `MOVEMENT.hexSecondsPerSpeed` was
+  // doubled to make marches read as marches, which doubled that penalty in
+  // absolute seconds. Measured, seconds per hex:
+  //
+  //     default spread   2.53   (dragged to rams, speed 30)
+  //     mono spearmen    1.69   1.5x faster
+  //     mono militia     1.38   1.8x faster
+  //     mono raiders     0.72   3.5x faster
+  //
+  // So the dominant answer is no longer "bring militia". It is "leave the rams
+  // at home", which is a much wider hole, and it compounds the finding already
+  // recorded above: rams measure as a straight loss because `breachSeconds`
+  // stopped binding, and now they cost the whole army its legs as well.
+  //
+  // Pinned as ARITHMETIC rather than as a win rate, because that is the part
+  // that cannot be noise: the speed table is exact, and a win-rate sweep on an
+  // un-tuned campaign would only tell us the campaign is un-tuned.
+  const spread = { militia: 111, spearmen: 67, raiders: 39, rams: 23 };
+  const spreadPace = MOVEMENT.hexSecondsPerSpeed / slowestSpeed(spread);
+  for (const unit of ['militia', 'spearmen', 'raiders']) {
+    const pace = MOVEMENT.hexSecondsPerSpeed / slowestSpeed({ [unit]: 100 });
+    assert.ok(pace < spreadPace,
+      `mono-${unit} marches at ${pace.toFixed(2)}s/hex against the spread's `
+      + `${spreadPace.toFixed(2)} -- if this stopped being true the exploit changed shape`);
+  }
+  assert.equal(slowestSpeed(spread), UNITS.rams.speed,
+    'the whole point: one ram sets the pace for the entire army');
+
+  // NEGATIVE CONTROL. Drop the rams and the same spread keeps up with a mono
+  // army -- so the gap above is the ram, not "mixing units is slow".
+  const noRams = { militia: 111, spearmen: 67, raiders: 39 };
+  assert.equal(slowestSpeed(noRams), UNITS.spearmen.speed,
+    'without rams the spread marches at its next-slowest unit, not at some blend');
+  assert.ok(MOVEMENT.hexSecondsPerSpeed / slowestSpeed(noRams)
+    <= MOVEMENT.hexSecondsPerSpeed / slowestSpeed({ spearmen: 100 }) + 1e-9,
+    'a ram-free mixed army is exactly as quick as the mono army of its slowest type');
 });
