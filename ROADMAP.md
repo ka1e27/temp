@@ -20,11 +20,17 @@ any region, loadout, tier of idling, legacy or relic budget. Six previously-iner
 features and four sold-but-dead upgrades were found *by measurement* rather than by a
 bug report. That is unusual and it is what makes everything below tractable.
 
-**The campaign is tuned, and it is confirmed.** All 24 regions report `ok` at n=96
-against their tier's band and their advertised length; band edges confirmed at n=240
-where they were close. Advertised lengths were re-authored from measured win medians.
-The table lives in `CLAUDE.md` under "Still open" — re-take it with `npm run sim`
-rather than trusting a number written down, including one here.
+**The campaign WAS tuned and is now deliberately untuned again.** All 24 regions were
+confirmed `ok` at n=96 with band edges checked at n=240 — and then the battle redesign
+changed the ground under every number (marches twice as long, hostile territory twice as
+expensive, a corner start, buildings that shoot, territory-gated construction). Every
+advertised length is wrong today and the bands are out campaign-wide.
+
+That is on purpose: tuning between two structural changes is work thrown away, and the
+re-tune is the last step of the redesign rather than a pass of its own. **It is the
+single next thing to do**, and three findings feed it — the difficulty curve inverted
+early-versus-late, rams now cost the whole army its march speed, and the lengths need
+re-authoring again. Numbers and reasoning at the head of `Tuning` in `CLAUDE.md`.
 
 **What is missing is not content. It is a REASON TO KEEP DECIDING.** The moment-to-moment
 tactics of a battle stay rich for a long time — fog, sieges, rally timing, relief forces,

@@ -132,8 +132,15 @@ mechanically. This is what lets the whole simulation run headless with zero mock
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **9**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **10**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly.
+
+**v10 is the squad rewrite, and it is v8's lesson a THIRD time.** A squad carries
+the `path` it walks, its `to` is nullable (a march onto bare ground), and it may be
+`camped` on a hex it is holding. No CONFIG field moved — again — because the blob that
+breaks is state: a v9 squad has no path, so `squadHexOf` finds it nowhere. It draws
+nothing, fogs nothing, and the towers that shoot at positions cannot see it, while
+still arriving on schedule. A board this engine steps wrongly while looking healthy.
 
 **v9 is fog of war's foundation** — `SITE_KINDS` gained `watchtower` and state gained
 the `vision`/`seen` pair nothing before this had a use for. Same lesson as v8 a second
@@ -180,8 +187,67 @@ from `core/rng.js`; combat resolution uses none at all.
   after the tick by `screens/battle.js`. `step()` clears the array at the top.
 - **Presentation never mutates sim state.** Input appends command objects to
   `state.commands[]`; the sim drains them.
-- **Squads store no position.** `arriveTick` is computed once at spawn; renderers derive
-  position from `tick` and interpolation alpha.
+- **Squads store no position, but they do store a ROUTE.** `arriveTick` is computed once
+  at spawn and nothing is written per tick; `movement.js squadHexOf` reads a place off
+  the squad's own `path` as a pure function of `state.tick`. The invariant was never "a
+  squad has no hex field", it is "nothing recomputes position per tick" — see the battle
+  redesign section below.
+
+### The battle redesign: a squad walks a real path
+
+Five requested changes landed together, and the first one is the keystone the other four
+were blocked on.
+
+**A SQUAD CARRIES THE PATH IT WALKS.** It used to store `from`/`to` site ids and
+`squadHex` lerped a straight line between them — so a column routing around a mountain
+range was drawn, fogged and hit-tested marching straight over it. Every consumer of a
+squad's position was reading a place the army was not. Storing the path the A* already
+produced costs one array per squad and makes the position true. Determinism, replay and
+the O(arrivals) tick are all exactly as they were.
+
+**A DESTINATION MAY BE BARE GROUND.** `to` is nullable; a squad that arrives with no site
+to resolve against **camps** and stays in `state.squads`, so every existing consumer sees
+it without learning a new container. `MOVE_SQUAD` re-tasks it — its own verb rather than
+a branch of `SEND`, because the two validate nothing alike and folding them together
+means every garrison check growing an "unless it is camped" arm. It also closed a hole:
+`resolveArrival` answers a missing destination with a bare `return`, by which point the
+squads are off `state.squads`, so an army whose target was razed mid-flight **ceased to
+exist** with no event. Camping covers every way a site can vanish under an order.
+
+**A DRAG CHAINS THROUGH TILES** (`screens/battle-waypoints.js`). `pathThrough` stitches a
+leg of A* per stop, and consecutive stops are adjacent hexes, so the route walked is the
+line drawn — and `ticksAlong` prices it, so a detour costs what it costs. Three calls
+worth keeping: waypoints only ride an order when the drag was meaningfully longer than
+the straight line (a straight pull is *pointing*, and pinning the army to its incidental
+hexes would refuse the order if one were occupied); the trail is deduped as collected
+(pointermove fires far faster than a finger crosses a hex); and over the cap it is
+subsampled, never truncated, because truncating marches the army to the middle of the
+gesture and stops. **A drag that WIGGLES is not a detour** — in hex space a diagonal step
+still closes the distance, so an S-curve is exactly as long as the straight line.
+
+**BUILDINGS SHOOT** (`battle/towers.js`, `content/balance.towers.js`). Stronghold range 1,
+watchtower range 2 — the two kinds that earn nothing, because arming a farm would make the
+economic buildings the military ones and undo the yard/wall split. Two rules carry it:
+
+- **A building never fires on the column whose destination it is.** The field battle and
+  the siege already resolve an assault; letting the target also whittle the approach
+  charges twice, and not by a little — measured, a short hop spending its whole flight
+  inside a stronghold's reach lost **43%** of the force before the fight started, which
+  would make the siege decorative.
+- **The sub-body remainder CARRIES on the squad.** Damage is a fraction of a body per
+  tick, so a `Math.floor` anywhere makes the whole feature inert while every event and
+  draw call still looks live — one line from this project's most-repeated failure.
+
+**AND THE TOWERS BROKE THE PREVIEW, silently.** The pre-commit preview is a guarantee
+because it calls the same functions the sim runs. A column that walks past a wall arrives
+smaller, and the DEFENDER's power is a function of the attacker's composition (`counters`
+scale by the share of the foe that is the countered type). Measured: 30 militia and 6
+raiders lost ONE body on the approach, which moved the raider share from 16.7% to 17.1%,
+which moved the defending spearwall's counter, which moved `defPower` by 1% — and the
+preview promised the other number. `projectMarchLosses` projects the attacker forward
+exactly as `projectGarrison` already projects the defender's training; both are
+deterministic, both known at commit time. `tests/towers.test.js` runs the projection and
+the simulation over the same march and demands the same survivors, body for body.
 
 ### Free movement, and the four bounds the site graph was supplying by accident
 
@@ -511,6 +577,45 @@ a matched pair at twice a farm's radius because "take the castle, don't lose the
 the whole win condition and both ends should be findable without searching.
 
 ### Tuning
+
+**⚠ THE CAMPAIGN IS UNTUNED RIGHT NOW, AND EVERY WIN RATE AND LENGTH BELOW IS STALE.**
+The battle redesign above changed the ground under all of it: marches take twice as long
+(`MOVEMENT.hexSecondsPerSpeed` 38 → 76), hostile territory costs twice as much
+(`TERRITORY_SPEED.hostile` 0.75 → 0.50), the player's camp starts in a real corner box,
+buildings shoot, and construction is gated on territory rather than a radius. Measured at
+n=48, before → after:
+
+```
+region        win%          win-median
+riverfen      94% -> 83%    9.8m -> 11.6m
+kaldan        79% -> 52%    9.3m -> 10.8m
+gallowmoor    56% -> 38%    5.0m ->  9.0m
+thanescar     46% -> 58%    5.1m ->  6.3m
+widowsgate    25% -> 42%    6.5m ->  9.9m
+```
+
+**THE CURVE INVERTED, and that is the finding rather than any single number.** Early
+regions got harder and late ones easier. The reading that fits: a slower board hurts
+whoever is trying to EXPAND and helps whoever is trying to SURVIVE, and which of those
+the player is flips partway up the campaign. If it holds, the re-tune is not a uniform
+dial nudge — tiers 1–2 and 5–6 have to move in opposite directions.
+
+**AND THE DOMINANT LOADOUT CHANGED SHAPE ON THE SAME CHANGE.** `slowestSpeed` is a MIN
+over the stack, so the default spread marches at the pace of its rams, and doubling the
+march doubled that penalty in absolute seconds:
+
+```
+default spread   2.53 s/hex   (dragged to rams, speed 30)
+mono spearmen    1.69         1.5x faster
+mono militia     1.38         1.8x faster
+mono raiders     0.72         3.5x faster
+```
+
+The answer is no longer "bring militia", it is **"leave the rams at home"** — a wider
+hole, and it compounds the already-recorded finding that rams are a straight loss because
+`breachSeconds` stopped binding. `tests/loadoutdominance.test.js` pins it as arithmetic
+rather than as a win rate, because the speed table is exact where a sweep on an untuned
+campaign only reports that the campaign is untuned.
 
 All of it lives in `src/content/balance.js`. A balance pass should be a one-file diff.
 `npm run sim` reports win rate and median duration per region against the target band; a
@@ -1703,7 +1808,30 @@ activating focused buttons.
 
 ### Still open, and why
 
-- ~~**THE CAMPAIGN RE-TUNE.**~~ **CLOSED, and confirmed end to end.** It was the
+- **THE CAMPAIGN RE-TUNE IS OPEN AGAIN, and this time it is the last step of a
+  redesign rather than a pass of its own.** It was closed and confirmed — all 24
+  regions `ok` at n=96, band edges checked at n=240 — and then the battle redesign
+  (see Architecture, and the warning at the head of `Tuning`) changed the ground
+  under every number: marches take twice as long, hostile territory costs twice as
+  much, the camp starts in a corner, buildings shoot, and building is gated on
+  territory. Every advertised length is now wrong (gallowmoor promises 5 minutes and
+  delivers 9) and the bands are out campaign-wide.
+
+  **It has deliberately NOT been re-tuned yet**, and that is this project's own most
+  expensive lesson applied on purpose: tuning between two structural changes is work
+  thrown away, and the vision rework is still in flight. One honest pass at the end,
+  against the finished battle layer.
+
+  **Three findings feed it, and none is a dial nudge:** the curve inverted early
+  versus late, rams now cost the whole army its legs as well as being a straight
+  loss, and the lengths need re-authoring again from measured win medians. The
+  numbers and the reasoning are at the head of `Tuning`.
+
+  What follows is the record of the pass that closed it the FIRST time, kept because
+  the shape of it is the useful part.
+
+- ~~**THE CAMPAIGN RE-TUNE (first pass).**~~ **Closed and confirmed end to end at the
+  time.** It was the
   biggest open item in the project for a long time, waiting on free movement, the
   yard/wall split, construction, the map redesign, fog, the AI belief model and the
   castle-gate fix — because tuning between two structural changes is work thrown
