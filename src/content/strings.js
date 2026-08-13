@@ -157,6 +157,40 @@ export const ENDGAME = Object.freeze({
   legacyWorth: 'Every point is permanent, applies to every run, and is never spent.',
 });
 
+/** The lifetime record drawer (screens/mainmenu-record.js). Labels only — every
+ *  number behind them comes from meta/record.js, which is where the arithmetic
+ *  is documented and tested. */
+export const RECORD = Object.freeze({
+  title: 'Record',
+  hint: 'Every battle you have fought, on this empire and every one before it.',
+  empty: 'Nothing to show yet — fight a battle and this fills in.',
+  survives: 'Records are kept through abdication. They are the one thing a new'
+    + ' campaign never takes back.',
+  warTitle: 'War',
+  winRate: 'Win rate',
+  battles: 'Battles fought',
+  wins: 'Won',
+  losses: 'Lost',
+  withdrawals: 'Withdrawn from',
+  raids: 'Regions re-raided',
+  incursions: 'Incursion rungs cleared',
+  troopsTitle: 'Troops',
+  killRatio: 'Killed per lost',
+  killed: 'Enemy troops killed',
+  lost: 'Own troops lost',
+  timeTitle: 'Time',
+  // Named as a share of TIME, because that is what is counted — see
+  // meta/record.js `awayShare` on why this is not an income share.
+  awayShare: 'Earned while away',
+  played: 'Time in the game',
+  away: 'Time credited away',
+  purseTitle: 'Purse',
+  crownsEarned: 'Crowns earned',
+  crownsSpent: 'Crowns spent',
+  relicsEarned: 'Relics earned',
+  relicsSpent: 'Relics spent',
+});
+
 export const SHOP = Object.freeze({
   header: 'Spend crowns on things you will feel next battle.',
   economyFirst: 'Economy-first starves the enemy and wins slowly.',

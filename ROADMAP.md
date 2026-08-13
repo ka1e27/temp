@@ -150,19 +150,20 @@ Three things, in the order they bite. The first is above; these are the other tw
 `meta.stats` tracks **thirteen lifetime counters** — battles, wins, losses, raids,
 incursion rungs, units lost and killed, crowns and relics earned and spent, time played,
 and time claimed while away. They are written on every battle and carried through
-abdication. **No screen in the game shows a single one of them.**
+abdication, and until recently **no screen showed a single one of them.**
 
-For an idle/strategy hybrid that is a real gap, not a nicety: "numbers that go up, which
-you can look at" is the genre's core retention loop, and this game collects the numbers
-and hides them. The cheapest version is a lifetime-record drawer on the main menu
-following `mainmenu-legacy.js` / `mainmenu-settings.js` — pure UI, zero balance risk. The
-derived figures are worth more than the raw counters: win rate, kill/loss ratio, and the
-share of all income collected while away, which is the idle half of the game made visible.
+**That half is DONE**: `meta/record.js` derives and `screens/mainmenu-record.js` renders,
+behind a Record button on the menu. The derived figures are the reason to open it — win
+rate, kill/loss ratio, and how much of the elapsed time was credited while away, which is
+the idle half of the game made visible. Pure UI, zero balance risk, and the arithmetic is
+a module so it is tested rather than squinted at.
 
-Beyond that, the honest next step is **milestones** — a small, fixed, non-random set of
-named achievements over counters that already exist. It is the standard answer to "why
-open this again tomorrow" for a game with no server, no accounts and no live-ops, and it
-costs no balance work at all.
+**The next step is MILESTONES**, and it is now cheap for the same reason: a small, fixed,
+non-random set of named achievements over counters that already exist *and are already
+displayed*. It is the standard answer to "why open this again tomorrow" for a game with
+no server, no accounts and no live-ops, and it costs no balance work at all. The record
+drawer is where they would live, and `recordView` is already the one place that knows
+what every figure means.
 
 ### Sessions you can actually fit into a day
 

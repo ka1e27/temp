@@ -2,14 +2,13 @@
 // and export/import so a save survives a cleared browser.
 //
 // A BRAND-NEW SAVE NEVER SEES THIS SCREEN. There is nothing to continue and
-// nothing to export, so the menu would be a form standing between a first-time
-// player and the game. `bootRoute()` sends that player straight into region 1
-// instead; the menu is for someone with an empire to come back to.
+// nothing to export, so the menu would be a form between a first-time player
+// and the game. `bootRoute()` sends them straight into region 1 instead.
 //
 // The scene works BOTH as the boot scene (main.js replaces into it) and as an
 // overlay pushed from the world map's Menu button. `enter()` runs BEFORE the
 // stack pushes this scene, so `ctx.scenes.depth` at that moment is exactly what
-// is underneath — which is all it takes to tell the two apart.
+// is underneath — all it takes to tell the two apart.
 //
 // WIPE AND IMPORT MUTATE THE LIVE ROOT IN PLACE. main.js closed over the state
 // object at boot, so swapping `ctx.state` for a new object would leave idle
@@ -20,10 +19,11 @@ import { compact, rate } from '../ui/format.js';
 import { UI, SAVE, ENDGAME } from '../content/strings.js';
 import { renderSettings } from './mainmenu-settings.js';
 import { renderAbdicate } from './mainmenu-legacy.js';
+import { renderRecord } from './mainmenu-record.js';
 import { renderRefusal } from './mainmenu-recovery.js';
+import { renderExport, renderImport } from './mainmenu-io.js';
 import { canAbdicate, legacyPoints } from '../meta/legacy.js';
 import { createMeta, markDirty, metaOf } from '../core/store.js';
-import { exportSave, importSave } from '../meta/save.js';
 import { incomePerSec, recalcIncome } from '../meta/idle.js';
 import { REGION_IDS, regionsConquered, refreshUnlocks, isAttackable } from '../meta/world.js';
 import { defaultSelection } from '../meta/boosters.js';
@@ -65,11 +65,10 @@ export function launchFirstRegion(ctx) {
 export function adoptCampaign(ctx, next, now) {
   const state = ctx.state;
   // PREFERENCES OUTLIVE THE CAMPAIGN. `meta` is replaced wholesale here — by a
-  // new campaign or by an imported save — and settings ride inside it, so
-  // without this a player who wanted their rally hold-back at zero would have
-  // to say so again after every reset, and importing a friend's save would
-  // silently adopt their pace and their hold-back too. They are the player's,
-  // not the save's.
+  // new campaign or an imported save — and settings ride inside it, so without
+  // this a player who wanted their rally hold-back at zero would have to say so
+  // again after every reset, and importing a friend's save would silently adopt
+  // their pace too. They are the player's, not the save's.
   const keptSettings = state.meta?.settings;
   state.saveVersion = next.saveVersion ?? state.saveVersion;
   state.seed = next.seed ?? state.seed;
@@ -99,6 +98,12 @@ export function createMainMenuScene(ctx) {
   let prevScene;
 
   const meta = () => ctx.state.meta;
+  // Five controls dismiss a drawer; a `clear` that forgets `renderActions`
+  // leaves the menu with no buttons at all, so it is written once.
+  const backToActions = () => { clear(drawer); renderActions(); };
+  const closeBtn = () => h('button.btn.ghost', {
+    type: 'button', text: UI.close, on: { click: backToActions },
+  });
   const close = () => (overlay
     ? ctx.scenes.pop()
     : ctx.scenes.replace(ctx.screens.worldmap, bootParams ?? undefined));
@@ -200,9 +205,9 @@ export function createMainMenuScene(ctx) {
       [UI.treasury, () => compact(meta().crowns)],
       [UI.income, () => rate(incomePerSec(meta()))],
     ];
-    // Legacy joins the readout only once there is some. A row reading "0 legacy"
-    // on every save in the game would advertise a mechanic most players have not
-    // reached yet and teach them nothing about it.
+    // Legacy joins the readout only once there is some: a row reading "0 legacy"
+    // on every save advertises a mechanic most players have not reached and
+    // teaches them nothing about it.
     if (legacyPoints(meta()) > 0) {
       rows.push([ENDGAME.legacyTitle, () => `${legacyPoints(meta())}`]);
     }
@@ -242,6 +247,9 @@ export function createMainMenuScene(ctx) {
       h('button.btn.ghost.menu-import', {
         type: 'button', text: 'Import save', on: { click: showImport },
       }),
+      h('button.btn.ghost.menu-record-btn', {
+        type: 'button', text: 'Record', on: { click: showRecord },
+      }),
       h('button.btn.ghost.menu-settings-btn', {
         type: 'button', text: 'Settings', on: { click: showSettings },
       }));
@@ -257,11 +265,20 @@ export function createMainMenuScene(ctx) {
     actions.firstChild?.focus?.();
   }
 
+  /** The lifetime record — see ./mainmenu-record.js. Offered unconditionally,
+   *  unlike Abdicate: it is never destructive and a save with nothing in it
+   *  says so, so there is no state in which the button would be a dead end. */
+  function showRecord() {
+    renderRecord(drawer, ctx, {
+      onCancel: backToActions,
+    })?.focus?.();
+  }
+
   /** The prestige decision. Destructive, so it lives behind the same second
    *  click "New Campaign" does — see ./mainmenu-legacy.js. */
   function showAbdicate() {
     renderAbdicate(drawer, ctx, {
-      onCancel: () => { clear(drawer); renderActions(); },
+      onCancel: backToActions,
       onDone: (result) => {
         say(`Abdicated. You hold ${result.total} legacy.`);
         // Same stack reasoning as newCampaign(): as an overlay there is a world
@@ -291,7 +308,7 @@ export function createMainMenuScene(ctx) {
         type: 'button', text: 'Erase and start over', on: { click: newCampaign },
       }),
       h('button.btn.ghost', {
-        type: 'button', text: 'Cancel', on: { click: () => { clear(drawer); renderActions(); } },
+        type: 'button', text: 'Cancel', on: { click: backToActions },
       }))));
     drawer.querySelector('.menu-wipe')?.focus();
   }
@@ -315,79 +332,26 @@ export function createMainMenuScene(ctx) {
 
   // --- export / import -----------------------------------------------------
 
-  function textbox(props) {
-    return h('textarea.menu-text', {
-      spellcheck: 'false', autocomplete: 'off', rows: '4',
-      // The board is user-select:none; a save you cannot select is not an export.
-      style: { userSelect: 'text', WebkitUserSelect: 'text', width: '100%' },
-      ...props,
-    });
-  }
-
   function showSettings() {
     renderSettings(drawer, ctx)?.focus?.();
   }
 
   function showExport() {
-    clear(drawer);
-    const text = exportSave(ctx.state, { now: Date.now() });
-    const box = textbox({ readonly: true, 'aria-label': 'Your save, as text' });
-    box.value = text;
-    mount(drawer, h('div.menu-drawer', {},
-      h('label.label', { for: 'menu-export-box', text: 'Copy this somewhere safe' }),
-      box,
-      h('div.row', {},
-        h('button.btn.menu-copy', {
-          type: 'button',
-          text: 'Copy to clipboard',
-          on: {
-            click: () => {
-              box.select();
-              navigator.clipboard?.writeText(text).catch(() => {});
-              say(SAVE.exported);
-            },
-          },
-        }),
-        h('button.btn.ghost', {
-          type: 'button', text: UI.close, on: { click: () => { clear(drawer); renderActions(); } },
-        }))));
-    box.id = 'menu-export-box';
-    box.focus();
-    box.select();
+    renderExport(drawer, ctx, { say, close: closeBtn });
   }
 
   function showImport() {
-    clear(drawer);
-    const box = textbox({ 'aria-label': 'Paste a save', placeholder: 'Paste your save text here' });
-    mount(drawer, h('div.menu-drawer', {},
-      h('label.label', { for: 'menu-import-box', text: 'Paste a save' }),
-      box,
-      h('div.row', {},
-        h('button.btn.primary.menu-do-import', {
-          type: 'button', text: 'Import', on: { click: () => runImport(box.value) },
-        }),
-        h('button.btn.ghost', {
-          type: 'button', text: UI.close, on: { click: () => { clear(drawer); renderActions(); } },
-        }))));
-    box.id = 'menu-import-box';
-    box.focus();
-  }
-
-  /** importSave() applies the same refusal rules as a disk load: a file we
-   *  cannot read changes NOTHING, and says why. */
-  function runImport(raw) {
-    const text = String(raw ?? '').trim();
-    if (!text) { say('Paste a save first.'); return; }
-    const now = Date.now();
-    const res = importSave(text, { now });
-    if (!res.ok) {
-      say(`${SAVE.refusedTitle}: ${SAVE.reasons[res.reason] ?? res.reason}. ${SAVE.refusedBody}`);
-      return;
-    }
-    adoptCampaign(ctx, res.state, now);
-    clear(drawer);
-    renderActions();
-    stats.update();
-    say(SAVE.imported);
+    renderImport(drawer, ctx, {
+      say,
+      close: closeBtn,
+      // The drawer only ever hands back a save that PARSED (see
+      // mainmenu-io.js), so this side does the adopting and nothing else has
+      // to know the refusal rules.
+      onAdopt: (next, now) => {
+        adoptCampaign(ctx, next, now);
+        backToActions();
+        stats.update();
+      },
+    });
   }
 }

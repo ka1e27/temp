@@ -2158,14 +2158,32 @@ activating focused buttons.
   holding) is +7 on gallowmoor, `--relics=78` is +25. Both are now re-takeable rather than
   remembered, which is the only part that was ever actionable.
 - Dead seam fields with no reader: `ramImpactHp`, `rules.isRaid`, `rules.targetLengthMs`.
-- **`meta.stats` tracks thirteen lifetime counters and no screen shows one of them.** They
-  are written on every battle and carried through abdication; a player has no way to see
-  any of it. `screens/mainmenu-legacy.js` and `mainmenu-settings.js` are the pattern a
-  stats drawer would follow. For an idle/strategy hybrid this is a retention gap rather
-  than a nicety — "numbers that go up, which you can look at" is the genre's core loop,
-  and this game collects them and hides them. The derived figures are the reason to build
-  it: win rate, kill/loss ratio, and the share of all income collected *while away*,
-  which is the idle half of the game made visible. See `ROADMAP.md`.
+- ~~**`meta.stats` tracks thirteen lifetime counters and no screen shows one of them.**~~
+  **CLOSED.** `meta/record.js` derives, `screens/mainmenu-record.js` renders, and the
+  drawer computes nothing — a screen that derived its own win rate is a second
+  implementation of the rule whose only test is squinting at a menu.
+
+  **Three things it decided, and each one is a rule rather than a layout choice.** A
+  fresh save's ratios are **null, not 0** — "0% win rate" is a claim about somebody who
+  fought and lost, and a new save has not fought; the drawer renders null as an em dash.
+  Win rate is over BATTLES, not over `wins + losses`, because `losses` counts a loss or a
+  timeout and a WITHDRAWAL is neither — taking it over decided battles only would quietly
+  flatter every player who has ever pulled out. And a flawless record reads as unknown
+  rather than as `∞ : 1`, which looks like a bug rather than like a perfect record.
+
+  **The away figure is a share of TIME and says so.** Nothing counts offline CROWNS
+  separately, so an income share would have to be reconstructed from a rate that changes
+  every time a region is taken — exact-looking and wrong. Time is what is recorded, so
+  time is what it claims.
+
+  Two defects a screenshot caught and no test could: `.menu-empire dd:nth-of-type(2)`
+  out-specifies a bare `.menu-record dd`, so rows two and three of every group came out
+  gold and green — which looked deliberate and was not. And the drawer is the first one
+  tall enough to overflow a laptop window, where both obvious layouts fail: letting
+  `.dialog` scroll the whole thing puts the title off the top as soon as anything lower
+  is focused, and giving the drawer its own scroller nests two. Only the middle scrolls;
+  title and Close are always on screen. **`tools/smoke.mjs` failed on the version where
+  Close sat below the fold**, which is exactly the class of bug it exists for.
 - **`split` is uncalibrated, and unlike `branch` it has no knob.** Grouped by silhouette
   against the middle of each region's own band, all three `split` regions read −6 —
   saltmere, sunder and gravenreach, identically. `branch` was −11 and was fixed by

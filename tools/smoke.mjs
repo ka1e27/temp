@@ -611,6 +611,44 @@ try {
     await hitPoint('.menu-abdicate-go', 'the Abdicate confirmation');
     step(`abdication: ${drawer.rows} payout rows, gives up ${drawer.pays}, confirm hittable`);
     await page.screenshot(`${OUT}/06-abdicate.png`);
+
+    // THE LIFETIME RECORD. Driven here rather than in a unit test for the one
+    // reason unit tests cannot cover: the drawer has to be REACHABLE. Both of
+    // the newest screens before this were nearly shipped as the only ones
+    // nothing ever clicked, and a whole release once went out unclickable
+    // because a synthetic `el.click()` bypasses hit testing entirely.
+    //
+    // The figures themselves are meta/record.js's business (tests/record.test.js);
+    // what is asserted here is that a real pointer opens it, that it is NOT the
+    // empty branch — by this point the run has fought a battle, so a record
+    // saying "nothing yet" would mean the counters never reached the drawer —
+    // and that Close is hittable, or the menu is a trap.
+    await click('.btn.menu-record-btn', 'the Record button');
+    await page.sleep(150);
+    const rec = await page.eval(() => {
+      // The TITLE's own class, not a wrapper's: a selector naming a container
+      // stops asserting the moment the layout moves, which is exactly how this
+      // step first broke (the wrapper was removed when the drawer stopped
+      // needing its own scroller) — and how two HUD controls silently went
+      // untested before it.
+      const dds = [...document.querySelectorAll('.menu-record dd')].map((d) => d.textContent);
+      return {
+        open: !!document.querySelector('.menu-record-title'),
+        groups: document.querySelectorAll('.menu-record-head').length,
+        rows: dds.length,
+        winRate: document.querySelector('.menu-record dd')?.textContent ?? null,
+        dashes: dds.filter((t) => t === '\u2014').length,
+      };
+    });
+    if (!rec.open) throw new Error('the Record drawer did not render');
+    if (rec.groups < 4) throw new Error(`record showed ${rec.groups} groups, expected 4`);
+    if (rec.rows < 10) throw new Error(`record showed ${rec.rows} rows, expected 10+`);
+    if (rec.dashes === rec.rows) {
+      throw new Error('every record figure is an em dash — the counters never reached the drawer');
+    }
+    await hitPoint('.menu-record-close', 'the Record close button');
+    step(`record: ${rec.groups} groups, ${rec.rows} rows, win rate ${rec.winRate}`);
+    await page.screenshot(`${OUT}/07-record.png`);
   }
 
   if (errors.length) throw new Error(`console errors:\n    ${errors.join('\n    ')}`);

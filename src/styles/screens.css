@@ -2,10 +2,9 @@
    strip), the shared dialog shell and the main menu.
 
    The site panel moved here out of hud.css when it stopped being corner
-   furniture: it is anchored to a site on the board now, so it belongs with the
-   training picker it shares that board with. The pre-battle loadout moved the
-   other way, into prebattle.css, when that pushed this file over the cap.
-   `.btn` is NOT declared here — it lives once in base.css. */
+   furniture: it is anchored to a site now, so it belongs with the training
+   picker it shares that board with. The pre-battle loadout moved the other way,
+   into prebattle.css. `.btn` is NOT declared here — it lives in base.css. */
 
 /* --- Stronghold training picker -------------------------------------------
    The highest-frequency decision in the game, so it lives ON the site rather
@@ -346,6 +345,41 @@
 }
 .menu-empire dd:nth-of-type(2) { color: var(--c-gold); }
 .menu-empire dd:nth-of-type(3) { color: var(--c-player); }
+
+/* THE LIFETIME RECORD (screens/mainmenu-record.js). Reuses `.menu-empire` so
+   the record and the abdication payout read as the same kind of table, then
+   undoes the two things that only suit the three-row readout above: the border
+   per block (four bordered lists stack into a fence, so the headings separate
+   instead) and the POSITIONAL tint.
+
+   THE TINT OVERRIDE MUST MATCH `:nth-of-type` SPECIFICITY OR IT LOSES, and a
+   screenshot caught that: `.menu-empire dd:nth-of-type(2)` beats a bare
+   `.menu-record dd`, so rows two and three of every group came out gold and
+   green — which looked deliberate and was not. The record's accent is one row
+   per group, the DERIVED figure it leads with. */
+.menu-record { border-block: 0; padding-block: 0; }
+.menu-record dd:nth-of-type(n) { color: var(--c-text); }
+.menu-record dd:first-of-type { color: var(--c-rank); }
+.menu-record-head {
+  margin: var(--s-3) 0 0; color: var(--c-text-dim);
+  font: var(--w-bold) var(--t-xs) / 1.6 var(--font-ui);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+}
+.menu-record-head:first-of-type { margin-top: 0; }
+/* A focused heading draws no ring: it is focused to move the reading position,
+   not because it can be activated. */
+.menu-record-title:focus-visible { outline: none; }
+/* ONLY THE MIDDLE SCROLLS. `.dialog` scrolls too (CLAUDE.md's gotcha about the
+   menu outgrowing the window), and the two obvious alternatives both fail: let
+   the dialog scroll the whole record and the title leaves the top as soon as
+   anything lower is focused; give the drawer one scroller of its own and you
+   get both problems nested. Capping the body keeps the title and Close on
+   screen at any window height — a dialog whose dismiss control sits below the
+   fold is a trap, and tools/smoke.mjs failed on exactly that. */
+.menu-record-body {
+  max-height: 38vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0;
+}
 .menu-actions { display: flex; flex-direction: column; gap: var(--s-2); }
 .menu-io:empty { display: none; }
 .menu-drawer, .menu-confirm { display: flex; flex-direction: column; gap: var(--s-3); }
