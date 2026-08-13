@@ -174,7 +174,12 @@ test('every CROWN line rides a contract field that already existed', () => {
   // checks is "changing a field requires a bump", and that one slips past it.
   // v9 is the same shape a second time — SITE_KINDS gained `watchtower` and
   // state gained `vision`/`seen`, and neither is a CROWN-line field either.
-  assert.equal(CONTRACT_VERSION, 9);
+  // v10 is the same shape a THIRD time: a squad gained the `path` it walks, a
+  // nullable `to` and a `camped` hex, so a v9 blob is a board whose columns are
+  // nowhere — invisible to the renderer, to fog and to the towers that shoot at
+  // positions, while still arriving on schedule. No CROWN line moved for any of
+  // the three, which is exactly what this assertion is here to keep true.
+  assert.equal(CONTRACT_VERSION, 10);
   const cfg = configWith({ arms: 3, warChest: 3, drill: 3, standingArmy: 2, siegeworks: 3 });
   for (const k of ['unitAtkMult', 'unitDefMult', 'goldRateMult', 'trainCostMult',
     'siegeDmgMult', 'structureRegenMult', 'marchSpeedMult', 'farmYieldMult']) {

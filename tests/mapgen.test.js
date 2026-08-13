@@ -5,6 +5,7 @@ import {
 } from '../src/battle/mapgen.js';
 import { distance, findPath, key } from '../src/core/hex.js';
 import { MAPGEN, SITES } from '../src/content/balance.js';
+import { REGIONS } from '../src/content/regions.data.js';
 import { assertBattleConfig, makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 
 const SPEC = {
@@ -144,5 +145,35 @@ test('a generated map is a valid BattleConfig', () => {
   for (const s of cfg.sites) {
     assert.equal(s.hpMax, SITES[s.kind].hp, 'sites start at level 1 full health');
     assert.equal(s.hp, s.hpMax);
+  }
+});
+
+test('no two sites share a hex, on the REAL region table', () => {
+  // THE GAP THIS CLOSES. The test above asserts exactly the right property —
+  // and against `SPEC` and `BIG`, two synthetic specs, so it could never fire.
+  // The bug lived in the dense tier-4/5 regions (obsidian, gravenreach,
+  // nightharrow) which that test never generates: `pickHex`'s last resort was a
+  // bare `return pool[0]` with no separation check at all, so on a crowded
+  // board it handed back a hex another site was already standing on. Measured
+  // across 4,800 region-seed pairs it fired on ~39 of them, and it had been
+  // there since placement was written.
+  //
+  // Two sites on one hex is not a cosmetic overlap: `occupancy` is a
+  // `hexKey -> owner` map, so one silently overwrites the other — the
+  // pathfinder walks through a building, the influence flood counts one site
+  // twice, and battle/towers.js puts two guns on one point. Walking the REAL
+  // table is the whole point here; a fixture that cannot exhibit the defect is
+  // what let this survive.
+  for (const region of REGIONS) {
+    for (let seed = 1; seed <= 40; seed++) {
+      const { sites } = generateBattleMap(region, seed);
+      const seen = new Map();
+      for (const s of sites) {
+        const k = key(s.hex[0], s.hex[1]);
+        assert.ok(!seen.has(k),
+          `${region.id} seed ${seed}: ${s.id} shares a hex with ${seen.get(k)}`);
+        seen.set(k, s.id);
+      }
+    }
   }
 });
