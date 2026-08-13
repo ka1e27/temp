@@ -11,19 +11,25 @@
 // buffering, a replayable command log, and a UI that structurally cannot
 // corrupt the sim.
 import { UNIT_IDS } from '../content/balance.js';
-import { squadProgress, squadBow } from '../render/routes.js';
-import { perceivedSquads } from '../battle/vision.js';
-import { loadStops, routeAt } from '../render/routePath.js';
 import { needsTarget } from './battle-keys.js';
 import { createArmedBuild } from './battle-build.js';
+import { createSquadPicker } from './battle-squadpick.js';
+// The drag trail and its trimming live in ./battle-waypoints.js — both this
+// file and battle-input.js need them. Imported AND re-exported: one import
+// for callers, and one rule rather than two that drift.
+import { trimWaypoints, isDrawnRoute } from './battle-waypoints.js';
 
 /** Click slop for picking an in-flight squad off its arc, as a fraction of a
  *  hex. Deliberately tight: a stray click near a route must still deselect. */
-const SQUAD_PICK = 0.5;
+/** The optional half of a march order, present only when it was actually asked
+ *  for — shared so SEND and MOVE_SQUAD cannot disagree about the shape. */
+const route = (o) => ({
+  ...(o.toHex ? { toHex: o.toHex } : {}),
+  ...(o.waypoints && o.waypoints.length ? { waypoints: o.waypoints } : {}),
+});
 
 // Module-scope scratch: nothing on the click path allocates.
 const _a = { x: 0, y: 0 };
-const _p = { x: 0, y: 0 };
 
 /** Enabled unit ids in canonical order — stable, so the command log hashes
  *  identically across runs. */
@@ -39,7 +45,17 @@ export const cmd = {
   // No more `via`: a chained send existed to express several adjacent hops as
   // one order, and free movement (pathBetween) makes that a plain march — see
   // movement.js spawnSquad.
-  send: (from, to, fraction, filter) => ({ t: 'SEND', from, to, fraction, filter }),
+  /** `to` may be a site id OR null (a march onto bare ground). `toHex` and
+   *  `waypoints` are omitted entirely when unset, the same rule `rally.mode`
+   *  follows: a key that only exists sometimes is a worse shape than one that
+   *  never exists. Every order the AI and the harness issue is the bare form. */
+  send: (from, to, fraction, filter, o = {}) => ({
+    t: 'SEND', from, to, fraction, filter, ...route(o),
+  }),
+  /** Re-task an army already standing on open ground. */
+  moveSquad: (squadId, to, o = {}) => ({
+    t: 'MOVE_SQUAD', squadId, to: to ?? null, ...route(o),
+  }),
   // `mode` is omitted entirely when unset rather than sent as undefined: these
   // objects are asserted to be plain serializable data, and a key that only
   // exists sometimes is a worse shape than one that never exists.
@@ -87,11 +103,10 @@ export function createOrders(o) {
   // has to rule out the senseless pairs (nothing, yourself, someone else's site).
   const canSend = (from, to) => !!from && !!to && from.id !== to.id && from.owner === 'player';
 
-  /** Snap the drag to whatever the pointer is actually over, else the nearest
-   *  site of ANY owner nearby. It used to magnet only toward `from.adj`
-   *  members, because that was the whole legal set; free movement makes every
-   *  pair a candidate, so snapping is now purely about forgiving a sloppy
-   *  drag, not about teaching an adjacency rule. */
+  /** Snap the drag to whatever the pointer is over, else the nearest site of
+   *  ANY owner nearby. It used to magnet only toward `from.adj` members,
+   *  because that was the whole legal set; free movement makes every pair a
+   *  candidate, so snapping now only forgives a sloppy drag. */
   function snapTarget(from, wx, wy) {
     const hit = board.siteAt(getState(), wx, wy);
     if (hit) return hit;
@@ -112,9 +127,10 @@ export function createOrders(o) {
    *  exactly the way commands.js did, because a chain could otherwise die on
    *  arrival if the two checks ever disagreed. Free movement deleted the thing
    *  they both validated. */
-  function issueSend(from, to) {
-    if (!canSend(from, to)) return false;
-    push(cmd.send(from.id, to.id, view.fraction, filterList(view.filter)));
+  function issueSend(from, to, opts = {}) {
+    if (to && !canSend(from, to)) return false;
+    if (!to && !opts.toHex) return false;
+    push(cmd.send(from.id, to ? to.id : null, view.fraction, filterList(view.filter), opts));
     return true;
   }
 
@@ -320,64 +336,11 @@ export function createOrders(o) {
     view, canvas, bus, board, cancelBooster, pushBuild: (kind, hex) => push(cmd.build(kind, hex)),
   });
 
-  // ---- squads -------------------------------------------------------------
-
-  /** Nearest in-flight squad to a world point, so `R` can reach one. Squads are
-   *  drawn along the bowed arcs routes.js walks, so hit-testing reuses that
-   *  geometry rather than guessing at it. */
-  function squadAt(st, wx, wy) {
-    const r = board.hexSize * SQUAD_PICK;
-    let best = null;
-    let bestD = r * r;
-    // FOG, and it follows straight from the comment above: hit-testing reuses
-    // the renderer's geometry so a squad is clickable exactly where it is
-    // DRAWN — and a squad outside vision is not drawn at all. Scanning the raw
-    // list would leave an invisible enemy column pickable out of empty dark,
-    // which is a worse tell than drawing it would have been, because the player
-    // learns the army is there by finding it with the cursor.
-    //
-    // Unlike a SITE, whose position and kind are common knowledge (so clicking
-    // a ghost to aim a blind attack is intended), a squad's existence is
-    // precisely what fog hides.
-    const squads = perceivedSquads(st, 'player');
-    for (let i = 0; i < squads.length; i++) {
-      const sq = squads[i];
-      // Through the SAME geometry the renderer walks, so a squad drawn mid-arc
-      // is clickable exactly where it is drawn.
-      const stops = loadStops(sq, geo);
-      if (!stops) continue;
-      routeAt(sq, stops, squadProgress(sq, st.tick), squadBow(sq), _p, null);
-      const dx = wx - _p.x;
-      const dy = wy - _p.y;
-      const d = dx * dx + dy * dy;
-      if (d < bestD) { bestD = d; best = sq; }
-    }
-    return best;
-  }
-
-  /** Order the selected squad home. A squad that has already ARRIVED is no
-   *  longer in `state.squads`, so forget it rather than sending an order the
-   *  sim can only answer with 'unknown-squad'.
-   *  @returns {boolean} true when a live squad was turned around. */
-  function retreatSelectedSquad() {
-    const id = view.selectedSquad;
-    if (id == null) return false;
-    const sq = getState().squads.find((x) => x.id === id);
-    if (!sq) { view.selectedSquad = null; return false; }
-    push(cmd.retreatSquad(sq.id));
-    return true;
-  }
-
-  function selectSquad(sq) {
-    view.selection.length = 0;
-    view.trainPickerFor = null;
-    view.armed = null;
-    view.selectedSquad = sq.id;
-    bus?.emit('ui:selection', view.selection);
-  }
+  const picker = createSquadPicker({ getState, view, board, geo, push, cmd, bus });
+  const { squadAt, retreatSelectedSquad, selectSquad } = picker;
 
   return {
-    push, site, canSend, snapTarget, issueSend,
+    push, site, canSend, snapTarget, issueSend, trimWaypoints, isDrawnRoute,
     issueRally, toggleRally, issueRallyChain, issueRallyKeep,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,

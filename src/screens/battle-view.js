@@ -38,6 +38,20 @@ export function createView(init = {}) {
     dragFrom: null,
     dragTo: null,
     /**
+     * THE ROAD A SEND DRAG IS DRAWING, hex by hex, as packed [q,r] pairs.
+     *
+     * Accumulated on the way past rather than reconstructed on release: a
+     * pointer trail is the only record of which way round an obstacle the
+     * finger actually went, and it is gone the instant the gesture ends. That
+     * is the whole of "the drag chains through tiles so you can pick the path".
+     *
+     * MUTATED IN PLACE, never reassigned — the renderer holds this array to
+     * draw the route as it is being drawn, and swapping it would leave the
+     * board pointing at the previous gesture's.
+     * @type {Array<[number, number]>}
+     */
+    dragTrail: [],
+    /**
      * Every plain drag sets a rally instead of sending.
      *
      * A rally had exactly one input and it was a RIGHT-drag. That does not

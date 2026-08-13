@@ -12,6 +12,9 @@
 import { createDisposer } from '../ui/dom.js';
 import { createHotkeys } from './battle-hotkeys.js';
 import { createOrders, cmd } from './battle-orders.js';
+// The drag trail is accumulated HERE and trimmed in battle-orders.js — one
+// rule, in ./battle-waypoints.js, so the two halves cannot drift.
+import { trackHex } from './battle-waypoints.js';
 
 export { cmd, filterList } from './battle-orders.js';
 export { createView } from './battle-view.js';
@@ -44,6 +47,10 @@ export function createBattleInput(o) {
   function clearDrag() {
     view.dragFrom = null;
     view.dragTo = null;
+    // The road drawn by the gesture, hex by hex. Emptied in place rather than
+    // reassigned: the renderer holds this array to draw the route as it is
+    // being drawn, and swapping it would leave the board pointing at the old one.
+    view.dragTrail.length = 0;
     view.rallyFrom = null;
     view.rallyTo = null;
     view.box = null;
@@ -156,6 +163,12 @@ export function createBattleInput(o) {
       if (from) {
         const t = ord.snapTarget(from, w.x, w.y);
         view.dragTo = t && t.id !== from.id ? t.id : null;
+        // THE ROAD THE PLAYER IS DRAWING. Recorded on the way past rather than
+        // reconstructed on release: a pointer trail is the only record of which
+        // way round an obstacle the finger actually went, and it is gone the
+        // moment the gesture ends. Deduped inside `trackHex`, because
+        // pointermove fires far faster than a finger crosses a hex.
+        trackHex(view.dragTrail, w.x, w.y, board.hexSize);
       }
     } else if (view.box) {
       view.box.x1 = w.x;
@@ -214,7 +227,24 @@ export function createBattleInput(o) {
     if (from && press.moved) {
       // Drag order. Releasing back on the source is an explicit cancel.
       const to = view.dragTo ? ord.site(view.dragTo) : null;
-      if (to && to.id !== from.id) ord.issueSend(from, to);
+      // WAYPOINTS ONLY WHEN THE DRAG MEANT THEM. A straight pull from a site to
+      // its neighbour crosses hexes it means nothing by — the player was
+      // pointing, not drawing — and pinning the army to those would refuse the
+      // whole order if one of them happened to be occupied. `isDrawnRoute` is
+      // the test for "meaningfully longer than the straight line".
+      const drawn = ord.isDrawnRoute(view.dragTrail);
+      const waypoints = drawn ? ord.trimWaypoints(view.dragTrail) : [];
+      if (to && to.id !== from.id) {
+        ord.issueSend(from, to, { waypoints });
+      } else if (!to) {
+        // RELEASED ON OPEN GROUND: take the position rather than abandoning the
+        // gesture. This is the other half of what the squad rewrite bought —
+        // an army can hold a tile, so a drag has somewhere to end that is not a
+        // building. `snapTarget` already magnets to a nearby site, so landing
+        // here means the player really did release in open country.
+        const at = view.dragTrail[view.dragTrail.length - 1];
+        if (at) ord.issueSend(from, null, { toHex: at, waypoints });
+      }
       ord.selectOnly(from.id);
       view.armed = from.id;
     } else if (view.box && press.moved) {
