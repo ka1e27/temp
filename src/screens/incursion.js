@@ -30,6 +30,16 @@ export function createIncursionScene(ctx) {
     keepVisible: true, // the world map keeps rendering underneath
 
     enter() {
+      // MARK THE SCENE, as every other screen does. These two were the only
+      // screens that never did, and it was not cosmetic: tools/mobile.mjs gates
+      // its phone audit on `scene() === 'shop'`, so that step could never run
+      // and silently no-opped instead of failing. The shop was consequently
+      // never audited at any width — which is exactly how it shipped unreadable
+      // below 520px while the tool reported "no layout problems found".
+      //
+      // `keepVisible` means the world map stays mounted underneath, so `exit()`
+      // restores the marker rather than deleting it.
+      document.body.dataset.scene = 'incursion';
       root = h('div.screen.shop-overlay.incursion-overlay');
       const crowns = h('span.num.crowns');
       setCrowns = bindText(crowns);
@@ -69,6 +79,10 @@ export function createIncursionScene(ctx) {
     },
 
     exit() {
+      // Back to the map that is still mounted underneath, not deleted — these
+      // are overlays, and a screen that clears the marker outright would make
+      // the world map look like no scene at all to anything reading it.
+      document.body.dataset.scene = 'worldmap';
       root = body = setCrowns = null;
     },
   };

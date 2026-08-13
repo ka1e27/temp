@@ -266,8 +266,16 @@ export function createBattleHud(o) {
       if (ev.from === 'player') alert.show(`LOST — ${spaceCase(ev.kind).toLowerCase()} taken`, now(), 'danger');
       else if (ev.to === 'player') alert.show(`TAKEN — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'good');
     }));
+    // BOTH ENDS, and the second one is the fix. `owner` is who is besieging;
+    // `defender` is whose ground it is. Checking only the first meant the enemy
+    // sweeping up empty NEUTRAL farms three hexes away fired a red UNDER SIEGE
+    // banner — reliably within seconds of every battle starting, while the
+    // opening tutorial line was still on screen. A new player cannot tell that
+    // from their own farm being stormed; they read identically.
     off(bus.on('battle:siege-begun', (ev) => {
-      if (ev.owner === 'enemy') alert.show(`UNDER SIEGE — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'danger');
+      if (ev.owner === 'enemy' && ev.defender === 'player') {
+        alert.show(`UNDER SIEGE — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'danger');
+      }
     }));
   }
 

@@ -156,7 +156,14 @@ export function resolveArrival(state, group) {
     // Beating the garrison does NOT capture: the siege begins.
     site.garrison = emptyComp();
     site.siege = { owner, comp: r.attSurvivors };
-    pushEvent(state, EVENTS.SIEGE_BEGUN, { siteId: site.id, kind: site.kind, owner, hp: site.hp });
+    // `owner` is the BESIEGER; `defender` is whose ground is being taken, and
+    // the HUD needs both. Without the second one an enemy siege of a NEUTRAL
+    // farm is indistinguishable from an assault on the player, and the alert
+    // strip duly cried "UNDER SIEGE" within seconds of every battle opening —
+    // while the tutorial was still telling a new player where to drag.
+    pushEvent(state, EVENTS.SIEGE_BEGUN, {
+      siteId: site.id, kind: site.kind, owner, defender: site.owner, hp: site.hp,
+    });
   } else {
     site.garrison = r.defSurvivors;
     skirmishHome(state, site, group);

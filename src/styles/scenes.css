@@ -32,19 +32,37 @@
   display: grid; place-items: center; background: var(--scrim);
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
 }
-.shop-treasury { display: flex; align-items: baseline; gap: var(--s-2); margin-left: auto; }
+/* `min-width: 0` lets the readout shrink instead of forcing the header wide —
+   the flexbox default of `auto` is what makes a row refuse to reflow. */
+.shop-treasury {
+  display: flex; align-items: baseline; gap: var(--s-2); margin-left: auto;
+  min-width: 0; flex-wrap: wrap;
+}
 .shop-treasury .label {
   font-size: var(--t-xs); letter-spacing: var(--track-label);
   text-transform: uppercase; color: var(--c-text-dim);
 }
 .shop-panel {
   width: min(860px, 92vw); max-height: 86vh; overflow: hidden;
+  /* CLIP, not merely hidden, on the horizontal axis. `overflow: hidden` is
+     still PROGRAMMATICALLY scrollable, and that is what broke this screen: the
+     header could not fit below ~520px, focus moved to the Close button at its
+     far right on open, and the browser scrolled this box 112px to reveal it —
+     shifting every upgrade name off the left edge with no way to scroll back,
+     because a hidden box is not user-scrollable. `clip` cannot be scrolled at
+     all, so a future overflow degrades to a clipped edge instead of silently
+     relocating the whole panel. */
+  overflow-x: clip;
   display: flex; flex-direction: column;
   animation: hd-rise var(--d-slow) var(--ease-out) both;
 }
 /* The header is a band INSIDE the plate, not a second plate stacked on one. */
+/* WRAPS rather than overflowing. The title, the treasury readout and Close do
+   not fit on one line on a phone, and a flex row whose children cannot shrink
+   (`min-width: auto` is the default) overflows its parent instead of reflowing.
+   That overflow is what the clip above now contains and this wrap now avoids. */
 .shop-header {
-  display: flex; align-items: center; gap: var(--s-5);
+  display: flex; align-items: center; gap: var(--s-5); flex-wrap: wrap;
   padding: var(--s-4) var(--s-5); background: none; border: 0;
   border-bottom: var(--hairline); border-radius: 0; box-shadow: none;
   backdrop-filter: none; -webkit-backdrop-filter: none;
