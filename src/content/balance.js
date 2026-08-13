@@ -240,7 +240,7 @@ export const RECRUIT = {
 export const INFLUENCE_RADIUS = {
   farm: 1, trainingGround: 1, stronghold: 2, camp: 3, castle: 3, watchtower: 1,
 };
-export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.75 };
+export const TERRITORY_SPEED = { friendly: 1.4, neutral: 1.0, hostile: 0.50 }; // hostile WAS 0.75
 
 /** SIGHT radius by kind (battle/vision.js) — NOT a read of INFLUENCE_RADIUS:
  *  that would silently hand a camp a 3-hex sightline and a farm 1. Every

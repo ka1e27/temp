@@ -78,13 +78,14 @@ const fortsAmong = (holds) => (holds <= 1 ? 0
  *    works on the day you land; the walls are what you build.
  */
 function planSites(spec) {
-  const plan = [{ owner: 'player', kind: 'camp', band: [0, MAPGEN.homeBandFrac] },
+  // rowBand corners the beachhead (a real box) instead of just edging it.
+  const plan = [{ owner: 'player', kind: 'camp', band: [0, MAPGEN.playerHomeBandFrac], rowBand: [0, MAPGEN.playerHomeBandFrac] },
     { owner: 'enemy', kind: 'castle', band: [1 - MAPGEN.homeBandFrac, 1] }];
 
   const playerExtra = Math.max(0, (spec.playerSites ?? 2) - 1);
   for (let i = 0; i < playerExtra; i++) {
     const kind = (i + 1) % MAPGEN.playerStrongholdEvery === 0 ? 'trainingGround' : 'farm';
-    plan.push({ owner: 'player', kind, band: [0, MAPGEN.ownBandFrac] });
+    plan.push({ owner: 'player', kind, band: [0, MAPGEN.ownBandFrac], rowBand: [0, MAPGEN.ownBandFrac] });
   }
 
   // THE MIX IS AUTHORED PER REGION WHEN ONE IS SUPPLIED (regions.data.js
@@ -129,13 +130,13 @@ function planSites(spec) {
   return plan;
 }
 
-/** @param {Set<string>} outside hexes the region's SHAPE puts out of play — a
- *  site placed in one would be marooned inside a mountain range. */
-function bandCandidates(grid, [lo, hi], outside) {
+/** @param {Set<string>} outside a site would be marooned in. `rowBand` mirrors [lo,hi] on the row axis, default the whole grid. */
+function bandCandidates(grid, [lo, hi], outside, rowBand = [0, 1]) {
   const m = MAPGEN.edgeMargin;
   const out = [];
   const span = Math.max(1, grid.cols - 1);
   for (let row = m; row < grid.rows - m; row++) {
+    if (row / Math.max(1, grid.rows - 1) < rowBand[0] || row / Math.max(1, grid.rows - 1) > rowBand[1]) continue;
     for (let col = m; col < grid.cols - m; col++) {
       const t = col / span;
       const h = axialFromOffset(col, row);
@@ -322,7 +323,7 @@ export function generateBattleMap(regionSpec, seed) {
   for (const entry of plan) {
     const near = entry.near && throneAt
       ? { at: throneAt, radius: holdRadius, side: entry.near } : null;
-    const hex = pickHex(rng, bandCandidates(grid, entry.band, outside), placed, wide, near);
+    const hex = pickHex(rng, bandCandidates(grid, entry.band, outside, entry.rowBand ?? [0, 1]), placed, wide, near);
     placed.push(hex);
     if (entry.kind === 'castle') throneAt = hex;
     const n = (counters[entry.kind] = (counters[entry.kind] ?? 0) + 1);

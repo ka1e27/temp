@@ -7,8 +7,17 @@
 // anything from either, which is what made it a clean cut.
 
 /** Squad travel. secondsPerHex = hexSecondsPerSpeed / slowestUnitSpeed, so a
- *  militia (55) crosses a hex in ~1.1s and a ram (30) in 2.0s — one ram really
- *  does halve a stack's march, which is what telegraphs a siege push. */
+ *  militia (55) crosses a hex in ~2.2s and a ram (30) in 4.0s — one ram really
+ *  does halve a stack's march, which is what telegraphs a siege push.
+ *
+ *  hexSecondsPerSpeed WAS 38, and a leg between adjacent sites read as a median
+ *  1.7s on riverfen and 0.9s on nightharrow for a militia column (see CLAUDE.md
+ *  "Three specialists" speed note) — quicker than the bot's own 2s think
+ *  interval, so a march never read as a march. Doubled to 76 to make marches
+ *  read as marches, per the owner's ask. Win rate barely moves on the harness
+ *  (CLAUDE.md already measured that handing the player *infinite* march speed —
+ *  the ceiling on what this stat can ever be worth — is only 13-15 points), so
+ *  this is a LENGTH knob first and a difficulty knob a distant second. */
 /**
  * `reachHexes` is what `site.adj` MEANS now — how far away a site still counts
  * as your business. It is not a movement limit: an army marches anywhere it can
@@ -29,7 +38,7 @@
  * every site every other site's neighbour on the late maps, which turns the
  * per-site scan into an O(n^2) sweep whose answer is always "the castle".
  */
-export const MOVEMENT = { hexSecondsPerSpeed: 38, minTicks: 1, reachHexes: 4 };
+export const MOVEMENT = { hexSecondsPerSpeed: 76, minTicks: 1, reachHexes: 4 };
 
 /** Territory flood. Strength falls off linearly with distance from the site;
  *  two factions within `contestRatio` of each other paint a hatched band. */
@@ -41,8 +50,35 @@ export const MAPGEN = {
   minSeparation: 3,       // hexes between any two sites...
   minSeparationFloor: 2,  // ...relaxed to this so placement always terminates
   edgeMargin: 1,          // keep sites off the outer ring
-  homeBandFrac: 0.25,     // camp/castle sit inside this fraction of their edge
-  ownBandFrac: 0.42,      // a faction's other sites stay inside this fraction
+  homeBandFrac: 0.25,     // camp/castle sit inside this fraction of their edge.
+                          //    ENEMY CASTLE ONLY, now — see playerHomeBandFrac.
+  /**
+   * THE PLAYER'S CAMP, DECOUPLED FROM THE CASTLE'S BAND, AND PUSHED INTO A
+   * CORNER. `homeBandFrac`/`ownBandFrac` used to be the whole story: a column
+   * band with no row restriction, so the camp could land anywhere down the
+   * left edge — a full-height stripe, not a corner, and the player's own
+   * extra sites (`ownBandFrac` 0.42) reached far enough across the board to
+   * border the neutral pool (`neutralBand` starts at 0.28), so the opening
+   * was in contact with contested ground almost immediately.
+   *
+   * `planSites` now gives the camp a ROW band as well as a column one, using
+   * this single fraction for both — a real corner box, not an edge — while
+   * the enemy castle keeps reading `homeBandFrac` exactly as before: this
+   * constant has no effect on where the throne sits. See mapgen.js
+   * `bandCandidates`'s new `rowBand` parameter.
+   */
+  playerHomeBandFrac: 0.20,
+  ownBandFrac: 0.28,      // a faction's other sites stay inside this fraction.
+                          //    WAS 0.42 for the player: that reached past where
+                          //    `neutralBand` (0.28) starts, so the player's own
+                          //    farms could already be bordering contested
+                          //    ground at tick 0. Now also a ROW band for the
+                          //    player's extra sites (mapgen.js planSites),
+                          //    corner-ing them the same way as the camp. The
+                          //    enemy's mix does not read this field at all
+                          //    (regions.data.js `enemyMix` or the
+                          //    enemyStrongholdShare fallback), so this is
+                          //    player-only exactly as it always was.
   holdBandFrac: 0.30,     // ...but its WALLS AND YARDS stay inside this one, so
                           //    the war machine is on the throne's doorstep and
                           //    the marches are farmland. See mapgen planSites.
