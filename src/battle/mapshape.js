@@ -65,6 +65,33 @@ const TAU = Math.PI * 2;
 // bands, and the silhouette is what fits inside that budget — NOT the other way
 // round. Moving any of them re-tunes the campaign, and that is a balance pass
 // with a binary search per region in it, not a tweak.
+//
+// THE SHAPES WERE NEVER CALIBRATED AGAINST EACH OTHER, and the campaign re-tune
+// is what found it. Every region's win rate, grouped by silhouette and scored
+// against the MIDDLE of its own tier's WIN_BAND so that tiers are comparable:
+//
+//     shape     n   avg vs band-mid
+//     open      9        -2.0
+//     choke     6        -1.3
+//     split     3        -6.0    saltmere -6, sunder -6, gravenreach -6
+//     branch    5       -11.0    thornmoor -12, duskfell -12, obsidian -16,
+//                                ravensmarch -16, thanescar +1
+//     narrow    1       -11.0
+//
+// `branch` was costing eleven points and `split` a startlingly uniform six,
+// while `open` and `choke` sat near zero — so the shape column had quietly
+// become a second, unadvertised difficulty column. FOUR OF THE FIVE REGIONS
+// THAT SWEEP REPORTED OUT OF BAND WERE `branch`. `branchTrunk` 0.50 -> 0.62 put
+// duskfell, obsidian and ravensmarch back inside their bands in one number.
+//
+// It still behaved exactly as the paragraph above says it would, and that is
+// the part worth carrying forward: THANESCAR WENT DOWN ON THE SAME SOFTENING,
+// 46% -> 44%. Three of five moved the way the change intended and one moved
+// against it, because a shape re-rolls the layout rather than scaling a tax. So
+// this was measured region by region even though the change was one constant.
+//
+// `split` has no knob here at all, so its -6 is recorded and not fixed. Either
+// it gets a parameter or somebody writes down why it should not have one.
 // ---------------------------------------------------------------------------
 
 /**
@@ -79,7 +106,7 @@ export const SQUEEZE = Object.freeze({
   narrowKeep: 0.86,
   /** Where a `branch` stops being a trunk and forks, along the map. Later means
    *  shorter arms, and the arms are the whole cost. */
-  branchTrunk: 0.50,
+  branchTrunk: 0.62,
 });
 const { chokeNeck: CHOKE_NECK, narrowKeep: NARROW_KEEP, branchTrunk: BRANCH_TRUNK } = SQUEEZE;
 

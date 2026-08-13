@@ -17,9 +17,15 @@ multiplier and starts the campaign again.
 straight to the browser. Adding a dependency breaks the core promise of the project —
 don't, without asking.
 
+**`ROADMAP.md` is the companion to this file and they must not be confused.** This one is
+the INVENTORY — what is true, what is broken, and what every measurement cost to learn.
+That one is the ORDERING — which of the open items to spend the next session on, and what
+each is priced at. Facts live here and are referenced there; when the two disagree, this
+file wins, because it is the one maintained in the same commit as the code.
+
 ## Where to start, by what you're touching
 
-This file is read end to end at least once, but it is 1700+ lines and gets opened
+This file is read end to end at least once, but it is 1800+ lines and gets opened
 under time pressure after that. If you already know the shape of your change:
 
 - **A balance number** → `Tuning`, then whichever pass section covers your region
@@ -432,13 +438,44 @@ It is also violently size-dependent — the same `choke` is worth **+5 on a 13×
 had room: `gallowmoor 3.26→3.12`, `karrowmere 3.82→3.68`, `blackspire 3.92→3.84` (with
 `thanescar 3.85→3.80` to keep `enemyMult` non-decreasing).
 
-**Tier 6 ships unshaped, deliberately.** It is the one tier with no dial headroom —
-4.37/4.44/4.48 against nightharrow's 4.36 — so there is nothing to pay a shape with, and
+**THE SHAPES WERE NEVER CALIBRATED AGAINST EACH OTHER, and that is what a
+per-shape reading of the campaign re-tune found.** Grouping every region's win rate by
+its silhouette, as points against the MIDDLE of its own tier's `WIN_BAND` (so tiers are
+comparable), on the sweep that closed the re-tune:
+
+```
+shape     n   avg vs band-mid
+open      9        -2.0
+choke     6        -1.3
+split     3        -6.0     (saltmere -6, sunder -6, gravenreach -6 — all three)
+branch    5       -11.0     (thornmoor -12, duskfell -12, obsidian -16, ravensmarch -16,
+                             thanescar +1)
+narrow    1       -11.0
+```
+
+`branch` was costing about eleven points and `split` a startlingly uniform six, while
+`open` and `choke` sat near zero. **Four of the five regions the sweep reported out of
+band were `branch`** — the shape column had become an unadvertised difficulty column.
+`branchTrunk` 0.50 → **0.62** (a later fork means shorter arms, and the arms are the
+whole cost) put duskfell, obsidian and ravensmarch back in band in one number.
+
+It behaved exactly as the warning at `SQUEEZE` says it would, which is worth knowing
+before reaching for it again: **thanescar went DOWN on the same softening** (46 → 44).
+A shape re-rolls the layout; it does not scale a tax. Three of five moved the way the
+change intended and one moved against it, so the softening still had to be measured
+region by region rather than assumed. `split` has no `SQUEEZE` knob at all — its −6 is
+recorded here as an open observation, not something that was fixed.
+
+**Tier 6 ships unshaped, deliberately.** It was the one tier with no dial headroom —
+4.37/4.44/4.48 against nightharrow's 4.36 at the time of this pass — so there was nothing
+to pay a shape with, and
 widowsgate is additionally the incursion arena, where a `choke` took the ladder from
 94/88/75/38/19 to 81/56/50/13/0 across depths 1–30. Reverting the three restored their
 **exact** pre-shape win rates (26/29/26) and the ladder to 94/88/75/38/19 with the same
 win-medians, verified after the fact. If a future pass wants tier 6 shaped, the prerequisite
-is dial headroom, not a gentler mask.
+is dial headroom, not a gentler mask. (The campaign re-tune since moved both dials again —
+tier 6 and nightharrow now ship on the same flat 5.40 — so the headroom argument still
+holds, on updated numbers; see `regions.data.js` rather than the figures above.)
 
 *(One pre-existing miss surfaced and was fixed on the way: `highmarch` read 65% against a
 66% floor — on the unshaped baseline too, and stably so at n=240, so not noise. `enemyMult`
@@ -492,7 +529,10 @@ too EASY, and a walkover reports "ok" against a floor right up until someone pla
 sounds. `targetLengthMin` is what the world map tells the player the region costs, and what
 a player means by that is how long it takes to *take* it — a loss is not a short battle, it
 is one that ended early because they were being rolled up. The two only agree while wins
-dominate, and they come apart exactly where the campaign gets hard. Measured at n=64:
+dominate, and they come apart exactly where the campaign gets hard. Measured at n=64
+(the `advertised` column below predates the later `targetLengthMin` re-authoring — see
+"Still open" → "THE CAMPAIGN RE-TUNE" — and no longer matches `regions.data.js`; the
+win%/median shape is what this table is illustrating, not the current promise):
 
 ```
 region        win%   all-med  win-med   advertised
@@ -557,7 +597,9 @@ tier 2 played exactly as easy as tier 1. `src/content/regions.data.js` was retun
 it; the reasoning is in that file's third load-bearing rule.
 
 That table has since been retuned again, for the *uphill raid* pass (a smaller landing
-force, an enemy warm-up, and a shop with no ceiling). **The current measured curve:**
+force, an enemy warm-up, and a shop with no ceiling). **The curve as measured for the
+region-shape pass** (n=96, re-taken end to end when that pass changed eighteen of the
+twenty-four maps; band edges confirmed at n=240):
 
 ```
 tier 1   88 85 86 83        tier 4   56 40 42 40
@@ -565,15 +607,19 @@ tier 2   82 73 75 74 76     tier 5   24 23 30
 tier 3   67 53 54 66 53     tier 6   26 29 26
 ```
 
-n=96, re-taken end to end for the region-shape pass, which changed eighteen of the
-twenty-four maps; band edges confirmed at n=240. All twenty-four report `ok` against
-their tier's band *and* their advertised length. Nothing is frozen any more: the
-expedition re-base changed regions 1–5 by construction, so they were solved with the
-rest, and the shape pass re-solved most of tiers 3–4 on top. What replaced the freeze is
-the per-tier `WIN_BAND`.
+All twenty-four reported `ok` against their tier's band *and* their advertised length, at
+that dial. **This table is now superseded.** The campaign re-tune in progress as this is
+written (see "Still open" → "THE CAMPAIGN RE-TUNE") has since moved every `enemyMult` in
+`regions.data.js` again — in some places by a full point (tier 6's three regions and
+nightharrow all now ship on a flat 5.40, against the 4.36–4.48 this table was measured
+on) — so treat the percentages above as provenance, not as today's win rate. Re-derive
+with `npm run sim --all --n=96` before trusting one.
 
-**Tier 6 is byte-for-byte what it shipped as**, twice over — see the fourth expedition
-segment below, and the region-shape section for why that tier stayed unshaped.
+**Tier 6 was byte-for-byte what it shipped as, twice over**, through the fourth
+expedition segment below and the region-shape pass — but the retune above moved its dial
+too, onto the same 5.40 plateau as nightharrow. The *reasoning* in both sections (why a
+fourth expedition segment was needed, why the tier stayed unshaped) is unchanged; only
+the specific dial figures are not.
 
 ## A raid stays a raid: the starting-footprint pass
 
@@ -1113,8 +1159,8 @@ comes from the layout, since `seed` includes the depth. Rotation is not impossib
 *uncalibrated* — it needs a measured per-region ladder dial, which is a balance pass with
 nine binary searches in it.
 
-**The curve, `--incursion=... --n=16`, for a player who has just taken the last region
-and idled half an hour:**
+**The target shape, `--incursion=... --n=16`, for a player who has just taken the last
+region and idled half an hour:**
 
 ```
 depth      1    5   10   20   30   40   55
@@ -1122,17 +1168,35 @@ win%      94   88   75   38   19    0    0
 win-med  2.7  4.6  5.8  9.7 11.0    —    —
 ```
 
+**This table is now the TARGET rather than the last measurement.** The widowsgate arena's
+own dial shifted underneath it during the campaign re-tune (a shared-tree accident,
+since rebuilt — see "Still open" → "THE CAMPAIGN RE-TUNE"), so `baseDial` was moved
+3.65 → 4.38 to restore this shape. The freshest re-measurement against the rebuilt dial
+(`--incursion=1,5,10,20,30,40 --n=48`, recorded in `content/incursion.data.js`, not yet
+confirmed at n≥96 the way the rest of the campaign was):
+
+```
+depth      1    5   10   20   30   40
+win%      96   81   65   40   10    0
+win-med  2.8  3.4  4.8  7.2 15.2    —
+```
+
+— close to the target, and "a real wall again" in the source's own words. Depth 55 was
+not part of that sample; do not assume it still reads 0%.
+
 **...and the same player after ten hours of idling — the only table that justifies the
-word "endless":**
+word "endless" — has NOT been re-measured against the rebuilt dial**, and the source says
+so explicitly: re-take with `node tools/simrunner.js --incursion=40,55 --idle=600 --n=16`
+before trusting either number below against the current `baseDial`.
 
 ```
 depth     40   55
 win%      75   44
 ```
 
-The wall RECEDES rather than moving. If a future pass makes the ladder feel finite, that
-second table is the one to re-take: a `perDepth` that outruns the shop's own curve turns
-the ladder back into a wall with extra steps.
+The wall used to RECEDE rather than move. If a future pass makes the ladder feel finite,
+that second table is the one to re-take: a `perDepth` that outruns the shop's own curve
+turns the ladder back into a wall with extra steps.
 
 **The mutators own verbs where they can** (`ironwall` is the first thing in the game that
 makes sappers-versus-engines a question on the attacking side; `sealed` makes the
@@ -1639,21 +1703,34 @@ activating focused buttons.
 
 ### Still open, and why
 
-- **THE CAMPAIGN RE-TUNE IS THE BIGGEST OPEN ITEM, and it is now unblocked.** Every
-  structural pass it was waiting on has landed — free movement, the yard/wall split,
-  construction, the map redesign, fog, the AI belief model, and the castle-gate fix.
-  Tuning between two structural changes is work thrown away, which is why the table
-  was left alone through all of them; there is nothing left to wait for.
+- **THE CAMPAIGN RE-TUNE IS THE BIGGEST OPEN ITEM, and it is close but not confirmed.**
+  Every structural pass it was waiting on has landed — free movement, the yard/wall
+  split, construction, the map redesign, fog, the AI belief model, and the castle-gate
+  fix. Tuning between two structural changes is work thrown away, which is why the
+  table was left alone through all of them; there was nothing left to wait for.
 
-  **It is in progress as this is written** — HEAD is a commit titled "WIP: measured
-  `enemyMult` column applied (19 of 24 bisected, tier 5-6 tail seeded)", touching
-  `regions.data.js`, `ai.data.js` and `incursion.data.js`. Every win-rate percentage
-  below this bullet, and in `Tuning`, the harness-bot section, the starting-footprint
-  pass, the uphill-raid pass, Tier 5 and Tier 6, predates that pass. Re-take with
-  `npm run sim` before trusting one of them.
+  **HEAD has moved on from the snapshot this bullet used to cite.** It is now
+  `01c8aa2`, "Finish the tune: tiers 5-6 landed, lengths made honest, ladder a wall
+  again" — four commits past the "19 of 24 bisected, tier 5-6 tail seeded" WIP this
+  paragraph previously pointed at. In between, a `git add -A` in this shared tree
+  briefly mixed another engineer's in-flight `siteCounts`/`develop` edits under the
+  measured `enemyMult` column, doubling up difficulty on several regions; it was
+  traced, named, and rebuilt from the last known-good base rather than re-bisected to
+  fit the contamination (see that commit's own message — worth reading as an example
+  of how to catch this rather than paper over it). Since that rebuild: every region's
+  `enemyMult` has been re-applied, tiers 5-6 landed on a flat 5.40 dial, and
+  `targetLengthMin` was re-authored campaign-wide from measured win medians —
+  confirmed directly against `regions.data.js`: emberholt's advertised length dropped
+  from 16.5 to 9 minutes, thornmoor's from 16 to 9. The incursion ladder's own
+  `baseDial` was rebuilt too (3.65 → 4.38; see "The endless ladder" below). **None of
+  it is independently confirmed yet** — the commit's own message says so: "NOT YET
+  VERIFIED END TO END — the n=96 sweep is running and is the judge." Every win-rate
+  percentage below this bullet, and in `Tuning`, the harness-bot section, the
+  starting-footprint pass, the uphill-raid pass, Tier 5 and Tier 6, predates this
+  pass. Re-take with `npm run sim` before trusting one of them.
 
   The starting position, `--all --n=96`, taken after the gate fix for tiers 4-6 and
-  before it for tiers 1-3 (whose gates barely moved):
+  before it for tiers 1-3 (whose gates barely moved) — i.e. before any of the above:
 
   ```
   tier 1   100  99 100  95        tier 4   93 81 90 69
@@ -1661,19 +1738,22 @@ activating focused buttons.
   tier 3    99  98  94  93  86    tier 6   78 66 59   (n=32)
   ```
 
-  Twenty-three of twenty-four read TOO EASY. Difficulty has to come back from
-  `enemyMult`, `develop` and the ground, which are the columns meant to carry it —
-  the castle gate was doing it by accident and is now capped (see the gate section).
+  Twenty-three of twenty-four read TOO EASY — this is what the `enemyMult` pass above
+  was answering. Difficulty has to come back from `enemyMult`, `develop` and the
+  ground, which are the columns meant to carry it — the castle gate was doing it by
+  accident and is now capped (see the gate section).
 
-  **The lengths are the bigger story and they are the part a dial cannot fix.**
-  Every advertised number is two to three times the real one — emberholt promises
-  16.5 minutes and delivers about five — because an army marches straight at the
-  throne instead of chaining through the countryside. `targetLengthMin` needs
-  re-authoring across the whole table, and doing that by lowering the promise is the
-  wrong answer for the late regions: a tier-6 battle SHOULD be long, so what has to
-  move there is the fight, not the label. `tests/campaignplay.test.js` currently
-  FAILS on thornmoor for exactly this (16m advertised, 5.5m delivered), and that
-  failure gates the Pages deploy.
+  **The lengths were the bigger story and they are the part a dial cannot fix** — that
+  much is unchanged. Every advertised number used to be two to three times the real
+  one (emberholt promised 16.5 minutes and delivered about five), because an army
+  marches straight at the throne instead of chaining through the countryside.
+  `targetLengthMin` has since been re-authored across the whole table (see above)
+  rather than fixed by lowering every promise, which would have been the wrong answer
+  for the late regions: a tier-6 battle SHOULD be long, so what had to move there is
+  the fight, not the label. Whether `tests/campaignplay.test.js` now passes on
+  thornmoor — previously 16m advertised against 5.5m delivered, the failure that was
+  gating the Pages deploy — has not been re-run to confirm here; it is exactly the
+  kind of thing the in-flight n=96 sweep is the judge of.
 - **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
   rule — a yard while it holds fewer than three, a farm after that — and never a
   stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
@@ -1693,16 +1773,42 @@ activating focused buttons.
   found this bullet still claiming the feature was unbuilt *after* it had shipped, and
   a stale "still open" entry is worse than no list: it sends the next reader to build
   something twice. **If you close an item, close it here in the same commit.**
-- **The loadout has a dominant answer: bring only militia.** Measured at n=48 on matched
-  seeds — gallowmoor 58% → **98%**, widowsgate 25% → **94%** — which is wider than the
-  entire difficulty range of the campaign, and four clicks away on the loadout screen.
-  A per-type slot-share cap was built and measured (it takes the exploit to 69%/56% and
-  leaves the default spread byte-identical) and then **reverted**, because it contradicts
-  the documented carry contract: `carryComposition` promises that growth becomes militia
-  and a pick is never rescaled, and ten tests encode that. Reconciling the two is a real
-  balance pass with a re-measure, not a bolt-on. The cause underneath is that militia is
-  best-in-class on both currencies at once — 4.00 atk/slot AND 3.00 def/slot AND 1.50
-  gold per point of attack — and counters the one unit the enemy always fields.
+- **The loadout has a dominant answer: bring only militia.** Re-measured on the tuned
+  table at n=48, matched seeds: gallowmoor **56% → 98%** (and a 5-minute region won in
+  2.3), widowsgate **27% → 90%**. The exploit gets *wider* as the campaign gets harder,
+  so the part meant to be a wall is the part it trivialises most. It is now pinned by
+  `tests/loadoutdominance.test.js`, which encodes it as a DEFECT and fails
+  informatively in both directions.
+
+  **⚠ DO NOT FIX THIS BY NERFING MILITIA — measured, and it backfires.** Three probes,
+  gallowmoor, n=24, matched seeds (default → mono, gap):
+
+  ```
+  baseline                       54% -> 100%   gap 46
+  counters.spearmen 0.75 -> 0    29% ->  83%   gap 54
+  atk 4->3 and def 3->2.25       38% ->  88%   gap 50
+  ```
+
+  Every nerf WIDENS the gap. The mixed army sits on the steep part of the win curve and
+  the mono army on its flat top, so the same nerf costs the default spread 16–25 points
+  and the exploit 12–17 — and wrecks the campaign on the way past. This retires the
+  standing "re-tune `UNITS.militia.counters.spearmen`" recommendation.
+
+  **The mechanism is TEMPO, not stats.** One slot budget buys 471 militia or 240 mixed
+  bodies, 32% more field power, at *equal* siege output — the spread's 23 rams make 276
+  siege DPS and 471 militia make 283, so rams buy siege the militia already had for a
+  third of the field. That is the same finding as "`breachSeconds` stopped binding"
+  below, from the other end. And **nothing in the game is sensitive to concentration**:
+  `battle/aiadapt.js` counter-picks by `argmax`, so it answers a 46%-militia army and a
+  98%-militia army with the identical share of production. Measured against mono-militia
+  the enemy is down to ZERO training grounds by t=3min — it is not out-fought, it is
+  out-raced before the adaptation it already has can matter.
+
+  So the levers that could work are the ones that read CONCENTRATION rather than the
+  unit: make the counter-pick scale with how dominant the dominant unit is, or give
+  siege a scarcity headcount cannot buy. A per-type slot-share cap was built and
+  measured (69%/56%, default spread byte-identical) and then **reverted**, because it
+  contradicts the carry contract ten tests encode — do not re-spend that either.
 - **Ownership's second channel is half-built.** `render/ownerDash.js` shipped the
   site-stroke half of the fix for the ΔE 1.8 measurement above: `ctx.setLineDash`
   sized off line width, solid for yours, dashed for theirs, fine dotted for nobody's
@@ -1726,7 +1832,25 @@ activating focused buttons.
 - **`meta.stats` tracks thirteen lifetime counters and no screen shows one of them.** They
   are written on every battle and carried through abdication; a player has no way to see
   any of it. `screens/mainmenu-legacy.js` and `mainmenu-settings.js` are the pattern a
-  stats drawer would follow.
+  stats drawer would follow. For an idle/strategy hybrid this is a retention gap rather
+  than a nicety — "numbers that go up, which you can look at" is the genre's core loop,
+  and this game collects them and hides them. The derived figures are the reason to build
+  it: win rate, kill/loss ratio, and the share of all income collected *while away*,
+  which is the idle half of the game made visible. See `ROADMAP.md`.
+- **`split` is uncalibrated, and unlike `branch` it has no knob.** Grouped by silhouette
+  against the middle of each region's own band, all three `split` regions read −6 —
+  saltmere, sunder and gravenreach, identically. `branch` was −11 and was fixed by
+  `branchTrunk` (see the region-shape section); `SQUEEZE` has no `split` entry at all, so
+  this one is recorded rather than solved. Either give it a parameter or write down why
+  it should not have one.
+- **A short session has nothing to do in it.** A battle is 7–15 undistracted minutes and
+  passive play loses on purpose — verified, a Riverfen battle with no input is down to
+  two sites inside two minutes — which is correct, and is what stops the idle half being
+  used to skip the real-time half. But a raid is a whole battle and an incursion rung is
+  a whole battle, so there is nothing a player can do in ninety seconds except collect
+  income and buy an upgrade. Half of this was built and merely unadvertised and is now
+  fixed (the battle autosaves and resumes for twelve hours; Withdraw now says so). The
+  other half is open, and it is the least-explored axis in the design.
 - **The service worker has no install affordance.** The manifest, the icons and the
   worker are all there, so the browser's own install prompt is the only route in;
   `beforeinstallprompt` is not captured, so there is no button anywhere that says the

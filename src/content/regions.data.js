@@ -75,21 +75,46 @@ export const REGIONS = Object.freeze([
     'split'),
 
   // --- Tier 2 (5) -- the first real wall. Kaldan proves the upgrade layer matters. ---
+  //
+  // THE WHOLE TIER SHARES ONE `enemyMult` (3.34), SO `develop` AND THE GROUND
+  // ARE THE ONLY LEVERS INSIDE IT — and that is a constraint rather than a
+  // style. Kaldan opens the tier at the band CEILING, so the shared dial cannot
+  // come down without pushing it out the top; every column is required
+  // non-decreasing, so a region cannot be given a lower `develop` than the one
+  // before it. The back half of the tier is therefore tuned by walking the
+  // whole run of `develop` values down together (highmarch and greywater both
+  // to 1.2, thornmoor to the 1.25 its bigger fort pool needs) rather than by
+  // dropping one row.
+  //
+  // TWO TRAPS, BOTH PAID FOR HERE. `develop` is QUANTISED — greywater measured
+  // 63% at 1.5 and 63% again at 1.25, then 69% at 1.2, because nothing crossed
+  // a promotion threshold in between. And the assertion that actually binds is
+  // on the REALISED mean fort level, not on this column: thornmoor has two
+  // forts to greywater's one, so the same 1.2 spreads thinner and realises
+  // 1.167 against greywater's 1.200 — an inversion tests/campaign.test.js
+  // catches and the raw column does not. 1.25 is the smallest value that
+  // realises 1.333 and clears it.
+  //
+  // Highmarch is 15x12 rather than 15x11 for the same reason in the other
+  // direction: at develop 1.2 it read 85% against an 84% ceiling, and its own
+  // `choke` is the lever, because a choke costs MORE on a bigger board (+5 on
+  // a 13x10, -16 on a 21x16 — see battle/mapshape.js). One extra row took it to
+  // 83% without touching a column any other region shares.
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
     3.34, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 10,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    3.34, 15, 11, [[1, 3, 5], 5, 4], 1.25, 0.15, 5.5, 12.5,
+    3.34, 15, 12, [[1, 3, 5], 5, 4], 1.2, 0.15, 5.5, 12.5,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.',
     'choke'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    3.34, 15, 12, [[1, 3, 5], 7, 4], 1.5, 0.2, 6.6, 10.5,
+    3.34, 15, 12, [[1, 3, 5], 7, 4], 1.2, 0.2, 6.6, 10.5,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    3.34, 15, 12, [[2, 3, 5], 7, 4], 1.7, 0.25, 7.9, 9,
+    3.34, 15, 12, [[2, 3, 4], 7, 4], 1.25, 0.25, 7.9, 9,
     'Bramble country: five neutral farms make the opening land grab the whole battle.',
     'branch'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
@@ -249,7 +274,7 @@ export const REGIONS = Object.freeze([
   // The band is WIN_BAND[4] = [22, 42]: these are meant to cost a good player
   // several attempts. Measured at n=240, in campaign order: see CLAUDE.md.
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach', 'stormhalt'],
-    4.88, 18, 13, [[2, 4, 8], 20, 4], 2.6, 0.6, 61, 6,
+    4.88, 18, 13, [[2, 4, 7], 20, 4], 2.6, 0.6, 61, 6,
     'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.',
     'branch'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],
