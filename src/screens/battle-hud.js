@@ -149,7 +149,7 @@ export function createBattleHud(o) {
     h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow),
     h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
     alert.el);
-  el.tr = h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el);
+  el.tr = h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el, withdraw.hint);
   // Each card is a header row (the label, full width, ruled off) over a
   // CONTROLS row. Two real rows, not one flex row with the label faked into
   // its own line via flex-basis — that trick fooled the browser's own

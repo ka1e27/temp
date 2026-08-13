@@ -133,3 +133,78 @@ test('the resume slot never touches the save slot', () => {
   assert.equal(storage.getItem('hexdominion.save'), '{"kept":true}',
     'progress must be untouched by an ephemeral battle blob');
 });
+
+// EVERYTHING ABOVE PROVES THE MECHANIC WORKS. This last one proves the game
+// SAYS SO, and it lives here rather than with the other HUD tests on purpose:
+// a feature the player is never told about is this project's signature bug —
+// four upgrades were refunded for it and six features shipped inert — and the
+// place to catch it is beside the behaviour being advertised, so that deleting
+// one and not the other fails immediately.
+//
+// The gap it closes: Withdraw is the ONLY labelled way out of a battle, and it
+// gives up the region. Closing the tab costs nothing (autosaved every four
+// seconds by screens/battle.js, resumed ahead of every other boot route by
+// main.js, valid for twelve hours) and nothing anywhere said so — so "I have to
+// go" and "I give up" were the same button on a fight that runs 8-14 minutes.
+test('the player is TOLD the battle survives leaving', async () => {
+  // The smallest fake document `ui/dom.js` will accept. tests/sitepanel.test.js
+  // carries the full one; this needs a button, a div and their text.
+  class FakeNode {}
+  class FakeEl extends FakeNode {
+    constructor(tag) {
+      super();
+      this.tagName = String(tag).toUpperCase();
+      this.kids = []; this.attrs = {}; this.dataset = {}; this.handlers = {};
+      this.own = ''; this.style = { setProperty() {} };
+      const classes = new Set();
+      this.classList = {
+        add: (...c) => c.forEach((x) => classes.add(x)),
+        remove: (c) => classes.delete(c),
+        contains: (c) => classes.has(c),
+        toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)),
+      };
+    }
+
+    get textContent() { return this.own + this.kids.map((k) => k.textContent).join(''); }
+    set textContent(v) { this.kids.length = 0; this.own = String(v); }
+    setAttribute(k, v) { this.attrs[k] = v; }
+    addEventListener(t, fn) { (this.handlers[t] ??= []).push(fn); }
+    fire(t) { for (const fn of this.handlers[t] ?? []) fn({ type: t }); }
+    append(...n) { this.kids.push(...n); }
+  }
+  const prevNode = globalThis.Node;
+  const prevDoc = globalThis.document;
+  globalThis.Node = FakeNode;
+  globalThis.document = {
+    createElement: (tag) => new FakeEl(tag),
+    createTextNode: (t) => { const e = new FakeEl('#text'); e.own = String(t); return e; },
+  };
+  try {
+    const { createWithdraw } = await import('../src/screens/battle-alert.js');
+    const w = createWithdraw({ input: { withdraw() {} } });
+
+    // The tooltip carries it for a pointer. A touchscreen has no hover at all,
+    // which is why it cannot be the only channel.
+    assert.match(String(w.el.attrs.title ?? ''), /saved|resume/i,
+      'the Withdraw tooltip must name the non-destructive alternative');
+
+    // The armed state is the channel that reaches a phone: it is the moment the
+    // player has decided to leave and not yet decided how.
+    assert.equal(w.hint.textContent, '', 'the hint must be silent until armed');
+    w.el.fire('click');
+    assert.match(w.hint.textContent, /resume|saved|keeps it/i,
+      'arming Withdraw must offer the alternative, or a player who only needs to '
+      + 'stop for now has exactly one visible option and it loses the region');
+
+    // NEGATIVE CONTROL. Without this the test would pass just as happily if the
+    // hint were hard-coded on, which is a different bug wearing the same green:
+    // a permanent line of copy beside a destructive button reads as noise and
+    // gets tuned out long before it is needed.
+    w.update(Date.now() + 60_000);
+    assert.equal(w.hint.textContent, '',
+      'the hint must clear with the disarm, not linger');
+  } finally {
+    globalThis.Node = prevNode;
+    globalThis.document = prevDoc;
+  }
+});
