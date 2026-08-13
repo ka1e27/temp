@@ -12,7 +12,8 @@
 import { UNIT_IDS, UNITS, SITES, SITE_LEVELS } from '../content/balance.js';
 import { resolveField, breachSeconds, projectHp, scaleComp, total, emptyComp }
   from '../battle/combat.js';
-import { travelTicks } from '../battle/movement.js';
+import { travelTicks, pathBetween } from '../battle/movement.js';
+import { projectMarchLosses } from '../battle/towers.js';
 import { groundOf, siteDefMultOf, garrisonMultOf } from '../battle/terrain.js';
 import { perceivedSite } from '../battle/vision.js';
 import { TICK_HZ } from '../core/loop.js';
@@ -39,6 +40,24 @@ function filtered(comp, filter) {
  */
 export function travelSecondsFor(state, from, to, comp) {
   return travelTicks(state, from, to, comp, 'player') / TICK_HZ;
+}
+
+/**
+ * The force that actually reaches `to`, after every gun on the way in.
+ *
+ * Kept beside `projectGarrison` because they are the same idea pointed at the
+ * two sides of the fight: both project a deterministic process forward over the
+ * flight, so the preview describes the battle that will happen rather than the
+ * one that would happen if it started now.
+ */
+function marchArrival(state, from, to, comp, etaSeconds) {
+  const path = pathBetween(state, from, to, 'player');
+  if (!path || path.length < 2) return comp;
+  const spawnTick = state.tick;
+  return projectMarchLosses(state, {
+    path, owner: 'player', comp, spawnTick, toId: to.id,
+    arriveTick: spawnTick + Math.max(1, Math.round(etaSeconds * TICK_HZ)),
+  });
 }
 
 /** In-progress training is deterministic, so the preview can honestly show the
@@ -69,9 +88,23 @@ export function computePreview(state, fromId, toId, o = {}) {
   const to = siteOf(state, toId);
   if (!from || !to || from.id === to.id) return null;
 
-  const send = scaleComp(filtered(from.garrison, o.filter), o.fraction ?? 0.5);
+  const sent = scaleComp(filtered(from.garrison, o.filter), o.fraction ?? 0.5);
+  const eta = (o.travelSeconds || travelSecondsFor)(state, from, to, sent);
+
+  // WHAT ARRIVES, NOT WHAT SETS OFF. Towers shoot a column all the way in
+  // (battle/towers.js), so an army that walks up to a stronghold reaches it
+  // smaller — and the DEFENDER's power is a function of the attacker's
+  // composition, because `counters` scale by the share of the foe that is the
+  // countered type. Previewing the force that departed would quietly break the
+  // one promise this file exists to keep: measured, a column of 30 militia and
+  // 6 raiders lost a single body on the approach, which moved the raider share
+  // by 0.4 points, which moved the defending spearwall's power by 1%.
+  //
+  // Projectable rather than guessable for exactly the reason `projectGarrison`
+  // below can project the defender's training: the route is known at commit
+  // time and nothing in it is random.
+  const send = marchArrival(state, from, to, sent, eta);
   const sendN = total(send);
-  const eta = (o.travelSeconds || travelSecondsFor)(state, from, to, send);
 
   // AN UNSCOUTED TARGET GETS NO PREVIEW — decision 10, and it collides with
   // this file's own header on purpose. The guarantee below only holds because

@@ -297,17 +297,34 @@ test('the preview reports the terrain-adjusted fight, not the flat-ground one', 
 
   // The promise: the preview is the SAME function the sim runs. Send the army
   // for real and the field battle lands on the preview's numbers exactly.
+  //
+  // COMPUTED WITHOUT THE eta=0 STUB. That stub is right for the terrain
+  // comparison above — it holds the march constant so only the ground differs —
+  // but a preview told the march is instant, compared against a simulation that
+  // really marches, tests a claim nobody makes. Two deterministic things happen
+  // during a flight and the preview accounts for both: the defender trains
+  // (`projectGarrison`) and the column is shot at (`projectMarchLosses`).
+  //
+  // The tower half went unnoticed until marches were slowed: the old flight was
+  // fast enough that the column's tick samples skipped the hexes beside the
+  // wall, so no gun got a tick to fire on. Slowed down it clips a few
+  // attackers, which shifts the spearmen's raider-`counters` share and moves
+  // defPower off the promised number. The answer was to make the preview know
+  // about it, not to make the march fast again.
+  const live = computePreview(hills, 'camp', 'fort', { fraction: 1 });
   hills.commands.push({ t: 'SEND', from: 'camp', to: 'fort', fraction: 1 });
   const fought = [];
-  for (let i = 0; i < 60 && !fought.length; i++) {
+  for (let i = 0; i < 200 && !fought.some((e) => e.attPower !== undefined); i++) {
     step(hills);
-    fought.push(...hills.events.filter((e) => e.type === 'battle:field' || e.siteId === 'fort'));
+    fought.push(...hills.events.filter((e) => e.siteId === 'fort'));
   }
   const field = fought.find((e) => e.attPower !== undefined);
   assert.ok(field, 'the assault must actually have resolved');
-  assert.ok(Math.abs(field.defPower - b.dp) < 1e-6,
-    `preview promised DP ${b.dp}, the simulation fought ${field.defPower}`);
-  assert.equal(field.win, b.win);
+  assert.ok(Math.abs(field.defPower - live.dp) < 1e-6,
+    `preview promised DP ${live.dp}, the simulation fought ${field.defPower}`);
+  assert.ok(Math.abs(field.attPower - live.ap) < 1e-6,
+    `preview promised AP ${live.ap}, the simulation fought ${field.attPower}`);
+  assert.equal(field.win, live.win);
 });
 
 test('the site panel says WHY a site is hard, and stays silent on open ground', () => {

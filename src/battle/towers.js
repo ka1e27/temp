@@ -51,6 +51,64 @@ function gunsOf(state, faction) {
 }
 
 /**
+ * What a column will have LEFT when it arrives, having been shot at all the way.
+ *
+ * THIS EXISTS TO KEEP THE PREVIEW HONEST, and that is not a nicety here: the
+ * pre-commit preview calls the same functions the simulation runs, so "will I
+ * win this" is a guarantee rather than an estimate — invariant 3, and the
+ * design's load-bearing promise. Towers broke it the moment they landed,
+ * because a column that walks up to a stronghold arrives with fewer men than
+ * it set off with, and the DEFENDER's power is a function of the attacker's
+ * composition (`counters` scale by the share of the foe that is the countered
+ * type). Measured on tests/terrain.test.js's fixture: 30 militia and 6 raiders
+ * lost one body on the approach, which moved the raider share from 16.7% to
+ * 17.1%, which moved the defending spearwall's counter, which moved the
+ * defender's power by 1% — and the preview promised the other number.
+ *
+ * It is projectable rather than guessable for the same reason `projectGarrison`
+ * can project the defender's training: the route is known at commit time, the
+ * guns are known, and nothing here is random.
+ *
+ * SHARES `gunsOf` AND THE DAMAGE ARITHMETIC WITH `towersPhase` deliberately —
+ * they are two readings of one rule, and a second implementation is exactly how
+ * a preview starts lying again. tests/towers.test.js pins that they agree.
+ *
+ * @param {object} state
+ * @param {{path:Array, owner:string, comp:object, spawnTick:number, arriveTick:number}} plan
+ * @returns {object} the composition that arrives
+ */
+export function projectMarchLosses(state, plan) {
+  const { path, owner, comp, spawnTick, arriveTick } = plan;
+  // `toId` is excluded for the same reason `towersPhase` excludes `sq.to`: the
+  // target does not shoot the assault that is coming for it. Passed explicitly
+  // rather than read off a squad, because at preview time there is no squad yet.
+  const guns = [...gunsOf(state, 'player'), ...gunsOf(state, 'enemy')]
+    .filter((g) => g.site.owner !== owner && g.site.id !== plan.toId);
+  if (!guns.length || !path || !path.length) return comp;
+
+  const sq = { path, owner, spawnTick, arriveTick, camped: false, hex: null };
+  let live = comp;
+  let carry = 0;
+  // Every tick the sim will run `towersPhase` on, in the same order, so the
+  // sub-body remainder accumulates identically. The loop is bounded by the
+  // flight time; a long march on the biggest board is a few hundred iterations.
+  for (let t = spawnTick + 1; t <= arriveTick; t++) {
+    const n = total(live);
+    if (n <= 0) break;
+    const at = squadHexOf({ ...state, tick: t }, sq);
+    if (!at) continue;
+    let dmg = 0;
+    for (const g of guns) if (distance(g.hex, at) <= g.range) dmg += g.dmg;
+    if (dmg <= 0) continue;
+    carry += dmg;
+    const kill = Math.floor(carry);
+    carry -= kill;
+    if (kill > 0) live = scaleComp(live, Math.max(0, (n - kill) / n));
+  }
+  return live;
+}
+
+/**
  * One tick of every armed building shooting at every enemy column in reach.
  *
  * ATTRITION IS PROPORTIONAL, exactly as a field battle's is, and through the
@@ -80,6 +138,16 @@ export function towersPhase(state) {
     let by = null;
     for (const g of guns) {
       if (g.site.owner === sq.owner) continue;
+      // A BUILDING DOES NOT SHOOT THE ARMY THAT IS COMING FOR IT. This is the
+      // rule that keeps the whole mechanic a tax on marching PAST rather than a
+      // second defence bolted onto the one that already exists. An assault is
+      // resolved by the field battle and then the siege; letting the target
+      // also whittle the column down on the approach charges for the same
+      // attack twice, and it is not a small charge — measured, a short hop that
+      // spends its whole flight inside a stronghold's reach lost 43% of the
+      // force before the fight even started, which would make the siege
+      // mechanic the design rests on decorative.
+      if (sq.to != null && g.site.id === sq.to) continue;
       if (distance(g.hex, at) > g.range) continue;
       dmg += g.dmg;
       by = by ?? g.site;

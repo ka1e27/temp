@@ -218,8 +218,16 @@ test('tactics: a specialist named in the loadout is really landed', () => {
   // first — so it bought the 400-crown outriders and the 1200-crown halberds but
   // never the 1800-crown sappers, and a sapper run landed ZERO sappers and
   // reported the default army's win rate under their name.
+  // maxTicks was 5, sized against the old MOVEMENT.hexSecondsPerSpeed (38).
+  // Doubled to slow marches down (see balance.engine.js), an outrider
+  // detachment riding out alone from gallowmoor's camp now arrives around
+  // tick 33 rather than well inside the old window — halberds and sappers
+  // still read as landed at tick 1 (they start IN the camp's garrison and are
+  // never the ones peeled off to ride out alone), so only the rider case was
+  // ever this timing-sensitive. 80 keeps comfortable margin over the measured
+  // arrival without turning the test into a full battle.
   for (const unit of ['outriders', 'halberds', 'sappers']) {
-    const { battle } = observe('gallowmoor', withSpecialists({ [unit]: 0.3 }), 1000, 5);
+    const { battle } = observe('gallowmoor', withSpecialists({ [unit]: 0.3 }), 1000, 80);
     const landed = battle.sites
       .filter((s) => s.owner === 'player')
       .reduce((a, s) => a + (s.garrison[unit] || 0), 0);

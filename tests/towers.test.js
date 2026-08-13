@@ -22,7 +22,7 @@ import { emptyComp, total } from '../src/battle/combat.js';
 import { spawnSquad, squadHexOf } from '../src/battle/movement.js';
 import { asHex } from '../src/battle/influence.js';
 import { distance } from '../src/core/hex.js';
-import { towersPhase } from '../src/battle/towers.js';
+import { towersPhase, projectMarchLosses } from '../src/battle/towers.js';
 import { TOWERS, ARMED_KINDS, towerDamagePerTick } from '../src/content/balance.towers.js';
 import { SITES, SITE_KINDS } from '../src/content/balance.js';
 import { EVENTS } from '../src/battle/events.js';
@@ -173,4 +173,56 @@ test('a higher-level wall hits harder, and a column shot to nothing is removed',
   }
   assert.equal(s.squads.some((x) => x.id === sq.id), false,
     'a column shot to nothing stayed on the board as an empty army');
+});
+
+test('the projection and the simulation agree exactly, body for body', () => {
+  // THE ONE THAT KEEPS THE PREVIEW HONEST. The pre-commit preview is a
+  // guarantee rather than an estimate, and towers broke that the moment they
+  // landed: a column arrives smaller than it set off, and the DEFENDER's power
+  // is a function of the attacker's composition, because `counters` scale by
+  // the share of the foe that is the countered type.
+  //
+  // `projectMarchLosses` is what the preview uses to describe the force that
+  // will actually arrive. It shares `gunsOf` and the damage arithmetic with
+  // `towersPhase`, but it walks the flight in one pass instead of a tick at a
+  // time — which is exactly the shape of a second implementation that drifts.
+  // So: run both over the same march and demand the same survivors.
+  const s = board('stronghold', [9, 1]);
+  const sq = spawnSquad(s, {
+    owner: 'player', from: 'camp', to: 'far', comp: comp({ militia: 100, raiders: 20 }),
+  });
+  const projected = projectMarchLosses(s, {
+    path: sq.path, owner: 'player', comp: comp({ militia: 100, raiders: 20 }),
+    spawnTick: sq.spawnTick, arriveTick: sq.arriveTick, toId: 'far',
+  });
+  while (s.tick < sq.arriveTick) { s.tick++; s.events = []; towersPhase(s); }
+  const live = s.squads.find((x) => x.id === sq.id);
+
+  assert.ok(total(projected) < 120, 'sanity: the march must actually cost something');
+  assert.deepEqual(projected, live.comp,
+    'the preview would have promised a different army than the one that arrived');
+});
+
+test('a building never shoots the assault that is coming for it', () => {
+  // The rule that keeps this a tax on marching PAST rather than a second
+  // defence stacked on the siege. Measured before it existed: a short hop that
+  // spends its whole flight inside a stronghold's reach lost 43% of the force
+  // before the fight started, which charges for one attack twice and makes the
+  // siege — the mechanic the design rests on — decorative.
+  const s = board('stronghold', [9, 1]);
+  const gun = s.sites.find((x) => x.id === 'gun');
+  const before = comp({ militia: 60 });
+  const at = spawnSquad(s, { owner: 'player', from: 'camp', to: gun.id, comp: before });
+  while (s.tick < at.arriveTick) { s.tick++; s.events = []; towersPhase(s); }
+  const live = s.squads.find((x) => x.id === at.id);
+  assert.deepEqual(live.comp, before, 'the target shot the column marching at it');
+
+  // NEGATIVE CONTROL: the identical column marching PAST the same wall to a
+  // different destination does lose men — so the zero above is the rule and not
+  // a stronghold that never fires.
+  const past = board('stronghold', [9, 1]);
+  const by = spawnSquad(past, { owner: 'player', from: 'camp', to: 'far', comp: comp({ militia: 60 }) });
+  while (past.tick < by.arriveTick) { past.tick++; past.events = []; towersPhase(past); }
+  const survivors = past.squads.find((x) => x.id === by.id);
+  assert.ok(total(survivors.comp) < 60, 'a column marching past a wall must pay for it');
 });
