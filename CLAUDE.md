@@ -30,10 +30,11 @@ under time pressure after that. If you already know the shape of your change:
 
 - **A balance number** → `Tuning`, then whichever pass section covers your region
   (harness-bot upgrades, starting-footprint, uphill-raid, Tier 5, Tier 6, the castle
-  gate). **A retune is in progress right now** — see "Still open" →
-  "THE CAMPAIGN RE-TUNE" — so treat every win-rate percentage below that marker as
-  provisional until it lands, and re-derive from `npm run sim` rather than trust one
-  already written down.
+  gate). **Every win rate in those pass sections is PROVENANCE, not today's number** —
+  the campaign has been re-tuned twice since most of them were written, most recently
+  against the finished battle layer. `src/content/regions.data.js` is the only current
+  answer, and `npm run sim` is how to check it. What the pass sections are still good
+  for is the *reasoning*: which lever moved what, and why.
 - **The simulation** (`src/battle/`) → Architecture → The four invariants → Simulation
   model, then the mechanic-specific section (Free movement, The yard and the wall,
   Building on the ground you took, Two-stage capture, Region shapes, Fog of war).
@@ -578,27 +579,24 @@ the whole win condition and both ends should be findable without searching.
 
 ### Tuning
 
-**⚠ THE CAMPAIGN IS UNTUNED RIGHT NOW, AND EVERY WIN RATE AND LENGTH BELOW IS STALE.**
-The battle redesign above changed the ground under all of it: marches take twice as long
-(`MOVEMENT.hexSecondsPerSpeed` 38 → 76), hostile territory costs twice as much
-(`TERRITORY_SPEED.hostile` 0.75 → 0.50), the player's camp starts in a real corner box,
-buildings shoot, and construction is gated on territory rather than a radius. Measured at
-n=48, before → after:
+**The campaign was re-tuned end to end against the finished battle layer** — free
+movement, the yard/wall split, construction, towers, the slower march, fog, squad sight
+and the site-existence gate. Read the re-tune section below (`Still open` → the closed
+entry) for the numbers and the method; what belongs here are the four facts a future
+tuner needs before touching a dial.
 
-```
-region        win%          win-median
-riverfen      94% -> 83%    9.8m -> 11.6m
-kaldan        79% -> 52%    9.3m -> 10.8m
-gallowmoor    56% -> 38%    5.0m ->  9.0m
-thanescar     46% -> 58%    5.1m ->  6.3m
-widowsgate    25% -> 42%    6.5m ->  9.9m
-```
+**THE CURVE INVERTED, and that was the whole shape of the pass.** The redesign made
+early regions harder and late ones easier — a slower board hurts whoever is trying to
+EXPAND and helps whoever is trying to SURVIVE, and which of those the player is flips
+partway up the campaign. So tiers 1–2 and 4–5 moved in OPPOSITE directions: riverfen's
+dial came down 2.02 → 1.82 while thanescar's went up 4.78 → 5.20.
 
-**THE CURVE INVERTED, and that is the finding rather than any single number.** Early
-regions got harder and late ones easier. The reading that fits: a slower board hurts
-whoever is trying to EXPAND and helps whoever is trying to SURVIVE, and which of those
-the player is flips partway up the campaign. If it holds, the re-tune is not a uniform
-dial nudge — tiers 1–2 and 5–6 have to move in opposite directions.
+**THE SLOPE IS ABOUT 1 POINT OF WIN RATE PER 0.01 OF DIAL, campaign-wide — except on
+the small maps, where it is nearly twice that.** Measured across all 24 regions over
+five sweeps: riverfen and kaldan both run ~1.8 pts/0.01 (11×9 and 15×11), while the
+17×13-and-up regions sit near 1.0. A dial step that is a nudge at tier 4 is a
+correction at tier 1. This supersedes the older per-region figures further down, which
+were taken before free movement.
 
 **AND THE DOMINANT LOADOUT CHANGED SHAPE ON THE SAME CHANGE.** `slowestSpeed` is a MIN
 over the stack, so the default spread marches at the pace of its rams, and doubling the
@@ -614,8 +612,8 @@ mono raiders     0.72         3.5x faster
 The answer is no longer "bring militia", it is **"leave the rams at home"** — a wider
 hole, and it compounds the already-recorded finding that rams are a straight loss because
 `breachSeconds` stopped binding. `tests/loadoutdominance.test.js` pins it as arithmetic
-rather than as a win rate, because the speed table is exact where a sweep on an untuned
-campaign only reports that the campaign is untuned.
+rather than as a win rate: the speed table is exact, where a win rate is a claim about
+whatever dial the table happens to ship today.
 
 All of it lives in `src/content/balance.js`. A balance pass should be a one-file diff.
 `npm run sim` reports win rate and median duration per region against the target band; a
@@ -713,12 +711,11 @@ tier 3   67 53 54 66 53     tier 6   26 29 26
 ```
 
 All twenty-four reported `ok` against their tier's band *and* their advertised length, at
-that dial. **This table is now superseded.** The campaign re-tune in progress as this is
-written (see "Still open" → "THE CAMPAIGN RE-TUNE") has since moved every `enemyMult` in
-`regions.data.js` again — in some places by a full point (tier 6's three regions and
-nightharrow all now ship on a flat 5.40, against the 4.36–4.48 this table was measured
-on) — so treat the percentages above as provenance, not as today's win rate. Re-derive
-with `npm run sim --all --n=96` before trusting one.
+that dial. **This table is superseded twice over** — by the first campaign re-tune and
+then by the second, against the finished battle layer. Every `enemyMult` has moved since,
+several by more than a full point. Treat the percentages above as provenance, not as
+today's win rate; `src/content/regions.data.js` is the only current answer, and
+`npm run sim --all --n=96` is how to check it.
 
 **Tier 6 was byte-for-byte what it shipped as, twice over**, through the fourth
 expedition segment below and the region-shape pass — but the retune above moved its dial
@@ -1083,6 +1080,22 @@ a new number.** A column lights the ground it is crossing and nothing beyond it.
 watchtower sees four times as far and is the one building that exists to answer "I want
 to see"; a marching army that scouted for free would take that away.
 
+**AND WHAT A COLUMN SEES IS WRITTEN DOWN — that half was missing, and it looked complete
+because the SCREEN was right.** `recomputeVision` builds `state.seen` out of the
+site-only map at its four ownership-shaped events, and squad sight is in none of that,
+so a column could march past an enemy stronghold, light it, show it to the player, and
+record nothing. Measured on gallowmoor: **56 tick-site pairs visible from the march,
+zero remembered.** The instant the column moved on, the board went back to saying nobody
+had ever looked — sight that creates no memory does not read as fog, it reads as a
+flicker, which is the exact failure `state.seen` exists to prevent. `recordSquadSightings`
+is a per-tick pass (O(squads × sites), ~1.2k comparisons a tick on the biggest board) that
+**bumps `influenceVersion` only on a genuinely NEW site id** — a few dozen times in a whole
+battle, and precisely the moment a building has to appear on the board, so the affordable
+condition and the correct one are the same condition.
+
+It is not free: giving both commanders memory of what their columns saw moved the campaign
+**+6 to +11 points across tier 4** and had to be paid for in the dial.
+
 **A marching squad NEVER bumps `influenceVersion`, and that is the one accepted cost.**
 That counter is what marks the background canvas dirty, so bumping it per tick would
 force a full repaint per tick — the exact regression `bgcache.js` already measured once
@@ -1125,12 +1138,54 @@ here`.
 **The ground is always visible; the people are not.** Terrain, rivers, the shape mask and
 the grid draw everywhere from tick 0. Hiding the terrain too was rejected: it turns the
 opening into an exploration phase, and this is a ten-minute real-time battle whose opening
-is already a land grab — it would also make the pre-battle preview a lie. A site's
-**position, kind and `adj` are common knowledge** for the same reason: a building on
-visible terrain is visible, you simply cannot see whose flag is on it or how many are
-inside. That is also what stops this becoming an AI rewrite — `aicore.js frontDistance`
-and `aihome.js reach` are pure whole-map geometry, and fogging site EXISTENCE would force
-a planner that reasons about a map with holes in it.
+is already a land grab — it would also make the pre-battle preview a lie.
+
+**BUT AN ENEMY BUILDING YOU HAVE NEVER LOOKED AT IS NOT ON YOUR BOARD, and that is the
+one place the player and the commander are told different things on purpose.** Site
+position and kind used to be common knowledge from tick 0 for both sides, so the player
+could read the enemy's entire economy and defence layout at a glance and pick the soft
+targets before moving. `siteKnown(state, faction, site)` — owns it, sees it now, or
+`state.seen` carries a last-known owner — is the ONE predicate the board, the panel and
+the hit-test all ask, so an unscouted building cannot be invisible on the canvas and
+still selectable with the cursor. That symmetry is the point: a thing that draws nothing
+and still answers a click is a worse tell than drawing it, because the player finds it by
+sweeping empty dark.
+
+**UNCLAIMED GROUND IS COMMON KNOWLEDGE, and leaving it out was a shipping bug caught by
+one measurement.** With only the rule above, the campaign OPENER measured — on all twelve
+seeds — a player board holding their own three sites and **nothing else**: no neutral farm
+anywhere on it, while `COACH.drag`, the first line a new player is ever shown, says *"Drag
+from your camp to the grey farm."* An instruction pointing at something not on the board.
+So `recomputeVision` records a site whose owner is `neutral` into BOTH factions' `seen`.
+It is the honest reading of the ask (the thing to hide is where the ENEMY's buildings
+are), it keeps the opening land grab legible, and it goes in `seen` rather than being a
+live "is it neutral right now?" test in `siteKnown` — otherwise a farm the enemy captured
+while you were elsewhere would BLINK OUT, where the ghost should say "nobody's, last I
+knew". Riverfen now opens at 6 sites known of 11, gallowmoor 16 of 28, widowsgate 37 of
+55, and **zero enemy buildings on any of them.**
+
+**It is provably balance-neutral rather than merely within noise**: with the dial fixed,
+the n=96 sweep before and after is *identical region by region* from gallowmoor to
+widowsgate. Nothing in `ai.js`, `aihome.js` or the harness branches on the difference
+between a ghost owned by `null` and one owned by `neutral` — both are "not the foe".
+
+**`beliefFor` deliberately does NOT ask it.** `perceivedSite` keeps handing the enemy AI
+and the harness bot a ghost for every site on the map, because `aicore.js frontDistance`
+and `aihome.js reach` are pure whole-map geometry and fogging site EXISTENCE from them
+would force a planner that reasons about a map with holes in it — measured once already,
+in the shape of a bot that swept the countryside for a whole battle, sent 1,741 orders and
+never once attacked a castle it could not see. So the two functions answer two different
+questions: `perceivedSite` is "what do I know about this site", `siteKnown` is "is it on
+my screen at all". **The cost is stated rather than hidden**: the balance table therefore
+describes a bot that still knows where every building is, so it understates the shipped
+game for a human. Same shape as the `--idle` and `--relics` gaps recorded below.
+
+One accepted leak: `buildBlocker` requires `BUILD_MIN_SEPARATION` from *every* site, so
+while a build is armed the legal-hex tint has a 2-hex hole around an unknown one. Narrow
+(only within build range of ground you already hold) and arguably correct — builders two
+hexes from a fort would notice it. Both alternatives are worse: gating the tint on
+knowledge makes the preview disagree with the command, and gating `buildBlocker` itself
+changes a sim rule the harness plays.
 
 **`state.seen` is the memory half, and it is the one derived map NOT rebuilt from
 scratch** — it only ever gains an entry or updates one, because its whole purpose is to
@@ -1238,11 +1293,15 @@ ask.
 
 - **A squad outside vision is not drawn, so it must not be clickable.** `squadAt` scanned
   the raw list, leaving an invisible column pickable out of empty dark — a worse tell than
-  drawing it would have been, because the player finds the army with the cursor. A SITE is
-  deliberately left alone: its position and kind are common knowledge, so clicking a ghost
-  to aim a blind attack is intended. For the same reason the build-target tint is *not* a
-  leak, though it looks like one — a hole in the wash around an unscouted site reveals only
-  what the ghost silhouette already shows.
+  drawing it would have been, because the player finds the army with the cursor. **The
+  same rule now covers SITES**, via `siteKnown`: a building nobody has looked at draws
+  nothing, opens no panel and answers no click. A site the player HAS seen and since lost
+  to fog is still a ghost and still clickable, so aiming a blind attack at remembered
+  ground remains intended — that is the whole difference between a ghost and a blank.
+  (When this bullet said a site was "deliberately left alone", the build-target tint was
+  not a leak because a hole in it revealed only what the silhouette already showed. Now
+  that the silhouette is gone the hole IS the tell — narrow, and accepted; see the fog
+  section for why closing it either way is worse.)
 
 **A spotted column's route is drawn in FULL, including the part in fog.** That is a
 deliberate call rather than an oversight: the entire value of spotting an army is knowing
@@ -1267,14 +1326,24 @@ per-frame half without a measurement showing it matters; the tick-keyed cache th
 itself buys nothing and adds a staleness bug of exactly the class this project keeps
 hitting.
 
-**A battle opens 85–90% dark, and that is worth knowing before playtest.** Every ordinary
-building sees radius 1 — its own doorstep, exactly as the brief asked — so a beachhead of
-three or four sites lights ~28 hexes of 192. What makes that playable rather than blind is
-decision 9: every site's POSITION and KIND are common knowledge from tick 0, so the player
-always knows where to go and only ever has to guess at what is inside. If a playtest says
-the opening feels blind, the knob is `VISION_RADIUS` for `camp`/`castle` — but raising it
-takes differentiation away from the watchtower, which is the one building that exists to
-answer this question.
+**A battle opens 85–90% dark AND with an empty map, and that is the single biggest thing
+to watch in a playtest.** Every ordinary building sees radius 1 — its own doorstep,
+exactly as the brief asked — so a beachhead of three or four sites lights ~28 hexes of
+192, and since the site-existence gate the player no longer starts knowing where anything
+is either. What keeps it from being a blank screen is the ground: terrain, rivers, the
+shape mask and the grid all draw from tick 0, and a column now lights and REMEMBERS what
+it walks past, so marching is itself scouting.
+
+Two knobs if it plays too blind, in order of preference: `SQUAD_VISION_RADIUS` (currently
+1 — raising it makes marching a better scout without touching buildings) and
+`VISION_RADIUS` for `camp`/`castle`. Raising the latter takes differentiation away from
+the watchtower, which is the one building that exists to answer this question.
+
+**A third thing to look at, which is legibility rather than a knob:** an unclaimed farm
+you have not reached yet is common knowledge but still a GHOST, so it draws at
+`GHOST_ALPHA` *under* the veil — correct (you know it is there and that it is nobody's;
+you cannot see what is inside) and, on a screenshot, very faint. If a playtest says the
+opening race is hard to find, the answer is the neutral ghost's contrast, not more sight.
 
 **The harness plays it** — same lesson as construction and upgrades, repeated a third
 time: a mechanic the harness cannot answer is a mechanic nobody has measured. A blinded
@@ -1859,24 +1928,52 @@ activating focused buttons.
 
 ### Still open, and why
 
-- **THE CAMPAIGN RE-TUNE IS OPEN AGAIN, and this time it is the last step of a
-  redesign rather than a pass of its own.** It was closed and confirmed — all 24
-  regions `ok` at n=96, band edges checked at n=240 — and then the battle redesign
-  (see Architecture, and the warning at the head of `Tuning`) changed the ground
-  under every number: marches take twice as long, hostile territory costs twice as
-  much, the camp starts in a corner, buildings shoot, and building is gated on
-  territory. Every advertised length is now wrong (gallowmoor promises 5 minutes and
-  delivers 9) and the bands are out campaign-wide.
+- ~~**THE CAMPAIGN RE-TUNE (second pass), against the finished battle layer.**~~
+  **Closed.** It reopened when the battle redesign changed the ground under every
+  measured number — marches twice as long, hostile territory twice as costly, a
+  corner camp, buildings that shoot, construction gated on territory — and it was
+  deliberately left open through the vision work rather than tuned twice. One honest
+  pass at the end, exactly as planned.
 
-  **It has deliberately NOT been re-tuned yet**, and that is this project's own most
-  expensive lesson applied on purpose: tuning between two structural changes is work
-  thrown away, and the vision rework is still in flight. One honest pass at the end,
-  against the finished battle layer.
+  **All twenty-four report `ok` at n=240**, against their tier's `WIN_BAND` *and* their
+  advertised length, in campaign order:
 
-  **Three findings feed it, and none is a dial nudge:** the curve inverted early
-  versus late, rams now cost the whole army its legs as well as being a straight
-  loss, and the lengths need re-authoring again from measured win medians. The
-  numbers and the reasoning are at the head of `Tuning`.
+  ```
+  tier 1   riverfen 90  ashford 90  ironwood 88  saltmere 79
+  tier 2   kaldan 75  highmarch 77  greywater 67  thornmoor 74  emberholt 74
+  tier 3   gallowmoor 60  sunder 58  vaelstrand 57  duskfell 65  karrowmere 54
+  tier 4   thanescar 54  blackspire 45  ironcrown 47  obsidian 47
+  tier 5   ravensmarch 30  gravenreach 33  nightharrow 35
+  tier 6   stormhalt 30  cinderwatch 33  widowsgate 29
+  ```
+
+  **The starting point was twelve of twenty-four out of band, in BOTH directions**,
+  which is what made this different from every earlier pass. Tier 1 read too hard and
+  tiers 4–5 read 15–25 points too easy, so the dial had to move down at one end and up
+  at the other. It took five full sweeps (n=48 to find the slope, three at n=96, one at
+  n=240 to close) and cost about two hours of wall clock at four jobs.
+
+  **Four things are worth more than the numbers:**
+
+  1. **The slope is ~1 point per 0.01 of dial campaign-wide, and ~1.8 on the small
+     maps.** Derived by applying a deliberate first step to all 24 rows and reading the
+     deltas, rather than trusting the older per-region figures — which were taken before
+     free movement and would have over-corrected tier 5 into the floor.
+  2. **A tier's ground has to be a tier's ground; the dial cannot rescue a row that is
+     structurally in the wrong tier.** Ravensmarch shipped with obsidian's exact enemy
+     mix on a wider board and read 61% against a band eleven points lower than
+     obsidian's. `enemyMult` is required non-decreasing, so pulling it down alone would
+     have needed a dial above its own tier-mates — a contradiction, not a tuning
+     problem. Its mix became gravenreach's and it landed at 31%.
+  3. **`siteCounts.neutral` is a real difficulty knob and it points the way the tier-2
+     header already said it did.** Ironcrown sat on obsidian's dial reading thirteen
+     points easier, and the whole difference was 15 neutral sites against 20. Widening
+     it to 19 moved it 58% → 42% with nothing else touched.
+  4. **`targetLengthMin` derives `hardCapMs`, so re-authoring the promise re-tunes the
+     battle.** Honest lengths cut tier 2's caps by 15–32% and cost that tier 2–8 points
+     — which is correct (a region should not be allowed three times the time it
+     advertises) but has to be measured, not assumed, and has to land BEFORE the
+     confirming sweep.
 
   What follows is the record of the pass that closed it the FIRST time, kept because
   the shape of it is the useful part.

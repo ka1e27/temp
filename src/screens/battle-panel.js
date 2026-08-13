@@ -11,12 +11,11 @@
 // Withdraw and the alert strip moved to battle-alert.js and are re-exported
 // below, so nothing downstream has to care that they moved.
 //
-// HARD RULE, same as everywhere: nothing here mutates simulation state. The
-// Upgrade button and the rally stepper append commands through `input`, exactly
-// like a click on the board does.
+// HARD RULE: nothing here mutates simulation state. The Upgrade button and the
+// rally stepper append commands through `input`, like a board click does.
 import { total } from '../battle/combat.js';
 import { rallyKeepOf, rallyTargetsOf, upgradeProgress, buildProgress } from '../battle/state.js';
-import { perceivedSite, perceivedSquads, lastKnownGarrison } from '../battle/vision.js';
+import { perceivedSite, perceivedSquads, siteKnown, lastKnownGarrison } from '../battle/vision.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration, spaceCase } from '../ui/format.js';
@@ -63,12 +62,11 @@ export function createSitePanel(o) {
   const sub = h('div.hud-selection-sub', { text: '' });
   // HP and troop composition as BARS rather than a plain "N troops · HP x/y"
   // line — see battle-bars.js. Fractions come straight off site.hp/hpMax and
-  // site.garrison; nothing here re-derives them.
+  // site.garrison, never re-derived here.
   const hpBar = createFillBar('bar-hp');
   const compBar = createCompBar(tip);
   // What the site EARNS and SPENDS, straight from the sim's own economy and
   // training functions — see battle-econ.js for why it may not be re-derived.
-  // A row of bubbles now, not a sentence — see battle-bubbles.js.
   const money = h('div.hud-site-money.bubbles', {});
   const trains = h('div.hud-selection-sub.hud-site-train', { text: '' });
   // The "moving bar that shows when the troop is going to be trained" —
@@ -76,19 +74,18 @@ export function createSitePanel(o) {
   const trainBar = createFillBar('bar-train');
   const trainStats = h('div.hud-site-unit-stats.bubbles', {});
   // The build timer, as a BAR rather than the "building · 12s left" line it
-  // replaces. A countdown is a number you have to read twice to know whether it
-  // is nearly done; a fill answers that at a glance, which is the same argument
-  // the HP and training bars already won. `upgradeProgress` is the sim's, not
-  // this file's — see battle-bars.js's header on why a fraction is never
-  // computed here.
+  // replaces: a countdown has to be read twice to know whether it is nearly
+  // done, and a fill answers that at a glance. `upgradeProgress` is the sim's,
+  // not this file's — see battle-bars.js on why a fraction is never computed
+  // here.
   const buildBar = createFillBar('bar-build');
-  // WHY a site is tough. Terrain the player cannot read is an invisible
+  // WHY a site is tough — terrain the player cannot read is an invisible
   // difficulty dial, and this row is what makes it visible.
   const terrain = h('div.hud-site-terrain.bubbles', {});
   const stat = h('div.hud-selection-sub.hud-site-stat', { text: '' });
-  // "What upgrading gives you" — bubbles read straight off upgradePreview(),
-  // sitting directly above the button they explain (see battle-econ.js/
-  // battle-bubbles.js for why every number here is real, never fabricated).
+  // "What upgrading gives you" — read straight off upgradePreview(), sitting
+  // directly above the button it explains (battle-econ.js says why every number
+  // here is real rather than fabricated).
   const upgradePreviewRow = h('div.hud-upgrade-preview.bubbles', {});
   const upgrade = h('button.btn.hud-upgrade', {
     'data-interactive': true, type: 'button',
@@ -97,25 +94,22 @@ export function createSitePanel(o) {
   const keep = createKeepRow(getState, input, targetId);
   const hire = createRecruitRow(getState, input, targetId);
   // Raise a building used to be a third row here (createBuildRow). It moved to
-  // its own rail beside the troop-type and booster ones — see battle-hud.js
-  // and battle-actions.js `createBuildRail` — because arming a build never
-  // read the SELECTED site to begin with, only the treasury.
-  // Four visual groups, so the eye chunks "what this site IS" (head) from
-  // "what it's WORTH" (econ) from "why it's hard / what's happening to it"
-  // (context) from "what you can do about it" (actions) instead of scanning
-  // one flat stack of same-size lines. Each group vanishes on its own — see
-  // the `:has()` rules in screens.css — when it would otherwise have carried
-  // only empty lines, so a farm with nothing to say about terrain shows no
-  // stray divider either.
+  // its own rail — see battle-actions.js `createBuildRail` — because arming a
+  // build never read the SELECTED site to begin with, only the treasury.
+  // Four visual groups, so the eye chunks "what this site IS" from "what it's
+  // WORTH" from "why it's hard / what's happening to it" from "what you can do
+  // about it", instead of scanning one flat stack of same-size lines. Each
+  // group vanishes on its own — see the `:has()` rules in screens.css — so a
+  // farm with nothing to say about terrain shows no stray divider either.
   const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, buildBar.el, stat);
   const actions = h('div.hud-site-actions', {},
     keep.el, hire.el, upgradePreviewRow, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
-  // #hud is pointer-events:none, and a panel that let clicks through would sit
-  // over the board, take a click on its own text as a click on empty ground,
-  // clear the selection — and vanish under the cursor that was reaching for it.
+  // #hud is pointer-events:none, so a panel that let clicks through would take
+  // a click on its own text as a click on empty ground, clear the selection,
+  // and vanish under the cursor that was reaching for it.
   const el = h('div.hud-selection.panel', { 'data-interactive': true },
     head, econ, context, actions);
   const follower = createFollower(el, board, siteOf);
@@ -190,14 +184,18 @@ export function createSitePanel(o) {
     if (squad) { setShown(false); showSquad(state, squad); return; }
 
     const id = view.selection[0];
-    // FOG. `perceivedSite` returns the real object for anything owned or
-    // currently in sight, so nothing below changes for the ordinary case —
-    // it only ever substitutes a GHOST, which carries no garrison/hp/level/
-    // trainType at all. Reading those off it would silently read
-    // `undefined`, and `undefined` still renders; the branch below is where
-    // that gets stopped instead of drawn.
+    // FOG, in two steps. `perceivedSite` returns the real object for anything
+    // owned or currently in sight and otherwise a GHOST, which carries no
+    // garrison/hp/level/trainType at all — reading those off it renders
+    // `undefined` rather than failing, so the ghost branch below is where that
+    // is stopped instead of drawn. And a site the player has NEVER SEEN opens
+    // no panel at all, the same way it draws no silhouette and answers no
+    // click: `siteKnown` is the shared predicate rather than a second reading
+    // of `state.seen`, because a building invisible on the board but still
+    // inspectable by keeping it selected is one bug fixed and one left live.
     const real = id ? siteOf(state, id) : null;
-    const site = real ? perceivedSite(state, 'player', real) : null;
+    const known = real ? siteKnown(state, 'player', real) : false;
+    const site = known ? perceivedSite(state, 'player', real) : null;
     setAnchor(site);
     set.open(!!site);
     if (!site) {

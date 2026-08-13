@@ -20,17 +20,18 @@ any region, loadout, tier of idling, legacy or relic budget. Six previously-iner
 features and four sold-but-dead upgrades were found *by measurement* rather than by a
 bug report. That is unusual and it is what makes everything below tractable.
 
-**The campaign WAS tuned and is now deliberately untuned again.** All 24 regions were
-confirmed `ok` at n=96 with band edges checked at n=240 — and then the battle redesign
-changed the ground under every number (marches twice as long, hostile territory twice as
-expensive, a corner start, buildings that shoot, territory-gated construction). Every
-advertised length is wrong today and the bands are out campaign-wide.
+**The campaign is tuned, for the second time, against the finished battle layer.** It was
+deliberately left untuned through the redesign — tuning between two structural changes is
+work thrown away — and then re-tuned end to end once free movement, the yard/wall split,
+construction, towers, the slower march, fog, squad sight and the site-existence gate had
+all landed. Every `enemyMult` and every advertised length moved; the method and the four
+transferable findings are in `CLAUDE.md` (`Still open` → the closed re-tune entry).
 
-That is on purpose: tuning between two structural changes is work thrown away, and the
-re-tune is the last step of the redesign rather than a pass of its own. **It is the
-single next thing to do**, and three findings feed it — the difficulty curve inverted
-early-versus-late, rams now cost the whole army its march speed, and the lengths need
-re-authoring again. Numbers and reasoning at the head of `Tuning` in `CLAUDE.md`.
+The one thing to carry forward: **the table describes a bot that earns no relics, idles
+far less than a real player, brings the default four-type spread, and still knows where
+every enemy building is.** Each of those gaps is now a flag away from being measured
+(`--relics`, `--idle`, `--weights`), and the last one is new — see the site-existence
+note in `CLAUDE.md`'s fog section.
 
 **What is missing is not content. It is a REASON TO KEEP DECIDING.** The moment-to-moment
 tactics of a battle stay rich for a long time — fog, sieges, rally timing, relief forces,

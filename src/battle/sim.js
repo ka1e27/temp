@@ -25,7 +25,7 @@ import { arrivalsPhase } from './arrivals.js';
 import { towersPhase } from './towers.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { recomputeOccupancy } from './occupancy.js';
-import { recomputeVision } from './vision.js';
+import { recomputeVision, recordSquadSightings } from './vision.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget, reverseSquad, clearPathCache } from './movement.js';
 import { drainCommands } from './commands.js';
@@ -319,6 +319,12 @@ export function step(state) {
   // building that opens this tick does not fire on the tick it opens.
   towersPhase(state);
   timersPhase(state);
+  // SEE, THEN DECIDE. What the columns learned this tick has to be written
+  // down before the commander reasons about it, or the AI acts on a map one
+  // tick older than its own scouts. See battle/vision.js for why this is a
+  // per-tick pass at all when `state.vision` is rebuilt only four times a
+  // battle: squad sight is answered live and would otherwise leave no trace.
+  recordSquadSightings(state);
   think(state);
   attritionPhase(state);
   endPhase(state);

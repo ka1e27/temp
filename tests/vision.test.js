@@ -120,14 +120,32 @@ test('vision: a neutral site grants nobody sight — there is no neutral CLAIM',
   assert.equal(canSee(s, 'player', HEX[0], HEX[1]), false);
   assert.equal(canSee(s, 'enemy', HEX[0], HEX[1]), false);
   assert.deepEqual(s.vision.player, {}, 'a neutral farm painted a partial claim');
-  assert.equal(s.seen.player.n, undefined, 'nobody looked, so nobody remembers anything about it either');
 
-  // NEGATIVE CONTROL: the identical site and hex, OWNED, grants sight — so the
-  // darkness above is the neutral rule, not a fixture that was dark regardless.
+  // BUT ITS EXISTENCE IS COMMON KNOWLEDGE, and that is a different fact from
+  // sight — which is exactly why they are two maps. `vision` is "what ground
+  // can I watch"; `seen` is "what do I know is out there". An unclaimed farm
+  // is watched by nobody and hidden by nobody: no garrison is holding it, no
+  // fog is covering it, and the race for it is the whole shape of a battle's
+  // opening. Without this, `siteKnown` measured the campaign OPENER at three
+  // sites on the player's board and zero neutral farms — while the first line
+  // of the tutorial says to drag from the camp to the grey farm.
+  assert.equal(s.seen.player.n, 'neutral', 'unclaimed ground must be common knowledge');
+  assert.equal(s.seen.enemy.n, 'neutral', '...to both sides, or it is a player-side freebie');
+
+  // NEGATIVE CONTROL 1: the identical site and hex, OWNED, grants sight — so
+  // the darkness above is the neutral rule, not a fixture dark regardless.
   s.sites[0].owner = 'player';
   recomputeVision(s);
   assert.equal(canSee(s, 'player', HEX[0], HEX[1]), true);
   assert.equal(s.seen.player.n, 'player');
+
+  // NEGATIVE CONTROL 2: an ENEMY site nobody is watching is remembered by
+  // nobody. This is the half that makes the clause above narrow rather than
+  // "record everything" — enemy buildings are the thing being hidden.
+  const t = { grid: BIG_GRID, sites: [{ id: 'e', kind: 'farm', owner: 'enemy', hex: HEX }] };
+  recomputeVision(t);
+  assert.equal(t.seen.player.e, undefined,
+    'an unwatched enemy building was handed to the player for free');
 });
 
 test('vision: a watchtower sees materially further than an ordinary building', () => {

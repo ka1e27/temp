@@ -209,11 +209,18 @@ test('panel: an unscouted site says UNSCOUTED and shows nothing else', () => {
   assert.ok(dark, 'no unseen enemy site — this proves nothing');
   const { panel, view } = mountPanel(b);
 
+  // SEEN ONCE, NOT SEEN NOW — which is what a ghost is, and is no longer the
+  // same thing as "not currently visible". A site this faction has NEVER laid
+  // eyes on is not on the board or in this panel at all (`siteKnown`, and the
+  // negative control at the end of this test), so a fixture that skipped this
+  // line would be asserting the ghost branch against a site that never reaches
+  // it.
+  b.seen.player[dark.id] = 'enemy';
   select(view, dark.id);
   panel.update(b);
 
   assert.equal(panel.el.find('hud-selection-title').textContent, spaceCase(dark.kind).toUpperCase());
-  assert.equal(panel.el.find('hud-selection-sub').textContent, 'UNSCOUTED');
+  assert.equal(panel.el.find('hud-selection-sub').textContent, 'UNSCOUTED · last seen: enemy');
 
   // No leaked number anywhere a player would actually read.
   for (const cls of ['hud-selection-title', 'hud-selection-sub', 'hud-site-train', 'hud-site-stat']) {
@@ -235,6 +242,16 @@ test('panel: an unscouted site says UNSCOUTED and shows nothing else', () => {
   assert.equal(panel.el.find('hud-keep').classList.contains('is-open'), false);
   assert.equal(panel.el.find('hud-recruit').classList.contains('is-open'), false);
   assert.equal(panel.el.find('hud-upgrade'), null, 'the Upgrade button is not even mounted');
+
+  // NEGATIVE CONTROL, and it is the new rule rather than a nicety: forget that
+  // this site was ever seen and the panel does not open AT ALL. Without it,
+  // every assertion above would pass just as happily against the old behaviour,
+  // where a building nobody had ever looked at was still fully inspectable by
+  // clicking the silhouette the board drew for free.
+  delete b.seen.player[dark.id];
+  panel.update(b);
+  assert.equal(panel.el.classList.contains('is-open'), false,
+    'a building this faction has never seen opened a panel — it is not on the board either');
 });
 
 test('panel: the SAME site, once scouted, shows full live detail instead of UNSCOUTED', () => {
@@ -271,13 +288,16 @@ test('panel: switching from a real site to a ghost leaves no undefined/NaN, and 
   assert.equal(panel.el.find('bar-hp').classList.contains('is-open'), true,
     'sanity: the real site opened its HP bar');
 
+  // Seen once, not seen now — see the first ghost test for why the fixture has
+  // to say so explicitly since `siteKnown` landed.
+  b.seen.player[dark.id] = 'enemy';
   select(view, dark.id);
   panel.update(b);
 
   const title = panel.el.find('hud-selection-title').textContent;
   const sub = panel.el.find('hud-selection-sub').textContent;
   assert.equal(title, spaceCase(dark.kind).toUpperCase());
-  assert.equal(sub, 'UNSCOUTED');
+  assert.equal(sub, 'UNSCOUTED · last seen: enemy');
   assert.doesNotMatch(title, /undefined|NaN/);
   assert.doesNotMatch(sub, /undefined|NaN/);
   for (const cls of ['bar-hp', 'bar-comp', 'bar-train', 'bar-build']) {
@@ -293,8 +313,14 @@ test('panel: a ghost states its last-known owner in the past tense, and only whe
 
   select(view, dark.id);
   panel.update(b);
-  assert.equal(panel.el.find('hud-selection-sub').textContent, 'UNSCOUTED',
-    'never seen at all — nothing to say about ownership, not even "unknown"');
+  // NEVER SEEN AT ALL is no longer "a ghost with nothing to say about
+  // ownership" — it is not on the board and not in this panel, so there is no
+  // past tense to state yet. This half is the negative control for the half
+  // below: without it, "a ghost names its last-known owner" would pass just as
+  // happily against a panel that named an owner for every enemy site whether
+  // the player had ever looked or not.
+  assert.equal(panel.el.classList.contains('is-open'), false,
+    'a site nobody has ever looked at opened a panel');
 
   // It was seen once, and nobody has looked since — the exact shape
   // recomputeVision leaves behind (tests/vision.test.js: "seen keeps the

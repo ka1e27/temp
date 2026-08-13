@@ -120,31 +120,29 @@ test('map size, site count and battle length scale together across tiers', () =>
 // 60-80% with zero losses. Change them only with fresh simrunner output.
 test('the vertical slice matches the tuned balance table', () => {
   const table = [
-    // Re-measured after the mixed-table rebuild (a `git add -A` in a shared
-    // tree briefly stacked another engineer's siteCounts/develop/targetLengthMin
-    // edits under this pass's own enemyMult column — see the commit that
-    // rebuilt content/regions.data.js from the last known-good base and
-    // re-applied only the measured dial). `enemyMult` here is simply what the
-    // table now ships: 3.13/3.25 for ironwood/saltmere, not the 3.00/3.10 an
-    // earlier draft of this test pinned. `targetLengthMin` is re-authored from
-    // the WIN MEDIAN measured alongside each win rate, at n=96:
-    // riverfen 86%/10.0m, ashford 84%/10.3m, ironwood 88%/9.7m, saltmere
-    // 88%/8.1m. grid/siteCounts/reward are untouched.
+    // Re-measured end to end for the battle-redesign re-tune — the pass that
+    // followed free movement, the yard/wall split, construction, towers, the
+    // slower march and fog. Every column below moved, and the dial moved MOST
+    // at this end of the table, because that redesign inverted the campaign's
+    // difficulty curve: a slower board hurts whoever is trying to EXPAND and
+    // helps whoever is trying to SURVIVE, so tier 1 got harder while tiers 4-5
+    // got easier, and the two ends had to move in opposite directions.
     //
-    // KALDAN IS THE ONE ROW HERE THAT IS KNOWINGLY OUT OF BAND: 40% at n=96
-    // against tier 2's [66,84] floor, not the 72% this test used to assert.
-    // `enemyMult` (3.34) is unchanged and is not the suspect — `siteCounts`
-    // never moved for this row across the whole mixed-table episode. The
-    // likely cause is content/ai.data.js `AI_TIERS[1].economyMult` (0.36 ->
-    // 0.49), landed in the same commit as the dial and never touched by the
-    // rebuild, which only restores `regions.data.js`. Recorded here rather
-    // than quietly re-bisected, because the fix is either that economyMult or
-    // a fresh kaldan dial, and only one engineer should be turning that knob.
-    ['riverfen', 1, 2.02, 11, 9, 5, 3, 3, 1.0, 10],
-    ['ashford', 1, 2.80, 12, 9, 6, 3, 3, 1.2, 10.5],
-    ['ironwood', 1, 3.13, 13, 10, 7, 4, 3, 1.5, 9.5],
-    ['saltmere', 1, 3.25, 13, 10, 8, 4, 4, 1.8, 8],
-    ['kaldan', 2, 3.34, 15, 11, 9, 5, 4, 4.0, 10],
+    // `targetLengthMin` is re-authored from the WIN MEDIAN measured alongside
+    // each win rate, never from the all-runs median (tools/simrunner.js says
+    // why at length). grid/siteCounts/reward are untouched.
+    //
+    // NOTHING HERE IS KNOWINGLY OUT OF BAND ANY MORE. This block used to carry
+    // a standing note that kaldan read 40% against tier 2's 66% floor and that
+    // the suspect was an `AI_TIERS[1].economyMult` edit surviving a rebuild.
+    // That is closed: kaldan is tuned on its own dial (3.34 -> 3.19) and reads
+    // inside its band on the same sweep as every other row. Confirmed at n=240:
+    // riverfen 90, ashford 90, ironwood 88, saltmere 79, kaldan 75.
+    ['riverfen', 1, 1.82, 11, 9, 5, 3, 3, 1.0, 9.5],
+    ['ashford', 1, 2.66, 12, 9, 6, 3, 3, 1.2, 10],
+    ['ironwood', 1, 3.04, 13, 10, 7, 4, 3, 1.5, 9.5],
+    ['saltmere', 1, 3.08, 13, 10, 8, 4, 4, 1.8, 7.5],
+    ['kaldan', 2, 3.19, 15, 11, 9, 5, 4, 4.0, 8.5],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;

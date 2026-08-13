@@ -1,13 +1,17 @@
-// THREE FOG CHANGES, ALL FROM THE SAME PASS — split out of tests/vision.test.js
+// FIVE FOG CHANGES, ALL FROM THE SAME PASS — split out of tests/vision.test.js
 // purely for the 400-line cap, the same way fogleaks/fogrender/fogpanel
 // already split the fog suite by concern rather than by file size alone.
 //
 // 1. A marching or camped squad now grants its owner a small sight radius of
 //    its own, answered by `canSee` rather than baked into `state.vision`.
-// 2. A watchtower hides its OWNER's squads from the other side —
+// 2. ...and what it sees is WRITTEN DOWN (`recordSquadSightings`), or the
+//    sight creates no memory and the board flickers as the column passes.
+// 3. A watchtower hides its OWNER's squads from the other side —
 //    counter-intelligence, checked in `perceivedSquads`.
-// 3. A failed assault leaves a stale garrison count behind — the one
+// 4. A failed assault leaves a stale garrison count behind — the one
 //    deliberate, narrow relaxation of "a ghost carries nothing that changes".
+// 5. A site this faction has NEVER SEEN is not on its board at all
+//    (`siteKnown`) — the difference between a ghost and a blank.
 //
 // Same discipline as the rest of this suite: every claim carries a negative
 // control, because a fixture that is silently empty passes a "must hide X"
@@ -17,7 +21,7 @@ import assert from 'node:assert/strict';
 
 import {
   recomputeVision, canSee, squadHex, perceivedSite, perceivedSquads,
-  recordFailedAssault, lastKnownGarrison,
+  recordFailedAssault, lastKnownGarrison, siteKnown,
 } from '../src/battle/vision.js';
 import { VISION_RADIUS, SQUAD_VISION_RADIUS } from '../src/content/balance.js';
 import { beliefFor } from '../src/battle/belief.js';
@@ -259,4 +263,130 @@ test('vision: recordFailedAssault is the only writer — a WIN records nothing',
     'the assault never actually won — pick a weaker target or extend the loop');
   assert.equal(lastKnownGarrison(b, 'player', target.id), undefined,
     'a WON assault left a stale-garrison memory behind — recordFailedAssault has exactly one caller and this is not it');
+});
+
+// ---------------------------------------------------------------------------
+// A site this faction has never seen is not on its board at all — and sight
+// from a marching column is what turns that around
+// ---------------------------------------------------------------------------
+
+test('vision: a marching column writes down what it sees, so sight becomes memory', () => {
+  // THE DEFECT THIS PINS shipped one release earlier and looked complete,
+  // because the SCREEN was right: `canSee` answers squad sight live, so the
+  // player watched a column light an enemy farm — and `state.seen`, which is
+  // built by `recomputeVision` out of the SITE-only map at four ownership-
+  // shaped events, recorded none of it. Measured on this exact fixture before
+  // the fix: 56 tick-site pairs visible from the march, ZERO remembered. The
+  // instant the column moved on, the board went back to saying nobody had ever
+  // looked.
+  const b = battleFor();
+  const home = b.sites.find((s) => s.kind === 'camp');
+  const target = b.sites.find((s) => s.owner === 'enemy');
+  assert.ok(home && target, 'no camp or no enemy site — this proves nothing');
+
+  b.commands.push({ t: 'SEND', from: home.id, to: target.id, fraction: 0.9 });
+  step(b);
+  const sq = b.squads.find((s) => s.owner === 'player');
+  assert.ok(sq, 'nothing marched — this proves nothing');
+
+  const before = Object.keys(b.seen.player).length;
+  let sightings = 0;
+  let remembered = 0;
+  for (let i = 0; i < 2000 && b.squads.some((x) => x.id === sq.id); i++) {
+    step(b);
+    for (const site of b.sites) {
+      if (site.owner !== 'enemy') continue;
+      if (!canSee(b, 'player', site.hex[0], site.hex[1])) continue;
+      sightings++;
+      if (b.seen.player[site.id] !== undefined) remembered++;
+    }
+  }
+  assert.ok(sightings > 0,
+    'the column never saw an enemy site on the way — this proves nothing');
+  assert.equal(remembered, sightings,
+    'a column saw an enemy site and did not write it down — sight without memory flickers');
+  assert.ok(Object.keys(b.seen.player).length > before,
+    'the march ended knowing exactly what it knew at the start');
+});
+
+test('siteKnown: never looked is not the same as looked once and lost sight', () => {
+  const b = battleFor();
+  const dark = b.sites.find((s) => s.owner === 'enemy'
+    && !canSee(b, 'player', s.hex[0], s.hex[1])
+    && b.seen.player[s.id] === undefined);
+  assert.ok(dark, 'no never-seen enemy site — this proves nothing');
+
+  assert.equal(siteKnown(b, 'player', dark), false,
+    'a building nobody has ever looked at is on the board');
+  // ...and it IS still a ghost to `perceivedSite`, which is the whole reason
+  // these are two functions. battle/belief.js hands that ghost to the enemy
+  // commander and to the harness bot, whose planners are pure whole-map
+  // geometry — fogging site EXISTENCE from THEM is a different feature with a
+  // balance pass attached, so `siteKnown` answers only the rendering question.
+  assert.equal(perceivedSite(b, 'player', dark).ghost, true,
+    'the resolver the AI reads must still describe this site');
+
+  // Look once and stop looking: known forever after, as a ghost.
+  b.seen.player[dark.id] = 'enemy';
+  assert.equal(siteKnown(b, 'player', dark), true,
+    'a building seen once and since lost to fog fell off the board');
+  assert.equal(perceivedSite(b, 'player', dark).ghost, true,
+    'being remembered is not being seen');
+
+  // NEGATIVE CONTROL: your own ground is never in question, and neither is
+  // ground you are currently standing next to.
+  const mine = b.sites.find((s) => s.owner === 'player');
+  assert.equal(siteKnown(b, 'player', mine), true);
+  assert.equal(siteKnown(b, 'enemy', mine), false,
+    'the player\'s own beachhead was handed to the enemy for free');
+});
+
+test('siteKnown: unclaimed ground is common knowledge, enemy buildings are not', () => {
+  // THE OPENING LAND GRAB HAS TO STAY LEGIBLE. Measured on the campaign opener
+  // across twelve seeds before this clause existed: the player's board held
+  // their own three sites and NOTHING else — no neutral farm anywhere on it —
+  // while COACH.drag, the first line a new player is ever shown, says "drag
+  // from your camp to the grey farm". An instruction pointing at something not
+  // on the board is a worse version of the half-written coach beats this
+  // project already had to go and find.
+  const b = battleFor('riverfen');
+  const neutrals = b.sites.filter((s) => s.owner === 'neutral');
+  const enemies = b.sites.filter((s) => s.owner === 'enemy');
+  assert.ok(neutrals.length > 0 && enemies.length > 0, 'fixture has no both — proves nothing');
+
+  for (const s of neutrals) {
+    assert.equal(siteKnown(b, 'player', s), true,
+      `unclaimed ${s.kind} ${s.id} was hidden — the opening race is invisible`);
+  }
+  // NEGATIVE CONTROL, and it is the whole point of the rule being narrow: an
+  // enemy building nobody has looked at is NOT on the board, even though a
+  // neutral one on the same map is.
+  const dark = enemies.filter((s) => !canSee(b, 'player', s.hex[0], s.hex[1]));
+  assert.ok(dark.length > 0, 'every enemy site is already in sight — proves nothing');
+  for (const s of dark) {
+    assert.equal(siteKnown(b, 'player', s), false,
+      `enemy ${s.kind} ${s.id} is on the board without anyone having looked at it`);
+  }
+
+  // ...and it holds BOTH WAYS, so this cannot be read as a player-side freebie.
+  for (const s of neutrals) assert.equal(siteKnown(b, 'enemy', s), true);
+});
+
+test('vision: a captured neutral does not blink out — seen keeps the past tense', () => {
+  // WHY THE RULE IS RECORDED IN `seen` RATHER THAN SPECIAL-CASED IN `siteKnown`.
+  // If "is it neutral RIGHT NOW" were the test, then the moment the enemy took
+  // a farm the player had never approached, the building would vanish off the
+  // board — a flicker, which is the exact failure `state.seen` exists to
+  // prevent for owner colouring.
+  const b = battleFor('riverfen');
+  const far = b.sites.find((s) => s.owner === 'neutral'
+    && !canSee(b, 'player', s.hex[0], s.hex[1]));
+  assert.ok(far, 'no out-of-sight neutral site — this proves nothing');
+  assert.equal(siteKnown(b, 'player', far), true, 'sanity: it starts on the board');
+
+  far.owner = 'enemy';   // the enemy takes it while the player is looking elsewhere
+  assert.equal(siteKnown(b, 'player', far), true,
+    'a farm the player knew about vanished the moment somebody else took it');
+  assert.equal(perceivedSite(b, 'player', far).owner, 'neutral',
+    'the ghost must report what was last TRUE, not what is true now');
 });

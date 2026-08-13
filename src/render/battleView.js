@@ -1,12 +1,10 @@
 // The battle board renderer. TWO CANVASES, deliberately:
 //
 //   #board-bg  terrain, the territory flood and site base shapes. Repainted
-//              ONLY when the background is dirty — an
-//              ownership or level change, i.e. roughly once a second, not
-//              sixty times.
+//              ONLY when the background is dirty — an ownership or level
+//              change, i.e. roughly once a second, not sixty times.
 //   #board-fx  everything that moves: squads, garrison bars, HP rings, siege
-//              progress, selection, the drag arc. Cleared and redrawn every
-//              frame.
+//              progress, selection, the drag arc. Redrawn every frame.
 //
 // The whole fx path is allocation-free: scratch vectors live at module scope,
 // dash patterns are mutated in place, draws are batched by colour, `ctx.font`
@@ -36,7 +34,7 @@ import { numStr } from '../ui/format.js';
 // FOG OF WAR. `perceivedSite`/`perceivedSquads` are the one resolver every
 // surface is meant to call (battle/vision.js); `fog.js` is the renderer's own
 // half — the drawn flood and the veil, neither of which is "hide one object".
-import { perceivedSite, perceivedSquads } from '../battle/vision.js';
+import { perceivedSite, perceivedSquads, siteKnown } from '../battle/vision.js';
 import {
   perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA, drawAssaultWash, drawStaleGarrisons,
 } from './fog.js';
@@ -101,11 +99,16 @@ export function createBattleView(opts) {
   // and rally previews, a squad's endpoints) gets whatever this faction
   // actually knows about that site, so a halo traced around a ghost can never
   // draw the storeys of a level it has not seen (see siteShapes.js
-  // traceStructure). Position and kind are common knowledge either way.
+  // traceStructure). A site this faction has NEVER SEEN resolves to null rather
+  // than to a ghost, exactly as it draws nothing and hit-tests to nothing —
+  // `siteKnown` is the one predicate all three ask, so an unscouted building
+  // cannot be invisible on the board and still reachable through a halo.
   function byId(id) {
     const list = state0.sites;
     for (let i = 0; i < list.length; i++) {
-      if (list[i].id === id) return perceivedSite(state0, viewFaction, list[i]);
+      if (list[i].id !== id) continue;
+      if (!siteKnown(state0, viewFaction, list[i])) return null;
+      return perceivedSite(state0, viewFaction, list[i]);
     }
     return null;
   }
@@ -143,6 +146,11 @@ export function createBattleView(opts) {
       let bestD = Infinity;
       for (let i = 0; i < state.sites.length; i++) {
         const s = state.sites[i];
+        // A BUILDING YOU HAVE NEVER SEEN IS NOT PICKABLE, for the same reason
+        // squadpick already refuses an unseen column: a thing that draws
+        // nothing and still answers the cursor is a worse tell than drawing
+        // it, because the player finds it by sweeping empty dark.
+        if (!siteKnown(state, viewFaction, s)) continue;
         sitePos(s, _a);
         const dx = wx - _a.x;
         const dy = wy - _a.y;
@@ -213,8 +221,15 @@ export function createBattleView(opts) {
     board.lineWidth = 2.5 / camera.zoom;
     drawFrontLine(ctx, board);
     for (let i = 0; i < state.sites.length; i++) {
-      // A ghost draws too — kind and position are common knowledge (design
-      // decision 9) — but faded, so it reads as remembered rather than live.
+      // A GHOST DRAWS, faded, so it reads as remembered rather than live — but
+      // only once this faction has actually LOOKED at it. Position and kind
+      // used to be common knowledge from tick 0 for the player as well as for
+      // the commander; that made the enemy's whole economy and defence layout
+      // readable at a glance, which is exactly what the owner asked to lose.
+      // The commander keeps it (battle/belief.js reads `perceivedSite`
+      // directly and plans over the whole map), so this is a change to what
+      // the screen shows, not to what either side can reason about.
+      if (!siteKnown(state, viewFaction, state.sites[i])) continue;
       const s = perceivedSite(state, viewFaction, state.sites[i]);
       sitePos(s, _a);
       if (s.ghost) ctx.globalAlpha = GHOST_ALPHA;
@@ -232,23 +247,12 @@ export function createBattleView(opts) {
   }
 
   // THE LINK GRAPH IS GONE, and deleting it was the point rather than a tidy-up.
-  //
-  // It drew one line per `site.adj` entry, and its own comment said why: "sends
-  // go to adjacent sites only, so the graph is drawn explicitly — the rule
-  // should never be something the player has to infer from a rejection." That
-  // rule no longer exists. An army marches anywhere it can find a path to, and
-  // `adj` was redefined as REACH — every site within `MOVEMENT.reachHexes` —
-  // which is a scan bound for the AI and the harness, not a promise to anybody.
-  //
-  // So the lines had stopped being information and become an anti-explanation:
-  // at hex reach a late map draws forty-odd of them into a cobweb that connects
-  // nearly everything to nearly everything, and what it tells the player is a
-  // constraint the engine gave up enforcing. A screenshot found this; no test
-  // could, because every one of them still drew correctly.
-  //
-  // What replaces it is the ground itself — the mountains, the shape mask and
-  // the bases that deny their own hex are all already drawn, and they are what
-  // actually decides where an army can go.
+  // It drew one line per `site.adj` entry to advertise "sends go to adjacent
+  // sites only" — a rule free movement retired, after which `adj` meant REACH
+  // and a late map drew forty-odd lines into a cobweb describing a constraint
+  // the engine no longer enforced. A screenshot found it; no test could,
+  // because every line still drew correctly. What replaces it is the ground:
+  // mountains, the shape mask and the bases that deny their own hex.
 
   // ---- per-frame ----------------------------------------------------------
 
@@ -338,17 +342,13 @@ export function createBattleView(opts) {
     }
   }
 
-  /** A besieging stack sits ON the site it is grinding down, offset upward so
-   *  it never hides the garrison plaque beneath.
-   *
-   *  Drawn as troops, at the SAME piece size drawSquads uses, because a siege is
-   *  exactly when the player is asking "is this enough to hold?" against the
-   *  relieving columns walking toward it — and that comparison only works if a
-   *  besieging soldier is the same size as a marching one.
-   *
-   *  `angle` faces the wall (+PI/2, down the screen toward the site), which is
-   *  the opposite of the chevron this replaces: it puts the militia screen
-   *  against the structure and sweeps the crescent's wings the right way. */
+  /** A besieging stack sits ON the site it is grinding down, offset upward so it
+   *  never hides the garrison plaque beneath. Drawn as troops at the SAME piece
+   *  size drawSquads uses, because a siege is exactly when the player asks "is
+   *  this enough to hold?" against the relieving columns walking toward it, and
+   *  that comparison only works if a besieging soldier is the same size as a
+   *  marching one. `angle` faces the wall (+PI/2, down the screen), which puts
+   *  the militia screen against the structure. */
   function drawSiegeStack(ctx, site, cx, cy, r, px) {
     // Hung off the built roofline rather than a fixed 1.25r, because a level-3
     // tower now grows up into where the besiegers used to sit. At L1 this is

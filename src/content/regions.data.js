@@ -59,47 +59,37 @@ import { T } from './regions.rowbuilder.js';
 export const REGIONS = Object.freeze([
   // --- Tier 1 (4) -- the vertical slice. These five rows are balance-frozen. ---
   T('riverfen', 'Riverfen', 1, [0, 0], ['ashford', 'ironwood'],
-    2.02, 11, 9, [[1, 1, 2], 3, 3], 1, 0, 1, 10,
+    1.82, 11, 9, [[1, 1, 2], 3, 3], 1, 0, 1, 9.5,
     'Flooded lowlands: two neutral farms sit in the open and the enemy is slow to claim them.'),
   T('ashford', 'Ashford Downs', 1, [1, 0], ['riverfen', 'ironwood', 'saltmere', 'kaldan', 'highmarch'],
-    2.8, 12, 9, [[1, 1, 3], 3, 3], 1, 0, 1.2, 10.5,
+    2.66, 12, 9, [[1, 1, 3], 3, 3], 1, 0, 1.2, 10,
     'Open chalk downs with almost no cover — a fast raid arrives before the wall does.'),
   T('ironwood', 'Ironwood', 1, [0, 1], ['riverfen', 'ashford', 'saltmere', 'emberholt'],
-    3.13, 13, 10, [[1, 2, 3], 4, 3], 1, 0, 1.5, 9.5,
+    3.04, 13, 10, [[1, 2, 3], 4, 3], 1, 0, 1.5, 9.5,
     'Dense timber and single-file passes: chokepoints turn every push into a committed one.',
     'choke'),
   T('saltmere', 'Saltmere', 1, [1, 1],
     ['ashford', 'ironwood', 'kaldan', 'greywater', 'thornmoor', 'emberholt'],
-    3.25, 13, 10, [[1, 2, 4], 4, 4], 1, 0, 1.8, 8,
+    3.08, 13, 10, [[1, 2, 4], 4, 4], 1, 0, 1.8, 7.5,
     'A salt lagoon splits the field; whoever holds the causeway strongholds holds the region.',
     'split'),
 
   // --- Tier 2 (5) -- the first real wall. Kaldan proves the upgrade layer matters. ---
   //
-  // THE WHOLE TIER SHARES ONE `enemyMult` (3.34), SO `develop` AND THE GROUND
-  // ARE THE ONLY LEVERS INSIDE IT — and that is a constraint rather than a
-  // style. Kaldan opens the tier at the band CEILING, so the shared dial cannot
-  // come down without pushing it out the top; every column is required
-  // non-decreasing, so a region cannot be given a lower `develop` than the one
-  // before it. The back half of the tier is therefore tuned by walking the
-  // whole run of `develop` values down together (highmarch and greywater both
-  // to 1.2, thornmoor to the 1.25 its bigger fort pool needs) rather than by
-  // dropping one row.
-  //
-  // TWO TRAPS, BOTH PAID FOR HERE. `develop` is QUANTISED — greywater measured
-  // 63% at 1.5 and 63% again at 1.25, then 69% at 1.2, because nothing crossed
-  // a promotion threshold in between. And the assertion that actually binds is
-  // on the REALISED mean fort level, not on this column: thornmoor has two
-  // forts to greywater's one, so the same 1.2 spreads thinner and realises
+  // TWO TRAPS IN `develop`, BOTH PAID FOR HERE. It is QUANTISED — greywater
+  // measured 63% at 1.5 and 63% again at 1.25, then 69% at 1.2, because nothing
+  // crossed a promotion threshold in between. And the assertion that actually
+  // binds is on the REALISED mean fort level, not on this column: thornmoor has
+  // two forts to greywater's one, so the same 1.2 spreads thinner and realises
   // 1.167 against greywater's 1.200 — an inversion tests/campaign.test.js
   // catches and the raw column does not. 1.25 is the smallest value that
   // realises 1.333 and clears it.
   //
-  // Highmarch is 15x12 rather than 15x11 for the same reason in the other
-  // direction: at develop 1.2 it read 85% against an 84% ceiling, and its own
-  // `choke` is the lever, because a choke costs MORE on a bigger board (+5 on
-  // a 13x10, -16 on a 21x16 — see battle/mapshape.js). One extra row took it to
-  // 83% without touching a column any other region shares.
+  // Highmarch is 15x12 rather than 15x11 because at develop 1.2 it read 85%
+  // against an 84% ceiling, and its own `choke` is the lever: a choke costs
+  // MORE on a bigger board (+5 on a 13x10, -16 on a 21x16 — see
+  // battle/mapshape.js). One extra row took it to 83% without touching a column
+  // any other region shares.
   //
   // AND `siteCounts.neutral` IS NOT THE FREE LEVER IT LOOKS LIKE. It is the one
   // site column with no non-decreasing constraint on it, so it is the obvious
@@ -111,23 +101,23 @@ export const REGIONS = Object.freeze([
   // the player. Measured at n=96 both times, same seeds.
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
-    3.34, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 10,
+    3.19, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 8.5,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    3.34, 15, 12, [[1, 3, 5], 5, 4], 1.2, 0.15, 5.5, 12.5,
+    3.38, 15, 12, [[1, 3, 5], 5, 4], 1.2, 0.15, 5.5, 9,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.',
     'choke'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    3.34, 15, 12, [[1, 3, 5], 7, 4], 1.2, 0.2, 6.6, 10.5,
+    3.4, 15, 12, [[1, 3, 5], 7, 4], 1.2, 0.2, 6.6, 8,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    3.34, 15, 12, [[2, 3, 4], 7, 4], 1.25, 0.25, 7.9, 9,
+    3.45, 15, 12, [[2, 3, 4], 7, 4], 1.25, 0.25, 7.9, 6.5,
     'Bramble country: five neutral farms make the opening land grab the whole battle.',
     'branch'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    3.55, 16, 12, [[2, 3, 5], 7, 4], 1.7, 0.3, 9.5, 9,
+    3.74, 16, 12, [[2, 3, 5], 7, 4], 1.7, 0.3, 9.5, 8,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
   // --- Tier 3 (5) -- 16x12 to 17x13, ~7.5-8 min. Sieges are the conversation. ---
@@ -187,24 +177,24 @@ export const REGIONS = Object.freeze([
   // site count and battle length scale together across tiers") for why the
   // campaign-wide monotonic length claim is still NOT restored here.
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    4, 16, 12, [[2, 3, 6], 12, 4], 1.8, 0.55, 11.4, 5,
+    4.08, 16, 12, [[2, 3, 6], 12, 4], 1.8, 0.55, 11.4, 6.5,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.',
     'narrow'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    4, 16, 12, [[2, 3, 6], 12, 4], 1.92, 0.56, 13.7, 5,
+    4.2, 16, 12, [[2, 3, 6], 12, 4], 1.92, 0.56, 13.7, 6.5,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.',
     'split'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    4.39, 17, 13, [[2, 3, 7], 12, 4], 2, 0.57, 16.4, 5,
+    4.52, 17, 13, [[2, 3, 7], 12, 4], 2, 0.57, 16.4, 6,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    4.39, 17, 13, [[2, 3, 7], 12, 4], 2.05, 0.58, 19.7, 6,
+    4.58, 17, 13, [[2, 3, 7], 12, 4], 2.05, 0.58, 19.7, 6,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.',
     'branch'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    4.39, 17, 13, [[2, 4, 7], 14, 4], 2.08, 0.59, 23.6, 5.5,
+    4.58, 17, 13, [[2, 4, 7], 14, 4], 2.08, 0.59, 23.6, 6,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.',
     'choke'),
 
@@ -230,21 +220,30 @@ export const REGIONS = Object.freeze([
   // MAPGEN.enemyStrongholdShare rounds up a fifth stronghold — a step worth
   // ~25 points on its own. The landing force is what pays for it. ---
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    4.78, 17, 13, [[2, 4, 7], 15, 4], 2.2, 0.6, 28.4, 5.5,
+    5.2, 17, 13, [[2, 4, 7], 15, 4], 2.2, 0.6, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.',
     'branch'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
-    4.78, 17, 13, [[2, 4, 7], 15, 4], 2.45, 0.6, 34, 5.5,
+    5.2, 17, 13, [[2, 4, 7], 15, 4], 2.45, 0.6, 34, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.',
     'choke'),
+  // IRONCROWN'S NEUTRAL POOL IS THE LEVER HERE, and it is the tier-2 header's
+  // finding used deliberately rather than stumbled into. It ships on obsidian's
+  // exact dial and obsidian's exact enemy mix, and it measured THIRTEEN points
+  // easier (58% against 45% at n=96) — the whole difference between them was 15
+  // neutral sites against 20. Raising the dial cannot fix that: obsidian sits at
+  // the same value and `enemyMult` is required non-decreasing, so ironcrown can
+  // only rise by dragging obsidian below its own floor with it. Unclaimed ground
+  // is a race the enemy is better at, so widening the pool is a difficulty knob
+  // that costs nothing anywhere else.
   T('ironcrown', 'Ironcrown', 4, [4, 0],
     ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
-    4.88, 17, 13, [[2, 4, 7], 15, 4], 2.48, 0.6, 40.8, 5,
+    5.2, 17, 13, [[2, 4, 7], 19, 4], 2.48, 0.6, 40.8, 7,
     'A Marshal holds the throne: the castle guard fights 25% harder and trains 40% faster.',
     'choke'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1],
     ['ironcrown', 'duskfell', 'thanescar', 'gravenreach', 'nightharrow'],
-    4.88, 17, 13, [[2, 4, 7], 20, 4], 2.52, 0.6, 49, 7,
+    5.2, 17, 13, [[2, 4, 7], 20, 4], 2.52, 0.6, 49, 6,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. Their capital.',
     'branch'),
 
@@ -276,23 +275,34 @@ export const REGIONS = Object.freeze([
   //      1 and 8 points — that is the size of this half of the step, and it is
   //      already paid for by the time a player arrives here.
   //
-  // `castleGateFrac` runs 0.74-0.80 and is NOT doing the work (it is worth
-  // about a point — see the note above tier 3). It is here so the last three
-  // regions cannot be rushed, which is the guarantee it was added for.
+  // `castleGateFrac` is a flat 0.60 for the whole back half and is NOT doing
+  // the work — it is here so the last regions cannot be rushed, which is the
+  // only thing that column was ever meant to buy (see the gate section in
+  // CLAUDE.md for what happened when it drifted past that).
   //
   // The band is WIN_BAND[4] = [22, 42]: these are meant to cost a good player
-  // several attempts. Measured at n=240, in campaign order: see CLAUDE.md.
+  // several attempts.
+  //
+  // RAVENSMARCH'S MIX IS A TIER-5 MIX NOW, and the dial could not have done
+  // this. It shipped with obsidian's exact enemy mix ([2,4,7]) on a WIDER
+  // board — structurally easier than the tier-4 region before it, against a
+  // band eleven points lower — and it read 61% at n=96 where its two
+  // tier-mates read 40% and 35% on almost the same dial. `enemyMult` is
+  // required non-decreasing, so pulling ravensmarch down to its band alone
+  // would have needed a dial ABOVE gravenreach's, which is a contradiction
+  // rather than a tuning problem. Matching gravenreach's mix is what makes
+  // the tier's opener a tier-5 region.
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach', 'stormhalt'],
-    4.88, 18, 13, [[2, 4, 7], 20, 4], 2.6, 0.6, 61, 6,
+    5.2, 18, 13, [[2, 5, 8], 20, 4], 2.6, 0.6, 61, 7,
     'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.',
     'branch'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],
     ['ironcrown', 'obsidian', 'ravensmarch', 'nightharrow', 'stormhalt', 'cinderwatch'],
-    4.88, 18, 14, [[2, 5, 8], 22, 4], 2.8, 0.6, 76, 5.5,
+    5.22, 18, 14, [[2, 5, 8], 22, 4], 2.8, 0.6, 76, 6.5,
     'Every wall here is built and manned. Half the enemy yards retrain to answer whatever you brought.',
     'split'),
   T('nightharrow', 'Nightharrow', 5, [5, 1], ['obsidian', 'gravenreach', 'cinderwatch', 'widowsgate'],
-    5.40, 19, 15, [[2, 5, 8], 27, 5], 2.85, 0.6, 95, 7.5,
+    5.43, 19, 15, [[2, 5, 8], 27, 5], 2.85, 0.6, 95, 6.5,
     'The last of them, behind level-four walls with a Marshal on the gate. Bring engines and bring time.',
     'choke'),
 
@@ -333,31 +343,26 @@ export const REGIONS = Object.freeze([
   //      is stack-local: it makes ONE line of the countryside genuinely
   //      expensive rather than making the whole map slightly harder.
   //
-  // `castleGateFrac` runs 0.82-0.85 and is still not doing the work (about a
-  // point, as everywhere else). 0.85 is the GATE_CLAMP ceiling and the last
-  // region sits on it: the final throne cannot be rushed at all.
-  //
   // The band is WIN_BAND[5] = [18, 36]. These are the last three regions in the
   // game and they are meant to cost a good player several attempts each, with
   // the incursion ladder (content/incursion.data.js) waiting past them for a
   // player who wants difficulty without end.
   //
-  // MEASURED AT n=240, because at this end of the campaign nothing smaller is
-  // worth reading: stormhalt reported 16% at n=32, 23% at n=48, 26% at n=96 and
-  // 21% at n=240 on settings that differ by less than the noise between those
-  // samples. The advertised lengths are the n=240 win medians too — widowsgate
-  // read a 16.0m median off an n=48 sample and 9.6m at n=240, so a table tuned on
-  // the small sample would have told the player a region takes half again as long
-  // as it does.
+  // NOTHING SMALLER THAN n=96 IS WORTH READING HERE: stormhalt has reported
+  // 16% at n=32, 23% at n=48, 26% and 23% at n=96 and 21% at n=240 on settings
+  // differing by less than the noise between those samples. The advertised
+  // lengths are win medians from the same runs — widowsgate read a 16.0m median
+  // off an n=48 sample and 9.6m at n=240, so a table tuned on the small sample
+  // tells the player a region takes half again as long as it does.
   T('stormhalt', 'Stormhalt', 6, [6, -1], ['ravensmarch', 'gravenreach', 'cinderwatch'],
-    5.4, 20, 15, [[2, 5, 9], 28, 5], 3.1, 0.6, 118, 9,
+    5.43, 20, 15, [[2, 5, 9], 28, 5], 3.1, 0.6, 118, 9,
     'A storm coast fortress fed from the sea. Five attacks at once, and every one of them means it.'),
   T('cinderwatch', 'Cinderwatch', 6, [6, 0],
     ['gravenreach', 'nightharrow', 'stormhalt', 'widowsgate'],
-    5.4, 20, 15, [[2, 5, 9], 30, 5], 3.15, 0.6, 147, 9,
+    5.45, 20, 15, [[2, 5, 9], 30, 5], 3.15, 0.6, 147, 7,
     'They burned their own farms rather than leave them standing. Take the ashes and hold them.'),
   T('widowsgate', 'The Widow’s Gate', 6, [6, 1], ['nightharrow', 'cinderwatch'],
-    5.4, 21, 16, [[3, 5, 9], 32, 5], 3.3, 0.6, 183, 6.5,
+    5.48, 21, 16, [[3, 5, 9], 32, 5], 3.3, 0.6, 183, 7.5,
     'The last gate, two banners behind it, and no throne left to retreat to. Finish it.'),
 ]);
 
