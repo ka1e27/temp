@@ -228,10 +228,12 @@ test('panel: an unscouted site says UNSCOUTED and shows nothing else', () => {
   // Nothing to earn, spend or fight about either.
   assert.equal(panel.el.find('hud-site-money').kids.length, 0);
   assert.equal(panel.el.find('hud-site-terrain').kids.length, 0);
-  // No actionable rows — none of these apply to ground you cannot see.
+  // No actionable rows — none of these apply to ground you cannot see. Build
+  // moved out to its own rail (battle-actions.js `createBuildRail`) and is no
+  // longer part of this panel at all, so there is nothing here left to assert
+  // shut for it — it was never gated on the selection to begin with.
   assert.equal(panel.el.find('hud-keep').classList.contains('is-open'), false);
   assert.equal(panel.el.find('hud-recruit').classList.contains('is-open'), false);
-  assert.equal(panel.el.find('hud-build-row').classList.contains('is-open'), false);
   assert.equal(panel.el.find('hud-upgrade'), null, 'the Upgrade button is not even mounted');
 });
 
@@ -317,6 +319,13 @@ test('panel: an enemy squad stops being inspectable the instant it leaves vision
   const enemySquad = {
     id: 'sq1', owner: 'enemy', from: 'a', to: 'b', spawnTick: 0, arriveTick: 10,
     comp: { militia: 40 }, retreating: false,
+    // A squad carries the ROUTE it walks (contract v10) and its position is
+    // read off that, not lerped between its two endpoint sites — so a fixture
+    // without one is an army that is nowhere, invisible to fog and to this
+    // panel alike. Written out because the fixture is hand-built; a real battle
+    // gets it from the same A* the travel time is priced by.
+    path: Array.from({ length: 11 }, (_, i) => ({ q: i, r: i })),
+    camped: false, hex: null,
   };
   const state = {
     tick: 5, sites, squads: [enemySquad], vision: { player: { '5,5': 1 }, enemy: {} },

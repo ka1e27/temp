@@ -8,7 +8,7 @@
 import { goldOf } from '../src/battle/economy.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
 import {
-  SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS, BUILD_RANGE_HEXES, VISION_RADIUS,
+  SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS, VISION_RADIUS,
 } from '../src/content/balance.js';
 import { distance as hexDistance } from '../src/core/hex.js';
 import { buildBlocker } from '../src/battle/commands.js';
@@ -167,13 +167,27 @@ export function upgradeTurn(state, front) {
  *   2. BEHIND THE LINE, on the same `rearOf` gradient the upgrade ladder uses.
  *      A site goes up at 1 HP and stays there for the whole build — see
  *      battle/construct.js — so raising one where the fighting is means paying
- *      for a building the enemy razes before it opens.
+ *      for a building the enemy razes before it opens. `buildBlocker`'s ground
+ *      rule is now the player's TERRITORY rather than a radius from one site
+ *      (same file), so a legal hex no longer implies proximity to any
+ *      particular site of mine — the anchor below is whichever of my sites is
+ *      actually NEAREST the candidate hex, and rule 2 asks whether THAT one is
+ *      a rear site, not whether some rear site happens to be close enough.
  *   3. OUT OF THE SAME SURPLUS `upgradeTurn` reasons about, and never in the
  *      same turn as an upgrade. One treasury, one decision, and the reserve is
  *      the empire's ACTUAL training bill rather than a magic number.
  *   4. NEAREST THE FRONT OF THE REAR. Among the legal hexes it takes the one
  *      closest to the throne, so the country grows toward the war instead of
  *      backfilling ground already three sites deep.
+ *
+ * DELIBERATELY STILL ONE BUILD AT A TIME, even though the engine now allows
+ * `BUILD_MAX_CONCURRENT` (2) — rule 3 already models an ordinary player as
+ * someone who queues one thing, watches it, and comes back, and spending both
+ * slots every time it can afford to is the OPTIMAL play this file exists to
+ * NOT measure (same argument `upgradeTurn`'s rule 5 makes about the top rung
+ * of the upgrade ladder). Teaching the bot to fill both slots is a balance
+ * pass — it would move every region's construction throughput at once — not
+ * a consequence of the engine change above.
  */
 const WANT_YARDS = 3;
 
@@ -194,16 +208,17 @@ export function constructTurn(state, front, hexes) {
   // is only as safe as the site that legitimises it, so it inherits that site's
   // place on the front gradient.
   const isRear = rearOf(front, mine.map((s) => s.id));
-  const rear = mine.filter((s) => isRear(s.id));
-  if (!rear.length) return;
+  if (!mine.some((s) => isRear(s.id))) return;
 
   let best = null;
   let bestScore = Infinity;
   for (const h of hexes) {
     if (buildBlocker(state, 'player', h)) continue;
-    // It has to be MY rear that reaches it, not merely any site I hold.
-    const anchor = rear.find((s) => hexDist(s, h) <= BUILD_RANGE_HEXES);
-    if (!anchor) continue;
+    // Legality (buildBlocker) only ever says the hex is somewhere in MY
+    // territory now, not whose. The nearest of my own sites is the one whose
+    // safety the hex actually inherits.
+    const anchor = nearestMine(mine, h);
+    if (!anchor || !isRear(anchor.id)) continue;
     const score = nearestAdvance(state, h);
     if (score < bestScore) { bestScore = score; best = h; }
   }
@@ -211,6 +226,18 @@ export function constructTurn(state, front, hexes) {
 }
 
 const hexDist = (site, h) => hexDistance({ q: site.hex[0], r: site.hex[1] }, h);
+
+/** Closest of `mine` to hex `h` — see constructTurn's rule 2 above. */
+function nearestMine(mine, h) {
+  let best = null;
+  let bestD = Infinity;
+  for (const s of mine) {
+    const d = hexDist(s, h);
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  return best;
+}
+
 /** Hexes from this hex to the enemy throne — rule 4's "toward the war". */
 function nearestAdvance(state, h) {
   const goal = state.sites.find((s) => s.kind === 'castle' && s.owner !== 'player');

@@ -1,8 +1,11 @@
-// The site panel's ACTIONS group: what you can do about the site you selected.
+// The site panel's ACTIONS group (rally hold-back, Recruit) plus the Build
+// rail, which used to be a third row of this same group and has since moved
+// out onto the side — see `createBuildRail`'s own comment.
 //
 // Split out of ./battle-panel.js for the line budget, same as ./battle-upgrade.js
-// before it. battle-panel.js still owns the group element and re-exports these,
-// so nothing downstream has to know they moved.
+// before it. battle-panel.js still owns the actions group and re-exports these,
+// so nothing downstream has to know they moved; battle-hud.js constructs the
+// build rail directly, since it no longer has anything to do with a selection.
 //
 // Everything here appends a COMMAND through `input` and reads its value back off
 // the SIMULATION. Nothing writes to a site. That is what makes a rejected order
@@ -10,6 +13,9 @@
 import {
   RALLY_KEEP, UNITS, SITES, CENTIGOLD, RECRUIT, BUILDABLE_KINDS, BUILD_COSTS,
 } from '../content/balance.js';
+// BUILD_MAX_CONCURRENT is new and cannot yet ride balance.js's own re-export
+// — see battle/construct.js's import comment for why.
+import { BUILD_MAX_CONCURRENT } from '../content/balance.construct.js';
 import { TICK_HZ } from '../core/loop.js';
 import { rallyKeepOf, clampRallyKeep } from '../battle/state.js';
 import { recruitReadyTick, buildingFor } from '../battle/commands.js';
@@ -191,8 +197,8 @@ export function buildOffer(state, kind) {
   if (!state || !spec) return out;
   out.shown = true;
   out.label = `${spaceCase(kind).toUpperCase()} · ${spec.gold}g · ${spec.sec}s`;
-  if (buildingFor(state, 'player').length) {
-    out.why = 'Already raising something — one at a time.';
+  if (buildingFor(state, 'player').length >= BUILD_MAX_CONCURRENT) {
+    out.why = 'Already raising as much as you can at once.';
     return out;
   }
   if (goldOf(state.factions.player) < spec.gold * CENTIGOLD) {
@@ -204,31 +210,45 @@ export function buildOffer(state, kind) {
 }
 
 /**
- * The build action's row: one button per buildable kind, so `kind` is fixed
- * per button rather than a picker the player opens first — the loadout is
- * short enough (three) that naming each one on its own face costs nothing and
- * saves a click every time.
+ * THE BUILD RAIL: one card, one button per buildable kind — ALWAYS visible,
+ * the same way the troop-type and booster rails beside it are, rather than
+ * gated behind selecting a site you own.
+ *
+ * It used to live inside the site panel and open only once a player-owned
+ * site was selected — but `buildOffer` above never reads the selection at
+ * all, only the treasury and whether something is already going up, so the
+ * gate was never a rule about what arming a build MEANS. It was an accident
+ * of where the buttons happened to sit, and it hid the one command in the
+ * game that targets a HEX rather than a SITE behind a click on a site that
+ * has nothing to do with where the building will land. Moved out, arming
+ * still works exactly as before: press a kind here, the next board click
+ * resolves the hex (battle-build.js `armBuild`/`fireBuild`), Esc or the same
+ * button again cancels, and an armed booster still outranks an armed build.
+ *
+ * `kind` is fixed per button rather than a picker the player opens first —
+ * the loadout is short enough (four, with the watchtower) that naming each
+ * one on its own face costs nothing and saves a click every time.
  */
-export function createBuildRow(getState, input, view) {
+export function createBuildRail(getState, input, view) {
   const buttons = BUILDABLE_KINDS.map((kind) => h(`button.btn.hud-build.hud-build-${kind}`, {
     'data-interactive': true, type: 'button',
     on: { click: () => input.useBuild(kind) },
   }, ''));
-  const el = h('div.hud-build-row', {}, ...buttons);
+  const el = h('div.hud-rail.hud-rail-build', {},
+    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Build' }),
+      h('div.hud-group-row', {}, ...buttons)));
   const label = buttons.map((b) => bindText(b, ''));
   const armedSet = buttons.map((b) => bindClass(b, 'is-armed'));
-  const open = bindClass(el, 'is-open');
   const can = buttons.map(() => null);
 
   return {
     el,
-    /** @param {?object} site the selected site, or null to hide the row.
-     *  @returns {boolean} true when the row appeared, vanished or changed. */
-    show(site) {
+    /** Refreshed on the HUD's own 10Hz text pass — nothing here is per-frame.
+     *  @returns {boolean} true when anything on the rail changed. */
+    update() {
       const state = getState();
-      const shown = !!state && !!site && site.owner === 'player';
-      let wrote = open(shown) ? 1 : 0;
-      if (!shown) return !!wrote;
+      if (!state) return false;
+      let wrote = 0;
       for (let i = 0; i < BUILDABLE_KINDS.length; i++) {
         const kind = BUILDABLE_KINDS[i];
         const offer = buildOffer(state, kind);

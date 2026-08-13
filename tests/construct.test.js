@@ -12,17 +12,22 @@ import { buildBlocker, buildingFor, drainCommands } from '../src/battle/commands
 import { generateBattleMap, gridHexes } from '../src/battle/mapgen.js';
 import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
+import { createBattleState } from '../src/battle/state.js';
+import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { REGIONS } from '../src/content/regions.data.js';
 import {
-  BUILD_COSTS, BUILDABLE_KINDS, BUILD_RANGE_HEXES, BUILD_MIN_SEPARATION,
-  SITES, SITE_KINDS, CENTIGOLD, VISION_RADIUS,
+  BUILD_COSTS, BUILDABLE_KINDS, BUILD_MIN_SEPARATION, SITES, SITE_KINDS, CENTIGOLD, VISION_RADIUS,
 } from '../src/content/balance.js';
+// BUILD_MAX_CONCURRENT cannot yet ride balance.js's own re-export — see
+// battle/construct.js's own import comment for why.
+import { BUILD_MAX_CONCURRENT } from '../src/content/balance.construct.js';
 import { siteTrainRate } from '../src/battle/training.js';
 import { siteGoldPerSec, goldOf } from '../src/battle/economy.js';
 import { distance } from '../src/core/hex.js';
 import { canSee } from '../src/battle/vision.js';
-import { total } from '../src/battle/combat.js';
+import { territoryAt } from '../src/battle/influence.js';
+import { emptyComp, total } from '../src/battle/combat.js';
 
 /** A real battle for `id`, on the real path, with the enemy AI held off unless
  *  asked otherwise — most of these are about the BUILD, not about surviving it. */
@@ -49,10 +54,18 @@ const rejections = (b) => b.events
 
 test('build: there is somewhere legal to build on every region in the campaign', () => {
   // A rule with no legal hex is not a rule, it is a disabled feature — and this
-  // was true on the first cut. `BUILD_RANGE_HEXES` was 2 against a
-  // `MAPGEN.minSeparation` of 3, which asks for a hex simultaneously within 2 of
-  // your farm and at least 3 from it: every one of gallowmoor's 192 hexes was
-  // refused and nothing failed.
+  // was true on the first cut, under the OLD range-from-a-site rule:
+  // `BUILD_RANGE_HEXES` was 2 against a `MAPGEN.minSeparation` of 3, which asks
+  // for a hex simultaneously within 2 of your farm and at least 3 from it, and
+  // every one of gallowmoor's 192 hexes was refused with nothing failing loudly.
+  //
+  // The ground rule is TERRITORY now (buildBlocker reads `state.influence`
+  // rather than a distance), so the analogous risk is different but just as
+  // real: a beachhead's territory is a small, thin flood, and if
+  // `BUILD_MIN_SEPARATION` ever swallowed the whole of it — every hex inside
+  // that flood also sitting within 2 of some site — the rule would again have
+  // no legal hex anywhere and nothing would say so. This is the one test that
+  // would catch it, on every region in the campaign rather than one.
   for (const r of REGIONS) {
     const b = battleFor(r.id);
     const n = legalHexes(b).length;
@@ -60,12 +73,44 @@ test('build: there is somewhere legal to build on every region in the campaign',
   }
 });
 
-test('build: the range must be able to clear the separation', () => {
-  // The invariant underneath the test above, stated where a future pass will
-  // read it before moving either number.
-  assert.ok(BUILD_RANGE_HEXES >= BUILD_MIN_SEPARATION,
-    'a hex cannot be both inside the range of a site you hold and outside its '
-    + 'separation — set the range below the separation and the whole board is illegal');
+test('build: the ground rule is your TERRITORY, not a radius from a site', () => {
+  // A hand-built state, so `state.influence` can be set directly rather than
+  // hoping a real region happens to shape one the way this needs — the
+  // CONTRACT under test is "buildBlocker reads territoryAt", not "some region
+  // has a hex far enough from every site to prove it".
+  const b = createBattleState({
+    contractVersion: CONTRACT_VERSION,
+    battleId: 'territory',
+    seed: 1,
+    grid: { cols: 15, rows: 11, blocked: [] },
+    sites: [
+      { id: 'camp', kind: 'camp', hex: [1, 1], owner: 'player', garrison: {}, hp: 600, hpMax: 600 },
+      { id: 'cas', kind: 'castle', hex: [12, 9], owner: 'enemy', garrison: {}, hp: 600, hpMax: 600 },
+    ],
+    player: makeMods({ expedition: emptyComp() }),
+    enemy: makeMods({ expedition: emptyComp() }),
+    boosters: [],
+    rules: { victory: 'capture-castle', hardCapMs: 480000, aiTier: 1 },
+  });
+
+  // Ten hexes from the camp — well past the OLD `BUILD_RANGE_HEXES` (4) — but
+  // painted as the player's own by the flood, the way a cluster of sites
+  // overlapping into a gap between them would in a real battle.
+  const far = { q: 11, r: 1 };
+  assert.ok(distance({ q: 1, r: 1 }, far) > 4, 'the probe hex must be outside the old radius');
+  b.influence[`${far.q},${far.r}`] = 'player';
+  assert.equal(buildBlocker(b, 'player', far), null,
+    'territory says this is mine — distance from any one site must not refuse it');
+
+  // The negative control: clear that one entry (absence reads as 'neutral',
+  // same as `territoryAt`'s own fallback) and the SAME hex is refused, by name.
+  delete b.influence[`${far.q},${far.r}`];
+  assert.equal(buildBlocker(b, 'player', far), 'no-ground',
+    'unclaimed ground must be refused even where a fixed radius would have allowed it');
+
+  // And enemy territory is refused for the same reason, not merely "not mine".
+  b.influence[`${far.q},${far.r}`] = 'enemy';
+  assert.equal(buildBlocker(b, 'player', far), 'no-ground');
 });
 
 test('build: every refusal is a real one, and names itself', () => {
@@ -73,15 +118,24 @@ test('build: every refusal is a real one, and names itself', () => {
   const mine = b.sites.find((s) => s.owner === 'player');
   const at = { q: mine.hex[0], r: mine.hex[1] };
   assert.equal(buildBlocker(b, 'player', at), 'occupied', 'a site stands there');
-  assert.equal(buildBlocker(b, 'player', { q: at.q + 1, r: at.r }), 'too-close');
+  // NOT 'too-close', at the current BUILD_MIN_SEPARATION (1) — and that is
+  // measured, not an oversight. `d < 1` can only ever be true for d = 0, which
+  // `occupied` above already claims one line earlier, so 'too-close' is
+  // provably unreachable by distance alone at this value; see the constant's
+  // own comment for why it was lowered here (ironcrown and gravenreach had
+  // ZERO legal build hexes at 2, unrecoverable by ordinary play). The
+  // adjacent hex is legal instead, which is the point of the change.
+  assert.equal(buildBlocker(b, 'player', { q: at.q + 1, r: at.r }), null,
+    'building on the hex right next to your own site is exactly what the looser separation now allows');
   assert.equal(buildBlocker(b, 'player', { q: -99, r: -99 }), 'off-map');
 
-  // ...and somewhere genuinely far from everything the player holds. It has to
-  // be open ground too: `blocked-ground` is checked first, so a far hex that
-  // happens to be rock would assert the wrong refusal.
+  // ...and somewhere genuinely outside the player's territory. It has to be
+  // open ground too: `blocked-ground` is checked first, so a hex that happens
+  // to be rock would assert the wrong refusal; and clear of every site's own
+  // separation, or `too-close` would fire first for an unrelated reason.
   const far = gridHexes(b.grid.cols, b.grid.rows).find((h) => !b.grid.blocked.includes(`${h.q},${h.r}`)
-    && b.sites.every((s) => s.owner !== 'player'
-      || distance({ q: s.hex[0], r: s.hex[1] }, h) > BUILD_RANGE_HEXES));
+    && territoryAt(b, h) !== 'player'
+    && b.sites.every((s) => distance({ q: s.hex[0], r: s.hex[1] }, h) >= BUILD_MIN_SEPARATION));
   if (far) {
     assert.equal(buildBlocker(b, 'player', far), 'no-ground',
       'you may not build in country you do not hold');
@@ -128,19 +182,37 @@ test('build: it costs gold, goes up over time, and produces nothing until it ope
   assert.ok(siteTrainRate(b, site) > 0, 'a finished yard trains');
 });
 
-test('build: one at a time, per faction', () => {
+test('build: BUILD_MAX_CONCURRENT at a time, per faction — a third names the cap', () => {
+  // Pinned against the constant rather than the literal 2, so a future change
+  // to BUILD_MAX_CONCURRENT moves this test's expectation with it instead of
+  // silently becoming a test of the OLD number.
+  assert.equal(BUILD_MAX_CONCURRENT, 2, 'sanity: the rest of this test assumes exactly two');
+
   const b = battleFor();
-  const spots = legalHexes(b);
-  b.commands.push({ t: 'BUILD', kind: 'farm', hex: [spots[0].q, spots[0].r] });
+  const first = legalHexes(b)[0];
+  b.commands.push({ t: 'BUILD', kind: 'farm', hex: [first.q, first.r] });
   step(b);
   assert.deepEqual(rejections(b), []);
   assert.equal(buildingFor(b, 'player').length, 1);
 
-  const next = legalHexes(b)[0];
-  assert.ok(next, 'the board still has room — otherwise this proves nothing');
-  b.commands.push({ t: 'BUILD', kind: 'farm', hex: [next.q, next.r] });
+  // A SECOND, concurrent build — the whole point of raising the cap from one —
+  // must be allowed. Recomputed fresh: the first build now occupies its hex,
+  // which can shrink the legal set for anything within BUILD_MIN_SEPARATION.
+  const second = legalHexes(b)[0];
+  assert.ok(second, 'the board still has room for a second — otherwise this proves nothing');
+  b.commands.push({ t: 'BUILD', kind: 'farm', hex: [second.q, second.r] });
   step(b);
-  assert.deepEqual(rejections(b), ['already-building']);
+  assert.deepEqual(rejections(b), [], 'a second concurrent build must be allowed now');
+  assert.equal(buildingFor(b, 'player').length, 2);
+
+  // A THIRD must still be refused, by the SPECIFIC reason — this is the
+  // negative control: without a cap at all, this would also pass.
+  const third = legalHexes(b)[0];
+  assert.ok(third, 'the board still has room for a third probe — otherwise this proves nothing');
+  b.commands.push({ t: 'BUILD', kind: 'farm', hex: [third.q, third.r] });
+  step(b);
+  assert.deepEqual(rejections(b), ['already-building'], 'a third must be refused, and refused by name');
+  assert.equal(buildingFor(b, 'player').length, 2, 'the count must not have crept past the cap');
 });
 
 test('build: the two kinds you cannot raise are the two that would undo a loss', () => {
@@ -275,9 +347,10 @@ test('build: SCAFFOLDING IS BLIND, and the tick it opens is a vision event', () 
   const b = battleFor();
   const at = legalHexes(b)[0];
   // The hex to watch has to be DARK to begin with, and picking the first one at
-  // some fixed distance is not enough: a build hex sits within
-  // `BUILD_RANGE_HEXES` of a site the player already holds, so plenty of its
-  // neighbourhood is already lit and the naive pick failed on exactly that. An
+  // some fixed distance is not enough: a legal build hex sits inside the
+  // player's own territory, which sits inside (or beside) whatever a held
+  // site already sees, so plenty of its neighbourhood is already lit and the
+  // naive pick failed on exactly that. An
   // already-lit hex would also pass against an engine that never recomputed
   // anything, which is the whole thing under test. It must additionally be
   // further out than an ORDINARY building's radius 1, or a farm would do.

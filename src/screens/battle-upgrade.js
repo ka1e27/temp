@@ -34,7 +34,7 @@ export const REJECTIONS = Object.freeze({
   // two. A rejection the player cannot read is the same as no feedback at
   // all — see the boosters this table already exists to fix.
   'not-buildable': 'That cannot be raised — only a farm, a yard or a wall may be built.',
-  'already-building': 'Already raising something — one at a time.',
+  'already-building': 'Already raising as much as you can at once.',
   'off-map': 'That is off the map.',
   'blocked-ground': 'You cannot build on that ground.',
   occupied: 'Something already stands there.',

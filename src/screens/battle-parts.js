@@ -138,7 +138,7 @@ export function placeFan(board, site, set) {
 }
 
 /**
- * Put the two control rails where the screen has room for them, and keep them
+ * Put the control rails where the screen has room for them, and keep them
  * there. Returns a disposer.
  *
  * BOTH AXES. Width alone was the first version and it put the rails on the
@@ -149,11 +149,19 @@ export function placeFan(board, site, set) {
  * This is also the single source of truth for the decision: it sets the classes
  * the stylesheets key off, rather than the same condition being written once
  * here and again as a breakpoint in CSS with nothing checking they agree.
+ *
+ * THREE RAILS, NOT TWO, and `el.build` is OPTIONAL rather than a third named
+ * parameter every caller must supply — the build rail rides in the RIGHT
+ * corner, stacked under the boosters one, because it is the same shape of
+ * control (spend gold on a limited action) rather than a standing preference
+ * like the troop filter on the left. A caller with only the original two
+ * rails (`el.build` left undefined) places exactly as before.
  */
 export function placeRails(el) {
   const railable = typeof window !== 'undefined' && window.matchMedia
     ? window.matchMedia('(min-width: 721px) and (min-height: 561px)') : null;
   const docRoot = typeof document !== 'undefined' ? document.documentElement : null;
+  const rightRails = [el.right, el.build].filter(Boolean);
 
   function place() {
     const railed = !railable || railable.matches;
@@ -161,9 +169,9 @@ export function placeRails(el) {
     docRoot?.classList.toggle('is-docked', !railed);
     if (railed) {
       mount(el.tl, el.rail);
-      mount(el.tr, el.right);
+      mount(el.tr, ...rightRails);
     } else {
-      mount(el.dock, el.rail, el.right);
+      mount(el.dock, el.rail, ...rightRails);
     }
   }
   place();

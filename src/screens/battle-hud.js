@@ -17,7 +17,9 @@ import { compact, clock, percent, rate, spaceCase } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
 import { siteOf } from './battle-preview.js';
 import { goldFlow, flowLine } from './battle-econ.js';
-import { createSitePanel, createWithdraw, createAlert, rejectionText } from './battle-panel.js';
+import {
+  createSitePanel, createWithdraw, createAlert, rejectionText, createBuildRail,
+} from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
 import { createSpeedControl } from './battle-speed.js';
@@ -120,6 +122,10 @@ export function createBattleHud(o) {
   const site = createSitePanel({ getState, view, input, board, tip });
   const withdraw = createWithdraw({ input });
   const alert = createAlert();
+  // ALWAYS visible, like the troop-type and booster rails it now sits beside
+  // — arming a build never read the selected site, so it no longer lives in
+  // the panel that follows one. See battle-actions.js `createBuildRail`.
+  const buildRail = createBuildRail(getState, input, view);
 
   el.gold = h('span.hud-value.num', { text: '0' });
   // NET, not income: the number the player decides on is what the treasury does
@@ -184,6 +190,11 @@ export function createBattleHud(o) {
   el.railRight = h('div.hud-rail.hud-rail-right', {},
     h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }),
       h('div.hud-group-row', {}, ...boosters)));
+  // A THIRD rail, stacked under Boosters rather than reparented on its own —
+  // see placeRails's own comment on why the build rail rides in the right
+  // corner. Built by battle-actions.js `createBuildRail`, same as the site
+  // panel used to, but no longer anything the panel owns.
+  el.railBuild = buildRail.el;
   // MOUNTED INSIDE THE CORNERS, not as free-floating siblings. As a sibling the
   // rail was centred on the viewport and promptly sat on top of the gold
   // readout while its own bottom card ran off under the dock — a tall column and
@@ -208,7 +219,9 @@ export function createBattleHud(o) {
    * cards direct flex items of the dock, so they scroll with everything else
    * instead of being a box inside a box.
    */
-  off(placeRails({ tl: el.tl, tr: el.tr, dock: el.dock, rail: el.rail, right: el.railRight }));
+  off(placeRails({
+    tl: el.tl, tr: el.tr, dock: el.dock, rail: el.rail, right: el.railRight, build: el.railBuild,
+  }));
 
   // Where the HUD's own furniture is, so the anchored site panel can stay off
   // it. The two rails live INSIDE the corner plates, so they are covered by the
@@ -336,6 +349,7 @@ export function createBattleHud(o) {
 
     speed.update(state);
     site.update(state);
+    buildRail.update();
     // The drag/attack preview — computing it and painting every readout off
     // the result moved to battle-parts.js at the 400-line cap, the natural
     // cut since renderComp/renderCaveats (which it calls) already lived

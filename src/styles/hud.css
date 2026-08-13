@@ -207,6 +207,16 @@
    be wide enough for a word rather than a percentage. */
 .hud-dragmode { min-width: 62px; }
 
+/* --- Build rail -------------------------------------------------------
+   `.hud-build` itself (min-height, disabled, armed) is still declared in
+   screens.css, where it shipped as a full-width row inside the site panel —
+   the button's own look does not change now that a rail hosts it, only its
+   address. `align-items: stretch` on the railed rule above already makes it
+   full width in a column; this only sets a floor for the DOCKED, horizontal
+   case, where three buttons in one scrolling card must not crush down to
+   their own text. */
+.hud-rail-build .hud-build { min-width: 132px; text-align: left; }
+
 /* --- Segmented controls: strength, and battle speed ---------------------- */
 
 .seg {

@@ -31,9 +31,12 @@ import {
   siteIntel, trainLine, gateLine, upgradePreview,
 } from './battle-econ.js';
 import { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
-import { createKeepRow, createRecruitRow, createBuildRow } from './battle-actions.js';
+import { createKeepRow, createRecruitRow } from './battle-actions.js';
 // Re-exported so nothing downstream has to know the actions group moved out.
-export { setKeep, recruit, recruitOffer } from './battle-actions.js';
+// `createBuildRail` in particular never touches the selected site at all any
+// more (see its own comment) — battle-hud.js constructs it directly, as a
+// rail beside the troop-type and booster ones, not as part of this panel.
+export { setKeep, recruit, recruitOffer, createBuildRail } from './battle-actions.js';
 
 export { createWithdraw, createAlert } from './battle-alert.js';
 export { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
@@ -93,7 +96,10 @@ export function createSitePanel(o) {
   }, 'Upgrade');
   const keep = createKeepRow(getState, input, targetId);
   const hire = createRecruitRow(getState, input, targetId);
-  const builds = createBuildRow(getState, input, view);
+  // Raise a building used to be a third row here (createBuildRow). It moved to
+  // its own rail beside the troop-type and booster ones — see battle-hud.js
+  // and battle-actions.js `createBuildRail` — because arming a build never
+  // read the SELECTED site to begin with, only the treasury.
   // Four visual groups, so the eye chunks "what this site IS" (head) from
   // "what it's WORTH" (econ) from "why it's hard / what's happening to it"
   // (context) from "what you can do about it" (actions) instead of scanning
@@ -105,7 +111,7 @@ export function createSitePanel(o) {
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, buildBar.el, stat);
   const actions = h('div.hud-site-actions', {},
-    keep.el, hire.el, builds.el, upgradePreviewRow, upgrade);
+    keep.el, hire.el, upgradePreviewRow, upgrade);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, and a panel that let clicks through would sit
   // over the board, take a click on its own text as a click on empty ground,
@@ -195,7 +201,7 @@ export function createSitePanel(o) {
     setAnchor(site);
     set.open(!!site);
     if (!site) {
-      setShown(false); keep.show(null); hire.show(null); builds.show(null);
+      setShown(false); keep.show(null); hire.show(null);
       blankVitals(); set.siege(false); return;
     }
 
@@ -215,7 +221,6 @@ export function createSitePanel(o) {
       setShown(false);
       keep.show(null);
       hire.show(null);
-      builds.show(null);
       if (wrote) follower.markDirty();
       return;
     }
@@ -238,7 +243,6 @@ export function createSitePanel(o) {
       setShown(false);
       keep.show(null);
       hire.show(null);
-      builds.show(null);
       if (wrote) follower.markDirty();
       return;
     }
@@ -298,7 +302,6 @@ export function createSitePanel(o) {
     // A hold-back only means anything where there is a rally to hold back from.
     wrote |= keep.show(site.owner === 'player' && rallyTargetsOf(site).length ? site : null);
     wrote |= hire.show(site);
-    wrote |= builds.show(site);
 
     const offer = upgradeOffer(state, site);
     wrote |= setShown(site.owner === 'player');
@@ -330,7 +333,6 @@ export function createSitePanel(o) {
     set.siege(false);
     wrote |= keep.show(null);
     wrote |= hire.show(null);
-    wrote |= builds.show(null);
     if (wrote) follower.markDirty();
   }
 

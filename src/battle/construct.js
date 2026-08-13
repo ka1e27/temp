@@ -18,8 +18,14 @@
 import { distance } from '../core/hex.js';
 import { inGrid } from './mapgen.js';
 import {
-  BUILD_COSTS, BUILD_RANGE_HEXES, BUILD_MIN_SEPARATION, SITES, CENTIGOLD, RALLY_KEEP,
+  BUILD_COSTS, BUILD_MIN_SEPARATION, SITES, CENTIGOLD, RALLY_KEEP,
 } from '../content/balance.js';
+// BUILD_MAX_CONCURRENT is new and cannot yet ride balance.js's own re-export —
+// that file is frozen mid a concurrent rewrite (see balance.construct.js's own
+// comment on BUILD_RANGE_HEXES for the same constraint). Imported straight off
+// its home module until it can join BUILD_COSTS et al above; every OTHER name
+// here still comes through the front door as it always has.
+import { BUILD_MAX_CONCURRENT } from '../content/balance.construct.js';
 // `buildTicksLeft` and `brownout` aside, the shape below is exactly what
 // state.js `createBattleState` builds. A built site that were missing a field
 // would work until the one tick something read it.
@@ -27,7 +33,7 @@ import { TICK_HZ } from '../core/loop.js';
 import { goldOf, applyGold } from './economy.js';
 import { isBlocked, recomputeReach, clampRallyKeep } from './state.js';
 import { recomputeOccupancy } from './occupancy.js';
-import { recomputeInfluence } from './influence.js';
+import { recomputeInfluence, territoryAt } from './influence.js';
 import { recomputeVision } from './vision.js';
 import { siteMaxHp, emptyComp } from './combat.js';
 import { trainableUnit } from './training.js';
@@ -43,32 +49,38 @@ export const buildingFor = (state, faction) => state.sites
 /**
  * Why this hex cannot be built on, or null when it can.
  *
- * READ-ONLY and exported, so `screens/battle-input.js` can paint a legal hex
+ * READ-ONLY and exported, so `render/buildTargets.js` can paint a legal hex
  * green while the player is still choosing rather than rejecting them after the
  * click. A build preview that disagreed with the command would be the same
  * class of bug as a battle preview that disagrees with the simulation.
+ *
+ * THE GROUND RULE IS YOUR TERRITORY, not a radius from one site. It used to be
+ * "within `BUILD_RANGE_HEXES` of a site you hold", which drew a fixed ring
+ * around each building rather than answering "is this my country" — a player
+ * whose sites ringed a gap between them could not build IN that gap if it sat
+ * one hex past every ring, even though the ground was plainly theirs and the
+ * board already painted it that way. `state.influence` (battle/influence.js
+ * `recomputeInfluence`) is the flood that already answers "whose ground is
+ * this" for the board's own colouring, castle-gate math and march speed, and
+ * it is recomputed on every ownership change — so reading it back here is
+ * cheap, always current, and can never disagree with what the player sees.
  *
  * @param {object} state @param {string} faction @param {{q,r}} at
  */
 export function buildBlocker(state, faction, at) {
   if (!inGrid(state.grid, at)) return 'off-map';
   if (isBlocked(state, at.q, at.r)) return 'blocked-ground';
-  // Every existing site at once: the occupancy map answers "is something HERE",
-  // and separation answers "is something too near", and a build has to clear
-  // both. One pass, because a site is both.
-  let near = false;
+  // Every existing site at once: a build has to clear both "is something
+  // standing HERE" and "is something too close", against every site on the
+  // board regardless of owner — one pass, because a site is both.
   for (const s of state.sites) {
     const d = distance({ q: s.hex[0], r: s.hex[1] }, at);
     if (d === 0) return 'occupied';
     if (d < BUILD_MIN_SEPARATION) return 'too-close';
-    if (s.owner === faction && d <= BUILD_RANGE_HEXES) near = true;
   }
-  // ...and it has to be YOUR ground. Not influence, deliberately: influence is a
-  // flood with a soft edge that a player reads as a colour rather than as a
-  // number, so "you may build where the wash reaches" would be a rule nobody
-  // could predict the boundary of. Hexes from a site you hold is a rule you can
-  // count on your fingers.
-  if (!near) return 'no-ground';
+  // ...and it has to be YOUR ground — read off the same flood the board
+  // paints, not re-derived from distance.
+  if (territoryAt(state, at) !== faction) return 'no-ground';
   return null;
 }
 
@@ -82,9 +94,12 @@ export function buildBlocker(state, faction, at) {
  * enemy takes one — it is a site, and every rule that applies to a site applies
  * to it.
  *
- * ONE AT A TIME PER FACTION, like `cmdUpgrade`'s per-site rule and for the same
- * reason: it keeps the spend rate honest. Without it a treasury that has been
- * idling can convert itself into a row of strongholds in a single tick.
+ * AT MOST `BUILD_MAX_CONCURRENT` PER FACTION, like `cmdUpgrade`'s per-site rule
+ * and for the same reason: it keeps the spend rate honest. Without a cap a
+ * treasury that has been idling could convert itself into a row of
+ * strongholds in a single tick; the cap being 2 rather than 1 is what lets a
+ * player answer two separate needs — a farm at home and a yard at the front —
+ * without an arbitrary queue between them.
  */
 export function cmdBuild(state, cmd, by) {
   const spec = BUILD_COSTS[cmd?.kind];
@@ -93,7 +108,7 @@ export function cmdBuild(state, cmd, by) {
   if (!Array.isArray(hex) || hex.length !== 2) return 'malformed';
   const at = { q: hex[0], r: hex[1] };
 
-  if (buildingFor(state, by).length) return 'already-building';
+  if (buildingFor(state, by).length >= BUILD_MAX_CONCURRENT) return 'already-building';
   const why = buildBlocker(state, by, at);
   if (why) return why;
 
