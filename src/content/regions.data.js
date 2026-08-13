@@ -100,6 +100,15 @@ export const REGIONS = Object.freeze([
   // `choke` is the lever, because a choke costs MORE on a bigger board (+5 on
   // a 13x10, -16 on a 21x16 — see battle/mapshape.js). One extra row took it to
   // 83% without touching a column any other region shares.
+  //
+  // AND `siteCounts.neutral` IS NOT THE FREE LEVER IT LOOKS LIKE. It is the one
+  // site column with no non-decreasing constraint on it, so it is the obvious
+  // reach when every other column is boxed in — and it moves the wrong way.
+  // Greywater at 7 neutral reads 66%; at 9 it reads **54%**. Unclaimed ground
+  // is not the player's ground, it is a race, and the enemy starts closer to
+  // more of it with an economy already running. Widening the neutral pool hands
+  // the side that can convert it faster a bigger prize, which at tier 2 is not
+  // the player. Measured at n=96 both times, same seeds.
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
     3.34, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 10,
