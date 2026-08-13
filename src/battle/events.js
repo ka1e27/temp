@@ -12,6 +12,11 @@ export const EVENTS = Object.freeze({
   SQUAD_SENT: 'squad-sent',
   SQUAD_ARRIVED: 'squad-arrived',
   SQUAD_RETREATED: 'squad-retreated',
+  /** A stronghold or watchtower shot an enemy column passing within its range.
+   *  Carries the hex rather than only the site, because the casualties happen
+   *  where the ARMY is standing, not at the building's feet — an effect drawn
+   *  on the tower would point the player at the wrong half of the exchange. */
+  TOWER_FIRED: 'tower-fired',
   /** An army reached open ground and is holding it. Distinct from ARRIVED,
    *  which means a building changed hands or a fight started — a camp resolves
    *  nothing, so a HUD that treated the two alike would announce a capture

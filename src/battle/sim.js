@@ -22,6 +22,7 @@ import {
 } from './state.js';
 import { rallyPhase } from './rally.js';
 import { arrivalsPhase } from './arrivals.js';
+import { towersPhase } from './towers.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { recomputeOccupancy } from './occupancy.js';
 import { recomputeVision } from './vision.js';
@@ -309,6 +310,12 @@ export function step(state) {
   siegePhase(state);
   rallyPhase(state);
   arrivalsPhase(state);
+  // AFTER arrivals, so a column that reached its target this tick is resolved
+  // as a fight rather than shot at while standing on the doorstep — being
+  // taxed for passing and being taxed for arriving would double-charge the one
+  // assault the whole siege mechanic is about. Before `timersPhase`, so a
+  // building that opens this tick does not fire on the tick it opens.
+  towersPhase(state);
   timersPhase(state);
   think(state);
   attritionPhase(state);
