@@ -1,11 +1,26 @@
 // Squad movement.
 //
-// Squads NEVER integrate position. Travel time is computed ONCE at spawn and
-// stored as `arriveTick`; the sim only ever asks "is arriveTick === tick?".
-// That kills an entire class of drift bug and makes the tick O(arrivals)
-// rather than O(squads). The renderer interpolates spawnTick -> arriveTick.
+// Squads STILL never integrate position. Travel time is computed ONCE at spawn
+// and stored as `arriveTick`; the sim only ever asks "is arriveTick === tick?".
+// That kills an entire class of drift bug and makes the tick O(arrivals) rather
+// than O(squads). What changed is only where the interpolation happens ALONG:
+// the squad now carries the actual `path` it walks, and `squadHexOf` reads a
+// position off it as a pure function of `state.tick`. Nothing is written per
+// tick, so replay and determinism are exactly as they were.
+//
+// THE OLD MODEL WAS A STRAIGHT LINE BETWEEN TWO SITES and that was visible.
+// `squadHex` lerped from one site's hex to the other's, so a column routing
+// around a mountain range was drawn marching straight over it, and every
+// consumer of a squad's position — fog, the route overlay, and now the towers
+// that shoot at it — was reading a place the army was not. Storing the path the
+// A* already produced costs one array per squad and makes the position true.
+//
+// A SQUAD MAY NOW END ON BARE GROUND. `to` is a site id or null; a squad whose
+// destination is not a site arrives and CAMPS there (`camped`, `hex`) instead of
+// resolving an arrival, and can be ordered on again later. That is what lets an
+// army take a position rather than only shuttle between buildings.
 // PURE.
-import { findPath, distance } from '../core/hex.js';
+import { findPath, distance, round } from '../core/hex.js';
 import { TICK_HZ } from '../core/loop.js';
 import { UNITS, UNIT_IDS, MOVEMENT } from '../content/balance.js';
 import { siteById, isBlocked } from './state.js';
@@ -46,13 +61,55 @@ export function pathBetween(state, from, to, faction = null) {
   if (!a || !b) return null;
   const ck = `${state.battleId}|${faction ?? '-'}|${a.id}>${b.id}|${state.influenceVersion || 0}`;
   if (ck in pathCache) return pathCache[ck];
-  const goal = asHex(b.hex);
+  const path = pathBetweenHexes(state, asHex(a.hex), asHex(b.hex), faction);
+  pathCache[ck] = path;
+  return path;
+}
+
+/**
+ * The same A*, between two bare HEXES rather than two sites.
+ *
+ * `pathBetween` is now a thin wrapper on this. It exists because a destination
+ * is no longer always a building: an army can be sent to open ground, and a
+ * waypointed march is several of these stitched end to end. Deliberately NOT
+ * cached — the site-pair cache is keyed on ids and there is no bounded key
+ * space for arbitrary hex pairs, so a cache here would grow without limit over
+ * a fifteen-minute battle. Call it once at spawn and keep the answer, which is
+ * exactly what `spawnSquad` does.
+ */
+export function pathBetweenHexes(state, a, b, faction = null) {
+  const goal = asHex(b);
   const passable = faction
     ? passableFor(state, faction, goal)
     : (h) => inGrid(state.grid, h) && !isBlocked(state, h.q, h.r);
-  const path = findPath(asHex(a.hex), goal, passable);
-  pathCache[ck] = path;
-  return path;
+  return findPath(asHex(a), goal, passable);
+}
+
+/**
+ * Stitch a route through `waypoints`, so the PLAYER picks the road rather than
+ * the engine picking the shortest one.
+ *
+ * Each leg is a separate A*, which is what makes the detour real: pathing
+ * start -> end directly would throw the waypoints away, and that is the whole
+ * order. A leg that cannot be walked fails the WHOLE route rather than being
+ * skipped — silently dropping an unreachable waypoint would march the army
+ * somewhere the player did not point at, which is worse than a refusal.
+ *
+ * @param {Array<{q:number,r:number}>} stops start, ...waypoints, goal
+ * @returns {Array<{q:number,r:number}>|null} inclusive hex path, or null
+ */
+export function pathThrough(state, stops, faction = null) {
+  if (!stops || stops.length < 2) return null;
+  const out = [asHex(stops[0])];
+  for (let i = 1; i < stops.length; i++) {
+    const leg = pathBetweenHexes(state, out[out.length - 1], stops[i], faction);
+    if (!leg) return null;
+    // `leg[0]` is where we already stand; appending it would double the hex and
+    // give that step of the march twice the weight in every position derived
+    // from path length.
+    for (let j = 1; j < leg.length; j++) out.push(leg[j]);
+  }
+  return out;
 }
 
 /** A stack marches at the pace of its slowest unit — one ram halves a militia
@@ -74,18 +131,64 @@ export function travelTicks(state, from, to, comp, faction) {
   const b = resolve(state, to);
   if (!a || !b) return MOVEMENT.minTicks;
   const path = pathBetween(state, a, b, faction);
-  const hexes = path ? path.length - 1 : distance(asHex(a.hex), asHex(b.hex));
+  const route = path ?? [asHex(a.hex), asHex(b.hex)];
+  return ticksAlong(state, route, comp, faction);
+}
+
+/**
+ * Whole ticks to walk an already-resolved `route`.
+ *
+ * Split out of `travelTicks` because the route is now decided BEFORE the cost
+ * is: a waypointed march is a path the player drew, and pricing it by
+ * re-pathing between its endpoints would charge for the short way round and
+ * hand the detour out for free. Both callers reach the same arithmetic, which
+ * is the point — the route the army walks and the time it is charged cannot
+ * disagree.
+ * @returns {number} integer >= MOVEMENT.minTicks
+ */
+export function ticksAlong(state, route, comp, faction) {
+  const hexes = route ? route.length - 1 : 0;
   if (hexes <= 0) return MOVEMENT.minTicks;
 
   const secPerHex = MOVEMENT.hexSecondsPerSpeed / slowestSpeed(comp);
+  // TERRAIN IS AVERAGED OVER THE ROUTE, not sampled per step, and that is what
+  // keeps position a pure function of tick: `squadHexOf` paces the path
+  // uniformly, so a per-hex cost would put the drawn column somewhere the
+  // arithmetic never agreed to.
   let terrain = 0;
-  const route = path ?? [asHex(a.hex), asHex(b.hex)];
   for (const h of route) terrain += speedMultiplierFor(state, faction, h);
   terrain = route.length ? terrain / route.length : 1;
 
   const march = state.mods?.[faction]?.marchSpeedMult || 1;
   const seconds = (hexes * secPerHex) / (terrain * march);
   return Math.max(MOVEMENT.minTicks, Math.round(seconds * TICK_HZ));
+}
+
+/**
+ * Where a squad is RIGHT NOW, as a hex.
+ *
+ * Lives here rather than in vision.js (which re-exports it, so every existing
+ * import still works) because it is the other half of `spawnSquad`: the path
+ * and the reading-off of it are one mechanism, and they were in two files only
+ * because fog happened to be the first consumer that needed a position.
+ *
+ * Pure in `state.tick`, so a squad still stores no position and a replay lands
+ * a column on exactly the hex the original run did.
+ */
+export function squadHexOf(state, sq) {
+  if (sq.camped && sq.hex) return asHex(sq.hex);
+  const path = sq.path;
+  if (!path || !path.length) return null;
+  const last = path.length - 1;
+  const span = Math.max(1, sq.arriveTick - sq.spawnTick);
+  const f = Math.max(0, Math.min(1, (state.tick - sq.spawnTick) / span));
+  const t = f * last;
+  const i = Math.min(last, Math.floor(t));
+  const j = Math.min(last, i + 1);
+  const k = t - i;
+  const a = path[i];
+  const b = path[j];
+  return round({ q: a.q + (b.q - a.q) * k, r: a.r + (b.r - a.r) * k });
 }
 
 /**
@@ -100,19 +203,40 @@ export function travelTicks(state, from, to, comp, faction) {
  */
 export function spawnSquad(state, {
   owner, from, to, comp, retreating = false, arriveTick = 0,
+  fromHex = null, toHex = null, waypoints = null,
 }) {
   const a = resolve(state, from);
   const b = resolve(state, to);
-  const natural = state.tick + travelTicks(state, a, b, comp, owner);
+  const start = a ? asHex(a.hex) : asHex(fromHex);
+  const goal = b ? asHex(b.hex) : asHex(toHex);
+
+  // THE PATH IS AN INVARIANT, never a maybe. Every position derived from a
+  // squad reads it, so a squad without one would be an army with no location —
+  // and the failure would look like fog working rather than like a bug, which
+  // is precisely how the empty-vision default nearly shipped. When A* finds
+  // nothing (a route that closed behind an order already given) the straight
+  // line is the honest fallback: it is what `travelTicks` has always priced.
+  const stops = waypoints && waypoints.length
+    ? [start, ...waypoints.map(asHex), goal]
+    : [start, goal];
+  const path = pathThrough(state, stops, owner) ?? [start, goal];
+
+  const natural = state.tick + ticksAlong(state, path, comp, owner);
   const squad = {
     id: state.nextSquadId++,
     owner,
-    from: a ? a.id : String(from),
-    to: b ? b.id : String(to),
+    from: a ? a.id : (from == null ? null : String(from)),
+    // `to` is null for a march onto BARE GROUND. arrivals.js reads exactly that
+    // to decide between resolving a fight and making camp, so the null is the
+    // order rather than a missing value.
+    to: b ? b.id : (to == null ? null : String(to)),
     comp: addComp(emptyComp(), comp),
+    path,
     spawnTick: state.tick,
     arriveTick: Math.max(natural, arriveTick | 0),
     retreating: !!retreating,
+    camped: false,
+    hex: null,
   };
   state.squads.push(squad);
   return squad;
@@ -181,5 +305,46 @@ export function reverseSquad(state, squad) {
   squad.retreating = true;
   squad.spawnTick = state.tick - (trip - travelled);
   squad.arriveTick = state.tick + Math.max(1, back);
+  // THE PATH HAS TO TURN AROUND TOO. Leaving the outbound one in place would
+  // draw the column still marching at the enemy while the sim walked it home,
+  // and every position-reading consumer — fog, the towers, the route overlay —
+  // would agree with the picture and not with the order. Repathed from where
+  // it actually stands, which is the one hex the old model could not name.
+  const at = squadHexOf(state, squad) ?? asHex(home.hex);
+  squad.path = pathBetweenHexes(state, at, asHex(home.hex), squad.owner)
+    ?? [at, asHex(home.hex)];
+  squad.camped = false;
+  squad.hex = null;
+  return true;
+}
+
+/**
+ * Order a squad that is standing on open ground to march again.
+ *
+ * A camped squad is the only thing in the game that can be re-tasked without
+ * passing through a building, so this is its whole verb. It re-uses
+ * `spawnSquad`'s arithmetic by rewriting the same object rather than making a
+ * second one: a new id would break every event, order and selection already
+ * pointing at this column.
+ * @returns {boolean} false when nothing can be walked
+ */
+export function marchCamped(state, squad, { to = null, toHex = null, waypoints = null }) {
+  const at = squadHexOf(state, squad);
+  if (!at) return false;
+  const dest = resolve(state, to);
+  const goal = dest ? asHex(dest.hex) : (toHex ? asHex(toHex) : null);
+  if (!goal) return false;
+  const stops = waypoints && waypoints.length
+    ? [at, ...waypoints.map(asHex), goal] : [at, goal];
+  const path = pathThrough(state, stops, squad.owner);
+  if (!path) return false;
+
+  squad.from = null;
+  squad.to = dest ? dest.id : null;
+  squad.path = path;
+  squad.spawnTick = state.tick;
+  squad.arriveTick = state.tick + ticksAlong(state, path, squad.comp, squad.owner);
+  squad.camped = false;
+  squad.hex = null;
   return true;
 }

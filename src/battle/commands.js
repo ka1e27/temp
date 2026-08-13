@@ -13,8 +13,12 @@ import {
   SITES, SITE_UPGRADE, UNIT_IDS, UNITS, CENTIGOLD, RECRUIT,
 } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
-import { siteById, clampRallyKeep, rallyTargetsOf, ralliesTo } from './state.js';
-import { spawnSquad, retreatTarget, reverseSquad, pathBetween } from './movement.js';
+import { siteById, clampRallyKeep, rallyTargetsOf, ralliesTo, isBlocked } from './state.js';
+import {
+  spawnSquad, retreatTarget, reverseSquad, pathBetween, pathThrough, marchCamped,
+} from './movement.js';
+import { asHex } from './influence.js';
+import { inGrid } from './mapgen.js';
 import { isTrainable } from './training.js';
 import { applyGold, goldOf } from './economy.js';
 import { pushEvent, EVENTS } from './events.js';
@@ -23,56 +27,16 @@ import { BOOST } from './boosters.js';
 // re-exported: a bare `export ... from` would not bind the name locally, and
 // HANDLERS below needs it.
 import { cmdBuild, buildBlocker, buildingFor } from './construct.js';
+// Same reason, one file further out: SEND and MOVE_SQUAD are the two orders
+// that move bodies, and HANDLERS below needs both names bound locally.
+import {
+  subComp, filterComp, cmdSend, cmdMoveSquad,
+} from './marchorders.js';
 
 export { cmdBuild, buildBlocker, buildingFor };
+export { subComp, filterComp };
 
 const sec = (s) => Math.round(s * TICK_HZ);
-
-/** a minus b, never below zero. */
-export function subComp(a, b) {
-  const out = emptyComp();
-  for (const u of UNIT_IDS) out[u] = Math.max(0, (a[u] || 0) - (b[u] || 0));
-  return out;
-}
-
-/** Keep only the unit ids in `filter` (the HUD's Q-W-E-R-T chips). */
-export function filterComp(comp, filter) {
-  if (!Array.isArray(filter) || !filter.length) return addComp(emptyComp(), comp);
-  const out = emptyComp();
-  for (const u of UNIT_IDS) if (filter.includes(u)) out[u] = comp[u] || 0;
-  return out;
-}
-
-// --- individual orders -----------------------------------------------------
-
-function cmdSend(state, cmd, by) {
-  const from = siteById(state, cmd.from);
-  const to = siteById(state, cmd.to);
-  if (!from || !to) return 'unknown-site';
-  if (from.owner !== by) return 'not-your-site';
-  if (from.id === to.id) return 'same-site';
-  // THE RULE THAT REPLACED ADJACENCY. A send used to be legal only along an
-  // authored edge; now it is legal wherever an army can actually walk, and the
-  // only thing that stops one is a base in the way — see ./occupancy.js for why
-  // a building denies exactly its own hex and no more. `pathBetween` answers it
-  // with the same A* the travel time is already computed from, so the rule the
-  // player is refused by and the route they are charged for cannot disagree.
-  if (!pathBetween(state, from, to, by)) return 'no-route';
-  const frac = Math.min(1, Math.max(0, Number(cmd.fraction ?? 1)));
-  if (!(frac > 0)) return 'bad-fraction';
-
-  const send = scaleComp(filterComp(from.garrison, cmd.filter), frac);
-  if (total(send) === 0) return 'empty-send';
-
-  from.garrison = subComp(from.garrison, send);
-  const squad = spawnSquad(state, {
-    owner: by, from: from.id, to: to.id, comp: send, arriveTick: cmd.arriveTick | 0,
-  });
-  pushEvent(state, EVENTS.SQUAD_SENT, {
-    squadId: squad.id, owner: by, from: from.id, to: to.id, arriveTick: squad.arriveTick,
-  });
-  return null;
-}
 
 function cmdTrain(state, cmd, by) {
   const site = siteById(state, cmd.site);
@@ -319,6 +283,7 @@ function cmdBooster(state, cmd, by) {
 // order. The shapes documented on each handler remain canonical.
 const HANDLERS = {
   SEND: cmdSend,
+  MOVE_SQUAD: cmdMoveSquad,
   TRAIN: cmdTrain,
   RECRUIT: cmdRecruit,
   UPGRADE: cmdUpgrade,

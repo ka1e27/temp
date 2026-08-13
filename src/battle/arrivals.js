@@ -172,12 +172,41 @@ export function resolveArrival(state, group) {
 
 export function arrivalsPhase(state) {
   if (!state.squads.length) return;
-  const landed = state.squads.filter((sq) => sq.arriveTick <= state.tick);
+  // A CAMPED SQUAD HAS ALREADY ARRIVED and must never arrive again. Its
+  // `arriveTick` is in the past forever, so without this filter it would be
+  // re-resolved on every single tick from the moment it made camp — which is
+  // the shape of bug that reads as "the army is fine" right up until something
+  // consumes the duplicate events.
+  const landed = state.squads.filter((sq) => !sq.camped && sq.arriveTick <= state.tick);
   if (!landed.length) return;
-  state.squads = state.squads.filter((sq) => sq.arriveTick > state.tick);
+  state.squads = state.squads.filter((sq) => sq.camped || sq.arriveTick > state.tick);
 
+  // MARCHES ONTO BARE GROUND MAKE CAMP; they resolve nothing and fight nobody.
+  // They go back into `state.squads` rather than into a second collection, so
+  // every existing consumer — fog, the renderer, the selection, the AI's threat
+  // scan — sees them without being taught a new container to look in.
   const groups = {};
   for (const sq of landed) {
+    // TWO WAYS TO END UP HOLDING OPEN GROUND, and the second one closes a real
+    // hole. `to == null` is the order: march onto bare ground and stay there.
+    // A destination that no longer EXISTS is the accident — `razedByCapture`
+    // strikes a half-built site off the board mid-flight — and `resolveArrival`
+    // answers a missing site with a bare `return`, by which point these squads
+    // are already off `state.squads` and simply cease to exist, with no event.
+    // The razing path works around that by turning marching armies around
+    // first; camping where they stand makes the workaround unnecessary and
+    // covers every other way a site can disappear under an order.
+    const dest = sq.to == null ? null : siteById(state, sq.to);
+    if (!dest) {
+      sq.camped = true;
+      sq.to = null;
+      sq.hex = sq.path?.length ? sq.path[sq.path.length - 1] : sq.hex;
+      state.squads.push(sq);
+      pushEvent(state, EVENTS.SQUAD_CAMPED, {
+        squadId: sq.id, owner: sq.owner, hex: sq.hex, count: total(sq.comp),
+      });
+      continue;
+    }
     const site = siteById(state, sq.to);
     // A retreat is a clean escape only into friendly ground. If the haven fell
     // while they were in the air they have to fight for it after all.

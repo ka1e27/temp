@@ -54,6 +54,7 @@ import { inGrid } from './mapgen.js';
 // close a cycle. ./occupancy.js and ./influence.js touch state.js for exactly
 // the same reason: not at all.
 import { siteById } from './siteinfo.js';
+import { squadHexOf } from './movement.js';
 
 const FACTIONS = ['player', 'enemy'];
 const kOf = (h) => `${h.q},${h.r}`;
@@ -146,34 +147,26 @@ export function canSee(state, faction, q, r) {
 }
 
 /**
- * The hex a squad currently occupies, derived exactly the way the renderer
- * derives its on-screen position (render/routePath.js `routeAt`) — from
- * `spawnTick`/`arriveTick` and the CURRENT tick, never stored — so the two can
- * never disagree about which tick a marching army becomes visible.
+ * The hex a squad currently occupies.
  *
- * The renderer's route bows to one side so two crossing squads never overlap
- * on screen; that bow is a screen-space flourish with no hex underneath it,
- * so the part that has to match is the PROGRESS FRACTION alone. Here it
- * drives a straight lerp between the two endpoint hexes, rounded to the
- * nearest real one.
+ * ONE IMPLEMENTATION, in movement.js, re-exported here under the name every
+ * existing caller already imports. It used to live in this file and lerp
+ * between the two endpoint SITES — which was wrong the moment a route bent
+ * around anything, because the army was drawn and fogged and targeted at a
+ * place it was not walking through. It now reads a position off the squad's
+ * own stored `path`, still as a pure function of `state.tick`, so nothing is
+ * integrated and a replay lands the column on the same hex.
  *
  * Battle has no `alpha` — that is a render-frame smoothing term between two
  * ticks, and this only ever asks "where is it AT this tick" — so progress is
  * measured against `state.tick` directly, the exact integer `routeAt()` is
  * fed once rendering catches up to it.
  *
- * @returns {?{q:number,r:number}} null when either endpoint site is gone
+ * @returns {?{q:number,r:number}} null when the squad has no route to read
  */
-export function squadHex(state, sq) {
-  const from = siteById(state, sq.from);
-  const to = siteById(state, sq.to);
-  if (!from || !to) return null;
-  const span = Math.max(1, sq.arriveTick - sq.spawnTick);
-  const f = Math.max(0, Math.min(1, (state.tick - sq.spawnTick) / span));
-  const a = asHex(from.hex);
-  const b = asHex(to.hex);
-  return round({ q: a.q + (b.q - a.q) * f, r: a.r + (b.r - a.r) * f });
-}
+// IMPORTED AND re-exported, not `export ... from`: a bare re-export does NOT
+// bind the name locally, and `perceivedSquads` below calls it.
+export { squadHexOf as squadHex };
 
 /**
  * The site `faction` actually gets to know about right now.
@@ -215,7 +208,7 @@ export function perceivedSquads(state, faction) {
   const out = [];
   for (const sq of state.squads) {
     if (sq.owner === faction) { out.push(sq); continue; }
-    const hex = squadHex(state, sq);
+    const hex = squadHexOf(state, sq);
     if (hex && canSee(state, faction, hex.q, hex.r)) out.push(sq);
   }
   return out;

@@ -65,7 +65,8 @@ function fixture() {
 }
 
 const at = (s, id) => s.sites.find((x) => x.id === id);
-const sitePos = (site, out) => { out.x = site.hex[0] * 40; out.y = site.hex[1] * 40; return out; };
+const hexPos = (q, r, out) => { out.x = q * 40; out.y = r * 40; return out; };
+const sitePos = (site, out) => hexPos(site.hex[0], site.hex[1], out);
 
 /** Records only whether anything was actually painted — fill/stroke/text —
  *  which is all these claims need. Same shape as the recorders in
@@ -209,6 +210,11 @@ function withMarchingSquad(s) {
   s.squads.push({
     id: 1, owner: 'enemy', from: 'farm', to: 'castle',
     comp: { ...emptyComp(), militia: 20 }, spawnTick: 0, arriveTick: 10, retreating: false,
+    // A squad carries the route it walks. Written out here because the fixture
+    // is hand-built; in a real battle spawnSquad fills it from the same A* the
+    // travel time is priced by. Farm [8,0] -> castle [15,0], one hex a tick.
+    path: Array.from({ length: 8 }, (_, i) => ({ q: 8 + i, r: 0 })),
+    camped: false, hex: null,
   });
   return s;
 }
@@ -224,7 +230,7 @@ test('perceivedSquads: the same column shows at the farm and vanishes at the cas
 test('drawSquads/drawSquadRoutes/drawSquadLabels paint nothing for a squad out of vision', () => {
   const s = withMarchingSquad(fixture());
   s.tick = 10; // standing at the unscouted castle
-  const g = { pos: sitePos, byId: (id) => at(s, id), hexSize: 34, palette: P };
+  const g = { pos: sitePos, hexPos, byId: (id) => at(s, id), hexSize: 34, palette: P };
 
   // NEGATIVE CONTROL: fed the raw, UNfiltered list (what these functions used
   // to receive), the same squad draws — proving the fogged call is quiet

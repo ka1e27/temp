@@ -203,11 +203,28 @@ test('perceivedSquads: no ghost is ever left behind for a squad outside vision',
     { id: 'c', hex: [0, 0] }, { id: 'd', hex: [4, 4] },
     { id: 'e', hex: [0, 0] }, { id: 'f', hex: [20, 20] },
   ];
-  const mine = { id: 1, owner: 'player', from: 'a', to: 'b', spawnTick: 0, arriveTick: 10 };
+  // A squad carries the PATH it walks, so these fixtures state the route rather
+  // than two endpoints — the position is read off the path, not lerped between
+  // sites, which is what makes a column round a mountain fog where it actually
+  // is. `line` is only a straight route written out longhand.
+  const line = (a, b, n) => Array.from({ length: n + 1 }, (_, i) => ({
+    q: Math.round(a[0] + (b[0] - a[0]) * (i / n)),
+    r: Math.round(a[1] + (b[1] - a[1]) * (i / n)),
+  }));
+  const mine = {
+    id: 1, owner: 'player', from: 'a', to: 'b', spawnTick: 0, arriveTick: 10,
+    path: line([0, 0], [10, 10], 10), camped: false, hex: null,
+  };
   // marching c -> d; at tick 5 (halfway) it sits at the midpoint, (2,2).
-  const seen = { id: 2, owner: 'enemy', from: 'c', to: 'd', spawnTick: 0, arriveTick: 10 };
+  const seen = {
+    id: 2, owner: 'enemy', from: 'c', to: 'd', spawnTick: 0, arriveTick: 10,
+    path: line([0, 0], [4, 4], 10), camped: false, hex: null,
+  };
   // marching e -> f; its midpoint (10,10) is not lit by anything.
-  const hidden = { id: 3, owner: 'enemy', from: 'e', to: 'f', spawnTick: 0, arriveTick: 10 };
+  const hidden = {
+    id: 3, owner: 'enemy', from: 'e', to: 'f', spawnTick: 0, arriveTick: 10,
+    path: line([0, 0], [20, 20], 10), camped: false, hex: null,
+  };
   const s = {
     tick: 5, sites, squads: [mine, seen, hidden], vision: { player: { '2,2': 1 }, enemy: {} },
   };
@@ -227,7 +244,10 @@ test('perceivedSquads: no ghost is ever left behind for a squad outside vision',
 test('squadHex: origin at spawn, destination at arrival, monotonic between', () => {
   const from = { id: 'a', hex: [0, 0] };
   const to = { id: 'b', hex: [10, 0] };
-  const sq = { from: 'a', to: 'b', spawnTick: 100, arriveTick: 110 };
+  const sq = {
+    from: 'a', to: 'b', spawnTick: 100, arriveTick: 110, camped: false, hex: null,
+    path: Array.from({ length: 11 }, (_, i) => ({ q: i, r: 0 })),
+  };
   const s = { sites: [from, to], tick: 100 };
   assert.deepEqual(squadHex(s, sq), { q: 0, r: 0 });
   s.tick = 110;
@@ -242,12 +262,25 @@ test('squadHex: origin at spawn, destination at arrival, monotonic between', () 
   }
 });
 
-test('squadHex: null once an endpoint site is GONE — the razed-build-target path', () => {
+test('an army whose destination is RAZED loses nobody', () => {
   // Not a hand-built case: this is exactly how battle/sim.js `razedByCapture`
-  // strikes a site from state.sites mid-flight — see construct.test.js's "an
-  // army marching at a razed site turns around instead of vanishing", which
-  // this reuses to check squadHex rather than just the troop count.
+  // strikes a site from state.sites mid-flight.
+  //
+  // THE OLD ASSERTION HERE WAS `squadHex -> null`, because position was
+  // resolved from the two endpoint sites and one of them no longer existed.
+  // That was a symptom dressed as a property, and it stopped being true the
+  // moment a squad carried its own route — it now always knows where it is.
+  //
+  // What is worth asserting is the thing the razing path was BUILT to protect:
+  // no bodies are lost. Written as a headcount rather than as "the squad turns
+  // around", because two mechanisms can now deliver it — the reversal that
+  // `razedByCapture` performs, and arrivals.js camping an army whose
+  // destination is gone — and the test should not care which one ran.
   const b = battleFor();
+  const bodies = () => b.sites.filter((x) => x.owner === 'player')
+    .reduce((n, x) => n + total(x.garrison), 0)
+    + b.squads.filter((x) => x.owner === 'player').reduce((n, x) => n + total(x.comp), 0);
+
   const at = legalHexes(b)[0];
   b.commands.push({ t: 'BUILD', kind: 'trainingGround', hex: [at.q, at.r] });
   step(b);
@@ -258,12 +291,48 @@ test('squadHex: null once an endpoint site is GONE — the razed-build-target pa
   step(b);
   const sq = b.squads.find((x) => x.to === site.id);
   assert.ok(sq, 'nothing marched at the new site — this proves nothing');
+  assert.ok(squadHex(b, sq), 'a marching army always has a position to read');
+  const before = bodies();
 
   site.siege = { owner: 'enemy', comp: { militia: 20 } };
   step(b); // 1 HP scaffolding under siege is razed, not captured, the very next tick
-  assert.equal(b.sites.some((x) => x.id === site.id), false, 'the site must be gone for this to prove anything');
-  assert.equal(squadHex(b, sq), null,
-    'an endpoint site vanished mid-flight and squadHex still resolved a hex for it');
+  assert.equal(b.sites.some((x) => x.id === site.id), false,
+    'the site must be gone for this to prove anything');
+
+  for (let i = 0; i < 400 && b.squads.some((x) => x.id === sq.id); i++) step(b);
+  assert.equal(bodies(), before,
+    'the destination was struck off the board and the army went with it');
+});
+
+test('an army sent to open ground arrives, holds it, and can be moved on', () => {
+  // The verb the whole path rewrite exists for: ground is a destination now,
+  // not only buildings.
+  const b = battleFor();
+  const from = b.sites.find((x) => x.owner === 'player' && total(x.garrison) > 5);
+  // Somewhere empty and reachable: a hex on the path to another site, minus
+  // the endpoints, is open ground by construction.
+  const spot = legalHexes(b).find((h) => !b.sites.some((x) => x.hex[0] === h.q && x.hex[1] === h.r));
+  assert.ok(spot, 'no open hex on this map — the fixture is wrong, not the code');
+
+  b.commands.push({ t: 'SEND', from: from.id, toHex: [spot.q, spot.r], fraction: 0.5 });
+  step(b);
+  const sq = b.squads.find((x) => x.owner === 'player' && x.to === null);
+  assert.ok(sq, 'a send to bare ground was refused');
+  const sent = total(sq.comp);
+
+  for (let i = 0; i < 600 && !sq.camped; i++) step(b);
+  assert.equal(sq.camped, true, 'the army never made camp');
+  assert.deepEqual(squadHex(b, sq), { q: spot.q, r: spot.r },
+    'a camped army stands where it was sent');
+  assert.equal(total(sq.comp), sent, 'camping is not a fight and costs nobody');
+
+  // ...and it is still an army: it can be ordered on to a real site.
+  const target = b.sites.find((x) => x.owner !== 'player');
+  b.commands.push({ t: 'MOVE_SQUAD', squadId: sq.id, to: target.id });
+  step(b);
+  assert.equal(sq.camped, false, 'a camped army must be re-taskable without a building');
+  assert.equal(sq.to, target.id);
+  assert.ok(sq.arriveTick > b.tick, 'and it has a real march ahead of it');
 });
 
 // ---------------------------------------------------------------------------

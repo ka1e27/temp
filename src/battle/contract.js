@@ -79,7 +79,20 @@ import { checkMods, checkRivers } from './checks.js';
 // happens to call `recomputeVision` and populate it. A v8 save was a board
 // where both sides saw everything; resuming it under v9 hands them a
 // blackout they were never playing with.
-export const CONTRACT_VERSION = 9;
+//
+// v10: A SQUAD IS NO LONGER A LINE BETWEEN TWO BUILDINGS. It carries the `path`
+// it walks, its `to` may be null (a march onto bare ground), and it may be
+// `camped` on a `hex` it is holding. Again no CONFIG field moved — and again
+// that is the point, because the blob that breaks is state.
+//
+// A v9 squad has no `path`, so `squadHexOf` returns null for it and the army is
+// nowhere: it draws nothing, it fogs nothing, and the towers that shoot at
+// positions cannot see it. It would still ARRIVE, because arrival is a tick
+// comparison — so a resumed v9 battle is one where every column in the air is
+// invisible to both sides until it lands on top of somebody. That is a board
+// the current engine steps wrongly while looking entirely healthy, which is the
+// v5 sentence exactly.
+export const CONTRACT_VERSION = 10;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];

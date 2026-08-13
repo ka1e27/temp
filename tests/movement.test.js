@@ -4,12 +4,14 @@ import { createBattleState } from '../src/battle/state.js';
 import { recomputeInfluence, speedMultiplierFor } from '../src/battle/influence.js';
 import {
   travelTicks, spawnSquad, retreatTarget, reverseSquad, pathBetween, clearPathCache, slowestSpeed,
+  squadHexOf, pathThrough, marchCamped,
 } from '../src/battle/movement.js';
 import { emptyComp, total } from '../src/battle/combat.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { UNITS, MOVEMENT, TERRITORY_SPEED, MAPGEN } from '../src/content/balance.js';
 import { TICK_HZ } from '../src/core/loop.js';
 import { axialFromOffset } from '../src/battle/mapgen.js';
+import { distance } from '../src/core/hex.js';
 
 const comp = (o) => ({ ...emptyComp(), ...o });
 let n = 0;
@@ -102,6 +104,12 @@ test('paths are cached per battle and per site pair', () => {
 });
 
 test('a squad computes arriveTick once and never integrates position', () => {
+  // THE INVARIANT IS "NOTHING IS WRITTEN PER TICK", not "there is no hex field".
+  // This used to assert the latter, which was a fair proxy while a squad had
+  // nowhere to be — and it went red the moment one could stand on open ground
+  // and hold it. Position is still derived rather than integrated: `path` is
+  // fixed at spawn and `squadHexOf` reads a place off it as a pure function of
+  // `state.tick`, so the determinism and the O(arrivals) tick both survive.
   const s = road();
   s.tick = 40;
   const sq = spawnSquad(s, { owner: 'player', from: 'camp', to: 'f1', comp: comp({ militia: 4 }) });
@@ -110,10 +118,36 @@ test('a squad computes arriveTick once and never integrates position', () => {
   assert.ok(sq.arriveTick > 40);
   assert.equal(sq.retreating, false);
   assert.equal(total(sq.comp), 4);
-  const frozen = sq.arriveTick;
+  assert.equal(sq.camped, false);
+  assert.equal(sq.hex, null, 'an army in transit is nowhere in particular');
+  assert.ok(Array.isArray(sq.path) && sq.path.length >= 2, 'a squad marches a real route');
+
+  const before = JSON.stringify({ p: sq.path, s: sq.spawnTick, a: sq.arriveTick });
+  const at40 = squadHexOf(s, sq);
   s.tick = 60;
-  assert.equal(s.squads[0].arriveTick, frozen, 'nothing recomputes mid-flight');
-  assert.ok(!('x' in sq) && !('hex' in sq), 'squads carry no position');
+  assert.equal(s.squads[0].arriveTick, sq.arriveTick, 'nothing recomputes mid-flight');
+  assert.equal(JSON.stringify({ p: sq.path, s: sq.spawnTick, a: sq.arriveTick }), before,
+    'advancing the clock must not write anything onto the squad');
+  const at60 = squadHexOf(s, sq);
+  assert.ok(at40 && at60, 'a marching squad always has a position to read');
+  assert.notDeepEqual(at40, at60, 'and it is somewhere different twenty ticks later');
+});
+
+test('the route a squad walks is the route it was priced for', () => {
+  // The old model lerped between two site hexes, so a column routing around a
+  // mountain was DRAWN going over it — and fog, the route overlay and anything
+  // else reading a position agreed with the picture rather than the order.
+  const s = road();
+  const sq = spawnSquad(s, { owner: 'player', from: 'camp', to: 'f1', comp: comp({ militia: 4 }) });
+  const camp = s.sites.find((x) => x.id === 'camp');
+  const f1 = s.sites.find((x) => x.id === 'f1');
+  assert.deepEqual(sq.path[0], { q: camp.hex[0], r: camp.hex[1] });
+  assert.deepEqual(sq.path[sq.path.length - 1], { q: f1.hex[0], r: f1.hex[1] });
+  // Every step is a real hex move, so the drawn column cannot teleport.
+  for (let i = 1; i < sq.path.length; i++) {
+    assert.equal(distance(sq.path[i - 1], sq.path[i]), 1,
+      `path step ${i} jumps more than one hex`);
+  }
 });
 
 test('a requested arriveTick can hold a wave back but never speed it up', () => {

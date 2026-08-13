@@ -92,13 +92,12 @@ export function createBattleView(opts) {
   };
   // Geometry bundle handed to routes.js — stable references, so passing it
   // every frame allocates nothing.
-  const geo = { palette: p, hexSize, pos: sitePos, byId };
-
-  function sitePos(site, out) {
-    out.x = hexCx(site.hex[0], site.hex[1], hexSize);
-    out.y = hexCy(site.hex[0], site.hex[1], hexSize);
-    return out;
-  }
+  // `hexPos` answers for a bare hex what `pos` answers for a site — a route is
+  // hexes now, not buildings — and `sitePos` defers to it, so there is one
+  // formula. Squad hit-testing needs it too; see screens/battle-orders.js.
+  const hexPos = (q, r, o) => { o.x = hexCx(q, r, hexSize); o.y = hexCy(q, r, hexSize); return o; };
+  const sitePos = (s2, out) => hexPos(s2.hex[0], s2.hex[1], out);
+  const geo = { palette: p, hexSize, pos: sitePos, hexPos, byId };
 
   // PERCEIVED, not raw — every consumer below (hover/selection halos, the drag
   // and rally previews, a squad's endpoints) gets whatever this faction
@@ -130,6 +129,7 @@ export function createBattleView(opts) {
     },
 
     sitePos,
+    hexPos,
     /** Screen-space centre of a site — the HUD hangs the training picker here. */
     siteScreen(site, out) {
       sitePos(site, _a);

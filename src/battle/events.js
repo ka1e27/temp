@@ -12,6 +12,11 @@ export const EVENTS = Object.freeze({
   SQUAD_SENT: 'squad-sent',
   SQUAD_ARRIVED: 'squad-arrived',
   SQUAD_RETREATED: 'squad-retreated',
+  /** An army reached open ground and is holding it. Distinct from ARRIVED,
+   *  which means a building changed hands or a fight started — a camp resolves
+   *  nothing, so a HUD that treated the two alike would announce a capture
+   *  every time somebody took up a position. */
+  SQUAD_CAMPED: 'squad-camped',
   FIELD_BATTLE: 'field-battle',
   // Carries `kind` as well as `siteId`, because the HUD banner reads
   // "UNDER SIEGE — stronghold" and read "— undefined" for as long as it

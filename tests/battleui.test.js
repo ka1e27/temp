@@ -59,6 +59,10 @@ function harness(state, view = createView()) {
   };
   const board = {
     hexSize: 34,
+    // `hexPos` is what routePath.js walks a squad's route with; `sitePos`
+    // defers to it exactly as the real board does, so the stub cannot drift
+    // into placing a site and its own hex in two different places.
+    hexPos: (q, r, out) => { out.x = q * 51; out.y = r * 59; return out; },
     sitePos: (s, out) => { out.x = s.hex[0] * 51; out.y = s.hex[1] * 59; return out; },
     siteAt: () => null,
   };

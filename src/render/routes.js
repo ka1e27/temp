@@ -141,16 +141,17 @@ export function drawSquads(ctx, squads, t, px, g) {
   beginPieces();
   for (let i = 0; i < squads.length; i++) {
     const sq = squads[i];
-    const from = g.byId(sq.from);
-    const to = g.byId(sq.to);
-    if (!from || !to) continue;
+    // NO SITE LOOKUP. A squad's position comes off its own `path` now, so an
+    // army marching onto bare ground — or standing camped on it, with no
+    // destination site at all — draws exactly like any other. The old
+    // `byId(sq.to)` guard skipped both.
     let troops = 0;
     for (let k = 0; k < UNIT_IDS.length; k++) troops += sq.comp[UNIT_IDS[k]] || 0;
     if (troops <= 0) continue;
 
     const f = squadProgress(sq, t);
     const bow = squadBow(sq);
-    // loadStops() fills the shared scratch with the squad's two endpoints.
+    // loadStops() fills the shared scratch with the squad's whole route.
     const stops = loadStops(sq, g);
     if (!stops) continue;
 
@@ -170,7 +171,7 @@ export function drawSquads(ctx, squads, t, px, g) {
     // its own pixel length converts a global progress fraction directly — no
     // per-leg parameter span to normalise through, the way a multi-stop chain
     // needed.
-    const span = legSpan();
+    const span = legSpan(stops);
     const dt = Math.min(rg / span, 0.44 / (ranks > 1 ? ranks - 1 : 1));
 
     let slot = 0;

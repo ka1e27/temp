@@ -66,7 +66,13 @@ export function createOrders(o) {
 
   // The geometry bundle routePath.js wants, built ONCE so squad hit-testing can
   // reuse the renderer's own route walk instead of keeping a second copy of it.
-  const geo = { byId: (id) => site(id), pos: (s, out) => board.sitePos(s, out) };
+  // `hexPos` is not optional: routePath.js walks a squad's own hex path now,
+  // so squad hit-testing without it throws on the first click on a column.
+  const geo = {
+    byId: (id) => site(id),
+    pos: (s, out) => board.sitePos(s, out),
+    hexPos: (q, r, out) => board.hexPos(q, r, out),
+  };
 
   const push = (c) => {
     getState().commands.push(c);
