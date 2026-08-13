@@ -267,14 +267,40 @@ test('gilt gold is never a faction hue and never an alarm hue', () => {
 });
 
 test('ownership still carries the site, gilding or no gilding', () => {
+  // THIS ASKED ABOUT SOLID STROKES AND SHIPPED RED FOR IT. Ownership grew a
+  // SECOND channel (render/ownerDash.js: solid for yours, dashed for theirs,
+  // fine dotted for nobody's — the answer to player-green vs enemy-red
+  // measuring dE 1.8 under protanopia), so an enemy site has no solid outline
+  // at all and `solidStrokes` came back empty. The renderer was right and the
+  // question was stale: what this test means by "ownership carries the site"
+  // is that every outline is the OWNER'S COLOUR, not that every outline is
+  // solid. Asking over all strokes is also strictly stronger, because it can
+  // no longer be satisfied vacuously by an empty list.
   for (const owner of ['player', 'enemy', 'neutral']) {
     const ctx = recorder();
     drawSiteBase(ctx, site('stronghold', { owner, level: MAX_LEVEL }), 0, 0,
       siteRadius('stronghold', HEX), P, 1);
-    const strokes = solidStrokes(ctx);
-    assert.ok(strokes.length > 0 && strokes.every((s) => s.style === P.owner[owner]),
+    const strokes = ctx.ops.filter((o) => o.op === 'stroke');
+    assert.ok(strokes.length > 0, `${owner}: nothing was outlined at all`);
+    assert.ok(strokes.every((s) => s.style === P.owner[owner]),
       `${owner}: every outline is still the owner's colour`);
     assert.ok(ctx.ops.some((o) => o.style === P.siteWash[owner]),
       `${owner}: the owner wash is still under the body`);
+
+    // AND THE SECOND CHANNEL SURVIVES A MAXED-OUT SITE. Gilding is the one
+    // thing that draws over a site's whole silhouette, so it is exactly where
+    // a stray setLineDash would flatten ownership back to hue alone — on the
+    // late-game sites the board is most crowded with.
+    //
+    // THE EXPECTATION IS WRITTEN OUT, NOT READ BACK OUT OF `ownerDash`. The
+    // first version of this assertion derived it from the function under test,
+    // so deleting the enemy pattern entirely — the whole feature — left it
+    // green: the renderer drew solid, `ownerDash` said solid, and the two
+    // agreed about nothing. A test that asks the implementation what to expect
+    // cannot fail. Confirmed by mutation before this was rewritten.
+    const wantDashed = owner !== 'player';
+    assert.ok(strokes.every((s) => s.dashed === wantDashed),
+      `${owner}: expected every outline ${wantDashed ? 'dashed' : 'solid'}, got `
+      + JSON.stringify(strokes.map((s) => s.dashed)));
   }
 });
