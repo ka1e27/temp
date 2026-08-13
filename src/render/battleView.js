@@ -16,7 +16,7 @@ import { createBgCache } from './bgcache.js';
 import { palette as loadPalette } from './palette.js';
 import {
   computeOwners, drawPlates, drawFlood, drawFrontLine, drawBlocked, drawGridLines,
-  makeHatch, hexCx, hexCy, gridBounds,
+  makeHatch, makeOwnerHatches, hexCx, hexCy, gridBounds,
 } from './hexRenderer.js';
 import {
   siteRadius, drawSiteBase, drawHpRing, drawSiegeRing, drawSiteState,
@@ -84,6 +84,9 @@ export function createBattleView(opts) {
   const board = {
     cols: 0, rows: 0, size: hexSize, owners, blocked: new Set(),
     palette: p, hatch: makeHatch(bg.ctx, p.hatchA, p.hatchB, 12),
+    // Ownership's second channel — a stripe DIRECTION per faction, so the two
+    // territories differ by more than hue (hexRenderer.js `ownerWeave`).
+    ownerHatch: makeOwnerHatches(bg.ctx, p),
     zoom: 1, lineWidth: 1,
   };
   // Geometry bundle handed to routes.js — stable references, so passing it
@@ -236,23 +239,20 @@ export function createBattleView(opts) {
       drawSiteBase(ctx, s, _a.x, _a.y, siteRadius(s.kind, hexSize), p, 1 / camera.zoom);
       if (s.ghost) ctx.globalAlpha = 1;
     }
-    // THE VEIL (moved here from drawFrame — see the perf report). Vision
-    // changes exactly on the events that already force a repaint here
-    // (recomputeVision bumps `influenceVersion`, folded into `signature()`),
-    // so this stays as stale-free as the per-frame version, without paying
-    // #board-fx's per-frame recomposite — filling ~90% of a late board
-    // translucent 60x/s, measured as most of a throttled frame's cost.
+    // THE VEIL lives here rather than on #board-fx: vision changes exactly on
+    // the events that already force a repaint (recomputeVision bumps
+    // `influenceVersion`, folded into `signature()`), so it is as stale-free as
+    // a per-frame version without paying the per-frame recomposite — filling
+    // ~90% of a late board translucent 60x/s was most of a throttled frame.
     drawVeil(ctx, veil, board.cols, board.rows, hexSize, p);
     drawAssaultWash(ctx, state, viewFaction, board.cols, board.rows, hexSize, p); // over the veil, see fog.js
   }
 
-  // THE LINK GRAPH IS GONE, and deleting it was the point rather than a tidy-up.
-  // It drew one line per `site.adj` entry to advertise "sends go to adjacent
-  // sites only" — a rule free movement retired, after which `adj` meant REACH
-  // and a late map drew forty-odd lines into a cobweb describing a constraint
-  // the engine no longer enforced. A screenshot found it; no test could,
-  // because every line still drew correctly. What replaces it is the ground:
-  // mountains, the shape mask and the bases that deny their own hex.
+  // THE LINK GRAPH IS GONE, and deleting it was the point. It drew one line per
+  // `site.adj` to advertise "sends go to adjacent sites only" — a rule free
+  // movement retired, after which a late map drew forty-odd lines into a cobweb
+  // describing a constraint the engine no longer enforced. A screenshot found
+  // it; no test could, because every line still drew correctly.
 
   // ---- per-frame ----------------------------------------------------------
 

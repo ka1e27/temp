@@ -44,6 +44,59 @@ export function makeHatch(ctx, colorA, colorB, px = 8) {
   return ctx.createPattern(c, 'repeat');
 }
 
+/**
+ * OWNERSHIP'S SECOND CHANNEL: a faction's territory gets a stripe DIRECTION,
+ * not just a hue.
+ *
+ * Measured on the shipped palette, player-green against enemy-red is **ΔE 1.8
+ * at 1.03:1 under protanopia** — one continuous field of ground, and the
+ * territory flood is most of what the board actually is. `render/ownerDash.js`
+ * already fixed the site-STROKE half of this (solid yours, dashed theirs,
+ * dotted nobody's); this is the other half, and the bigger one by area.
+ *
+ * DIRECTION IS THE CHANNEL, deliberately, because it is the one that survives
+ * every colour-vision deficiency AND greyscale at once — where a lightness
+ * difference would collide with `floodT`'s depth ramp (the three-tier
+ * heartland/frontier shading that already uses lightness to say something
+ * else). Player leans one way, enemy the other, so the front line is where the
+ * weave changes hands.
+ *
+ * IT DOES NOT COLLIDE WITH THE CONTESTED HATCH ABOVE, and that was the design
+ * constraint that picked these angles: `makeHatch` is opaque (it paints its own
+ * background over the flood) and sits at ±45°, while these are TRANSPARENT
+ * overlays on top of a fill the flood already laid down, at a steeper pitch and
+ * a much lower alpha. So contested ground still reads as the one band that
+ * belongs to neither side rather than as a third faction.
+ *
+ * Built once per battle beside the contested hatch, counter-scaled by the
+ * camera at draw time exactly as that one is, so stripe width is constant on
+ * screen at any zoom.
+ *
+ * @param {'up'|'down'} lean which way the stripes run
+ */
+export function makeOwnerHatch(ctx, color, lean, px = 10) {
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas');
+  c.width = c.height = px;
+  const g = c.getContext('2d');
+  // NO background fill: the tile stays transparent so the flood's own colour and
+  // depth ramp show through between the stripes. Painting one would flatten the
+  // heartland/frontier reading this sits on top of.
+  g.strokeStyle = color;
+  g.lineWidth = px / 5;
+  g.lineCap = 'square';
+  g.beginPath();
+  if (lean === 'up') {
+    g.moveTo(-px, px); g.lineTo(px, -px);
+    g.moveTo(0, px * 2); g.lineTo(px * 2, 0);
+  } else {
+    g.moveTo(-px, 0); g.lineTo(px, px * 2);
+    g.moveTo(0, -px); g.lineTo(px * 2, px);
+  }
+  g.stroke();
+  return ctx.createPattern(c, 'repeat');
+}
+
 // --- Ground -----------------------------------------------------------------
 
 /**

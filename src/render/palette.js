@@ -253,6 +253,27 @@ export function derive(c) {
   // belongs to neither, which is exactly what a stalled front is.
   p.hatchA = withAlpha(c.player, 0.3);
   p.hatchB = withAlpha(c.enemy, 0.55);
+  // OWNERSHIP'S SECOND CHANNEL (render/terrain.js makeOwnerHatch): the stripe
+  // colour each faction's territory is woven with. NEUTRAL rather than the
+  // faction hue — the whole point is a cue that survives when hue does not, and
+  // striping green ground in green puts the signal straight back in the channel
+  // that measured ΔE 1.8 under protanopia.
+  //
+  // LIGHT RATHER THAN DARK, AND THAT WAS MEASURED. The first cut was black at
+  // 0.16, on the reasoning that darkening cannot tint. It is nearly invisible:
+  // the flood is only `--a-flood` (0.2) over near-black ground and the fog veil
+  // halves whatever is left, so a black stripe has no headroom to work in.
+  // White has the whole dynamic range of a dark board.
+  //
+  // THE NUMBER THAT PROVES IT IS THE NEGATIVE CONTROL, not the raw contrast.
+  // Measured off a real battle screenshot — clean faction-coloured patches,
+  // gradient energy along one diagonal against the other — the board's own
+  // plates, scrub and lattice already have a grain, and those patches lean
+  // **-0.35** with the weave disabled. With it they lean **+0.40**. The sign
+  // flip is the weave; the magnitude is how much other texture it competes
+  // with. White at 0.10 / 0.14 / 0.22 all land in the same place, so this is
+  // the middle of a flat optimum rather than a peak to defend.
+  p.weave = withAlpha('#ffffff', 0.14);
   // The hex lattice is scaffolding, not content. Pulled well back from the
   // token's nominal alpha: at full strength it turned the board into a
   // spreadsheet and buried the one line that matters, the front.

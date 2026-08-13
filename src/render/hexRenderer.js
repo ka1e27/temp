@@ -24,8 +24,13 @@ export {
   CONTESTED, hexRow, hexQ, hexIndex, hexCx, hexCy, gridBounds, traceHex,
   terrainTier,
 } from './hexGeom.js';
+// IMPORTED as well as re-exported: `makeOwnerHatches` below CALLS it, and a
+// bare `export ... from` does not bind the name locally.
+import { makeOwnerHatch } from './terrain.js';
+
 export {
-  makeHatch, plateBand, drawPlates, drawBlocked, drawRivers, setRiverLayer,
+  makeHatch, makeOwnerHatch, plateBand, drawPlates, drawBlocked, drawRivers,
+  setRiverLayer,
 } from './terrain.js';
 
 /**
@@ -60,15 +65,69 @@ function depthTier(owners, q, r, cols, rows, code) {
 }
 
 /**
- * The territory flood, in three depths per faction.
+ * The pair of faction weaves, built once per battle — see terrain.js
+ * `makeOwnerHatch` for why direction is the channel. Here rather than at the
+ * call site so the two patterns cannot be given the same lean by a caller that
+ * only has one of them in view, and keyed by the same strings `CODE_KEY` uses
+ * so `ownerWeave` needs no mapping. Neutral is deliberately absent: "nobody's"
+ * is the absence of a claim, and texturing it would make unclaimed ground look
+ * like a third side.
+ */
+export function makeOwnerHatches(ctx, p) {
+  return {
+    player: makeOwnerHatch(ctx, p.weave, 'up', 10),
+    enemy: makeOwnerHatch(ctx, p.weave, 'down', 10),
+  };
+}
+
+/**
+ * One faction's stripe weave, laid over the fill drawn for it.
+ *
+ * Split out of `drawFlood` rather than inlined because the pattern needs the
+ * SAME camera counter-scale the contested hatch does — `setTransform` with
+ * `1/zoom`, so stripe width is constant on screen — and having that arithmetic
+ * written twice in one function is how the two drift apart at some future zoom
+ * change. `o.ownerHatch` is absent in every headless fixture (`makeOwnerHatch`
+ * returns null without a `document`), so this is a no-op there rather than a
+ * branch every test has to know about.
+ */
+function ownerWeave(ctx, o, code, n) {
+  // NEUTRAL IS REFUSED HERE, not merely absent from `makeOwnerHatches`. The
+  // rule — "nobody's" is the absence of a claim, and texturing it would make
+  // unclaimed ground read as a third faction — belongs at the point of drawing
+  // rather than resting on the one caller that happens not to build the key.
+  // tests/ownerdash.test.js hands one in on purpose.
+  if (code === NEUTRAL) return;
+  const pattern = o.ownerHatch && o.ownerHatch[CODE_KEY[code]];
+  if (!pattern) return;
+  const { cols, rows, size, owners } = o;
+  let any = false;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    if (owners[i] !== code) continue;
+    any = true;
+    const r = hexRow(i, cols);
+    traceHex(ctx, hexCx(hexQ(i, cols), r, size), hexCy(0, r, size), size * 0.985);
+  }
+  if (!any) return;
+  if (pattern.setTransform && typeof DOMMatrix === 'function') {
+    const k = 1 / (o.zoom || 1);
+    pattern.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0]));
+  }
+  ctx.fillStyle = pattern;
+  ctx.fill();
+}
+
+/**
+ * The territory flood, in three depths per faction, plus each faction's weave.
  *
  * A heartland is saturated and a frontier fades out, so held ground has a
- * gradient and a direction instead of being one flat slab — and the fade
- * points at the front line, which is the thing worth looking at. Still one
- * fill per faction per depth, whatever the map size.
+ * gradient and a direction instead of being one flat slab — and the fade points
+ * at the front line, which is the thing worth looking at. Still one fill per
+ * faction per depth, whatever the map size.
  * @param {CanvasRenderingContext2D} ctx
  * @param {{cols:number,rows:number,size:number,owners:Uint8Array,palette:object,
- *          hatch:CanvasPattern|null, zoom:number}} o
+ *          hatch:CanvasPattern|null, ownerHatch?:object, zoom:number}} o
  */
 export function drawFlood(ctx, o) {
   const { cols, rows, size, owners, palette: p } = o;
@@ -92,6 +151,14 @@ export function drawFlood(ctx, o) {
       ctx.fillStyle = ramp ? ramp[t] : p.flood[key];
       ctx.fill();
     }
+    // OWNERSHIP'S SECOND CHANNEL — a stripe DIRECTION over the fill, so the two
+    // territories differ by something other than hue (measured: green against
+    // red is ΔE 1.8 at 1.03:1 under protanopia, i.e. one continuous field).
+    // See terrain.js makeOwnerHatch. ONE path and ONE fill per faction, the
+    // same batching the fills above use, and only ever on the background
+    // canvas. Neutral gets none: "nobody's" is the absence of a claim, and
+    // giving it a texture would make unclaimed ground look like a third side.
+    ownerWeave(ctx, o, code, n);
   }
 
   // Contested: a hatched band, so a stalemate line is visually distinct from

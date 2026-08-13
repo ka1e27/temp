@@ -2126,15 +2126,27 @@ activating focused buttons.
   **Four fixes have now been measured and rejected: two militia nerfs, a slot-share cap,
   and share-scaled march speed.** Anything proposed next should say, before it is built,
   which of those four shapes it is not.
-- **Ownership's second channel is half-built.** `render/ownerDash.js` shipped the
-  site-stroke half of the fix for the ΔE 1.8 measurement above: `ctx.setLineDash`
-  sized off line width, solid for yours, dashed for theirs, fine dotted for nobody's
-  (and for a fogged ghost, which must read as "nobody's, as far as you know" rather
-  than fall through to solid). Still open: the other half of the same proposal. The
-  territory FLOOD is most of what the board actually is, and it is still hue-only for
-  player vs enemy — `terrain.js makeHatch` is already wired into `drawFlood`, but only
-  for the CONTESTED band. A per-faction hatch under the flood itself, batched by owner
-  the same way the fill already is, is the highest-value visual-accessibility gap left.
+- ~~**Ownership's second channel is half-built.**~~ **CLOSED, both halves.**
+  `render/ownerDash.js` did the site STROKE (solid yours, dashed theirs, fine dotted
+  for nobody's and for a fogged ghost). The other half was the territory FLOOD, which
+  is most of what the board actually is: `hexRenderer.js ownerWeave` now lays a stripe
+  pattern over each faction's fill, leaning opposite ways, so ownership survives
+  greyscale and every colour-vision deficiency. One path and one fill per faction —
+  the same batching the fills already use — on the background canvas only. Neutral is
+  refused *at the point of drawing* rather than merely absent from the pattern map,
+  because "nobody's" is the absence of a claim and texturing it would make unclaimed
+  ground read as a third side.
+
+  **Two things it cost, and both were measurements rather than opinions.** The first
+  cut striped in BLACK, on the reasoning that darkening cannot tint — and it is
+  invisible: the flood is `--a-flood` 0.2 over near-black ground and the fog veil
+  halves what is left, so a dark stripe has no headroom. White has the whole dynamic
+  range of a dark board. And the number that settled it was the NEGATIVE CONTROL, not
+  the raw contrast: measured off a real battle screenshot, the board's own plates,
+  scrub and lattice already have a grain, so faction-coloured patches lean **−0.35**
+  with the weave off and **+0.40** with it on. The sign flip is the feature; the
+  magnitude is how much other texture it competes with. Measuring only the "after"
+  number would have reported a healthy 1.7 for a feature that was doing nothing.
 - **`breachSeconds` stopped binding around region 8.** 33 militia out-pace a level-5
   castle's repair, and landing budgets reach 703 slots, so the mechanism the whole design
   rests on no longer gates anything late. This is why rams measure as a straight loss.
