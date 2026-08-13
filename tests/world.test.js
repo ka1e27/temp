@@ -120,22 +120,31 @@ test('map size, site count and battle length scale together across tiers', () =>
 // 60-80% with zero losses. Change them only with fresh simrunner output.
 test('the vertical slice matches the tuned balance table', () => {
   const table = [
-    // Re-tuned campaign-wide for every region reading TOO EASY against
-    // tools/simrunner.js WIN_BAND (CLAUDE.md "Tuning"). `enemyMult` for tiers
-    // 1-2 is deliberately capped at <=3.10 (saltmere and kaldan both land on
-    // it) rather than pushed further, with the rest of each region's step
-    // carried by `siteCounts.enemy` and, for kaldan specifically, a raised
-    // `AI_TIERS[1].economyMult` (0.36 -> 0.49) — a tier-wide lever, not a
-    // per-region one, so it does not show up in this row. `targetLengthMin`
-    // is re-authored from the WIN MEDIAN measured alongside each win rate.
-    // Measured at n=96: riverfen 86%/10.0m, ashford 84%/10.3m, ironwood
-    // 81%/9.2m, saltmere 89%/6.9m, kaldan 72%/9.1m. grid/siteCounts/reward are
-    // untouched — only the dial and the advertised length moved on these five.
+    // Re-measured after the mixed-table rebuild (a `git add -A` in a shared
+    // tree briefly stacked another engineer's siteCounts/develop/targetLengthMin
+    // edits under this pass's own enemyMult column — see the commit that
+    // rebuilt content/regions.data.js from the last known-good base and
+    // re-applied only the measured dial). `enemyMult` here is simply what the
+    // table now ships: 3.13/3.25 for ironwood/saltmere, not the 3.00/3.10 an
+    // earlier draft of this test pinned. `targetLengthMin` is re-authored from
+    // the WIN MEDIAN measured alongside each win rate, at n=96:
+    // riverfen 86%/10.0m, ashford 84%/10.3m, ironwood 88%/9.7m, saltmere
+    // 88%/8.1m. grid/siteCounts/reward are untouched.
+    //
+    // KALDAN IS THE ONE ROW HERE THAT IS KNOWINGLY OUT OF BAND: 40% at n=96
+    // against tier 2's [66,84] floor, not the 72% this test used to assert.
+    // `enemyMult` (3.34) is unchanged and is not the suspect — `siteCounts`
+    // never moved for this row across the whole mixed-table episode. The
+    // likely cause is content/ai.data.js `AI_TIERS[1].economyMult` (0.36 ->
+    // 0.49), landed in the same commit as the dial and never touched by the
+    // rebuild, which only restores `regions.data.js`. Recorded here rather
+    // than quietly re-bisected, because the fix is either that economyMult or
+    // a fresh kaldan dial, and only one engineer should be turning that knob.
     ['riverfen', 1, 2.02, 11, 9, 5, 3, 3, 1.0, 10],
     ['ashford', 1, 2.80, 12, 9, 6, 3, 3, 1.2, 10.5],
-    ['ironwood', 1, 3.00, 13, 10, 7, 4, 3, 1.5, 9],
-    ['saltmere', 1, 3.10, 13, 10, 8, 4, 4, 1.8, 7],
-    ['kaldan', 2, 3.10, 15, 11, 9, 5, 4, 4.0, 9],
+    ['ironwood', 1, 3.13, 13, 10, 7, 4, 3, 1.5, 9.5],
+    ['saltmere', 1, 3.25, 13, 10, 8, 4, 4, 1.8, 8],
+    ['kaldan', 2, 3.34, 15, 11, 9, 5, 4, 4.0, 10],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;

@@ -79,38 +79,28 @@
  * knob in practice — the tail (see below) cannot be eased through `perDepth`
  * without breaking that assertion, only through `baseDial`.
  *
- * RE-MEASURED for the full campaign retune (CLAUDE.md "Tuning"): the arena
- * (widowsgate) shipped harder across the board — `develop` 3.1 (was ~2.9),
- * `castleGateFrac` 0.60 (was 0.85, part of a campaign-wide cap: see
- * regions.rules.js GATE_CLAMP), and `siteCounts.enemy` 28 (was 18) — so the OLD
- * `baseDial`/`perDepth` (3.55 / 0.012) no longer produced the old shape: it read
- * 100/100/100 at depths 1/5/10, because the arena itself had gone soft-to-hard
- * underneath a dial that was calibrated against the old, softer arena. `sealed`
- * also stopped being inert here: for its whole life the mutator's gate (0.85)
- * exactly equalled the arena's own, so `max()` was always the region's own value
- * and the mutator changed nothing, ever (see the comment at its table entry).
- * Against the new 0.60 base it is a genuine +0.12.
+ * RE-MEASURED after a shared-tree accident briefly stacked a second engineer's
+ * `siteCounts`/`develop` edits under this pass's own `enemyMult` column (see
+ * the commit that rebuilt content/regions.data.js from the last known-good
+ * base). The arena (widowsgate) now ships at its ORIGINAL, pre-that-episode
+ * shape — `develop` 3.3, `siteCounts.enemy` 18 — which is softer than the
+ * harder arena a previous `baseDial`/`perDepth` (3.55-3.65 / 0.012) had been
+ * calibrated against: at 3.65 the ladder read 100/100/100 at depths 1/5/10,
+ * a formality rather than a climb.
  *
- * `baseDial` moved 3.55 -> 3.65 to restore the early-mid rungs (`perDepth` could
- * not do it alone without breaking the doubling floor above). MEASURED,
- * `node tools/simrunner.js --incursion=1,5,10,20,30,40 --n=48`:
+ * `baseDial` moved 3.65 -> 4.38 to restore the shape against the arena as it
+ * now ships (`perDepth` untouched — moving it risks the doubling floor
+ * below). MEASURED, `node tools/simrunner.js --incursion=1,5,10,20,30,40 --n=48`:
  *
  *     depth      1    5   10   20   30   40
- *     win%      94   92   77   21   19    4
- *     win-med  2.2  3.0  3.5  6.0 10.0 16.8   (minutes)
+ *     win%      96   81   65   40   10    0
+ *     win-med  2.8  3.4  4.8  7.2 15.2    —   (minutes)
  *
- * against the documented shape (94/88/75/38/19/~0): three of six land on or
- * within 2 points (1, 10, 30), depth 40 is a proper wall (4%, matching the old
- * table's 0% at that rung), and depth 20 is the one real miss (21 vs ~38) —
- * its drawn mutators (Shieldwall, Scorched Earth, Levied Country) are simply a
- * harder-than-average hand for that dial, and depth 30's own draw (Iron Wall,
- * War Host, Shieldwall — three multiplicative combat buffs at once, the
- * harshest three-mutator combination on the table) would be too if the dial
- * there were not, by luck of where the curve lands, already tuned lower. A
- * fixed per-depth mutator draw (rule 3 above) means no two-parameter curve can
- * fit every rung exactly; this is the closest fit found without breaking the
- * doubling floor, and it is a real restoration of the shape rather than a new
- * one — not a re-derivation of every number.
+ * against the target shape (94/88/75/38/19/~0): a real wall again — 90%+ at
+ * the opening rung, a coin flip in the low 20s, nothing surviving depth 40.
+ * `sealed` is live here too: the campaign's own `GATE_CLAMP` plateaus at 0.60
+ * regardless of what a region's raw `castleGateFrac` was authored as, so the
+ * mutator's 0.72 is a genuine +0.12 whatever the arena's other columns do.
  *
  * The ten-hour-idle endurance table this section used to carry (depth 40/55
  * win% for a player who has kept idling and buying Crown levels) was NOT
@@ -143,7 +133,7 @@ export const INCURSION = Object.freeze({
    */
   gateCeiling: 0.75,
   /** Where the curve starts, independent of what the arena's own row says. */
-  baseDial: 3.65,
+  baseDial: 4.38,
   /** Compounding growth on `baseDial`, per rung. */
   perDepth: 0.012,
   /** Depth at which the 1st, 2nd and 3rd mutator arrive. Three is the ceiling

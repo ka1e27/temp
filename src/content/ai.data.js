@@ -169,7 +169,7 @@ export const AI_TIERS = [
     economyMult: 0.2746, concurrent: 1, retreatDiscipline: 0.10, counterShare: 0,
     ramAppetite: 0.1, stagingRatio: 0, stagingKeep: 1.0, warmupSec: 90 },
   { reactionTicks: 32, commitRatio: 0.50, safetyMargin: 1.50,
-    economyMult: 0.4900, concurrent: 1, retreatDiscipline: 0.35, counterShare: 0,
+    economyMult: 0.3600, concurrent: 1, retreatDiscipline: 0.35, counterShare: 0,
     ramAppetite: 0.4, stagingRatio: 0.70, stagingKeep: 0.35, warmupSec: 90 },
   { reactionTicks: 26, commitRatio: 0.70, safetyMargin: 1.25,
     economyMult: 0.5300, concurrent: 2, retreatDiscipline: 0.65, counterShare: 0.20,
