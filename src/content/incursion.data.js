@@ -63,7 +63,7 @@
  *     dial(depth) = baseDial x (1 + perDepth) ^ (depth - 1)
  *
  * `baseDial` is FLAT and deliberately below the arena's own shipped `enemyMult`
- * (4.85, post-retune). The ladder is not "the last region again", it is its own
+ * (5.48, post-retune). The ladder is not "the last region again", it is its own
  * curve that happens to be fought there — so the first rungs have to be a
  * victory lap for a player who has just finished the campaign, and the region's
  * own dial is tuned for a player who had not.
@@ -89,15 +89,28 @@
  * a formality rather than a climb.
  *
  * `baseDial` moved 3.65 -> 4.38 to restore the shape against the arena as it
- * now ships (`perDepth` untouched — moving it risks the doubling floor
- * below). MEASURED, `node tools/simrunner.js --incursion=1,5,10,20,30,40 --n=48`:
+ * now ships (`perDepth` untouched — moving it risks the doubling floor below).
+ *
+ * RE-MEASURED AFTER THE CAMPAIGN RE-TUNE, which moved the arena underneath this
+ * curve twice over: widowsgate's own dial, and the fog changes (squad sight,
+ * sightings memory, hidden enemy buildings) that apply to a rung exactly as they
+ * apply to a raid. `node tools/simrunner.js --incursion=1,5,10,20,30,40 --n=48`:
  *
  *     depth      1    5   10   20   30   40
- *     win%      96   81   65   40   10    0
- *     win-med  2.8  3.4  4.8  7.2 15.2    —   (minutes)
+ *     win%      98   88   71   50   19    2
+ *     win-med  2.9  3.9  5.3  5.3 11.3  6.7   (minutes)
+ *     target    94   88   75   38   19   ~0
  *
- * against the target shape (94/88/75/38/19/~0): a real wall again — 90%+ at
- * the opening rung, a coin flip in the low 20s, nothing surviving depth 40.
+ * The shape survived, which is the finding: 90%+ at the opening rung, a real
+ * climb through the middle, a coin flip in the low 20s and nothing past 40.
+ * NOTHING WAS CHANGED FOR IT. Five of the six rungs are within four points of
+ * target and depth 30 is exact; the one outlier is depth 20 at +12, which is
+ * 1.7 standard errors on an n=48 sample and cannot be corrected without a
+ * knob that moves the rungs already sitting on target — `baseDial` shifts the
+ * whole curve and `perDepth` is pinned from below by the doubling assertion.
+ * Recorded as an open observation rather than tuned, the same way `split`'s
+ * uniform -6 is in CLAUDE.md: re-take it at n>=96 before spending a change.
+ *
  * `sealed` is live here too: the campaign's own `GATE_CLAMP` plateaus at 0.60
  * regardless of what a region's raw `castleGateFrac` was authored as, so the
  * mutator's 0.72 is a genuine +0.12 whatever the arena's other columns do.
