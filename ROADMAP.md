@@ -20,9 +20,11 @@ any region, loadout, tier of idling, legacy or relic budget. Six previously-iner
 features and four sold-but-dead upgrades were found *by measurement* rather than by a
 bug report. That is unusual and it is what makes everything below tractable.
 
-**The campaign is tuned.** All 24 regions inside their tier's `WIN_BAND` at n=96, band
-edges confirmed at n=240, advertised lengths re-authored from measured win medians.
-Re-take with `npm run sim` — never trust a number written down, including one here.
+**The campaign is tuned, and it is confirmed.** All 24 regions report `ok` at n=96
+against their tier's band and their advertised length; band edges confirmed at n=240
+where they were close. Advertised lengths were re-authored from measured win medians.
+The table lives in `CLAUDE.md` under "Still open" — re-take it with `npm run sim`
+rather than trusting a number written down, including one here.
 
 **What is missing is not content. It is a REASON TO KEEP DECIDING.** The moment-to-moment
 tactics of a battle stay rich for a long time — fog, sieges, rally timing, relief forces,

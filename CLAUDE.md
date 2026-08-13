@@ -1703,34 +1703,27 @@ activating focused buttons.
 
 ### Still open, and why
 
-- **THE CAMPAIGN RE-TUNE IS THE BIGGEST OPEN ITEM, and it is close but not confirmed.**
-  Every structural pass it was waiting on has landed — free movement, the yard/wall
-  split, construction, the map redesign, fog, the AI belief model, and the castle-gate
-  fix. Tuning between two structural changes is work thrown away, which is why the
-  table was left alone through all of them; there was nothing left to wait for.
+- ~~**THE CAMPAIGN RE-TUNE.**~~ **CLOSED, and confirmed end to end.** It was the
+  biggest open item in the project for a long time, waiting on free movement, the
+  yard/wall split, construction, the map redesign, fog, the AI belief model and the
+  castle-gate fix — because tuning between two structural changes is work thrown
+  away. All twenty-four regions now report `ok` at n=96 against their tier's
+  `WIN_BAND` *and* their advertised length. Band edges confirmed at n=240 where they
+  were within a few points (greywater, thornmoor, highmarch). Left as a scar rather
+  than deleted because the shape of the pass is the useful part:
 
-  **HEAD has moved on from the snapshot this bullet used to cite.** It is now
-  `01c8aa2`, "Finish the tune: tiers 5-6 landed, lengths made honest, ladder a wall
-  again" — four commits past the "19 of 24 bisected, tier 5-6 tail seeded" WIP this
-  paragraph previously pointed at. In between, a `git add -A` in this shared tree
-  briefly mixed another engineer's in-flight `siteCounts`/`develop` edits under the
-  measured `enemyMult` column, doubling up difficulty on several regions; it was
-  traced, named, and rebuilt from the last known-good base rather than re-bisected to
-  fit the contamination (see that commit's own message — worth reading as an example
-  of how to catch this rather than paper over it). Since that rebuild: every region's
-  `enemyMult` has been re-applied, tiers 5-6 landed on a flat 5.40 dial, and
-  `targetLengthMin` was re-authored campaign-wide from measured win medians —
-  confirmed directly against `regions.data.js`: emberholt's advertised length dropped
-  from 16.5 to 9 minutes, thornmoor's from 16 to 9. The incursion ladder's own
-  `baseDial` was rebuilt too (3.65 → 4.38; see "The endless ladder" below). **None of
-  it is independently confirmed yet** — the commit's own message says so: "NOT YET
-  VERIFIED END TO END — the n=96 sweep is running and is the judge." Every win-rate
-  percentage below this bullet, and in `Tuning`, the harness-bot section, the
-  starting-footprint pass, the uphill-raid pass, Tier 5 and Tier 6, predates this
-  pass. Re-take with `npm run sim` before trusting one of them.
+  ```
+  tier 1   riverfen 90  ashford 86  ironwood 82  saltmere 79
+  tier 2   kaldan 84  highmarch 83  greywater 66  thornmoor 79  emberholt 70
+  tier 3   gallowmoor 50  sunder 55  vaelstrand 54  duskfell 58  karrowmere 52
+  tier 4   thanescar 44  blackspire 43  ironcrown 49  obsidian 34
+  tier 5   ravensmarch 33  gravenreach 26  nightharrow 33
+  tier 6   stormhalt 24  cinderwatch 21  widowsgate 27
+  ```
 
-  The starting position, `--all --n=96`, taken after the gate fix for tiers 4-6 and
-  before it for tiers 1-3 (whose gates barely moved) — i.e. before any of the above:
+  **The starting position was twenty-three of twenty-four reading TOO EASY** — the
+  castle gate had been carrying difficulty by accident, and capping it (see the gate
+  section) handed the whole job back to `enemyMult`, `develop` and the ground:
 
   ```
   tier 1   100  99 100  95        tier 4   93 81 90 69
@@ -1738,22 +1731,36 @@ activating focused buttons.
   tier 3    99  98  94  93  86    tier 6   78 66 59   (n=32)
   ```
 
-  Twenty-three of twenty-four read TOO EASY — this is what the `enemyMult` pass above
-  was answering. Difficulty has to come back from `enemyMult`, `develop` and the
-  ground, which are the columns meant to carry it — the castle gate was doing it by
-  accident and is now capped (see the gate section).
+  **Three things cost real time and are worth knowing before the next one.**
 
-  **The lengths were the bigger story and they are the part a dial cannot fix** — that
-  much is unchanged. Every advertised number used to be two to three times the real
-  one (emberholt promised 16.5 minutes and delivered about five), because an army
-  marches straight at the throne instead of chaining through the countryside.
-  `targetLengthMin` has since been re-authored across the whole table (see above)
-  rather than fixed by lowering every promise, which would have been the wrong answer
-  for the late regions: a tier-6 battle SHOULD be long, so what had to move there is
-  the fight, not the label. Whether `tests/campaignplay.test.js` now passes on
-  thornmoor — previously 16m advertised against 5.5m delivered, the failure that was
-  gating the Pages deploy — has not been re-run to confirm here; it is exactly the
-  kind of thing the in-flight n=96 sweep is the judge of.
+  A `git add -A` in this shared tree briefly mixed another engineer's in-flight
+  `siteCounts`/`develop` edits under the measured `enemyMult` column, doubling up
+  difficulty on several regions. It was traced, named, and rebuilt from the last
+  known-good base rather than re-bisected to fit the contamination. **Stage explicit
+  paths in a shared tree.** A residue of the same accident survived one rebuild —
+  `AI_TIERS[1].economyMult` — and put kaldan at 40% against a 66% floor until it was
+  found; a rebuild is only as good as the set of files it covers.
+
+  The **first full sweep after the tune reported five regions low, and four of the
+  five were `branch`-shaped.** That is the shape-calibration finding written up in the
+  region-shape section: the silhouettes had never been compared to each other, only to
+  the unshaped baseline, and `branch` had quietly become a second difficulty column
+  worth about eleven points. One constant fixed three of them.
+
+  And **the lengths were the bigger story, exactly as this bullet used to say.** Every
+  advertised number was two to three times the real one, because an army marches
+  straight at the throne instead of chaining through the countryside.
+  `targetLengthMin` was re-authored campaign-wide from measured win medians rather
+  than by lowering every promise — emberholt 16.5 → 9 minutes, thornmoor 16 → 9. Tier
+  6 is the exception that proves the rule: a tier-6 battle SHOULD be long, so what
+  moved there was the fight, not the label. `tests/campaignplay.test.js` passes on
+  thornmoor again, which is what had been gating the Pages deploy.
+
+  **What is still open in the same area, and is now the honest top of the list:** the
+  table describes a bot that earns no relics, idles far less than a real player, and
+  brings the default four-type spread. See the `--idle` / `--relics` bullet below and
+  the dominant-loadout bullet above — the second of those is a bigger lever on the
+  felt difficulty of this game than any row in `regions.data.js`.
 - **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
   rule — a yard while it holds fewer than three, a farm after that — and never a
   stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
