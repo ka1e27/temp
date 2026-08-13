@@ -160,33 +160,41 @@ test('loadout: bringing only militia converts a real fight into a walkover', { t
     + 'advertised length -- if this stopped being true the exploit changed shape');
 });
 
-test('the mixed spread marches at RAM speed, and that is now the exploit', () => {
-  // THIS TEST USED TO ASSERT THE OPPOSITE and the change is the finding.
+test('the mixed spread marches at RAM speed — true, and measured NOT to be the exploit', () => {
+  // THE ARITHMETIC BELOW HAS BEEN RIGHT THROUGH TWO REWRITES OF THIS COMMENT.
+  // What keeps changing is what it was thought to EXPLAIN, and the current
+  // answer is: nothing. Kept, because it is the exact fact that has to stay
+  // true for the disproof below to keep meaning anything.
   //
-  // It was "concentration is not the exploit -- militia is", and its control was
-  // that mono-spearmen measured BELOW the default spread. That was true and is
-  // no longer: on the same region, mono-spearmen now measures ABOVE it. The
-  // assertion fired exactly as it was written to, saying that if every one-note
-  // army wins then the problem stopped being militia's stat line.
-  //
-  // It has. `slowestSpeed` is a MIN over the stack, so the default spread
-  // marches at the pace of its rams -- and `MOVEMENT.hexSecondsPerSpeed` was
-  // doubled to make marches read as marches, which doubled that penalty in
-  // absolute seconds. Measured, seconds per hex:
+  // `slowestSpeed` is a MIN over the stack, so the default spread marches at
+  // the pace of its rams -- and `MOVEMENT.hexSecondsPerSpeed` was doubled to
+  // make marches read as marches, doubling that penalty in absolute seconds.
+  // Measured, seconds per hex:
   //
   //     default spread   2.53   (dragged to rams, speed 30)
   //     mono spearmen    1.69   1.5x faster
   //     mono militia     1.38   1.8x faster
   //     mono raiders     0.72   3.5x faster
   //
-  // So the dominant answer is no longer "bring militia". It is "leave the rams
-  // at home", which is a much wider hole, and it compounds the finding already
-  // recorded above: rams measure as a straight loss because `breachSeconds`
-  // stopped binding, and now they cost the whole army its legs as well.
+  // THIS TEST USED TO BE TITLED "...and that is now the exploit". IT IS NOT.
+  // `slowestSpeed` was replaced with the slot-weighted harmonic mean of the
+  // stack's speeds -- which makes the default spread 1.6x faster (2.53 ->
+  // 1.59 s/hex) and, by construction, cannot move a one-type army at all, so
+  // it was the one candidate fix that could not backfire the way the three
+  // militia nerfs above did. Measured at n=48 on five regions it bought the
+  // default spread a net +1 point and the mono gap went 43.6 -> 44.8 average.
+  // Sixty percent more speed, no change in outcome. Reverted; see
+  // battle/movement.js `slowestSpeed` for the table.
+  //
+  // So the ram's cost is entirely its SLOTS, which is the mechanism already
+  // written above arriving from the other side: 23 rams make 276 siege DPS
+  // where the 471 militia they displace make 283, at a third of the field
+  // power. Dropping rams is worth +23 to +40 points on the campaign even with
+  // the speed penalty weighted away. DO NOT RE-SPEND EITHER MEASUREMENT.
   //
   // Pinned as ARITHMETIC rather than as a win rate, because that is the part
-  // that cannot be noise: the speed table is exact, and a win-rate sweep on an
-  // un-tuned campaign would only tell us the campaign is un-tuned.
+  // that cannot be noise: the speed table is exact, where a win rate is a
+  // claim about whatever dial the campaign happens to ship today.
   const spread = { militia: 111, spearmen: 67, raiders: 39, rams: 23 };
   const spreadPace = MOVEMENT.hexSecondsPerSpeed / slowestSpeed(spread);
   for (const unit of ['militia', 'spearmen', 'raiders']) {

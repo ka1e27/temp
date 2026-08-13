@@ -44,16 +44,23 @@ stays right to the last battle in the game.
 
 ### The loadout has a dominant answer, and it scales with difficulty
 
-Measured on the tuned table, n=48, matched seeds:
+Re-measured against the finished battle layer and the closed re-tune, n=48, matched
+seeds:
 
-| region | default spread | militia only |
-|---|---|---|
-| gallowmoor (tier 3) | 56% | **98%**, and a 5-minute region won in 2.3 |
-| widowsgate (tier 6, the incursion arena) | 27% | **90%** |
+| region | default | **no rams** | militia only |
+|---|---|---|---|
+| kaldan (tier 2) | 75% | 75% | 85% |
+| gallowmoor (tier 3) | 58% | **81%** | **98%**, a 6.5-minute region won in 2.4 |
+| thanescar (tier 4) | 58% | **85%** | **94%** |
+| ravensmarch (tier 5) | 29% | **58%** | **94%** |
+| widowsgate (tier 6, the incursion arena) | 27% | **65%** | **94%** |
 
-It gets *wider* as the campaign gets harder, so the part of the game meant to be a wall
-is the part it trivialises most. It is four `−` clicks away on the loadout screen, and it
-is now pinned by `tests/loadoutdominance.test.js`.
+**The cheapest half of the exploit is one click: don't bring rams.** That alone is +23 to
++38 points past kaldan, for free. The full mono-militia version is +36 to +67, and it
+does not merely win more often — it deletes the battle, finishing in a third of the
+advertised time. It gets *wider* as the campaign gets harder, so the part of the game
+meant to be a wall is the part it trivialises most. Kaldan is the control at +0/+10:
+this is a late-campaign hole. Pinned by `tests/loadoutdominance.test.js`.
 
 **This is the reason the specialists, the relic troop lines, and most of the strategic
 layer are dead content.** Nobody re-opens a screen that already wins everything.
@@ -93,9 +100,17 @@ relative to a re-tune, both needing their own measurement:
    fixes both. Rams are 4× militia's siege per slot and the default spread still spends
    so few slots on them that the two armies come out level.
 
-*Do not* re-introduce a per-type slot-share cap. Built, measured (69%/56%, default spread
-byte-identical), reverted — it contradicts the `carryComposition` contract that ten tests
-encode.
+**Two things NOT to try, because they have now been built and measured.** A per-type
+slot-share cap (69%/56%, default spread byte-identical, reverted — it contradicts the
+`carryComposition` contract ten tests encode). And **share-scaled march speed**: replacing
+`slowestSpeed`'s hard `Math.min` with the slot-weighted harmonic mean, which makes the
+default spread 1.6× faster and provably cannot help a one-type army. It bought the
+default spread a net **+1 point** across five regions and left the gap fractionally
+wider. That result is worth more than the fix would have been — it says the ram's cost is
+entirely its SLOTS, so option 2 above (siege scarcity) is the live suspect and option 1
+is the cheap one. Four rejected fixes now: two militia nerfs, the slot cap, and speed.
+Anything proposed next should say which of those four shapes it is not, before it is
+built.
 
 ---
 

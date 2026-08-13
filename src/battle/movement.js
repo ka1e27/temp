@@ -112,8 +112,39 @@ export function pathThrough(state, stops, faction = null) {
   return out;
 }
 
-/** A stack marches at the pace of its slowest unit — one ram halves a militia
- *  stack, which is exactly what telegraphs a siege push. */
+/**
+ * A stack marches at the pace of its slowest unit — one ram halves a militia
+ * stack, which is exactly what telegraphs a siege push.
+ *
+ * A HARD `Math.min` IS DELIBERATE, AND THE OBVIOUS OBJECTION TO IT WAS BUILT,
+ * MEASURED AND REVERTED. This is the one stack-wide term in the game that is
+ * not share-scaled — `counters`, `sunder`, `repair` and `skirmish` all scale by
+ * how much of the stack is the unit in question — so replacing it with the
+ * slot-weighted harmonic mean of the stack's speeds looks like consistency, and
+ * it has the rare property of being provably unable to help the dominant
+ * loadout (a one-type stack's weighted mean IS its only member, so mono-militia
+ * does not move by construction). At a 700-slot budget it is worth a lot of
+ * pace:
+ *
+ *     loadout          MIN pace     slot-weighted
+ *     default spread   2.53 s/hex   1.59 s/hex     (1.6x faster)
+ *     no rams          1.69         1.28
+ *     mono militia     1.38         1.38           unchanged
+ *
+ * MEASURED AT n=48 ON FIVE REGIONS, IT BOUGHT THE DEFAULT SPREAD NOTHING:
+ * 75/58/58/29/27 became 79/54/52/40/23 — net +1 point across the five, well
+ * inside the noise — while the mono-militia gap went 43.6 -> 44.8 average, i.e.
+ * very slightly WIDER. Making the mixed army sixty percent faster did not move
+ * its win rate at all.
+ *
+ * THAT IS THE USEFUL PART, and it retires a hypothesis this file's own comments
+ * used to carry: march speed is NOT what rams cost you. Dropping rams is worth
+ * +23 to +40 points even when the speed penalty is weighted away, so their cost
+ * is entirely their SLOTS — which is the older, independently measured finding
+ * (23 rams make 276 siege DPS where the 471 militia they displace make 283, at
+ * a third of the field power) arriving from the other direction. See CLAUDE.md
+ * for the full table; do not re-spend this measurement.
+ */
 export function slowestSpeed(comp) {
   let s = Infinity;
   for (const u of UNIT_IDS) if ((comp?.[u] || 0) > 0) s = Math.min(s, UNITS[u].speed);

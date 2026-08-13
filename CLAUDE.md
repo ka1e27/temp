@@ -2056,12 +2056,26 @@ activating focused buttons.
   found this bullet still claiming the feature was unbuilt *after* it had shipped, and
   a stale "still open" entry is worse than no list: it sends the next reader to build
   something twice. **If you close an item, close it here in the same commit.**
-- **The loadout has a dominant answer: bring only militia.** Re-measured on the tuned
-  table at n=48, matched seeds: gallowmoor **56% → 98%** (and a 5-minute region won in
-  2.3), widowsgate **27% → 90%**. The exploit gets *wider* as the campaign gets harder,
-  so the part meant to be a wall is the part it trivialises most. It is now pinned by
-  `tests/loadoutdominance.test.js`, which encodes it as a DEFECT and fails
-  informatively in both directions.
+- **The loadout has a dominant answer, and after the battle redesign the biggest half
+  of it is simply LEAVING THE RAMS AT HOME.** Re-measured against the finished layer
+  and the closed re-tune, n=48, matched seeds:
+
+  ```
+  region        default   no rams   mono militia     win-median (def -> mono)
+  kaldan          75%       75%        85%           9.5m -> 8.2m
+  gallowmoor      58%       81%        98%           6.3m -> 2.4m
+  thanescar       58%       85%        94%           6.2m -> 2.8m
+  ravensmarch     29%       58%        94%           9.9m -> 3.5m
+  widowsgate      27%       65%        94%           5.2m -> 2.6m
+  ```
+
+  Two things to take from it. **Dropping one unit from the default spread is worth +23
+  to +38 points** — free, no trade — everywhere past kaldan; the full mono-militia
+  exploit is +36 to +67. And the exploit still gets *wider* as the campaign gets harder,
+  so the part meant to be a wall is the part it trivialises most. Kaldan is the control:
+  +0 and +10 there, so this is a late-campaign hole, not a global one. Pinned by
+  `tests/loadoutdominance.test.js`, which encodes it as a DEFECT and fails informatively
+  in both directions.
 
   **⚠ DO NOT FIX THIS BY NERFING MILITIA — measured, and it backfires.** Three probes,
   gallowmoor, n=24, matched seeds (default → mono, gap):
@@ -2087,11 +2101,31 @@ activating focused buttons.
   the enemy is down to ZERO training grounds by t=3min — it is not out-fought, it is
   out-raced before the adaptation it already has can matter.
 
-  So the levers that could work are the ones that read CONCENTRATION rather than the
-  unit: make the counter-pick scale with how dominant the dominant unit is, or give
-  siege a scarcity headcount cannot buy. A per-type slot-share cap was built and
-  measured (69%/56%, default spread byte-identical) and then **reverted**, because it
-  contradicts the carry contract ten tests encode — do not re-spend that either.
+  **⚠ AND IT IS NOT MARCH SPEED EITHER — that was the third fix built, measured and
+  reverted.** `slowestSpeed` is a hard `Math.min`, and it is the ONE stack-wide term in
+  the game that is not share-scaled (`counters`, `sunder`, `repair`, `skirmish` all
+  are), so one ram among 347 bodies imposes the whole ram penalty. Replacing it with the
+  slot-weighted harmonic mean makes the default spread **1.6× faster** (2.53 → 1.59
+  s/hex) and — uniquely among every candidate tried — *cannot* help the exploit, because
+  a one-type stack's weighted mean is its only member. Measured at n=48 on the five
+  regions above: 75/58/58/29/27 → 79/54/52/40/23, a net **+1 point**, and the mono gap
+  went 43.6 → 44.8 average. Sixty percent more speed bought nothing at all.
+
+  That is the useful half: **the ram's cost is entirely its SLOTS**, not its legs.
+  Dropping rams is worth +23 to +40 even with the speed penalty weighted away — the same
+  finding as the DPS arithmetic above, arriving from the other direction. The comment at
+  `battle/movement.js slowestSpeed` carries the table so nobody re-spends it.
+
+  So the levers that could still work are the ones that read CONCENTRATION rather than
+  the unit, or that make siege scarce again (see "`breachSeconds` stopped binding"
+  below — that is now the prime suspect, since it is what makes rams redundant). A
+  per-type slot-share cap was built and measured (69%/56%, default spread
+  byte-identical) and then **reverted**, because it contradicts the carry contract ten
+  tests encode — do not re-spend that either.
+
+  **Four fixes have now been measured and rejected: two militia nerfs, a slot-share cap,
+  and share-scaled march speed.** Anything proposed next should say, before it is built,
+  which of those four shapes it is not.
 - **Ownership's second channel is half-built.** `render/ownerDash.js` shipped the
   site-stroke half of the fix for the ΔE 1.8 measurement above: `ctx.setLineDash`
   sized off line width, solid for yours, dashed for theirs, fine dotted for nobody's
