@@ -16,12 +16,12 @@ import assert from 'node:assert/strict';
 
 import { createBattleState } from '../src/battle/state.js';
 import { recomputeInfluence } from '../src/battle/influence.js';
-import { perceivedSite, perceivedSquads } from '../src/battle/vision.js';
+import { perceivedSite, perceivedSquads, recordFailedAssault } from '../src/battle/vision.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { emptyComp } from '../src/battle/combat.js';
 import { hexIndex } from '../src/render/hexRenderer.js';
 import {
-  perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA,
+  perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA, drawAssaultWash, drawStaleGarrisons,
 } from '../src/render/fog.js';
 import { drawSiteBase, builtLevel } from '../src/render/siteGlyphs.js';
 import { siteRadius } from '../src/render/siteShapes.js';
@@ -149,6 +149,61 @@ test('drawVeil paints only the fogged hexes, and paints nothing when none are', 
   const ctx2 = recorder();
   drawVeil(ctx2, clear, cols, rows, 34, P);
   assert.deepEqual(ctx2.ops, [], 'a fully-scouted board draws no veil at all');
+});
+
+// ---------------------------------------------------------------------------
+// A failed assault's memory, drawn: a dark red wash and a stale headcount,
+// on a GHOST only, and only once something has actually been recorded
+// ---------------------------------------------------------------------------
+
+test('drawAssaultWash paints only a GHOST with a remembered garrison, never a live site or an unremembered one', () => {
+  const s = fixture();
+  const castle = at(s, 'castle'); // never scouted in this fixture — a real ghost
+  recordFailedAssault(s, 'player', castle.id, 40);
+  const ctx = recorder();
+  drawAssaultWash(ctx, s, 'player', s.grid.cols, s.grid.rows, 34, P);
+  assert.ok(ctx.ops.includes('fill'), 'a remembered, still-unscouted castle must be washed');
+
+  // NEGATIVE CONTROL 1: nothing was ever fought here — a fresh fixture with
+  // no recorded memory at all must draw nothing.
+  const s2 = fixture();
+  const ctx2 = recorder();
+  drawAssaultWash(ctx2, s2, 'player', s2.grid.cols, s2.grid.rows, 34, P);
+  assert.deepEqual(ctx2.ops, [], 'a site nobody ever attacked drew a memory wash anyway');
+
+  // NEGATIVE CONTROL 2: the memory exists, but the site is CURRENTLY visible
+  // (the farm is scouted by the watchtower in this fixture) — live
+  // information supersedes a stale one, so the wash must not draw.
+  const s3 = fixture();
+  const farm = at(s3, 'farm');
+  recordFailedAssault(s3, 'player', farm.id, 6);
+  const ctx3 = recorder();
+  drawAssaultWash(ctx3, s3, 'player', s3.grid.cols, s3.grid.rows, 34, P);
+  assert.deepEqual(ctx3.ops, [], 'a currently-visible site drew the memory wash anyway');
+});
+
+test('drawStaleGarrisons writes a headcount only for a GHOST with a remembered garrison', () => {
+  const s = fixture();
+  const castle = at(s, 'castle');
+  recordFailedAssault(s, 'player', castle.id, 40);
+  const ctx = recorder();
+  drawStaleGarrisons(ctx, s, 'player', sitePos, 34, 1, P, { x: 0, y: 0 });
+  assert.ok(ctx.ops.includes('fillText'), 'a remembered garrison never got written down');
+
+  // NEGATIVE CONTROL 1: nothing recorded.
+  const s2 = fixture();
+  const ctx2 = recorder();
+  drawStaleGarrisons(ctx2, s2, 'player', sitePos, 34, 1, P, { x: 0, y: 0 });
+  assert.deepEqual(ctx2.ops, [], 'nothing was ever fought here — nothing to write');
+
+  // NEGATIVE CONTROL 2: recorded, but currently visible — the live count
+  // (drawn elsewhere, by battleView.js's own OWNERS3 loop) wins, not this one.
+  const s3 = fixture();
+  const farm = at(s3, 'farm');
+  recordFailedAssault(s3, 'player', farm.id, 6);
+  const ctx3 = recorder();
+  drawStaleGarrisons(ctx3, s3, 'player', sitePos, 34, 1, P, { x: 0, y: 0 });
+  assert.deepEqual(ctx3.ops, [], 'a currently-visible site got a STALE label on top of its live one');
 });
 
 // ---------------------------------------------------------------------------

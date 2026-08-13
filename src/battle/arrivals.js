@@ -14,6 +14,7 @@ import { siteById, castleSealed } from './state.js';
 import { groundOf, siteDefMultOf, garrisonMultOf } from './terrain.js';
 import { spawnSquad, retreatTarget } from './movement.js';
 import { pushEvent, EVENTS } from './events.js';
+import { recordFailedAssault } from './vision.js';
 
 const modOf = (state, faction, key, fallback = 1) => state.mods[faction]?.[key] ?? fallback;
 /** Per-troop levels (contract v7). Sparse, and absent in every battle the
@@ -132,6 +133,9 @@ export function resolveArrival(state, group) {
     return;
   }
 
+  // READ BEFORE resolveField MUTATES ANYTHING — "the garrison that was there"
+  // is this number, not whatever survives the fight. See the loss branch below.
+  const defendersBefore = total(site.garrison);
   const r = resolveField(group.comp, site.garrison, {
     // siteDefMultOf, not SITES[kind].defMult: the mountains around a fort are
     // part of how hard it is to take, and sim/preview/AI/harness all read the
@@ -165,6 +169,12 @@ export function resolveArrival(state, group) {
       siteId: site.id, kind: site.kind, owner, defender: site.owner, hp: site.hp,
     });
   } else {
+    // A FAILED ASSAULT LEAVES A MEMORY — the one deliberate, narrow exception
+    // to "a ghost carries nothing that changes" (battle/vision.js
+    // `recordFailedAssault`). `owner` is the ATTACKER, and it lost, so this is
+    // the size of the force that just beat it — witnessed firsthand, not a
+    // sightline snapshot going stale.
+    recordFailedAssault(state, owner, site.id, defendersBefore);
     site.garrison = r.defSurvivors;
     skirmishHome(state, site, group);
   }

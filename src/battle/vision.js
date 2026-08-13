@@ -1,25 +1,64 @@
-// FOG OF WAR — the foundation. Nothing renders this yet and the AI does not
-// read it yet; this file defines the SHAPE both of those will consume.
+// FOG OF WAR — buildings see, and now a marching or camped column sees its
+// own doorstep too.
 //
-// BUILDINGS SEE. SQUADS DO NOT. Vision comes from what you HOLD, not from
-// what you are moving — an army marching through open country is blind for
-// the whole march, and that is the mechanic, not a bug. It is also the whole
-// reason this is cheap: a squad's position changes every tick, but a site's
-// ownership changes only on capture or construction, which are exactly the
-// events `recomputeInfluence` and `recomputeOccupancy` already key off.
-// Vision is a third derived map invalidated by the same events and rebuilt at
-// the same three call sites — sim.js `startBattle`, sim.js `siegePhase`'s
-// flip branch, and construct.js `cmdBuild` — never touched per tick or per
-// frame.
+// THE OLD RULE WAS ABSOLUTE: sight came from what you HELD, never from what
+// you were MOVING, and the reason was cost — a squad's position changed every
+// tick, so it could never follow `recomputeInfluence`'s rebuild-only-on-
+// ownership-change pattern the way a site can. That objection is gone.
+// `squadHexOf` (battle/movement.js, contract v10) reads a squad's position off
+// the `path` it carries as a pure function of `state.tick` — nothing is
+// integrated, nothing is stored — so a query can always ask "where is it
+// RIGHT NOW" for the cost of a lookup, and the answer never needs to be baked
+// into a map that then has to be invalidated.
 //
-// Modelled on ./influence.js and ./occupancy.js in every respect that
-// matters: a sparse plain-JSON record on state, rebuilt only when ownership
-// or the site list changes.
+// SO THE SQUAD HALF OF SIGHT LIVES ENTIRELY IN `canSee`, NEVER IN
+// `state.vision`. `state.vision` stays exactly what it always was — a sparse,
+// site-only map, rebuilt at the same four events as before (battle start, a
+// capture, a watchtower finishing, `cmdBuild`) and untouched by a squad simply
+// marching. `canSee` answers "does `faction` see this hex" by checking that
+// map FIRST (O(1), the cheap, common case) and, only if it misses, scanning
+// `faction`'s own live squads (O(squads) — a battle has at most a few dozen,
+// never hundreds) for one within `SQUAD_VISION_RADIUS` of the hex asked
+// about. Nothing is written down: every call re-derives the answer from
+// wherever the squads happen to be AT THAT TICK, so there is no map to keep in
+// step and no event that has to remember to invalidate one.
+//
+// THIS IS WHY `state.influenceVersion` IS NEVER BUMPED FOR A MARCHING SQUAD.
+// That counter is what tells the BACKGROUND canvas to repaint
+// (render/battleView.js `signature()`), and bumping it every tick a squad
+// moves would force that repaint every tick too — the exact shape of
+// regression `render/bgcache.js` already measured once (60fps -> 31 from a
+// much cheaper per-frame trigger). `computeVeil` (render/fog.js) now calls
+// `canSee` per hex rather than reading `state.vision` directly, so the veil
+// DOES pick up squad-granted sight — but only as of the LAST time something
+// else caused a background repaint, exactly the staleness every other
+// background-only fact already carries. The per-frame layer (squads, site
+// detail) has no such lag, because it calls `canSee` fresh every frame
+// regardless of any of this.
+//
+// Radius is deliberately SMALL (content/balance.engine.js
+// `SQUAD_VISION_RADIUS`, currently equal to an ordinary building's own
+// VISION_RADIUS): a column should light its immediate surroundings, not scout
+// for free. The watchtower is the one building that exists to answer "I want
+// to see", at four times this, and it has to stay worth building.
 //
 // THE SITE GRAPH IS COMMON KNOWLEDGE, ITS CONTENTS ARE NOT. A site's
 // position, kind and `adj` are known to both sides from tick 0 (see
 // `perceivedSite` below) — what fog hides is the live half: current owner,
 // garrison, HP, siege, training, and squads.
+//
+// COUNTER-INTELLIGENCE. A watchtower does not only grant its owner sight — it
+// denies the OTHER side sight of that owner's OWN squads nearby (see
+// `perceivedSquads`'s `hiddenByOwnTower` below). Squads only, never sites: the
+// owner asked specifically about "troops and movements", and a site's
+// position/kind are common knowledge regardless (decision above), so there is
+// nothing there for counter-intelligence to hide. It has to live in
+// `perceivedSquads` rather than in `canSee`, because it does not answer "can I
+// see this HEX" — a player can see the ground perfectly well and simply not
+// be shown the column standing on it — and it has to be checked from
+// `beliefFor` too (battle/belief.js), or the enemy AI would target what its
+// own doctrine says it cannot see, which is a behavioural bug wearing fog's
+// clothes rather than fog itself.
 //
 // LAST-KNOWN OWNER. `state.seen` remembers exactly one fact about a site once
 // it has been observed: who held it the last time either side actually
@@ -35,7 +74,9 @@
 // every call: it only ever GAINS an entry or updates one already there,
 // because its whole purpose is to remember what fog has since hidden. A site
 // currently in sight — or currently owned — gets its true owner written in;
-// everything else keeps whatever was already recorded.
+// everything else keeps whatever was already recorded. Squad-granted sight
+// does NOT feed `seen` — see `recordFailedAssault` below for the one, much
+// narrower exception to "a ghost carries nothing that changes".
 //
 // PERCEIVED views. The canvas renderer and the DOM panel/preview would
 // otherwise each resolve `state.sites.find(...)` independently, so hiding a
@@ -44,8 +85,9 @@
 // `perceivedSite`/`perceivedSquads` are the ONE resolver both are meant to
 // call, so there is one bug to find instead of three.
 // PURE.
-import { round, withinRadius } from '../core/hex.js';
-import { VISION_RADIUS } from '../content/balance.js';
+import { round, withinRadius, distance } from '../core/hex.js';
+import { VISION_RADIUS, SQUAD_VISION_RADIUS } from '../content/balance.js';
+import { COUNTER_INTEL_RADIUS } from '../content/balance.towers.js';
 import { asHex } from './influence.js';
 import { inGrid } from './mapgen.js';
 // ...from its REAL home rather than through state.js's re-export, because
@@ -141,9 +183,35 @@ export function recomputeVision(state) {
   return vision;
 }
 
-/** Does `faction` currently see hex `(q, r)`? */
+// Scratch — the query hex `canSee` is asked about, reused rather than
+// allocated per call: this is on the per-frame read path (perceivedSite/
+// perceivedSquads run every frame), so the same "no allocation in a hot
+// read" discipline render/*.js already holds itself to applies here too.
+const _q = { q: 0, r: 0 };
+
+/**
+ * Does `faction` currently see hex `(q, r)`?
+ *
+ * TWO SOURCES, checked cheapest-first. `state.vision` is the sparse,
+ * site-only map — an O(1) lookup, and the answer for almost every query,
+ * because most of a board is not standing on top of a marching column. Only
+ * on a miss does this scan `faction`'s own live squads for one within
+ * `SQUAD_VISION_RADIUS` — see the file header for why that scan, and not a
+ * second map, is the cheap half of this feature.
+ */
 export function canSee(state, faction, q, r) {
-  return !!state.vision?.[faction]?.[`${q},${r}`];
+  if (state.vision?.[faction]?.[`${q},${r}`]) return true;
+  const squads = state.squads;
+  if (!squads || !squads.length) return false;
+  _q.q = q;
+  _q.r = r;
+  for (let i = 0; i < squads.length; i++) {
+    const sq = squads[i];
+    if (sq.owner !== faction) continue;
+    const at = squadHexOf(state, sq);
+    if (at && distance(at, _q) <= SQUAD_VISION_RADIUS) return true;
+  }
+  return false;
 }
 
 /**
@@ -194,13 +262,40 @@ export function perceivedSite(state, faction, site) {
 }
 
 /**
+ * COUNTER-INTELLIGENCE: is `sq`, standing at `hex`, currently under the cover
+ * of one of ITS OWNER'S OWN watchtowers? See the file header for why this is
+ * squads-only and lives here rather than in `canSee`.
+ *
+ * O(sites), same shape as `towers.js gunsOf` and for the same reason: the
+ * armed/covering kinds are a handful of buildings on the biggest board, so a
+ * scan per squad costs nothing next to `canSee`'s own per-squad scan above.
+ * Gated on `buildTicksLeft` for the same reason `recomputeVision` gates a
+ * tower's own sight on it — SCAFFOLDING IS BLIND, so it cannot cover anyone
+ * either; presence is not production.
+ */
+function hiddenByOwnTower(state, sq, hex) {
+  for (const site of state.sites) {
+    if (site.owner !== sq.owner) continue;
+    const radius = COUNTER_INTEL_RADIUS[site.kind];
+    if (!radius) continue;
+    if (site.buildTicksLeft > 0) continue;
+    if (distance(asHex(site.hex), hex) <= radius) return true;
+  }
+  return false;
+}
+
+/**
  * Every squad `faction` gets to know about right now: its own, unconditionally
  * (an army always knows where it is), plus any of the enemy's currently
- * standing on a hex it can see.
+ * standing on a hex it can see AND not currently covered by one of ITS OWN
+ * watchtowers (`hiddenByOwnTower` above) — counter-intelligence, not just
+ * sight, and it is why a squad can be on ground `faction` can plainly see and
+ * still not be handed to them.
  *
- * A squad that leaves vision drops out immediately and without a trace — no
- * ghost, deliberately: a remembered army is worse than no information,
- * because the player would act on a position that is certainly stale.
+ * A squad that leaves vision (or comes under cover) drops out immediately and
+ * without a trace — no ghost, deliberately: a remembered army is worse than
+ * no information, because the player would act on a position that is
+ * certainly stale.
  *
  * @returns {object[]}
  */
@@ -209,7 +304,62 @@ export function perceivedSquads(state, faction) {
   for (const sq of state.squads) {
     if (sq.owner === faction) { out.push(sq); continue; }
     const hex = squadHexOf(state, sq);
-    if (hex && canSee(state, faction, hex.q, hex.r)) out.push(sq);
+    if (!hex || !canSee(state, faction, hex.q, hex.r)) continue;
+    if (hiddenByOwnTower(state, sq, hex)) continue;
+    out.push(sq);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// A failed assault leaves a memory — the one deliberate relaxation of "a
+// ghost carries nothing that changes"
+// ---------------------------------------------------------------------------
+//
+// `state.seen`'s rule is strict on purpose: a remembered garrison would be
+// fog leaking the one number that matters, wrong the moment it goes stale.
+// THAT OBJECTION IS ABOUT A NUMBER NOBODY EVER CONFIRMED. Ordinary fog can go
+// stale the instant vision drops, with no way for the player to tell how
+// stale — which is exactly why owner is the one field kept, and why a
+// garrison never was.
+//
+// A FAILED ASSAULT IS A DIFFERENT CLAIM: your own army stood on that ground
+// and fought that garrison, so the count is not a guess or a snapshot skimmed
+// off a passing sightline — it is the size of the force that just beat you,
+// witnessed at the moment it mattered most. Presenting it plainly as a STALE,
+// past-tense figure (never re-derived, never assumed current) is the same
+// honesty `state.seen` already trades in for owner; this is that same trade,
+// narrowed to the one moment a player unambiguously learned a number instead
+// of merely glimpsing a flag.
+//
+// The narrowness is the safeguard: `recordFailedAssault` has exactly one
+// caller (battle/arrivals.js `resolveArrival`, the direct-assault-on-a-
+// garrison branch, only when the attacker LOST), so the count can never drift
+// from "what a real engagement just showed you" into "something fog
+// half-remembers". It does not live inside `state.seen` — a separate map, so
+// the strict rule above stays exactly as strict for owner as it always was.
+export function recordFailedAssault(state, faction, siteId, count) {
+  const store = state.lastKnownGarrison ?? { player: {}, enemy: {} };
+  const bucket = { ...store[faction], [siteId]: count };
+  const sorted = {};
+  for (const id of Object.keys(bucket).sort()) sorted[id] = bucket[id];
+  state.lastKnownGarrison = { ...store, [faction]: sorted };
+  // Same reasoning as recomputeVision's own bump, one event later: a failed
+  // assault changes what the board should show (a stale count, a dark red
+  // wash) with no owner flip, no level change, no timer to key off — nothing
+  // else marks the moment. Cheap because it fires once per LOST assault,
+  // never per tick.
+  state.influenceVersion = (state.influenceVersion || 0) + 1;
+}
+
+/**
+ * The stale count `recordFailedAssault` left behind for `faction` at
+ * `siteId`, or `undefined` if that faction has never attacked it and lost.
+ * Deliberately NOT folded into `perceivedSite`'s ghost shape — a ghost's
+ * contract is "nothing that changes" (tests/vision.test.js pins the exact key
+ * list), and this is the one narrow exception to it, so it stays a call a
+ * renderer makes on purpose rather than a field that shows up unannounced.
+ */
+export function lastKnownGarrison(state, faction, siteId) {
+  return state.lastKnownGarrison?.[faction]?.[siteId];
 }

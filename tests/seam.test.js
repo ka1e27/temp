@@ -97,7 +97,7 @@ test('assertBattleConfig rejects unknown ids and bad charge counts', () => {
 // --- features: the seam that five purchased upgrades needed ---------------
 
 test('the contract carries shop features, and validates them', () => {
-  assert.equal(CONTRACT_VERSION, 10,
+  assert.equal(CONTRACT_VERSION, 11,
     'features + booster validation landed in v2, the terrain layer in v3,'
     + ' the castle gate in v4, the rally target list and hold-back default in v5,'
     + ' the incursion rung in v6, the per-troop multipliers in v7,'
@@ -110,7 +110,10 @@ test('the contract carries shop features, and validates them', () => {
     + ' a nullable `to` (a march onto bare ground) and a `camped` hex, so a v9'
     + ' squad has no route to read a position off and every column in the air is'
     + ' invisible to the renderer, to fog and to the towers that shoot at'
-    + ' positions, while still arriving on schedule');
+    + ' positions, while still arriving on schedule; v11 adds one real field,'
+    + ' `lastKnownGarrison`, alongside two behaviour changes (squad sight,'
+    + ' watchtower counter-intelligence) that need no field at all because both'
+    + ' read only what v10 already crosses the seam with');
   const mods = makeMods({ features: ['doubleSpeed'] });
   assert.ok(hasMod(mods, 'doubleSpeed'));
   assert.ok(!hasMod(mods, 'standingOrders'));

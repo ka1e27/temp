@@ -1060,16 +1060,67 @@ this was worth chasing at all is that `state.rules` is a hand-picked subset of
 dead code, which is exactly the shape of bug this project has shipped before
 (`rallyKeepDefault`). It is wired correctly — checked before any of the above was trusted.
 
-## Fog of war: buildings see, squads do not
+## Fog of war: buildings see, and a column sees its own doorstep
 
-`battle/vision.js`, and the rule is the whole feature: **sight comes from what you HOLD,
-never from what you are moving.** An army marching through open country is blind for the
-entire march. That is the mechanic, not an oversight — and it is also the only reason the
-feature is cheap. A squad's position changes every tick and could never follow
-`recomputeInfluence`'s pattern of rebuilding on ownership change; a site's owner changes
-only on capture or construction, which are exactly the events influence and occupancy
-already key off. So vision is a **third derived per-hex map** rebuilt beside the other two,
-sparse plain JSON, never touched per tick or per frame.
+**The rule used to be absolute — sight came from what you HELD, never from what you were
+moving — and the reason was never design, it was COST.** A squad's position changed every
+tick, so it could not follow `recomputeInfluence`'s rebuild-on-ownership-change pattern;
+a site's owner changes only on capture or construction, which are exactly the events
+influence and occupancy already key off. So vision is a **third derived per-hex map**
+rebuilt beside the other two, sparse plain JSON, never touched per tick or per frame.
+
+**That objection died with the squad-path change** (see the battle redesign section):
+`squadHexOf` reads a position off the `path` a squad carries as a pure function of
+`state.tick`, so a query can ask "where is it right now" for the price of a lookup and
+the answer never has to be written down. So the squad half of sight lives **entirely in
+`canSee`, never in `state.vision`** — the sparse map is checked first (O(1), the answer
+for almost every hex) and only on a miss does it scan that faction's own live squads for
+one within `SQUAD_VISION_RADIUS`. Nothing is stored, so there is no map to keep in step
+and no event that has to remember to invalidate one.
+
+**`SQUAD_VISION_RADIUS` is 1 — an ordinary building's own doorstep, and deliberately not
+a new number.** A column lights the ground it is crossing and nothing beyond it. The
+watchtower sees four times as far and is the one building that exists to answer "I want
+to see"; a marching army that scouted for free would take that away.
+
+**A marching squad NEVER bumps `influenceVersion`, and that is the one accepted cost.**
+That counter is what marks the background canvas dirty, so bumping it per tick would
+force a full repaint per tick — the exact regression `bgcache.js` already measured once
+(60fps → 31 from a cheaper trigger). `computeVeil` calls `canSee` per hex, so the veil
+*does* pick up squad sight — but only as of the last repaint something else caused. The
+per-frame layer (squads, live site detail) has no such lag; it calls `canSee` fresh.
+
+**A watchtower also DENIES sight, and only of squads.** `COUNTER_INTEL_RADIUS` reads
+`VISION_RADIUS.watchtower` rather than minting a second number at the same value: one
+bubble, two directions — what the tower grants its own side and what it denies the other.
+A radius wider than the tower's own sight would hide an army its owner could not see from
+there, which is not counter-intelligence, it is a blind spot with a name. It lives in
+`perceivedSquads`, not in `canSee`, because it does not answer "can I see this HEX" — the
+ground is plainly visible and the column standing on it simply is not handed over — and
+it is checked from `beliefFor` too, or the enemy AI would target what its own doctrine
+says it cannot see, which is a behavioural bug wearing fog's clothes. **Squads only,
+never sites**: a site's position and kind are common knowledge regardless, so there is
+nothing there for counter-intelligence to hide.
+
+**A FAILED ASSAULT LEAVES A MEMORY, and it is the one deliberate relaxation of "a ghost
+carries nothing that changes".** The objection to a remembered garrison is that it is a
+number nobody ever confirmed — skimmed off a passing sightline and wrong the instant it
+goes stale. A lost assault is a different claim: your own army stood on that ground and
+fought that garrison, so the count is what just beat you, witnessed at the moment it
+mattered. `recordFailedAssault` has **exactly one caller** (`arrivals.js resolveArrival`,
+the direct-assault branch, only on a loss) and that narrowness is the safeguard — it can
+never drift from "what an engagement showed you" into "what fog half-remembers". It is
+its own map rather than a field on `state.seen`, so the strict rule stays exactly as
+strict for owner as it always was. The count is read **before `resolveField` mutates
+anything**: "the garrison that was there" is not whatever survived.
+
+On the board it draws as a dark red wash one ring around the site (`fog.js
+drawAssaultWash`, on `#board-bg` beside the veil and the flood, because it is a wash over
+GROUND) plus the stale headcount hung off `garrisonLabelY` — the *same* expression the
+live count uses, so scouting the site mid-battle swaps one figure for the other with no
+jump. **Only a ghost gets it**: the moment the site is visible again, live information
+supersedes the memory. The site panel says `UNSCOUTED · last seen: enemy · lost ~N troops
+here`.
 
 **The ground is always visible; the people are not.** Terrain, rivers, the shape mask and
 the grid draw everywhere from tick 0. Hiding the terrain too was rejected: it turns the

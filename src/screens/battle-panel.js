@@ -16,7 +16,7 @@
 // like a click on the board does.
 import { total } from '../battle/combat.js';
 import { rallyKeepOf, rallyTargetsOf, upgradeProgress, buildProgress } from '../battle/state.js';
-import { perceivedSite, perceivedSquads } from '../battle/vision.js';
+import { perceivedSite, perceivedSquads, lastKnownGarrison } from '../battle/vision.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, bindText, bindClass } from '../ui/dom.js';
 import { duration, spaceCase } from '../ui/format.js';
@@ -225,16 +225,15 @@ export function createSitePanel(o) {
       return;
     }
 
-    // UNSCOUTED. Kind and position are common knowledge (battle/vision.js),
-    // so the panel still opens and anchors on the ghost — but everything
-    // that CHANGES (garrison, HP, level, training, siege, a rally list) is
-    // exactly what a ghost does not carry, and none of it is read past this
-    // point. The one fact fog lets a ghost keep is the last-known owner, and
-    // only in the past tense: real when it exists, silent when it does not,
-    // never re-derived into anything more current than that.
+    // UNSCOUTED. Kind/position are common knowledge; nothing that CHANGES
+    // survives on a ghost except the last-known owner and, as of a real lost
+    // assault (vision.js `recordFailedAssault`, the one deliberate exception
+    // to that rule), a stale garrison count.
     if (site.ghost) {
+      const beat = lastKnownGarrison(state, 'player', site.id);
       wrote |= set.title(spaceCase(site.kind).toUpperCase());
-      wrote |= set.sub(site.owner ? `UNSCOUTED · last seen: ${site.owner}` : 'UNSCOUTED');
+      wrote |= set.sub(`UNSCOUTED${site.owner ? ` · last seen: ${site.owner}` : ''}`
+        + (beat == null ? '' : ` · lost ~${beat} troops here`));
       wrote |= blankVitals();
       wrote |= set.trains('');
       wrote |= set.stat('');

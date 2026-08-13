@@ -38,7 +38,7 @@ import { numStr } from '../ui/format.js';
 // half — the drawn flood and the veil, neither of which is "hide one object".
 import { perceivedSite, perceivedSquads } from '../battle/vision.js';
 import {
-  perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA,
+  perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA, drawAssaultWash, drawStaleGarrisons,
 } from './fog.js';
 import { capOf, signature } from './battleViewSig.js';
 
@@ -68,15 +68,13 @@ export function createBattleView(opts) {
   const camera = createCamera({ minZoom: 0.3, maxZoom: 2.6 });
   const bgCache = createBgCache({ el: opts.bg, camera });
   let autoFit = true;
-
   let lastSig = NaN;
   let owners = new Uint8Array(0);
   let veil = new Uint8Array(0);
   let blockedSig = null;
   let spin = 0;
   let state0 = null;
-  let fontZoom = -1;
-  let fontStr = '';
+  let fontZoom = -1; let fontStr = ''; // always read/written together in drawLabels
 
   const onResize = (w, hgt) => { camera.setViewport(w, hgt); bgCache.markDirty(true); };
   let firstFit = true;
@@ -230,6 +228,7 @@ export function createBattleView(opts) {
     // #board-fx's per-frame recomposite — filling ~90% of a late board
     // translucent 60x/s, measured as most of a throttled frame's cost.
     drawVeil(ctx, veil, board.cols, board.rows, hexSize, p);
+    drawAssaultWash(ctx, state, viewFaction, board.cols, board.rows, hexSize, p); // over the veil, see fog.js
   }
 
   // THE LINK GRAPH IS GONE, and deleting it was the point rather than a tidy-up.
@@ -383,6 +382,7 @@ export function createBattleView(opts) {
         ctx.fillText(numStr(n), _a.x, _a.y + garrisonLabelY(s.kind, hexSize, px));
       }
     }
+    drawStaleGarrisons(ctx, state, viewFaction, sitePos, hexSize, px, p, _a);
     ctx.textBaseline = 'middle';
     for (let o = 0; o < OWNERS2.length; o++) {
       ctx.fillStyle = p.owner[OWNERS2[o]];

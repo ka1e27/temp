@@ -311,10 +311,14 @@ test('panel: a ghost states its last-known owner in the past tense, and only whe
 // ---------------------------------------------------------------------------
 
 test('panel: an enemy squad stops being inspectable the instant it leaves vision', () => {
-  // Hand-built rather than a real battle: perceivedSquads needs only tick,
-  // sites, squads and vision (see vision.test.js's own fixture for the same
-  // shape), and a minimal state keeps the scenario legible — an enemy column
-  // mid-march, lit for exactly the tick it is selected.
+  // Hand-built rather than a real battle: perceivedSquads needs tick, sites,
+  // squads and vision (see vision.test.js's own fixture for the same shape) —
+  // AND, since contract v10, a real `path` to read a position off: this
+  // fixture predates that and `squadHexOf` returned null for it, so the
+  // column was silently unfindable regardless of vision, which is a stronger
+  // failure than the one this test exists to catch and was masking it. `path`
+  // is a straight line so the column sits at (5,5) at tick 5 of 10 — the
+  // exact hex the `vision` fixture below already lights.
   const sites = [{ id: 'a', hex: [0, 0] }, { id: 'b', hex: [10, 10] }];
   const enemySquad = {
     id: 'sq1', owner: 'enemy', from: 'a', to: 'b', spawnTick: 0, arriveTick: 10,

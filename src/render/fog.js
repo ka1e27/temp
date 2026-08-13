@@ -27,8 +27,11 @@
 //
 // Applied to a THROWAWAY object, never to `state` itself, so the sim's real
 // `state.influence` is never touched.
+import { DIRS } from '../core/hex.js';
 import { recomputeInfluence } from '../battle/influence.js';
-import { perceivedSite, canSee } from '../battle/vision.js';
+import { perceivedSite, canSee, lastKnownGarrison } from '../battle/vision.js';
+import { numStr } from '../ui/format.js';
+import { garrisonLabelY } from './siteGlyphs.js';
 import {
   hexIndex, hexRow, hexQ, hexCx, hexCy, traceHex,
 } from './hexGeom.js';
@@ -96,23 +99,36 @@ export const GHOST_ALPHA = 0.42;
 /**
  * Which hexes are OUTSIDE `faction`'s current sight, as a dense buffer — the
  * same Uint8Array-reuse shape hexRenderer.js `computeOwners` already
- * established, and for the same reason: `state.vision` only changes at the
- * events `recomputeVision` documents (a capture, a construction finishing, a
+ * established.
+ *
+ * GOES THROUGH `canSee` NOW, per hex, rather than reading `state.vision`
+ * directly — that is the one map `canSee` answers from FIRST, but it is no
+ * longer the whole answer: a marching or camped squad grants a small radius
+ * of its own (battle/vision.js), and `canSee` is the one place that already
+ * knows how to fold the two together. Repeating that logic here instead
+ * would be a second implementation of the same rule, which is exactly the
+ * kind of duplication this project has watched drift before.
+ *
+ * The cost this adds is bounded by `cols*rows` hex lookups times however many
+ * of `faction`'s squads are in the field — still a background-only cost,
+ * never a per-frame one: `state.vision` only changes at the events
+ * `recomputeVision` documents (a capture, a construction finishing, a
  * watchtower opening), and every one of those already bumps
  * `influenceVersion` — the same counter that marks the background dirty. So
- * this needs recomputing only whenever the background does, never once for
- * the sixty frames a second the veil itself is redrawn on.
+ * this still recomputes only whenever the background does, never once for
+ * the sixty frames a second the veil itself is redrawn on. What is new is
+ * that a squad's OWN contribution is only as fresh as the LAST such repaint —
+ * marching squads do not bump `influenceVersion` on purpose (see the vision.js
+ * file header), so the veil can lag a moving column by however long it has
+ * been since something else forced a repaint. The per-frame layer (squads,
+ * site detail) carries none of that lag, because it calls `canSee` fresh
+ * every frame regardless of this buffer.
  * @returns {Uint8Array} 1 where the hex is fogged, 0 where it is in sight
  */
 export function computeVeil(state, faction, cols, rows, buf) {
   const out = buf && buf.length === cols * rows ? buf : new Uint8Array(cols * rows);
-  out.fill(1);
-  const vis = state.vision?.[faction];
-  if (!vis) return out;
-  for (const key in vis) {
-    const c = key.indexOf(',');
-    const i = hexIndex(+key.slice(0, c), +key.slice(c + 1), cols, rows);
-    if (i >= 0) out[i] = 0;
+  for (let i = 0; i < out.length; i++) {
+    out[i] = canSee(state, faction, hexQ(i, cols), hexRow(i, cols)) ? 0 : 1;
   }
   return out;
 }
@@ -123,11 +139,15 @@ export function computeVeil(state, faction, cols, rows, buf) {
  * because a path per hex, sixty times a second, is exactly the per-frame
  * allocation the render budget forbids.
  *
- * Drawn EARLY on `#board-fx`, ahead of rallies, routes, sites and squads: it
- * sits over the background's own ghost silhouettes (already dimmed there,
- * see GHOST_ALPHA) but under everything this frame draws for real, the same
- * way any fog-of-war convention keeps your own army lit while the ground
- * under it goes dark.
+ * Drawn on `#board-bg`, inside `redrawBg`, AFTER the ghost silhouettes
+ * (already dimmed there, see GHOST_ALPHA) — this comment used to say
+ * `#board-fx`, which stopped being true the moment the veil moved to the
+ * background canvas for measured performance reasons (see battleView.js's own
+ * comment at the call site); a per-frame recomposite of most of a board,
+ * sixty times a second, was most of a throttled frame's cost on its own.
+ * Everything the per-frame canvas draws for real — squads, live site detail —
+ * still lands on top of it, the same way any fog-of-war convention keeps your
+ * own army lit while the ground under it goes dark.
  */
 export function drawVeil(ctx, veil, cols, rows, size, palette) {
   const n = cols * rows;
@@ -143,4 +163,78 @@ export function drawVeil(ctx, veil, cols, rows, size, palette) {
   if (!any) return;
   ctx.fillStyle = palette.fogVeil;
   ctx.fill();
+}
+
+// The wash reaches exactly one ring from a remembered site — deliberately
+// SLIGHT, a hint to look here rather than a second territory claim — and
+// fixed at that one ring on purpose: it lets the loop below read `DIRS`
+// directly (a centre plus its six neighbours) instead of calling
+// `withinRadius`, which allocates a fresh array and fresh hex objects per
+// site. A battle has at most a handful of remembered assaults, so the saving
+// is small in absolute terms, but every other draw path in this file (and
+// the ones it sits beside on `#board-bg`) holds itself to the same rule, and
+// a scratch hex reused in place costs nothing to keep matching it.
+const _wh = { q: 0, r: 0 };
+
+/**
+ * A FAILED ASSAULT'S MEMORY, drawn — the dark red patch around a site whose
+ * garrison count `battle/vision.js recordFailedAssault` remembered.
+ *
+ * ON THE SAME SURFACE THE OWNERSHIP COLOURING USES: `#board-bg`, batched
+ * exactly like `drawVeil` above and for the same reason — this is a wash over
+ * an area of GROUND, not a mark on one site, so it belongs beside the flood
+ * and the veil rather than among the per-frame glyphs. It is deliberately NOT
+ * a dense Uint8Array buffer the way the veil is: a battle has at most a
+ * handful of failed, remembered assaults at once, so a direct per-site scan
+ * (bounded by `state.sites.length`, not by board area) is cheaper than a
+ * cols*rows pass would be, and there is no reuse-across-frames case to design
+ * for — this runs once per background repaint, same as everything else here.
+ *
+ * Only a GHOST gets the wash. The moment `faction` can see the site again
+ * (`perceivedSite` returns the real object), live information supersedes the
+ * memory and the ground reads as whatever it truly is now — the wash is a
+ * placeholder for "you do not currently know", not a permanent scar.
+ */
+export function drawAssaultWash(ctx, state, faction, cols, rows, size, palette) {
+  let any = false;
+  ctx.beginPath();
+  for (const site of state.sites) {
+    if (lastKnownGarrison(state, faction, site.id) == null) continue;
+    if (!perceivedSite(state, faction, site).ghost) continue;
+    const cq = site.hex[0];
+    const cr = site.hex[1];
+    for (let d = -1; d < DIRS.length; d++) {
+      // d === -1 is the centre hex itself; d >= 0 walks its six neighbours.
+      _wh.q = d < 0 ? cq : cq + DIRS[d].q;
+      _wh.r = d < 0 ? cr : cr + DIRS[d].r;
+      if (hexIndex(_wh.q, _wh.r, cols, rows) < 0) continue;
+      any = true;
+      traceHex(ctx, hexCx(_wh.q, _wh.r, size), hexCy(_wh.q, _wh.r, size), size * 0.985);
+    }
+  }
+  if (!any) return;
+  ctx.fillStyle = palette.assaultWash;
+  ctx.fill();
+}
+
+/**
+ * The stale headcount beside it — text, so it rides the per-frame canvas
+ * (`drawLabels`, alongside every other garrison number) rather than the
+ * background: a ghost's live counterpart already draws its digits there, and
+ * putting the stale figure anywhere else would be a second place a player has
+ * to know to look for the same kind of fact.
+ *
+ * Reuses `garrisonLabelY` — the SAME expression the live count is hung from —
+ * so a stale figure sits exactly where a live one would have, and a battle
+ * that scouts the site mid-frame swaps one for the other with no jump.
+ */
+export function drawStaleGarrisons(ctx, state, faction, sitePos, hexSize, px, palette, out) {
+  ctx.fillStyle = palette.staleText;
+  for (const site of state.sites) {
+    const n = lastKnownGarrison(state, faction, site.id);
+    if (n == null) continue;
+    if (!perceivedSite(state, faction, site).ghost) continue;
+    sitePos(site, out);
+    ctx.fillText(numStr(n), out.x, out.y + garrisonLabelY(site.kind, hexSize, px));
+  }
 }

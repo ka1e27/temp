@@ -48,8 +48,10 @@ export function startBattle(config) {
   const state = createBattleState(config);
   state.grid.rivers = (config.grid?.rivers ?? []).map(([q, r]) => `${q},${r}`);
   // All three per-hex maps, together, because they are invalidated by exactly
-  // the same event: a site changing hands or coming into existence. Vision
-  // is the fog-of-war layer (battle/vision.js) — buildings see, squads do not.
+  // the same event: a site changing hands or coming into existence. Vision is
+  // the fog-of-war layer (battle/vision.js), and it is the SITE half only — a
+  // squad's own small radius is answered live by `canSee` and never written to
+  // a map, so nothing here has to know that a column can see at all.
   recomputeInfluence(state);
   recomputeOccupancy(state);
   recomputeVision(state);

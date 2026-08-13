@@ -273,6 +273,19 @@ export function derive(c) {
   // faction's colour, so it has to sit over the plate shading, the flood,
   // rivers and mountains without fighting any of them for attention.
   p.fogVeil = withAlpha('#000000', 0.5);
+  // A FAILED ASSAULT'S MEMORY (render/fog.js `drawAssaultWash`). Unlike the
+  // veil above, this one DOES carry a hue on purpose — it is a warning about a
+  // specific piece of ground, not a statement that the ground is unknown, so
+  // it borrows `danger` rather than mint a colour with no other meaning in
+  // this palette. Low alpha: it rides on top of the veil, and the two
+  // together should read as "dark, AND you have reason to be wary here",
+  // never as a solid block that competes with the flood or a site glyph.
+  p.assaultWash = withAlpha(c.danger, 0.30);
+  // The stale garrison figure that sits beside it — legible on its own against
+  // near-black ground (unlike the wash, which is deliberately too faint to
+  // read text against), and coloured the same as the wash so the two are
+  // obviously one fact rather than two unrelated marks near the same site.
+  p.staleText = withAlpha(c.danger, 0.85);
   // WATER. ONE flat translucent fill, nothing else — the third pass at this
   // (see river.js for the full history). The first two both shaded it: a
   // four-layer stack of a darkened valley, a darkened bed, the water and a

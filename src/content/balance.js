@@ -396,4 +396,4 @@ export const CENTIGOLD = 100;
 // so `import { MAPGEN } from "../content/balance.js"` keeps working and this
 // file stays under the 400-line cap. Shape there, power here.
 // --------------------------------------------------------------------------
-export { MOVEMENT, INFLUENCE, MAPGEN, RIVERS, TERRAIN } from './balance.engine.js';
+export { MOVEMENT, SQUAD_VISION_RADIUS, INFLUENCE, MAPGEN, RIVERS, TERRAIN } from './balance.engine.js';

@@ -92,7 +92,26 @@ import { checkMods, checkRivers } from './checks.js';
 // invisible to both sides until it lands on top of somebody. That is a board
 // the current engine steps wrongly while looking entirely healthy, which is the
 // v5 sentence exactly.
-export const CONTRACT_VERSION = 10;
+//
+// v11: three fog changes travelling together, one of which is a real field.
+// A marching or camped squad now grants its owner a small sight radius
+// (battle/vision.js `canSee`) and a watchtower now hides its OWNER's squads
+// from the other side within its own sight radius (`perceivedSquads`) —
+// NEITHER needs a new field, because both are answered fresh from `path`/
+// `arriveTick`/`camped`/`hex` (already crossing the seam since v10) and the
+// existing site list; an old blob steps under the new rules exactly like any
+// other, just with a commander that finally uses ground it always had.
+//
+// STATE gains the one field that actually is new: `lastKnownGarrison` —
+// `{ player: {siteId: count}, enemy: {...} }`, `recordFailedAssault`'s
+// deliberate, narrow relaxation of "a ghost carries nothing that changes" —
+// the size of a garrison that just beat back a real, lost assault, kept
+// alongside `seen`'s last-known owner. A v10 blob has none of it, and
+// `state.lastKnownGarrison?.[faction]?.[id]` reads `undefined` for every site
+// under the new engine — which happens to be the right default ("never fought
+// here"), not a wrong-looking one. The bump is still required: the rule is
+// "state shape changed", not "and it happened to fail safe this time".
+export const CONTRACT_VERSION = 11;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];

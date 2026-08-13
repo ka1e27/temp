@@ -47,14 +47,20 @@ const BIG_GRID = { cols: 41, rows: 41, blocked: [] };
 const HEX = [18, 18];
 
 // ---------------------------------------------------------------------------
-// Buildings see, squads do not
+// Buildings see; a squad now ALSO sees, but through canSee, never through
+// state.vision — see the file header of battle/vision.js for the cost model.
 // ---------------------------------------------------------------------------
 
-test('vision: a marching army grants its owner no sight at all — only buildings do', () => {
-  // Vision is recomputed on ownership/build/timer events only (sim.js
-  // startBattle / siegePhase's flip branch / timersPhase, construct.js
-  // cmdBuild) — never per tick. A squad in flight triggers NONE of those, so
-  // the whole map must be byte-identical while it marches, however far it gets.
+test('vision: state.vision (the SITE map) still never counts a marching army', () => {
+  // THIS TEST USED TO BE TITLED "grants its owner no sight at all" — that
+  // headline claim is gone (see tests/squadvision.test.js: a squad now
+  // grants a small radius of its own). What survives, and is still worth
+  // pinning on its own, is narrower and just as load-bearing: the SITE-only
+  // sparse map `recomputeVision` builds must stay exactly what it always
+  // was, rebuilt only on ownership/build/timer events (sim.js startBattle /
+  // siegePhase's flip branch / timersPhase, construct.js cmdBuild) and never
+  // per tick. A squad in flight must not be baked into it, however far it
+  // marches — that is the entire cost argument this feature rests on.
   const b = battleFor();
   const before = JSON.parse(JSON.stringify(b.vision));
   const home = b.sites.find((s) => s.kind === 'camp');

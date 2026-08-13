@@ -40,6 +40,19 @@
  */
 export const MOVEMENT = { hexSecondsPerSpeed: 76, minTicks: 1, reachHexes: 4 };
 
+/**
+ * A marching or camped squad's OWN sight radius (battle/vision.js `canSee`) —
+ * small on purpose. The objection that used to make this impossible is gone
+ * (a squad reads a real position off its `path`, contract v10), but the
+ * design reason for keeping it small stays: a column should light its own
+ * immediate surroundings, not scout for free — the watchtower is the one
+ * building that exists to answer "I want to see", at four times this, and it
+ * has to stay worth building. Equal to an ordinary site's own VISION_RADIUS
+ * (1) rather than a new number, so a body of troops sees exactly as far as
+ * the doorstep of a building would.
+ */
+export const SQUAD_VISION_RADIUS = 1;
+
 /** Territory flood. Strength falls off linearly with distance from the site;
  *  two factions within `contestRatio` of each other paint a hatched band. */
 export const INFLUENCE = { contestRatio: 0.15, levelBonus: 0.25 };

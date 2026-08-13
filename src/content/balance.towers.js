@@ -30,6 +30,7 @@
 // real column on its own. Anything that can kill an assault by itself would
 // make the siege mechanic — the thing the whole design rests on — optional.
 // PURE DATA.
+import { VISION_RADIUS } from './balance.js';
 
 /** @typedef {{rangeHexes:number, dps:number}} TowerSpec */
 
@@ -47,6 +48,21 @@ export const TOWERS = Object.freeze({
 /** Kinds that shoot at all, derived rather than repeated — a list written out
  *  twice is how a kind ends up armed in one file and unarmed in another. */
 export const ARMED_KINDS = Object.freeze(Object.keys(TOWERS));
+
+/**
+ * COUNTER-INTELLIGENCE, not a weapon: a faction's own watchtower denies the
+ * OTHER side sight of ITS squads (never sites — see battle/vision.js
+ * `perceivedSquads`) within this many hexes of the tower. Only the watchtower
+ * gets one; a stronghold's job is already done by `TOWERS` above.
+ *
+ * READS `VISION_RADIUS.watchtower` rather than mint a second number at the
+ * same value: one bubble, two directions — what the tower GRANTS its own side
+ * (sight) and what it DENIES the other (detection of the squads inside that
+ * same sight). A radius wider than the tower's own sight would hide an army
+ * the tower's owner could not itself see from there, which is not
+ * counter-intelligence, it is a blind spot with a name.
+ */
+export const COUNTER_INTEL_RADIUS = { watchtower: VISION_RADIUS.watchtower };
 
 /**
  * Damage a building deals in one tick, or 0 if it is unarmed.

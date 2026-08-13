@@ -238,11 +238,14 @@ export function createBattleState(config) {
     /** FOG OF WAR — the sight half. `{ player: {hexKey: 1, ...}, enemy: {...} }`,
      *  built by battle/vision.js `recomputeVision` at the same three events
      *  influence and occupancy above are (a site changes hands, is built, or
-     *  the battle starts). Buildings see; squads do not — see that file. Left
-     *  empty here rather than computed, matching `influence`'s own pattern:
-     *  `createBattleState` is called directly by fixtures that never touch
-     *  `startBattle`, and an empty sight map is the honest answer for a state
-     *  nothing has painted yet. */
+     *  the battle starts). SITE sight only — a squad's own small radius
+     *  (contract v11, made possible by the real `path` a squad has carried
+     *  since v10) is answered by `canSee` on the fly and never written here;
+     *  see that file's header for why baking it in would be the expensive
+     *  way to do this. Left empty here rather than computed,
+     *  matching `influence`'s own pattern: `createBattleState` is called
+     *  directly by fixtures that never touch `startBattle`, and an empty
+     *  sight map is the honest answer for a state nothing has painted yet. */
     vision: { player: {}, enemy: {} },
     /** FOG OF WAR — the memory half. `{ player: {siteId: owner}, enemy: {...} }`,
      *  the LAST-KNOWN owner of every site either side has ever actually seen.
@@ -251,6 +254,14 @@ export function createBattleState(config) {
      *  one currently in sight, so a site that drops out of vision keeps
      *  whatever was last true of it instead of vanishing or flickering. */
     seen: { player: {}, enemy: {} },
+    /** FOG OF WAR — the one narrow exception to the memory rule above.
+     *  `{ player: {siteId: count}, enemy: {...} }`: the size of a garrison
+     *  that just beat back this faction's own attack, written ONLY by
+     *  battle/vision.js `recordFailedAssault` (called from arrivals.js on a
+     *  lost assault) and never rebuilt wholesale the way `vision` is — same
+     *  append-only shape as `seen`, for the same reason: it is a memory, not
+     *  a derived field. */
+    lastKnownGarrison: { player: {}, enemy: {} },
 
     /** UI writes intents here; the sim drains them at the top of each tick.
      *  Presentation can therefore never corrupt the simulation. */
