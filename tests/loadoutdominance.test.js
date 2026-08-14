@@ -57,6 +57,16 @@
 // took the exploit to 69% and left the default spread byte-identical, but it
 // contradicts the `carryComposition` contract that ten tests encode. Do not
 // re-spend that either.
+//
+// ** NOR IS IT SIEGE OUTPUT, and that was the standing prime suspect. **
+// `SIEGE_FRONTAGE` caps what ordinary bodies can do to a structure and exempts
+// engines, so a crowd now manages 24 structure dps against the default spread's
+// 276 — siege is removed from the question entirely. The gap did not move: +8 /
+// +36 / +61 / +63 on the four regions the re-tune left alone, against +10 / +40
+// / +65 / +67 before it. A change that big moving nothing is worth more than a
+// fix would have been. See CLAUDE.md "A wall has a frontage" for the half of
+// that measurement that nearly went the other way — the harness stopped
+// assaulting a throne it could have taken, and read as the exploit being fixed.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 

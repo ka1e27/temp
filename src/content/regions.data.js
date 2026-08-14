@@ -9,10 +9,9 @@
 //
 // The five columns that must never go backwards down this table are
 // `enemyMult`, `grid` area, `siteCounts.enemy`, `siteCounts.player` and
-// `develop`. tests/campaign.test.js asserts every one of them off REGIONS, so a
-// twenty-second region cannot ship untested the way regions 6-18 did. That has
-// already paid for itself: the tier-5 rows below were caught and re-shaped by
-// those assertions before they were ever played.
+// `develop`. tests/campaign.test.js asserts every one off REGIONS, so a
+// twenty-second region cannot ship untested the way regions 6-18 did — the
+// tier-5 rows below were caught and re-shaped by it before they were played.
 //
 // `targetLengthMin` is NOT one of them, and that is measured rather than
 // chosen: see the tier-3 and tier-4 headers below. It is measured over WINS —
@@ -70,46 +69,42 @@ export const REGIONS = Object.freeze([
     'choke'),
   T('saltmere', 'Saltmere', 1, [1, 1],
     ['ashford', 'ironwood', 'kaldan', 'greywater', 'thornmoor', 'emberholt'],
-    3.08, 13, 10, [[1, 2, 4], 4, 4], 1, 0, 1.8, 7.5,
+    3.05, 13, 10, [[1, 2, 4], 3, 4], 1, 0, 1.8, 7.5,
     'A salt lagoon splits the field; whoever holds the causeway strongholds holds the region.',
     'split'),
 
   // --- Tier 2 (5) -- the first real wall. Kaldan proves the upgrade layer matters. ---
   //
   // TWO TRAPS IN `develop`, BOTH PAID FOR HERE. It is QUANTISED — greywater
-  // measured 63% at 1.5 and 63% again at 1.25, then 69% at 1.2, because nothing
-  // crossed a promotion threshold in between. And the assertion that actually
-  // binds is on the REALISED mean fort level, not on this column: thornmoor has
-  // two forts to greywater's one, so the same 1.2 spreads thinner and realises
-  // 1.167 against greywater's 1.200 — an inversion tests/campaign.test.js
-  // catches and the raw column does not. 1.25 is the smallest value that
-  // realises 1.333 and clears it.
+  // measured 63% at 1.5 and again at 1.25, then 69% at 1.2, because nothing
+  // crossed a promotion threshold between. And the assertion that binds is on
+  // the REALISED mean fort level, not this column: thornmoor has two forts to
+  // greywater's one, so the same 1.2 spreads thinner and realises 1.167 against
+  // 1.200 — an inversion tests/campaign.test.js catches and the raw column does
+  // not. 1.25 is the smallest value that realises 1.333 and clears it.
   //
   // Highmarch is 15x12 rather than 15x11 because at develop 1.2 it read 85%
-  // against an 84% ceiling, and its own `choke` is the lever: a choke costs
-  // MORE on a bigger board (+5 on a 13x10, -16 on a 21x16 — see
-  // battle/mapshape.js). One extra row took it to 83% without touching a column
-  // any other region shares.
+  // against an 84% ceiling, and its `choke` is the lever: a choke costs MORE on
+  // a bigger board (+5 on 13x10, -16 on 21x16 — battle/mapshape.js).
   //
-  // AND `siteCounts.neutral` IS NOT THE FREE LEVER IT LOOKS LIKE. It is the one
-  // site column with no non-decreasing constraint on it, so it is the obvious
-  // reach when every other column is boxed in — and it moves the wrong way.
-  // Greywater at 7 neutral reads 66%; at 9 it reads **54%**. Unclaimed ground
-  // is not the player's ground, it is a race, and the enemy starts closer to
-  // more of it with an economy already running. Widening the neutral pool hands
-  // the side that can convert it faster a bigger prize, which at tier 2 is not
-  // the player. Measured at n=96 both times, same seeds.
+  // AND `siteCounts.neutral` IS NOT THE FREE LEVER IT LOOKS LIKE, twice over.
+  // It moves the WRONG way — greywater at 7 neutral reads 66%, at 9 it reads
+  // **54%**, because unclaimed ground is a race and the enemy starts closer to
+  // more of it with an economy already running. And while the column itself has
+  // no non-decreasing constraint, TOTAL sites does, so a region's neutral pool
+  // can never exceed nextRegion.total - (thisRegion.enemy + player). Thanescar
+  // is capped at 15 by blackspire, i.e. at what it already ships.
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
     3.19, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 8.5,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    3.38, 15, 12, [[1, 3, 5], 5, 4], 1.2, 0.15, 5.5, 9,
+    3.32, 15, 12, [[1, 3, 5], 5, 4], 1.2, 0.15, 5.5, 9,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.',
     'choke'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    3.4, 15, 12, [[1, 3, 5], 7, 4], 1.2, 0.2, 6.6, 8,
+    3.34, 15, 12, [[1, 3, 5], 7, 4], 1.2, 0.2, 6.6, 8,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
@@ -219,8 +214,13 @@ export const REGIONS = Object.freeze([
   // pins the last region at three times the first), and 15 is where
   // MAPGEN.enemyStrongholdShare rounds up a fifth stronghold — a step worth
   // ~25 points on its own. The landing force is what pays for it. ---
+  // THANESCAR'S `develop` CARRIES ITS FRONTAGE CORRECTION, the only column that
+  // could: the dial is tier 4's shared 5.20 so raising it drags all four rows,
+  // grid and enemy count match blackspire's, and the neutral pool is capped at
+  // 15 by blackspire's TOTAL (tier-2 header) — already spent. 2.20 -> 2.45 is
+  // the whole gap to blackspire, and reads 46% against 71% at n=48.
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    5.2, 17, 13, [[2, 4, 7], 15, 4], 2.2, 0.6, 28.4, 6.5,
+    5.2, 17, 13, [[2, 4, 7], 15, 4], 2.45, 0.6, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.',
     'branch'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
@@ -283,17 +283,17 @@ export const REGIONS = Object.freeze([
   // The band is WIN_BAND[4] = [22, 42]: these are meant to cost a good player
   // several attempts.
   //
-  // RAVENSMARCH'S MIX IS A TIER-5 MIX NOW, and the dial could not have done
-  // this. It shipped with obsidian's exact enemy mix ([2,4,7]) on a WIDER
-  // board — structurally easier than the tier-4 region before it, against a
-  // band eleven points lower — and it read 61% at n=96 where its two
-  // tier-mates read 40% and 35% on almost the same dial. `enemyMult` is
-  // required non-decreasing, so pulling ravensmarch down to its band alone
-  // would have needed a dial ABOVE gravenreach's, which is a contradiction
-  // rather than a tuning problem. Matching gravenreach's mix is what makes
-  // the tier's opener a tier-5 region.
+  // RAVENSMARCH'S MIX IS A TIER-5 MIX NOW, and the dial could not have done it.
+  // It shipped with obsidian's exact mix ([2,4,7]) on a WIDER board — easier
+  // than the tier-4 region before it, against a band eleven points lower — and
+  // read 61% where its two tier-mates read 40% and 35% on the same dial.
+  // `enemyMult` is non-decreasing, so pulling it down alone would have needed a
+  // dial ABOVE gravenreach's: a contradiction, not a tuning problem. Its
+  // NEUTRAL pool then went 20 -> 18, the only lever left once the siege
+  // frontage cost the whole back half ~7 points and the dial sat on tier 4's
+  // own 5.20 plateau. 23% -> 32%, the middle of the band.
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach', 'stormhalt'],
-    5.2, 18, 13, [[2, 5, 8], 20, 4], 2.6, 0.6, 61, 7,
+    5.2, 18, 13, [[2, 5, 8], 18, 4], 2.6, 0.6, 61, 7,
     'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.',
     'branch'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],

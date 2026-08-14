@@ -136,12 +136,23 @@ test('the vertical slice matches the tuned balance table', () => {
     // a standing note that kaldan read 40% against tier 2's 66% floor and that
     // the suspect was an `AI_TIERS[1].economyMult` edit surviving a rebuild.
     // That is closed: kaldan is tuned on its own dial (3.34 -> 3.19) and reads
-    // inside its band on the same sweep as every other row. Confirmed at n=240:
-    // riverfen 90, ashford 90, ironwood 88, saltmere 79, kaldan 75.
+    // inside its band on the same sweep as every other row.
+    //
+    // SALTMERE IS THE ONE TIER-1 ROW THE SIEGE FRONTAGE MOVED (dial 3.08 ->
+    // 3.05, neutral 4 -> 3), and it took both because they very nearly cancel:
+    // at n=240 the dial step is worth -5 and the neutral cut +5, so 3.08/3 read
+    // 76% and 3.05/4 read 77% — both under the floor — while 3.05/3 reads 80%.
+    // A frontage that only bites a crowd still shaves the opening, because an
+    // early landing force IS a crowd: it has almost no engines in it.
+    //
+    // AND n=96 READ THIS ROW ~5 POINTS HIGH THREE TIMES RUNNING. `--n` takes a
+    // seed PREFIX, so a smaller sample is not an unbiased draw from a bigger
+    // one — saltmere's first 96 seeds are simply kind. Confirm a tier-1 band
+    // edge at 240 or do not confirm it.
     ['riverfen', 1, 1.82, 11, 9, 5, 3, 3, 1.0, 9.5],
     ['ashford', 1, 2.66, 12, 9, 6, 3, 3, 1.2, 10],
     ['ironwood', 1, 3.04, 13, 10, 7, 4, 3, 1.5, 9.5],
-    ['saltmere', 1, 3.08, 13, 10, 8, 4, 4, 1.8, 7.5],
+    ['saltmere', 1, 3.05, 13, 10, 8, 3, 4, 1.8, 7.5],
     ['kaldan', 2, 3.19, 15, 11, 9, 5, 4, 4.0, 8.5],
   ];
   table.forEach((row, i) => {

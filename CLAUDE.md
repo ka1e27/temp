@@ -461,6 +461,69 @@ perfectly plausible wrong bar. Moving the build out of `statusLine` also un-mask
 bug: a site besieged *while* it built used to report "building · 12s left" and never once
 say UNDER SIEGE, because the build branch returned first.
 
+### A wall has a frontage, and that is what stopped a crowd being a siege train
+
+`siegeDps` was **linear in headcount**, so the mechanism above quietly stopped working
+around region 8: 33 militia out-pace a level-5 castle's repair, landing budgets reach 700
+slots, and `breachSeconds` gated nothing late. `SIEGE_FRONTAGE` (40, in
+`content/balance.engine.js`) is how many ordinary BODIES can be at a wall at once. Past
+that many they are queueing rather than digging, and contribute nothing.
+
+**ENGINES are exempt** (`engine: true`, and rams are the only one). That is the whole
+statement of the rule, and it re-prices the unit that had become a straight loss:
+
+```
+                                          before      after
+700 militia vs a level-5 castle              5s        385s
+the default spread (23 rams) vs the same     4s          4s
+4 militia vs a farm                        250s        250s
+```
+
+**Two properties make it shippable, and both are negative controls.** It is a **hard cap
+rather than a curve**, so below forty bodies *nothing changes* — every early-region
+number and every small-force breach time is byte-identical, and the rule is provably
+inert except on the late stacks that broke the mechanic. A saturating curve would have
+shaved every assault in the game instead. And the scaling lands on the bodies' summed
+**damage**, not on a body count, so a stack's MIX still matters: forty halberds out-dig
+forty militia by exactly the ratio they always did.
+
+**It inverted what terrain asks of you, and the old comment at `siegeDps` said so out
+loud** — *"the answer to a mountain fastness is not more engines, it is more bodies"*.
+That was true while a crowd was a siege train and is now exactly backwards. What answers
+highland is BETTER bodies: 40 sappers work at 2.5 siege × 1.15 highland for 115 dps where
+40 militia manage 24. The forty at the wall are a composition decision now, which is the
+first time the specialists' `siege` column has meant anything.
+
+**One number, not one per site kind.** A castle plainly has a longer perimeter than a
+farm — but a farm dies to a fraction of a frontage anyway, so a per-kind table would only
+change the answer where it is already a formality, at the cost of a second balance
+surface nobody could tune independently of `SITES`.
+
+`tests/frontage.test.js` pins all of it, three of its six tests as negative controls —
+including that **exactly one unit is an engine**, because `engine` is a one-word opt-out
+of the only thing limiting siege damage in the game and a second unit acquiring it by
+accident would silently restore the defect with nothing else looking wrong.
+
+**AND IT BROKE THE HARNESS IN A WAY THAT LOOKED LIKE A BALANCE WIN.** `simtactics.js
+bestAssaultTarget` walks away from any siege it cannot finish in 90 seconds — right for
+an ordinary wall, and a rule that had **never once bound at a castle** in this project's
+history, because a crowd broke any throne in about five. The frontage put widowsgate's
+throne at 128s for a body army, and the bot answered by never assaulting it: it timed out
+**thirty-five sites ahead**, with the region won everywhere except the gate, and
+mono-militia's win rate there read 94% → 25%. That is the harness declining to play, and
+taken at face value it says the frontage fixed the dominant loadout. It does not:
+`siegeBudget` asks the castle the question a player actually asks — *does the siege
+finish before the BATTLE does* — and mono went straight back to 92%.
+
+Three things about that fix are load-bearing. It is **the clock, not the kind**, so the
+bot still refuses a two-minute siege with nine seconds left, and an ordinary wall is
+still held to the flat ninety. The **territory gate is still checked first**, or the bot
+would camp an unopenable throne and starve every other front. And it was **unreachable
+code before the frontage**, which is what made it safe to add mid-campaign — no measured
+number was ever taken with this branch live, so it cannot have re-tuned anything. Same
+house pattern as the other escape hatches: `--nothrone` reverts it, `tests/throne.test.js`
+pins both directions, and the negative control is the half that matters.
+
 ### Region shapes
 
 A region is not a rectangle. `content/regions.rules.js` `SHAPE_RULE` + `battle/mapshape.js`:
@@ -658,6 +721,15 @@ separate times.** Kaldan's long-standing "58% ok" was an n=12 artefact; one buil
 `--all` at low n only as a smoke check. Some medians sit on a cliff — kaldan pegs the hard
 cap in ~40% of runs — so a median can jump discontinuously between sample sizes.
 
+**AND A SMALLER SAMPLE IS A SEED PREFIX, NOT AN UNBIASED DRAW.** `--n` walks seeds
+`0..n-1`, so n=96 is the *first* 96 of n=240's runs rather than a random subset of them —
+which means a region whose early seeds happen to be kind reads high at every small n, and
+reads high *reproducibly*. Saltmere did exactly that three times running: 82 / 88 / 88 at
+n=96 against 77 / 80 / 76 at n=240 on the same three tables. Re-running at n=96 is not a
+second opinion, it is the same opinion. This is the mechanism behind every "n=96 and
+n=240 disagreed by 5–13 points" note in this file, and it is why the rule is a bigger
+sample rather than more samples.
+
 **The difficulty dial must rise in the same steps the PLAYER does.** The shop buys
 cheapest-affordable-first and crowns compound ~1.3× a region, so combat multipliers arrive
 in lumps every second region (+15.4% into greywater, +14.3% into emberholt, 0% into
@@ -675,6 +747,16 @@ Two related traps in the same area: `develop` is quantised on the **castle**, be
 worth ~26 points, so where the fraction lands matters more than how big it is. And a unit
 unlock can make the landing force *smaller* (rams cost 5 slots a body: 54 → 48 into
 thornmoor), so the player's step into that region is negative.
+
+**`siteCounts.neutral` IS BOUNDED, and the column it is bounded by is not its own.**
+Every note in this project — including the tier-2 header in `regions.data.js` — says
+neutral is "the one site column with no non-decreasing constraint", and that is true of
+the column and false of the table: `tests/campaign.test.js` requires TOTAL sites to be
+non-decreasing, and neutral is a term in that total. So a region's neutral pool can never
+exceed `nextRegion.total − thisRegion.(enemy + player)`. Thanescar's is capped at 15 by
+blackspire, which is exactly what it already shipped — the lever looked free and was
+fully spent. Cost a measurement to learn; `develop` (2.20 → 2.45, the whole gap to
+blackspire) is what carried the correction instead.
 
 ## The harness bot upgrades sites, and the campaign is tuned against that
 
@@ -1936,16 +2018,28 @@ activating focused buttons.
   pass at the end, exactly as planned.
 
   **All twenty-four report `ok` at n=240**, against their tier's `WIN_BAND` *and* their
-  advertised length, in campaign order:
+  advertised length, in campaign order — re-confirmed after the siege frontage:
 
   ```
-  tier 1   riverfen 90  ashford 90  ironwood 88  saltmere 79
-  tier 2   kaldan 75  highmarch 77  greywater 67  thornmoor 74  emberholt 74
-  tier 3   gallowmoor 60  sunder 58  vaelstrand 57  duskfell 65  karrowmere 54
-  tier 4   thanescar 54  blackspire 45  ironcrown 47  obsidian 47
-  tier 5   ravensmarch 30  gravenreach 33  nightharrow 35
-  tier 6   stormhalt 30  cinderwatch 33  widowsgate 29
+  tier 1   riverfen 88  ashford 86  ironwood 89  saltmere 80
+  tier 2   kaldan 75  highmarch 79  greywater 68  thornmoor 75  emberholt 74
+  tier 3   gallowmoor 61  sunder 58  vaelstrand 57  duskfell 65  karrowmere 55
+  tier 4   thanescar 43  blackspire 43  ironcrown 51  obsidian 47
+  tier 5   ravensmarch 33  gravenreach 30  nightharrow 37
+  tier 6   stormhalt 28  cinderwatch 30  widowsgate 33
   ```
+
+  **The frontage cost four numbers and no more**, which is the useful figure: it is a
+  rule that is provably inert below forty bodies, so most of the table did not notice.
+  What moved was `highmarch` and `greywater`'s dials (3.38 → 3.32, 3.40 → 3.34),
+  `saltmere` (3.08 → 3.05 *and* neutral 4 → 3, which nearly cancel — see
+  `tests/world.test.js`), `thanescar`'s `develop` (2.20 → 2.45, the only column it had
+  left) and `ravensmarch`'s neutral pool (20 → 18). The pattern is that it costs the
+  regions taken with a CROWD — tier 1, where a landing force has almost no engines in
+  it, and the back half, where the stacks are biggest. The incursion ladder measured
+  unmoved (92/85/67/44/17/2 at n=48 against a recorded 96/81/65/40/10/0) and needed no
+  `baseDial` change, because the ladder is fought with the default spread and the
+  default spread brings rams.
 
   **The starting point was twelve of twenty-four out of band, in BOTH directions**,
   which is what made this different from every earlier pass. Tier 1 read too hard and
@@ -2062,20 +2156,31 @@ activating focused buttons.
 
   ```
   region        default   no rams   mono militia     win-median (def -> mono)
-  kaldan          75%       75%        85%           9.5m -> 8.2m
-  gallowmoor      58%       81%        98%           6.3m -> 2.4m
-  thanescar       58%       85%        94%           6.2m -> 2.8m
-  ravensmarch     29%       58%        94%           9.9m -> 3.5m
-  widowsgate      27%       65%        94%           5.2m -> 2.6m
+  kaldan          75%       75%        83%           9.2m -> 7.5m
+  gallowmoor      60%       85%        96%           6.0m -> 3.2m
+  thanescar       46%       71%        94%           7.7m -> 3.9m
+  ravensmarch     33%       63%        94%           7.1m -> 3.5m
+  widowsgate      29%       52%        92%           7.3m -> 3.5m
   ```
 
   Two things to take from it. **Dropping one unit from the default spread is worth +23
-  to +38 points** — free, no trade — everywhere past kaldan; the full mono-militia
-  exploit is +36 to +67. And the exploit still gets *wider* as the campaign gets harder,
+  to +30 points** — free, no trade — everywhere past kaldan; the full mono-militia
+  exploit is +36 to +63. And the exploit still gets *wider* as the campaign gets harder,
   so the part meant to be a wall is the part it trivialises most. Kaldan is the control:
-  +0 and +10 there, so this is a late-campaign hole, not a global one. Pinned by
+  +0 and +8 there, so this is a late-campaign hole, not a global one. Pinned by
   `tests/loadoutdominance.test.js`, which encodes it as a DEFECT and fails informatively
   in both directions.
+
+  **Re-taken after the SIEGE FRONTAGE shipped, and it is unmoved.** The mono gaps on the
+  four rows the re-tune did not touch read +8 / +36 / +61 / +63 against a pre-frontage
+  +10 / +40 / +65 / +67 — noise. (Thanescar's row moved for its own reasons, so its gap
+  is not comparable.) That is a much sharper negative result than it sounds, and it is
+  worth more than a fix would have been: **the frontage removes SIEGE from the question
+  entirely** — a crowd's structure damage is now capped at 24 dps where the default
+  spread's rams do 276 — and the gap did not move at all. So the mechanism is field power
+  and tempo, full stop, and "give siege a scarcity headcount cannot buy" is spent as an
+  answer to the loadout. It remains the right fix for `breachSeconds`; it is simply not
+  this.
 
   **⚠ DO NOT FIX THIS BY NERFING MILITIA — measured, and it backfires.** Three probes,
   gallowmoor, n=24, matched seeds (default → mono, gap):
@@ -2092,10 +2197,12 @@ activating focused buttons.
   standing "re-tune `UNITS.militia.counters.spearmen`" recommendation.
 
   **The mechanism is TEMPO, not stats.** One slot budget buys 471 militia or 240 mixed
-  bodies, 32% more field power, at *equal* siege output — the spread's 23 rams make 276
-  siege DPS and 471 militia make 283, so rams buy siege the militia already had for a
-  third of the field. That is the same finding as "`breachSeconds` stopped binding"
-  below, from the other end. And **nothing in the game is sensitive to concentration**:
+  bodies, 32% more field power, at *equal* siege output — the spread's 23 rams made 276
+  siege DPS and 471 militia made 283, so rams bought siege the militia already had for a
+  third of the field. That was the same finding as "`breachSeconds` stopped binding"
+  from the other end, and the frontage has since fixed both halves of it *without*
+  moving the gap — so "tempo" now means field power and nothing else.
+  And **nothing in the game is sensitive to concentration**:
   `battle/aiadapt.js` counter-picks by `argmax`, so it answers a 46%-militia army and a
   98%-militia army with the identical share of production. Measured against mono-militia
   the enemy is down to ZERO training grounds by t=3min — it is not out-fought, it is
@@ -2116,16 +2223,39 @@ activating focused buttons.
   finding as the DPS arithmetic above, arriving from the other direction. The comment at
   `battle/movement.js slowestSpeed` carries the table so nobody re-spends it.
 
-  So the levers that could still work are the ones that read CONCENTRATION rather than
-  the unit, or that make siege scarce again (see "`breachSeconds` stopped binding"
-  below — that is now the prime suspect, since it is what makes rams redundant). A
-  per-type slot-share cap was built and measured (69%/56%, default spread
+  A per-type slot-share cap was built and measured (69%/56%, default spread
   byte-identical) and then **reverted**, because it contradicts the carry contract ten
   tests encode — do not re-spend that either.
 
-  **Four fixes have now been measured and rejected: two militia nerfs, a slot-share cap,
-  and share-scaled march speed.** Anything proposed next should say, before it is built,
-  which of those four shapes it is not.
+  **⚠ AND IT IS NOT SIEGE SCARCITY, which was the standing prime suspect and is now
+  spent.** "Make siege scarce again" was the recommendation this file carried for a long
+  time, on the reasoning that rams measure as a straight loss *because* `breachSeconds`
+  stopped binding, so fixing one would fix both. Half of that is true: `SIEGE_FRONTAGE`
+  fixed `breachSeconds` outright and re-priced rams by a factor of twelve. The other half
+  is false. The gap did not move (see the re-take above), and it did not move under a
+  change that removed siege from the question **entirely** — a crowd is now capped at 24
+  structure dps against the spread's 276. Whatever mono-militia is winning with, it is
+  not siege output.
+
+  **THE MEASUREMENT NEARLY SAID OTHERWISE, and how it broke is the transferable part.**
+  On the first reading the frontage looked like it closed the exploit at tier 6:
+  widowsgate mono fell 94% → 25%. It had not. `simtactics.js bestAssaultTarget` walks
+  away from any siege over 90 seconds, a rule that had never once bound at a castle
+  because a crowd used to break any throne in about five — and the frontage put
+  widowsgate's throne at 128s, so the bot simply stopped assaulting it, timing out
+  **thirty-five sites ahead** with the region won everywhere but the gate. Teaching it to
+  commit to a throne it can take before the clock runs out put mono back at 92%. A
+  harness declining to play is the same class of defect as a harness that cannot play
+  (`upgradeTurn`, `constructTurn`, `scoutTurn`) — and this one broke *toward the result
+  somebody wanted*, which is the worst way for a measurement to break. `--nothrone` and
+  `tests/throne.test.js` keep it re-takeable.
+
+  **Five fixes have now been measured and four rejected: two militia nerfs, a slot-share
+  cap, share-scaled march speed, and siege scarcity.** The fifth (the frontage) shipped —
+  for `breachSeconds`, not for this. Anything proposed next should say, before it is
+  built, which of those five shapes it is not; the only structural lever nobody has tried
+  is the one that reads CONCENTRATION rather than the unit (`battle/aiadapt.js`
+  `counterShare`, ROADMAP option 1).
 - ~~**Ownership's second channel is half-built.**~~ **CLOSED, both halves.**
   `render/ownerDash.js` did the site STROKE (solid yours, dashed theirs, fine dotted
   for nobody's and for a fogged ghost). The other half was the territory FLOOD, which
@@ -2147,9 +2277,12 @@ activating focused buttons.
   with the weave off and **+0.40** with it on. The sign flip is the feature; the
   magnitude is how much other texture it competes with. Measuring only the "after"
   number would have reported a healthy 1.7 for a feature that was doing nothing.
-- **`breachSeconds` stopped binding around region 8.** 33 militia out-pace a level-5
-  castle's repair, and landing budgets reach 703 slots, so the mechanism the whole design
-  rests on no longer gates anything late. This is why rams measure as a straight loss.
+- ~~**`breachSeconds` stopped binding around region 8.**~~ **CLOSED** — `SIEGE_FRONTAGE`,
+  see "A wall has a frontage" above. 33 militia out-paced a level-5 castle's repair and
+  landing budgets reach 703 slots, so the mechanism the whole design rests on gated
+  nothing late; a crowd was a siege train and that is why rams measured as a straight
+  loss. Both halves were always one defect seen from two ends. 700 militia against a
+  level-5 castle now read 385s where they read 5s.
 - **The harness player is poorer than any real one**, in both currencies. `metaFor` grants
   one region's worth of idle income and never raids; a player who simply plays back-to-back
   banks 2.29M crowns by region 24 against the harness's 464k. At `--idle=50` the last region

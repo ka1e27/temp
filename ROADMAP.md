@@ -27,6 +27,13 @@ construction, towers, the slower march, fog, squad sight and the site-existence 
 all landed. Every `enemyMult` and every advertised length moved; the method and the four
 transferable findings are in `CLAUDE.md` (`Still open` → the closed re-tune entry).
 
+**Siege binds again.** `SIEGE_FRONTAGE` caps how much structure damage ordinary bodies
+can do at one wall and exempts engines, which closes the oldest measured defect in the
+file — "`breachSeconds` stopped binding around region 8" — and makes rams a purchase
+rather than a tax on your slots. It cost a four-number re-tune, no more. It did *not*
+fix the loadout problem below, and the section says exactly how the measurement of that
+nearly went wrong.
+
 The one thing to carry forward: **the table describes a bot that earns no relics, idles
 far less than a real player, brings the default four-type spread, and still knows where
 every enemy building is.** Each of those gaps is now a flag away from being measured
@@ -44,23 +51,23 @@ stays right to the last battle in the game.
 
 ### The loadout has a dominant answer, and it scales with difficulty
 
-Re-measured against the finished battle layer and the closed re-tune, n=48, matched
-seeds:
+Re-measured against the finished battle layer, the closed re-tune and the siege
+frontage, n=48, matched seeds:
 
 | region | default | **no rams** | militia only |
 |---|---|---|---|
-| kaldan (tier 2) | 75% | 75% | 85% |
-| gallowmoor (tier 3) | 58% | **81%** | **98%**, a 6.5-minute region won in 2.4 |
-| thanescar (tier 4) | 58% | **85%** | **94%** |
-| ravensmarch (tier 5) | 29% | **58%** | **94%** |
-| widowsgate (tier 6, the incursion arena) | 27% | **65%** | **94%** |
+| kaldan (tier 2) | 75% | 75% | 83% |
+| gallowmoor (tier 3) | 60% | **85%** | **96%**, a 6.5-minute region won in 3.2 |
+| thanescar (tier 4) | 46% | **71%** | **94%** |
+| ravensmarch (tier 5) | 33% | **63%** | **94%** |
+| widowsgate (tier 6, the incursion arena) | 29% | **52%** | **92%** |
 
 **The cheapest half of the exploit is one click: don't bring rams.** That alone is +23 to
-+38 points past kaldan, for free. The full mono-militia version is +36 to +67, and it
-does not merely win more often — it deletes the battle, finishing in a third of the
-advertised time. It gets *wider* as the campaign gets harder, so the part of the game
-meant to be a wall is the part it trivialises most. Kaldan is the control at +0/+10:
-this is a late-campaign hole. Pinned by `tests/loadoutdominance.test.js`.
++30 points past kaldan, for free. The full mono-militia version is +36 to +63, and it
+does not merely win more often — it deletes the battle, finishing in half the advertised
+time. It gets *wider* as the campaign gets harder, so the part of the game meant to be a
+wall is the part it trivialises most. Kaldan is the control at +0/+8: this is a
+late-campaign hole. Pinned by `tests/loadoutdominance.test.js`.
 
 **This is the reason the specialists, the relic troop lines, and most of the strategic
 layer are dead content.** Nobody re-opens a screen that already wins everything.
@@ -82,35 +89,46 @@ leaves the game worse in both directions.
 more field power, at *equal* siege output — the spread's 23 rams make 276 siege DPS and
 471 militia make 283. Rams buy siege the militia already had for a third of the field.
 
-**So the lever has to read CONCENTRATION, not the unit.** Two candidates, both cheap
-relative to a re-tune, both needing their own measurement:
+**Siege scarcity was the standing prime suspect. It has now been built, and it is
+spent.** `SIEGE_FRONTAGE` caps how much structure damage ordinary bodies can do at one
+wall (engines exempt), which fixed `breachSeconds` outright and re-priced rams by a
+factor of twelve — a crowd now does 24 structure dps against the default spread's 276.
+The mono gap did not move: +8 / +36 / +61 / +63 on the four rows the re-tune left alone,
+against a pre-frontage +10 / +40 / +65 / +67. **A change that removed siege from the
+question entirely moved nothing**, which is a far stronger statement than the fix would
+have been: whatever mono-militia wins with, it is field power and tempo, full stop.
 
-1. **Make the enemy's counter-pick scale with dominance.** `battle/aiadapt.js` already
-   picks the counter to the player's `argmax` unit and retrains a share of its yards —
-   the mechanic is built, unfogged, and well reasoned. It is insensitive to concentration:
-   it answers a 46%-militia army and a 98%-militia army with the identical share of
-   production. Scaling `counterShare` by how dominant the dominant unit is would bite a
-   mono army hard and leave the default spread near-untouched *by construction*, which is
-   the property that lets it ship without re-tuning 24 regions. **Verify the premise
-   first**: measured against mono-militia the enemy is down to zero training grounds by
-   t=3min, so the adaptation may simply be arriving too late to matter, in which case the
-   knob is onset rather than share.
-2. **Give siege a scarcity headcount cannot buy.** This is the same finding as
-   "`breachSeconds` stopped binding around region 8" from the other end, and fixing one
-   fixes both. Rams are 4× militia's siege per slot and the default spread still spends
-   so few slots on them that the two armies come out level.
+**And the measurement nearly said the opposite — read this before trusting the next
+one.** The first pass looked like the frontage closed the exploit at tier 6 (widowsgate
+mono 94% → 25%). It had not: `simtactics.js` walks away from any siege over 90 seconds, a
+rule that had never bound at a castle because a crowd used to break any throne in about
+five, and the frontage put widowsgate's throne at 128s — so the bot stopped assaulting it
+at all and timed out **35 sites ahead** with the region won everywhere but the gate.
+Teaching it to commit put mono back at 92%. A harness that declines to play is the same
+defect as one that cannot, and this one broke *toward the result somebody wanted*.
+`--nothrone` and `tests/throne.test.js` keep the delta re-takeable.
 
-**Two things NOT to try, because they have now been built and measured.** A per-type
-slot-share cap (69%/56%, default spread byte-identical, reverted — it contradicts the
-`carryComposition` contract ten tests encode). And **share-scaled march speed**: replacing
-`slowestSpeed`'s hard `Math.min` with the slot-weighted harmonic mean, which makes the
-default spread 1.6× faster and provably cannot help a one-type army. It bought the
-default spread a net **+1 point** across five regions and left the gap fractionally
-wider. That result is worth more than the fix would have been — it says the ram's cost is
-entirely its SLOTS, so option 2 above (siege scarcity) is the live suspect and option 1
-is the cheap one. Four rejected fixes now: two militia nerfs, the slot cap, and speed.
-Anything proposed next should say which of those four shapes it is not, before it is
-built.
+**So the one structural lever left is the one that reads CONCENTRATION, not the unit.**
+`battle/aiadapt.js` already picks the counter to the player's `argmax` unit and retrains a
+share of its yards — the mechanic is built, unfogged, and well reasoned. It is insensitive
+to concentration: it answers a 46%-militia army and a 98%-militia army with the identical
+share of production. Scaling `counterShare` by how dominant the dominant unit is would
+bite a mono army hard and leave the default spread near-untouched *by construction*, which
+is the property that lets it ship without re-tuning 24 regions. **Verify the premise
+first**: measured against mono-militia the enemy is down to zero training grounds by
+t=3min, so the adaptation may simply be arriving too late to matter, in which case the
+knob is onset rather than share.
+
+**Four things NOT to try, because they have been built and measured.** Two militia nerfs
+(both *widen* the gap — the mixed army sits on the steep part of the win curve and the
+mono army on its flat top). A per-type slot-share cap (69%/56%, default spread
+byte-identical, reverted — it contradicts the `carryComposition` contract ten tests
+encode). **Share-scaled march speed**: replacing `slowestSpeed`'s hard `Math.min` with the
+slot-weighted harmonic mean makes the default spread 1.6× faster and provably cannot help
+a one-type army — it bought a net **+1 point** across five regions and left the gap
+fractionally wider, which is what says the ram's cost is entirely its SLOTS. And siege
+scarcity, above. Anything proposed next should say which of those shapes it is not,
+before it is built.
 
 ---
 
@@ -121,9 +139,11 @@ built.
 than three, a farm after that — and never builds a wall or a tower at all. By this
 project's own repeatedly-paid-for standard ("a mechanic the harness cannot play is a
 mechanic nobody has measured"), two of four buildable kinds are unmeasured *today*. Ship
-it behind a flag next to `--noupgrades` / `--noconstruct` / `--noscout` so the delta stays
-re-takeable, exactly as `upgradeTurn` and `scoutTurn` did. Related and already recorded:
-the bot builds farms while it is losing — seven raised and seven razed on a run it lost.
+it behind a flag next to `--noupgrades` / `--noconstruct` / `--noscout` / `--nothrone` so
+the delta stays re-takeable, exactly as `upgradeTurn` and `scoutTurn` did. Related and
+already recorded: the bot builds farms while it is losing — seven raised and seven razed
+on a run it lost. The frontage pass is the freshest argument for ranking this at all: a
+bot that declines a mechanic reads exactly like a mechanic that works.
 
 **2. Calibrate `split`, or record that it cannot be.** The campaign re-tune found the
 silhouettes were never calibrated against each other: grouped by shape against the middle
@@ -213,6 +233,7 @@ npm run verify                                   # size + purity gates, full sui
 node tools/simrunner.js --all --n=96             # the campaign; n=240 near a band edge
 node tools/simrunner.js --incursion=1-30 --n=48  # the endless ladder
 node tools/simrunner.js --region=gallowmoor --n=48 --weights=spearmen:0,raiders:0,rams:0
+node tools/simrunner.js --region=widowsgate --n=48 --nothrone   # the bot that won't commit
 npm start & node tools/smoke.mjs                 # real pointer events, hit-tested
 node tools/mobile.mjs && node tools/mobile.mjs --w=844 --h=390
 ```

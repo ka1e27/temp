@@ -5,7 +5,7 @@
 // promise is load-bearing for the whole design — do not introduce randomness,
 // wall-clock reads, or hidden state here.
 // PURE.
-import { UNITS, UNIT_IDS, SITES, SITE_LEVELS } from '../content/balance.js';
+import { UNITS, UNIT_IDS, SITES, SITE_LEVELS, SIEGE_FRONTAGE } from '../content/balance.js';
 
 /** @typedef {Record<string, number>} Composition */
 
@@ -245,20 +245,51 @@ function keepCheapestOne(comp) {
 }
 
 /**
- * Siege damage per second from a besieging force. Rams are 20x a militia.
+ * Siege damage per second from a besieging stack. Rams are 20x a militia.
  *
- * Terrain lands here too, and this is where "a fort in the mountains" is really
- * felt: a ram works at 0.55 in full highland, so the answer to a mountain
- * fastness is not more engines, it is more bodies — militia are unaffected.
+ * A WALL HAS A FRONTAGE (content/balance.js `SIEGE_FRONTAGE`): ordinary bodies
+ * past the first `SIEGE_FRONTAGE` of them contribute nothing, because they are
+ * queueing rather than digging. ENGINES (`engine: true` — rams) are exempt and
+ * stay linear, which is the entire statement: a crowd cannot substitute for a
+ * siege train.
+ *
+ * This used to be linear in headcount and that is how `breachSeconds` stopped
+ * binding. Measured before the frontage existed: 700 militia broke a level-5
+ * castle in FIVE SECONDS, and the same 700 slots spent on the mixed spread
+ * produced almost exactly the same siege output — which is why rams measured as
+ * a straight loss, and why "leave the rams at home" was worth +23 to +38 points
+ * across the campaign.
+ *
+ * The scaling is applied to the bodies' summed damage rather than to a body
+ * count, so a stack's MIX still matters: forty halberds out-dig forty militia
+ * exactly as much as they always did. Only the crowd behind them stops counting.
+ *
+ * TERRAIN LANDS HERE TOO, and the frontage INVERTED what it asks of you. This
+ * comment used to read "the answer to a mountain fastness is not more engines,
+ * it is more bodies — militia are unaffected", which was true while a crowd was
+ * a siege train and is now exactly backwards: past forty, more bodies buy
+ * nothing at all. What answers highland is BETTER bodies, and the game already
+ * has them — 40 sappers work at 2.5 siege x 1.15 highland for 115 dps where 40
+ * militia manage 24. The forty at the wall are a composition decision now.
  * @param {?object} ground terrain of the site under siege
  */
 export function siegeDps(comp, mult = 1, ground = null) {
-  let d = 0;
+  let engines = 0;
+  let bodyDmg = 0;
+  let bodies = 0;
   for (const u of UNIT_IDS) {
     const n = comp[u] || 0;
-    if (n) d += n * UNITS[u].siege * groundMult(UNITS[u], ground);
+    if (!n) continue;
+    const spec = UNITS[u];
+    const d = n * spec.siege * groundMult(spec, ground);
+    if (spec.engine) { engines += d; continue; }
+    bodyDmg += d;
+    bodies += n;
   }
-  return d * mult;
+  // Below the frontage this is exactly 1, so a small force is untouched — see
+  // the constant's own comment on why that inertness is the point.
+  const crowd = bodies > SIEGE_FRONTAGE ? SIEGE_FRONTAGE / bodies : 1;
+  return (engines + bodyDmg * crowd) * mult;
 }
 
 export function siteRegen(kind, level = 1, mult = 1) {

@@ -24,14 +24,16 @@ export const UNITS = {
   raiders:  { gold: 45,  trainSec: 12, batch: 1, speed: 105, atk: 13, def: 4,  siege: 0.8,
               counters: { militia: 0.60, rams: 1.0 }, skirmish: 0.5,
               ground: { highland: 0.70, river: 1.20 } },
+  // `engine: true` is what exempts a unit from the siege FRONTAGE — see
+  // SIEGE_FRONTAGE below and combat.js `siegeDps`. Rams are the only one, and
+  // that is the point of them.
   rams:     { gold: 80,  trainSec: 20, batch: 1, speed: 30,  atk: 6,  def: 2,  siege: 12,
-              counters: { spearmen: 2.6 }, base: 0.4,
+              counters: { spearmen: 2.6 }, base: 0.4, engine: true,
               ground: { highland: 0.65, river: 0.75 } },
-  // banner 0.20 -> 0.25 and trainBuff 0.30 -> 0.40. He is no longer bought with
-  // expedition slots (one rides free with the unlock, see meta/composition.js
-  // `maxOf`), so his numbers no longer have to justify costing eight militia —
-  // they only have to be worth the 4,000-crown unlock and the 250 gold a second
-  // one costs to commission.
+  // banner 0.20 -> 0.25, trainBuff 0.30 -> 0.40. He is no longer bought with
+  // expedition slots (one rides free with the unlock — meta/composition.js
+  // `maxOf`), so his numbers only have to be worth the 4,000-crown unlock and
+  // the 250 gold a second one costs to commission.
   marshal:  { gold: 180, trainSec: 40, batch: 1, speed: 60,  atk: 20, def: 14, siege: 2.0,
               counters: {}, banner: 0.25, trainBuff: 0.40, maxPerSite: 1 },
 
@@ -41,29 +43,25 @@ export const UNITS = {
   // siege engine; adding a sixth set of stats would only have moved which
   // column of the same table you read. What these do instead:
   //
-  //   outriders  MOVE      three times a militia's march. The campaign is a
-  //                        beachhead landing into a map that is 30-50% unclaimed
-  //                        (see regions.data.js), so the race for neutral ground
-  //                        IS the opening, and this is the unit that wins it.
-  //                        They also carry `skirmish`, so a failed grab costs a
-  //                        fraction rather than the squad.
+  //   outriders  MOVE      three times a militia's march. The map is 30-50%
+  //                        unclaimed, so the race for neutral ground IS the
+  //                        opening. They carry `skirmish` too, so a failed grab
+  //                        costs a fraction rather than the squad.
   //   halberds   BREAK     the defender's ground advantage. `sunder` cuts
   //                        `siteDefMult` — a castle defends at x1.60 and a
   //                        level-5 wall stacks on top of that, which is exactly
   //                        the fight where militia stop scaling.
   //   sappers    HOLD      what you took. `repair` multiplies the site's HP
-  //                        regen while they garrison it, and battle/combat.js
-  //                        `breachSeconds` returns Infinity the moment repair
-  //                        out-paces siege damage — so a stronghold with sappers
-  //                        in it is not merely tougher, it is UNCRACKABLE by a
-  //                        force that did not bring engines. That is the same
-  //                        mechanism that already makes "a few troops cannot
-  //                        take a stronghold" true, handed to the player.
+  //                        regen while they garrison it, and `breachSeconds`
+  //                        returns Infinity the moment repair out-paces siege
+  //                        damage — so a wall they hold is UNCRACKABLE by a
+  //                        force that brought no engines, the same mechanism
+  //                        that makes "a few troops cannot take a stronghold"
+  //                        true, handed to the player.
   //
-  // None of them is in ENEMY_UNITS_BY_TIER, and none has a
-  // DEFAULT_COMPOSITION_WEIGHT: they are a deliberate pick on the loadout
-  // screen, so the default army — and every balance number measured against it
-  // — is exactly what it was.
+  // None is in ENEMY_UNITS_BY_TIER or has a DEFAULT_COMPOSITION_WEIGHT: they
+  // are a deliberate pick on the loadout screen, so the default army — and
+  // every number measured against it — is exactly what it was.
   outriders: { gold: 30,  trainSec: 10, batch: 1, speed: 165, atk: 6,  def: 3,  siege: 0.5,
               counters: { rams: 0.9 }, skirmish: 0.6,
               ground: { highland: 0.75, river: 1.25 } },
@@ -76,25 +74,21 @@ export const UNITS = {
 };
 
 /**
- * TERRAIN, per unit — the `ground` block above.
+ * TERRAIN, per unit — the `ground` block above. A single "terrain multiplier"
+ * would just be a second difficulty dial: every army scales the same way and
+ * nothing about the ground changes what you BRING. So it is per unit type, and
+ * lands on both the field battle (`power`) and siege damage (`siegeDps`), which
+ * is what makes one hillside read differently by who is walking up it:
  *
- * A single "terrain multiplier" would just be a second difficulty dial: every
- * army scales the same way and nothing about the ground changes what you BRING.
- * So the multiplier is per unit type, and it lands on both the field battle
- * (combat.js `power`) and on siege damage (combat.js `siegeDps`), which is what
- * makes the same hillside read differently depending on who is walking up it:
- *
- *   spearmen  x1.30 highland / x0.85 river   a spearwall holds a pass; it
- *                                            cannot keep formation in a ford
+ *   spearmen  x1.30 highland / x0.85 river   holds a pass; cannot keep
+ *                                            formation in a ford
  *   raiders   x0.70 highland / x1.20 river   no room to ride in broken ground,
  *                                            but they cross water at will
- *   rams      x0.55 highland / x0.75 river   you cannot drag a siege engine up
- *                                            a mountain, or through mud
- *   militia   —  no entry, so exactly 1.0 everywhere. Deliberate: militia is
- *                                            the unit that never cares, which
- *                                            is what makes it the safe answer
- *                                            when you cannot read the map.
- *   marshal   —  a banner is a banner on any ground.
+ *   rams      x0.55 highland / x0.75 river   you cannot drag an engine up a
+ *                                            mountain, or through mud
+ *   militia   —  no entry, so exactly 1.0 everywhere: the unit that never
+ *                cares, which is what makes it the safe answer when you cannot
+ *                read the map. The marshal is the same — a banner is a banner.
  *
  * Highland is GRADED (see TERRAIN.mountainFull), so the multiplier is
  * interpolated toward 1.0 on merely hilly ground; a river is binary.
@@ -104,25 +98,20 @@ export const UNITS = {
  * What one of each unit costs against the EXPEDITION budget.
  *
  * Without this every unit costs one seat and the optimal loadout is trivially
- * "as many marshals/raiders as the roster allows" — there is no decision.
+ * "as many marshals/raiders as the roster allows" — no decision at all.
  *
  * The anchor is the gold price above, because gold is already this game's own
  * statement of what a unit is worth (every unit runs at 3.0-4.5 gold/sec, so a
- * gold ratio IS a value ratio). Raw gold ratios are 1 / 2 / 3.75 / 6.67 / 15,
- * which prices a marshal above an entire starting expedition — unbuyable, not a
- * choice. So the curve is compressed by roughly gold^0.83:
+ * gold ratio IS a value ratio). Raw ratios are 1 / 2 / 3.75 / 6.67 / 15, which
+ * prices a marshal above an entire starting expedition — unbuyable, not a
+ * choice. So the curve is compressed by roughly gold^0.83, giving gold-per-slot
+ * of 12 / 12 / 15 / 16 / 22.5: militia and spearmen priced exactly at their
+ * gold value, and the unlockables carrying a deliberate discount so a
+ * specialist is affordable rather than theoretical.
  *
- *     militia 1   spearmen 2   raiders 3   rams 5   marshal 8
- *
- * Read as gold-per-slot that is 12 / 12 / 15 / 16 / 22.5: militia and spearmen
- * are priced exactly at their gold value, and the three unlockables carry a
- * deliberate discount so a specialist is affordable rather than theoretical.
- * The marshal's +20% banner pays for its 8 slots at roughly 18 slots of army
- * and up, which is where a player who has bought a 4000-crown unlock already is.
- *
- * The scale is anchored on militia = 1 on purpose: a leftover slot always buys
- * exactly one militia, so a budget is always spendable to the last slot and a
- * budget INCREASE always has somewhere to go.
+ * Anchored on militia = 1 on purpose: a leftover slot always buys exactly one
+ * militia, so a budget is spendable to the last slot and an increase always has
+ * somewhere to go.
  */
 export const UNIT_SLOTS = {
   militia: 1, spearmen: 2, outriders: 2, raiders: 3, halberds: 4, sappers: 3, rams: 5, marshal: 8,
@@ -146,12 +135,11 @@ export const SITES = {
   // a defence multiplier barely above bare ground. Taking one is cheap and
   // losing one hurts.
   //
-  // A `stronghold` trains nothing at all and is a genuine wall: two thirds again
-  // the HP, a defMult between a camp and a throne, and `garrisonMult`, which is
-  // the part that is not just a bigger number in the same column — see
-  // combat.js `power`. It is what "high defence targets with troops in it
-  // getting a buff" means, and it is deliberately the one defensive term the
-  // halberds' `sunder` cannot strip: they crack masonry, not the men behind it.
+  // A `stronghold` trains nothing and is a genuine wall: two thirds again the
+  // HP, a defMult between a camp and a throne, and `garrisonMult` — the part
+  // that is not just a bigger number in the same column (combat.js `power`),
+  // and the one defensive term halberds' `sunder` cannot strip. They crack
+  // masonry, not the men behind it.
   trainingGround:
               { gold: 0,   train: 1.30, cap: 45, hp: 180, hpRegen: 3.0, defMult: 1.05 },
   stronghold: { gold: 0,   train: 0,    cap: 60, hp: 340, hpRegen: 5.5, defMult: 1.55,
@@ -163,10 +151,10 @@ export const SITES = {
   watchtower: { gold: 0,   train: 0,    cap: 15, hp: 120, hpRegen: 2.5, defMult: 1.10 },
 };
 
-/** Every site kind, in the order they read as a ladder. ONE STATEMENT of the
- *  list: `contract.js SITE_KINDS` and the render tables derive from it rather
- *  than repeating it, because a kind that exists in four tables and not the
- *  fifth is how the specialists shipped with no CSS colour. */
+/** Every site kind, in ladder order. ONE STATEMENT of the list: `contract.js
+ *  SITE_KINDS` and the render tables derive from it rather than repeat it — a
+ *  kind in four tables and not the fifth is how the specialists shipped with no
+ *  CSS colour. */
 export const SITE_KINDS = Object.freeze(Object.keys(SITES));
 
 /** What may be RAISED mid-battle, and where. Split to ./balance.construct.js for
@@ -175,14 +163,13 @@ export {
   BUILD_COSTS, BUILDABLE_KINDS, BUILD_RANGE_HEXES, BUILD_MIN_SEPARATION,
 } from './balance.construct.js';
 
-
 /**
  * Per-level multipliers for in-battle site upgrades (index 0 = level 1).
  *
  * THESE TWO ARRAYS ARE THE ONLY STATEMENT OF HOW LONG THE LADDER IS. Nothing
- * anywhere may write 3, 5, or any other count: `SITE_LEVELS.length` is the
- * number of levels and `SITE_UPGRADE.length` is always exactly one less, because
- * every drawable step has to be a purchasable one. The renderer derives its
+ * may write 3, 5 or any other count: `SITE_LEVELS.length` is the number of
+ * levels and `SITE_UPGRADE.length` is always exactly one less, because every
+ * drawable step has to be a purchasable one. The renderer derives its
  * whole size ramp from the first (render/siteShapes.js `MAX_LEVEL`), the sim
  * derives HP, regen, gold, training and garrison cap from it, and
  * meta/fallbackMap.js clamps against it.
@@ -315,18 +302,16 @@ export const BOOSTERS = {
  * `perRegion` is well above the naive x1.36 for two reasons only a run of
  * tools/simrunner.js shows: Standing Army's flat +4 is +4 SLOTS rather than +4
  * bodies, and the late slice unlocks raiders at three slots each. It has been
- * re-tuned on the harness twice — once to pay for the terrain layer (mountains
- * and rivers cost Kaldan ~5 points and 2.4 minutes at n=480, and this is the
- * right knob for it because it scales with conquests, so the tier-1 opener pays
- * nothing), and once by the re-base below.
+ * re-tuned on the harness twice — once to pay for the terrain layer, and once
+ * by the re-base below.
  *
  * RE-BASED SO THE EMPIRE, NOT THE HANDOUT, IS WHAT YOU LAND WITH: base 19 -> 12
- * and perRegion 12 -> 10. A raid is supposed to be uphill, and at 19 base slots
- * the opening force simply rolled the first regions rather than having to build
- * into them. The end-to-start ratio went from 7.6x to 9.75x — more of your
- * landing force is something you went and got. It pairs with a WARM-UP on the
- * enemy (content/ai.data.js `AI.warmup`): landing smaller against an opponent
- * that presses from tick 0 is not a harder fight, it is a shorter one.
+ * and perRegion 12 -> 10. At 19 base slots the opening force simply rolled the
+ * first regions rather than having to build into them; the end-to-start ratio
+ * went from 7.6x to 9.75x, so more of your landing force is something you went
+ * and got. It pairs with a WARM-UP on the enemy (content/ai.data.js
+ * `AI.warmup`): landing smaller against an opponent that presses from tick 0 is
+ * not a harder fight, it is a shorter one.
  *
  * THE TAPER PAST `taperAfter` IS A PACING KNOB, NOT A NERF. Regions 1-5 are
  * attacked with 0-4 conquests, so the frozen opening is untouched by
@@ -396,4 +381,6 @@ export const CENTIGOLD = 100;
 // so `import { MAPGEN } from "../content/balance.js"` keeps working and this
 // file stays under the 400-line cap. Shape there, power here.
 // --------------------------------------------------------------------------
-export { MOVEMENT, SQUAD_VISION_RADIUS, INFLUENCE, MAPGEN, RIVERS, TERRAIN } from './balance.engine.js';
+export {
+  MOVEMENT, SQUAD_VISION_RADIUS, SIEGE_FRONTAGE, INFLUENCE, MAPGEN, RIVERS, TERRAIN,
+} from './balance.engine.js';

@@ -58,6 +58,7 @@ import {
 } from '../src/battle/combat.js';
 import { groundOf, siteDefMultOf, garrisonMultOf } from '../src/battle/terrain.js';
 import { siteControlFraction } from '../src/battle/state.js';
+import { TICK_HZ } from '../src/core/loop.js';
 
 /**
  * Units that must never share a squad with anything slower than themselves.
@@ -203,6 +204,39 @@ export function assaultFilter(state, target) { // eslint-disable-line no-unused-
  */
 export const PRIORITY = { trainingGround: 0, stronghold: 1, farm: 2, castle: 3, camp: 4 };
 const ATTACK_MARGIN = 1.5; // overkill to survive the defender's reinforcement
+const SIEGE_BUDGET_SEC = 90; // a wall this slow is somebody else's problem
+const THRONE_MARGIN_SEC = 30; // clock left over after the last gate falls
+
+/**
+ * How long a siege this bot will commit to, in seconds.
+ *
+ * NINETY FOR ANY ORDINARY TARGET, and that is a rule about OPPORTUNITY COST: a
+ * wave spent grinding a slow wall is a wave not spent on the three soft targets
+ * beside it, so an ordinary player walks away and comes back with engines.
+ *
+ * THE THRONE IS THE ONE PLACE THAT ARGUMENT DOES NOT HOLD. It is the win
+ * condition; `castleGateFrac` has already made most of the countryside a
+ * prerequisite for it even being offered as a target; and there is nothing else
+ * left for the army to do. A player who reads "BREACH IN 128s" on the last gate
+ * with the map already swept commits and waits. So the question asked of the
+ * castle is the one they actually ask — does the siege finish before the BATTLE
+ * does — and the flat ninety is asked of everything else.
+ *
+ * THIS BRANCH WAS UNREACHABLE UNTIL THE SIEGE FRONTAGE SHIPPED, which is what
+ * makes it safe to add mid-campaign: before the frontage a late-game stack broke
+ * any castle in seconds (700 militia read FIVE against a level-5 throne), so
+ * ninety never bound at a castle and no measured number was taken with this
+ * live. The frontage put widowsgate's throne at 128s for a body army — and the
+ * bot answered by never assaulting it at all, timing out 35 sites ahead with the
+ * region won everywhere but the gate. That is the harness declining to play, and
+ * without this it would have been written down as the frontage FIXING the
+ * mono-militia exploit — a measurement breaking toward the result you wanted.
+ */
+function siegeBudget(view, site, opts = {}) {
+  if (site.kind !== 'castle' || opts.throne === false) return SIEGE_BUDGET_SEC;
+  const left = ((view.rules?.hardCapTicks ?? 0) - view.tick) / TICK_HZ;
+  return Math.max(SIEGE_BUDGET_SEC, left - THRONE_MARGIN_SEC);
+}
 
 /**
  * The single best target one source should send `send` at this think, or
@@ -263,7 +297,7 @@ export function bestAssaultTarget(view, src, send, opts = {}) {
       );
       if (!stalled) continue; // still making progress on its own — do not pile on
       secs = breachSeconds(addComp(t.siege.comp, send), t.hp, t.kind, t.level, 1, 1, ground);
-      if (!Number.isFinite(secs) || secs > 90) continue;
+      if (!Number.isFinite(secs) || secs > siegeBudget(view, t, opts)) continue;
     } else {
       // The castle gate is VISIBLE (see screens/battle-panel.js) precisely so
       // a competent player does not commit an army to a siege that cannot
@@ -284,7 +318,7 @@ export function bestAssaultTarget(view, src, send, opts = {}) {
       // arrival, the "if unreinforced" caveat the HUD warns about.
       if (!field.win || field.attPower < field.defPower * ATTACK_MARGIN) continue;
       secs = breachSeconds(field.attSurvivors, t.hp, t.kind, t.level, 1, 1, ground);
-      if (!Number.isFinite(secs) || secs > 90) continue; // a siege we cannot finish
+      if (!Number.isFinite(secs) || secs > siegeBudget(view, t, opts)) continue;
     }
 
     const score = secs + PRIORITY[t.kind] * 25 - (t.kind === 'castle' ? 120 : 0);

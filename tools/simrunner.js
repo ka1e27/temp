@@ -10,6 +10,7 @@
 //   node tools/simrunner.js --all --noscout       # the bot with no answer to fog
 //   node tools/simrunner.js --all --noreinforce   # ...one that never relieves a stalled siege
 //   node tools/simrunner.js --all --nomicrosend   # ...one held to the blanket 5-body floor
+//   node tools/simrunner.js --all --nothrone      # ...one that will not commit to the last gate
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -140,7 +141,9 @@ for (const id of regionIds) {
   // hatches in simtactics.js `bestAssaultTarget` independently, so a stalled
   // siege getting reinforced and a below-floor send getting through a thin
   // target stay two separately re-measurable deltas rather than one bundled
-  // "and now it works".
+  // "and now it works". --nothrone is the third: it puts the castle back under
+  // the flat 90-second siege budget every other target gets, which is the bot
+  // that would rather time out ahead than commit to the last gate.
   // `--legacy=30` measures a SECOND RUN — the same campaign for a player who has
   // abdicated once. Zero, and therefore absent from the table, unless asked for.
   // `--relics=40` measures a player who has been paid for the ground they took
@@ -149,6 +152,7 @@ for (const id of regionIds) {
   const opts = {
     upgrades: !args.noupgrades, construct: !args.noconstruct, scout: !args.noscout,
     reinforce: !args.noreinforce, microsend: !args.nomicrosend,
+    throne: !args.nothrone,
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
     sightedAi: SIGHTED.ai, sightedBot: SIGHTED.bot,

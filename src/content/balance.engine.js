@@ -53,6 +53,29 @@ export const MOVEMENT = { hexSecondsPerSpeed: 76, minTicks: 1, reachHexes: 4 };
  */
 export const SQUAD_VISION_RADIUS = 1;
 
+/**
+ * A WALL HAS A FRONTAGE: how many ordinary BODIES can be at it at once. Past
+ * this many, a besieging crowd is queueing rather than digging — see combat.js
+ * `siegeDps` for the arithmetic and the measurement that forced it.
+ *
+ * A HARD CAP RATHER THAN A CURVE, deliberately: below it NOTHING changes, so
+ * every early-region number and every small-force breach time is byte-identical
+ * and the rule is provably inert except on the late stacks that broke the
+ * siege mechanic. A saturating curve would have shaved every assault instead.
+ *
+ * ENGINES ARE EXEMPT (`engine: true` — rams alone), and that is the statement:
+ * bodies get in each other's way at a wall, engines are what the wall is afraid
+ * of. Sappers are NOT engines; their verb is `repair` and they exist to hold a
+ * wall, so exempting them would hand the crowd a second way in.
+ *
+ * ONE NUMBER, NOT ONE PER SITE KIND. A castle plainly has a longer perimeter
+ * than a farm — but a farm dies to a fraction of a frontage anyway (100 HP
+ * against 40 militia is four seconds), so a per-kind table would only ever
+ * change the answer where it is already a formality, at the cost of a second
+ * balance surface nobody could tune independently of `SITES`.
+ */
+export const SIEGE_FRONTAGE = 40;
+
 /** Territory flood. Strength falls off linearly with distance from the site;
  *  two factions within `contestRatio` of each other paint a hatched band. */
 export const INFLUENCE = { contestRatio: 0.15, levelBonus: 0.25 };
