@@ -149,6 +149,22 @@
  *
  * It also, finally, makes duskfell's "the enemy counter-trains here for the
  * first time" less of a lie: at tier 3 only a fifth of the walls answer you.
+ *
+ * ⚠ THE +17/+32 ABOVE IS PROVENANCE, NOT TODAY'S NUMBER, AND THE YARD/WALL SPLIT
+ * IS WHY. This share is spent over the sites that TRAIN, and when it was measured
+ * that meant every stronghold on the map. A stronghold trains nothing now, so the
+ * pool is `trainingGround` only — instrumented over whole battles, ONE OR TWO of
+ * them mid-campaign. Re-measured with counter-training switched off at every tier
+ * (n=48): gallowmoor 60% -> 65%, karrowmere 60% -> 63%, ravensmarch 33% -> 40%.
+ * Five to seven points, not seventeen to thirty-two.
+ *
+ * AND THE LADDER BELOW IS VERY NEARLY INERT, for a second reason on top of that:
+ * `adapt` reserves a spear backbone before either share spends anything, so
+ * `spendable` is `yards - 1`. With two yards that is ONE, and the `max(1, ...)`
+ * floor already asks for one — so at gallowmoor `counterShare` 0.20 and 1.00 buy
+ * the identical single yard. The rungs are a difficulty ladder that mostly cannot
+ * be climbed. Fixing that is a balance pass (the honest lever is the enemy's YARD
+ * COUNT, not this share), not a bug fix — but do not price a tier against it.
  */
 /**
  * `aggression` IS GONE, and it never did anything.

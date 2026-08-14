@@ -108,27 +108,44 @@ Teaching it to commit put mono back at 92%. A harness that declines to play is t
 defect as one that cannot, and this one broke *toward the result somebody wanted*.
 `--nothrone` and `tests/throne.test.js` keep the delta re-takeable.
 
-**So the one structural lever left is the one that reads CONCENTRATION, not the unit.**
-`battle/aiadapt.js` already picks the counter to the player's `argmax` unit and retrains a
-share of its yards — the mechanic is built, unfogged, and well reasoned. It is insensitive
-to concentration: it answers a 46%-militia army and a 98%-militia army with the identical
-share of production. Scaling `counterShare` by how dominant the dominant unit is would
-bite a mono army hard and leave the default spread near-untouched *by construction*, which
-is the property that lets it ship without re-tuning 24 regions. **Verify the premise
-first**: measured against mono-militia the enemy is down to zero training grounds by
-t=3min, so the adaptation may simply be arriving too late to matter, in which case the
-knob is onset rather than share.
+**And the CONCENTRATION lever — the one this file ranked top — is spent as well, because
+its premise is measurably false.** "Scale `battle/aiadapt.js` `counterShare` by how
+dominant the dominant unit is" was ranked first for one property: it would bite a mono
+army and leave the default spread untouched *by construction*, so it could ship without
+re-tuning 24 regions. Read straight off the enemy's own `learnedPlayerComp`:
 
-**Four things NOT to try, because they have been built and measured.** Two militia nerfs
+```
+share of the player's army that is MILITIA, as the enemy sees it
+               t=1m   t=2m   t=5m
+default        80%    95%    95%
+mono militia   99%    99%    99%
+```
+
+**Both loadouts are the same army by minute two.** The 46% this file used to quote is the
+LANDING FORCE, which the enemy never sees as such — the player captures yards and trains
+militia in them. A dominance-scaled share sees 95% against 99%. Built anyway in its
+strongest form (share → 1.0 above 98% dominance *and* the spear backbone released, which
+breaks a pinned invariant): gaps +36/+38/+61 → +36/+33/+57, noise, and the default spread
+paid for it. Reverted.
+
+**That retires a class, not a knob: nothing keyed on what the player FIELDS can work**,
+because the two armies are identical from two minutes in. The gap is created entirely in
+the opening, by the landing force. Which is where the next candidate has to act — and
+there is one nobody has tried: **`UNIT_SLOTS.rams` is 5, and nothing re-priced it when the
+frontage made a ram worth twelve times a body at a wall.** What a ram *does* was
+re-priced; what it *costs* was not. That is a one-number change to the exact place the two
+armies differ, and it needs its own measurement.
+
+**Five things NOT to try, because they have been built and measured.** Two militia nerfs
 (both *widen* the gap — the mixed army sits on the steep part of the win curve and the
 mono army on its flat top). A per-type slot-share cap (69%/56%, default spread
 byte-identical, reverted — it contradicts the `carryComposition` contract ten tests
 encode). **Share-scaled march speed**: replacing `slowestSpeed`'s hard `Math.min` with the
 slot-weighted harmonic mean makes the default spread 1.6× faster and provably cannot help
 a one-type army — it bought a net **+1 point** across five regions and left the gap
-fractionally wider, which is what says the ram's cost is entirely its SLOTS. And siege
-scarcity, above. Anything proposed next should say which of those shapes it is not,
-before it is built.
+fractionally wider, which is what says the ram's cost is entirely its SLOTS. Siege
+scarcity, above. And the concentration counter-pick. Anything proposed next should say
+which of those shapes it is not, before it is built.
 
 ---
 
@@ -145,14 +162,26 @@ already recorded: the bot builds farms while it is losing — seven raised and s
 on a run it lost. The frontage pass is the freshest argument for ranking this at all: a
 bot that declines a mechanic reads exactly like a mechanic that works.
 
-**2. Calibrate `split`, or record that it cannot be.** The campaign re-tune found the
+**2. `counterShare` is a difficulty ladder that mostly cannot be climbed — decide
+whether that is wanted.** The yard/wall split moved counter-training's pool from every
+stronghold to `trainingGround` only, which instruments at **one or two buildings**
+mid-campaign, and `adapt` reserves a spear backbone before either share spends anything.
+So at gallowmoor `counterShare` 0.20 and 1.00 buy the identical single yard. Re-measured
+with it off at every tier (n=48): gallowmoor 60→65, karrowmere 60→63, ravensmarch 33→40 —
+five to seven points, where `ai.data.js` still records the +17/+32 it was worth before the
+split. The comment is corrected; the ladder is not. The honest lever is the enemy's YARD
+COUNT (`mapgen.js fortsAmong`), not this share, and moving it re-tunes tiers 3–6 — so
+this is a balance pass to schedule, not a bug. Ranked here because a tier priced against
+a knob that does nothing is how difficulty ends up somewhere nobody put it.
+
+**3. Calibrate `split`, or record that it cannot be.** The campaign re-tune found the
 silhouettes were never calibrated against each other: grouped by shape against the middle
 of each region's own band, `branch` ran −11 and `split` a startlingly uniform −6 (all
 three regions), while `open` and `choke` sat near zero. `branchTrunk` 0.50 → 0.62 fixed
 the branch regions. **`split` has no `SQUEEZE` knob at all**, so its −6 is currently an
 open observation. Either give it one or write down why it should not have one.
 
-**3. Pull the incursion mutator onset forward — but check it is worth it first.**
+**4. Pull the incursion mutator onset forward — but check it is worth it first.**
 `mutatorsAt: [3, 9, 18]` means depths 1–2 draw none, so the first rungs of the endless
 ladder are dial-only reruns of one map. Cheap to change (`content/incursion.data.js` is
 pure data and fully harness-playable via `--incursion=`), and cheap to measure. Ranked

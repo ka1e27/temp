@@ -2202,11 +2202,12 @@ activating focused buttons.
   third of the field. That was the same finding as "`breachSeconds` stopped binding"
   from the other end, and the frontage has since fixed both halves of it *without*
   moving the gap — so "tempo" now means field power and nothing else.
-  And **nothing in the game is sensitive to concentration**:
-  `battle/aiadapt.js` counter-picks by `argmax`, so it answers a 46%-militia army and a
-  98%-militia army with the identical share of production. Measured against mono-militia
-  the enemy is down to ZERO training grounds by t=3min — it is not out-fought, it is
-  out-raced before the adaptation it already has can matter.
+  And **nothing in the game is sensitive to concentration** — `battle/aiadapt.js`
+  counter-picks by `argmax`, so the share of production it commits does not depend on how
+  dominant the dominant unit is. That was recorded as the obvious gap to close; it is not,
+  because there is no concentration difference left to read by the time it could act (see
+  the concentration bullet below). The enemy is also down to ZERO training grounds by
+  t=3min against mono — it is not out-fought, it is out-raced.
 
   **⚠ AND IT IS NOT MARCH SPEED EITHER — that was the third fix built, measured and
   reverted.** `slowestSpeed` is a hard `Math.min`, and it is the ONE stack-wide term in
@@ -2250,12 +2251,43 @@ activating focused buttons.
   somebody wanted*, which is the worst way for a measurement to break. `--nothrone` and
   `tests/throne.test.js` keep it re-takeable.
 
-  **Five fixes have now been measured and four rejected: two militia nerfs, a slot-share
-  cap, share-scaled march speed, and siege scarcity.** The fifth (the frontage) shipped —
-  for `breachSeconds`, not for this. Anything proposed next should say, before it is
-  built, which of those five shapes it is not; the only structural lever nobody has tried
-  is the one that reads CONCENTRATION rather than the unit (`battle/aiadapt.js`
-  `counterShare`, ROADMAP option 1).
+  **⚠ AND THE CONCENTRATION LEVER IS SPENT TOO — its premise is measurably false.**
+  "Scale `counterShare` by how dominant the dominant unit is" was ranked top of the
+  ROADMAP for one property: it would bite a mono army and leave the default spread
+  untouched *by construction*, so it could ship without re-tuning 24 regions. That
+  property does not exist. Read straight off the enemy's own `learnedPlayerComp`:
+
+  ```
+  share of the player's army that is MILITIA, as the enemy sees it
+                 t=1m   t=2m   t=5m
+  default        80%    95%    95%
+  mono militia   99%    99%    99%
+  ```
+
+  **Both loadouts are the same army by minute two.** The 46% in the old write-up
+  describes the LANDING FORCE, which the enemy never sees as such: the player captures
+  yards and trains militia in them, so by the time the counter-pick has any data to act
+  on, the "spread" is 95% militia. A dominance-scaled share sees 95% against 99% and
+  cannot separate them. Built anyway, in its strongest defensible form (share scaling to
+  1.0 above 98% dominance, *and* releasing the spear backbone at that point, which breaks
+  a pinned invariant): gallowmoor 60→56 default / 96→92 mono, karrowmere 60→63 / 98→96,
+  ravensmarch 33→33 / 94→90. **Gaps +36/+38/+61 → +36/+33/+57** — noise, and the default
+  spread paid for it. Reverted.
+
+  **The corollary is the useful part, and it retires a whole CLASS rather than a knob:
+  no mechanic keyed on what the player FIELDS can address this**, because the two armies
+  it would have to tell apart are identical from two minutes in. The gap is created
+  entirely in the opening, by the landing force — which is the same conclusion "the
+  mechanism is tempo" reached, arriving from a third direction.
+
+  **Six fixes measured, five rejected: two militia nerfs, a slot-share cap, share-scaled
+  march speed, siege scarcity, and the concentration counter-pick.** The frontage shipped
+  — for `breachSeconds`, not for this. Anything proposed next should say which of those
+  six shapes it is not, and it should act on the LANDING FORCE, because that is the only
+  place the two armies differ. The one candidate that has never been tried and is not on
+  the list: **`UNIT_SLOTS.rams` is 5, and nothing re-priced it when the frontage made a
+  ram worth twelve times a body at a wall.** What a ram DOES was re-priced; what it COSTS
+  was not.
 - ~~**Ownership's second channel is half-built.**~~ **CLOSED, both halves.**
   `render/ownerDash.js` did the site STROKE (solid yours, dashed theirs, fine dotted
   for nobody's and for a fogged ghost). The other half was the territory FLOOD, which
