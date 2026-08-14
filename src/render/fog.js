@@ -84,6 +84,14 @@ export function perceivedInfluence(state, faction) {
 export function fxVisible(state, faction, ev, site) {
   if (ev.owner === faction || ev.attacker === faction
     || ev.from === faction || ev.to === faction) return true;
+  // A FIGHT ON OPEN GROUND NAMES NO SITE, and it is still a positional claim.
+  // Since battle/meleephase.js two hostile columns meeting on a bare tile push
+  // a `field-battle` carrying `hex` instead of a `siteId` — and the drain's
+  // "no site id, so not positional" shortcut let every one of those through,
+  // so a clash anywhere on the map made a noise the player could hear through
+  // fog. Same rule as a site: you hear your own men, and otherwise only what
+  // you can see.
+  if (ev.hex) return canSee(state, faction, ev.hex.q, ev.hex.r);
   if (!site) return false;
   return canSee(state, faction, site.hex[0], site.hex[1]);
 }

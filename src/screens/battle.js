@@ -74,6 +74,9 @@ export function createBattleScene(ctx) {
     const site = siteOf(getState(), siteId);
     return site && board ? board.sitePos(site, { x: 0, y: 0 }) : null;
   };
+  /** ...and a fight on open ground names a hex instead. Same job, one layer
+   *  lower — `hexPos` is what `sitePos` already defers to. */
+  const locateHex = (hex) => (board ? board.hexPos(hex.q, hex.r, { x: 0, y: 0 }) : null);
 
   return {
     id: 'battle',
@@ -200,16 +203,21 @@ export function createBattleScene(ctx) {
         // fired on ground the player cannot see, 385 of them gold "+N" floats
         // over the enemy's training grounds. See render/fog.js `fxVisible`.
         //
-        // An event that names no site is NOT a positional claim (a battle
-        // ending, a command refused) and passes through untouched — gating
-        // those on a hex they do not have would silence them all.
+        // An event that names no site AND NO HEX is not a positional claim (a
+        // battle ending, a command refused) and passes through untouched —
+        // gating those on a place they do not have would silence them all. A
+        // fight on open ground names a HEX, which is every bit as positional as
+        // a site id, and reading "no site id" as "not positional" let every
+        // clash on the map be heard through fog.
         //
         // The bus is deliberately outside the gate: it feeds game logic, not
         // the screen, and starving a coach beat or the results screen of the
         // fact that something happened is a different bug from drawing it.
         const at = ev.siteId != null ? siteOf(battle, ev.siteId) : null;
-        if (ev.siteId == null || fxVisible(battle, 'player', ev, at)) {
-          fxFromEvent(fx, ev, board.palette, board.hexSize, locate);
+        const placed = ev.siteId != null || ev.hex != null;
+        if (!placed || fxVisible(battle, 'player', ev, at)) {
+          const placedEv = ev.hex ? { ...ev, ...(locateHex(ev.hex) ?? {}) } : ev;
+          fxFromEvent(fx, placedEv, board.palette, board.hexSize, locate);
           sound?.onEvent(ev);
         }
         ctx.bus.emit(`battle:${ev.type}`, ev);

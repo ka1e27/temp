@@ -242,6 +242,14 @@ function attackFixture(attackComp) {
     boosters: [],
     rules: { victory: 'capture-castle', hardCapMs: 600000, aiTier: 1 },
   });
+  // THE ENEMY MUST NOT SORTIE, or this stops being a test about assaulting a
+  // wall. Once two hostile forces on one tile started fighting, the stronghold's
+  // own counter-attack met the probe in the open and the assault never happened
+  // — the run went quiet and the assertion read "no outrider escaped", which
+  // looks like `skirmish` breaking rather than the fixture measuring something
+  // else. The NEGATIVE CONTROL below would have gone on passing either way,
+  // which is exactly why it cannot be the only thing watching this.
+  s.ai.nextThinkTick = 1e9;
   s.commands.push({ t: 'SEND', from: 'home', to: 'wall', fraction: 1 });
   return s;
 }

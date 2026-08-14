@@ -118,6 +118,15 @@ that cycle would put `movement.js`'s `const resolve` in its own temporal dead zo
 trip take", which is pure geometry, and "where should it go instead", which has to know who
 owns what.
 
+**`battle/fightaid.js` is the same shape and exists for the same reason.** `arrivals.js`
+and `meleephase.js` both need `recordCasualties`, `skirmishHome`, `modOf` and `vetOf`, and
+`arrivals.js` imports `openSiteMelee` from `meleephase.js` — so leaving the helpers where
+they were made the pair a cycle. A third file both import is the house fix. Copying the
+four would have been two implementations of the lifetime record and of the raider escape.
+`melee.js` (the projection and its interpolation) is separate from `meleephase.js` (the
+tick phase) along the same line `movement.js`/`retreat.js` uses: arithmetic that knows
+nothing about the board, versus the pass that walks it.
+
 **`regions.rules.js` now also holds the two load-bearing rules of the region table**
 (a region's step must be the size of the player's step into it; the player's step
 includes the mechanics the harness actually plays). They moved out of the table's own
@@ -143,10 +152,17 @@ mechanically. This is what lets the whole simulation run headless with zero mock
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **11**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **12**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly. **Read the version off
 `contract.js`, not off this line**: it said 10 for a whole release after v11 shipped, which
 is the same staleness this file warns about at "Still open".
+
+**v12 is the v8 lesson a FOURTH time, and by now that is the pattern rather than the
+exception.** A field battle takes `MELEE.seconds` (see "A fight takes time" below), so a
+site carries a `melee` record and so does a squad — and no CONFIG field moved. A v11 blob
+resumed here is a board mid-assault whose fights are simply not happening: no melee record,
+so nothing steps toward an outcome, and both stacks stand there intact forever while every
+other phase runs normally.
 
 **v11 is three fog changes travelling together, and only one of them is a field.** Squad
 sight and a watchtower's counter-intelligence need no new state — both are answered fresh
@@ -490,6 +506,133 @@ gallowmoor 98% → 93%.** A real option rather than a dominant one, which is the
 a verb should have. (n=16 read +13 / +12 / −6 — same signs, and widowsgate's was
 half noise, which is the usual reason to re-take a number before writing it down.)
 
+### A fight takes time, a tile can be contested, and archers reach a hex
+
+Three requested changes, shipped together because they are one mechanic seen three
+ways: a force that meets a hostile force is no longer deleted on the tick they touch.
+`battle/melee.js` (the projection and its interpolation), `battle/meleephase.js` (the
+tick phase), `battle/fightaid.js` (the helpers both it and `arrivals.js` need).
+
+**`resolveField` IS UNCHANGED AND IS NOW READ AS THE PROJECTION**, and that one
+decision is what made the whole layer affordable. The sim interpolates both sides
+toward the outcome `resolveField` already computes, over `MELEE.seconds`, and
+re-projects when either side changes. Three properties fall out of it that a per-tick
+Lanchester exchange would not have had:
+
+- **The pre-commit preview is still a guarantee** (invariant 3). The preview shows the
+  projection and an uninterrupted fight lands exactly there — pinned in
+  `tests/melee.test.js` body for body, because a second implementation of "where does
+  this end" is the class of bug this project keeps finding.
+- **It is balance-neutral where nothing interrupts.** Same inputs, same outcome, later.
+- **The AI and the harness need no new model.** Both decide by asking `resolveField`
+  whether an attack wins, and that answer is still true.
+
+**A REINFORCEMENT CHANGES WHERE A FIGHT IS GOING, NOT HOW LONG IT LASTS**, and getting
+that wrong did not look like a bug — it looked like a slow campaign. The first cut
+restarted the clock on every arrival, so a steady trickle of columns held a melee open
+indefinitely: measured on gallowmoor, one assault ran **eighty ticks against a
+sixty-tick clock** and had still resolved nothing, and the harness read the region as
+`losses=0` with thirty-one timeouts *while ahead*. Nothing failed and no test could see
+it — the fight was progressing, it simply never arrived. `melee.js meleeTicksLeft`
+carries the remaining clock across a re-projection. Worth **+13 points on gallowmoor
+and 3.3× the harness's throughput** (a five-region n=48 sweep went 41 min → 12.4).
+
+**And a re-projection BANKS the casualties taken so far** before it throws its baseline
+away. The lifetime record is fed by differencing `comp0`/`garrison0` against the
+survivors, so re-baselining without paying out first loses every casualty from before
+the reinforcement — silently, and only on fights that were joined.
+
+**The staleness test is an ID SET, not a headcount.** Keyed on the opposing headcount,
+every tick of an ordinary fight looks like a new arrival, because casualties change it
+— so the melee re-projected every tick, reset its own clock, and neither side ever
+finished dying. Instrumented, that read as a `field-battle` event every six ticks
+forever.
+
+**ON A HEX, NEITHER SIDE OWNS THE GROUND**, so `openHexMelee` deliberately does not
+call `resolveField` at all: that function takes an attacker and a defender, and on a
+bare tile there is no such distinction to make. It is decided by power alone, no site
+multiplier and no bulwark, and the losing side's ratio is uniform, so each squad's
+endpoint is its own comp scaled. A marching squad that walks onto a contested tile is
+halted and joins in — that is the whole of "you cannot walk through an army", and the
+negative control that two FRIENDLY columns on a hex do *not* fight is what stops the
+rule being "any two squads", which would have armies killing their own reinforcements
+at every rally point.
+
+**ARCHERS ARE A SEPARATE COMP, NEVER PART OF THE STACK**, and that is load-bearing
+rather than a convenience. `resolveField` returns survivors by SCALING the comp it was
+handed, so archers folded into the fighting stack would take casualties as though they
+were in it — which is exactly what reach buys them out of. Kept apart, they raise the
+side's power and are never in the casualty pool. `reach: 1` — a tile back, per the
+brief — from a squad that is CAMPED and not itself engaged, so walking the bowmen into
+the line throws the reach away. `tests/melee.test.js` pins it with three negative
+controls, including that **exactly one unit has `reach`**.
+
+**YOU CAN BREAK OFF, and that half was simply refused.** Reinforcing a melee was the
+easy direction; the opposite one answered `nothing-to-retreat` on an assault you could
+watch losing, because a force in `site.melee` is in neither of the two places `cmdRetreat`
+knew about (a siege, a garrison). It is **not** a free look at the projection —
+`meleeStep` writes the survivors to `m.comp` every tick, so a commander who breaks off at
+the halfway mark leaves with what is left at the halfway mark, which is the same bargain
+the siege-abandon branch already strikes. No UI changed: `R` was already sending `RETREAT`
+at a site.
+
+**A FIGHT IS DRAWN WHEREVER IT HAPPENS, and both halves of that were missing.** At a
+site the attacking column is off `state.squads` for six seconds and lives in
+`site.melee` — so `battleView.js`, which drew only sieges, made an assault VANISH and
+reappear as besiegers, hiding exactly the opening the layer exists to create. It draws
+through the same `drawSiteStack` a siege does, at the same piece size, because "is this
+enough to hold?" is the question both states are asking. The panel says `FIELD BATTLE`,
+above the shield and the rally for the reason `UNDER SIEGE` is.
+
+**...and on open ground it was a FIFTH FOG LEAK, of the worst shape: inaudible-visible
+inverted.** A hex clash names no `siteId`, and the event drain in `screens/battle.js`
+read "no site id" as "not a positional claim, let it through" — so a fight anywhere on
+the map played its sound through fog while `fxFromEvent` drew nothing, having no
+position to draw at. The event carries `hex` now, `fxVisible` answers it with `canSee`,
+and `locateHex` places the burst. `tests/fogleaks.test.js` pins it with both controls —
+a lit tile plays, and your own column fighting in the dark still reaches you.
+
+**Contract v12, and it is the v8 lesson a FOURTH time: no CONFIG field moved.** A site
+carries `melee` and so does a squad, so a v11 blob resumed here is a board mid-assault
+whose fights are not happening — no melee record, nothing steps toward an outcome, and
+both stacks stand there intact forever.
+
+**⚠ THE CAMPAIGN IS OUT OF BAND AND THIS IS THE MEASUREMENT, not an estimate.** Shipped
+deliberately ahead of the re-tune, which is its own pass. n=48, after the clock fix:
+
+```
+region        win%  win-med  all-med  target   verdict     signature
+riverfen       96%    8.9m     8.9m    9.5m   TOO EASY   losses=0  timeout(ahead=2)
+kaldan         77%    9.0m     9.9m    8.5m   ok         losses=1  timeout(ahead=7)
+gallowmoor     23%   14.2m    17.0m    6.5m   TOO SLOW   losses=0  timeout(ahead=31)
+thanescar       2%    7.3m    20.0m    6.5m   TOO HARD   losses=4  timeout(ahead=24)
+ravensmarch     4%   15.2m    24.0m      7m   TOO HARD   losses=7  timeout(ahead=16)
+```
+
+**Read the SIGNATURE, not the win rate.** `losses=0` with thirty-one timeouts while
+*ahead* is not a bot being beaten, it is a bot running out of clock — the campaign has
+become too long rather than too hard, and `targetLengthMin` derives `hardCapMs`, so the
+promise and the cap are the same number.
+
+**`MELEE.seconds` IS A WEAK KNOB, and that is the finding that matters for the re-tune.**
+Tripling it costs almost nothing:
+
+```
+                gallowmoor        thanescar
+2 seconds       29% / 17.0m       10% / 20.0m
+6 seconds       23% / 17.0m        2% / 20.0m
+```
+
+Six points and eight, with the all-run median pinned at the hard cap either way. So the
+overrun is **not** per-fight duration — it is fight COUNT, because interception creates
+fights that did not previously exist. Do not reach for this constant first; it is
+priced at ~2 points a second and it is the one number a player can actually learn. Six
+is where a relief column one hex away is a real answer, which is the whole feature.
+
+*(An earlier 2-second probe read gallowmoor 25% and looked like the duration mattered.
+It was taken BEFORE the clock fix, so it was measuring the stuck-fight bug at a shorter
+clock. The pair above is matched.)*
+
 ### Two-stage capture
 
 Taking a site is a field battle (proportional attrition, largest-remainder
@@ -710,6 +853,10 @@ Two canvases. `#board-bg` repaints only when `signature(state)` changes (ownersh
 influence version); `#board-fx` every frame. Draw paths allocate nothing per frame, batch
 by colour, and never use `shadowBlur` (10–50× a plain fill). `battleView.js` owns the
 frame; `siteGlyphs`/`siteShapes`/`terrain`/`hexGeom`/`formation`/`routes` are its parts.
+`battleLabels.js` is every string the board draws — split off at the cap along the seam
+that matters, because the ONE `ctx.font` assignment per frame is a rule rather than a
+tidiness, and it took the zoom-keyed font cache with it (a cache whose only consumer
+lives in another file is a second writer waiting to happen).
 
 Army size is always drawn as **individual troop pieces**, never a size-scaled glyph —
 marching columns and dug-in siege crescents use the same per-piece length so the two are
@@ -1732,20 +1879,28 @@ than a constant `false`.
 An unknown `requires` value is treated as UNMET rather than ignored, so content asking
 for a gate `meta/upgrades.js` does not implement cannot go on sale by default.
 
-## Three specialists, each owning a verb
+## Four specialists, each owning a verb
 
 The roster was five units: a rock-paper-scissors of stats plus a siege engine. A sixth set
-of stats would only have moved which column of the same table you read, so the three added
-instead each own a **verb** — a hook in the simulation, not a bigger number on an existing
-one.
+of stats would only have moved which column of the same table you read, so each one added
+since owns a **verb** instead — a hook in the simulation, not a bigger number on an
+existing one. Three shipped together; the archer came later, with the melee layer that
+gave it something to shoot at.
 
 | Unit | Slots | Verb | Why it matters |
 |---|---|---|---|
 | **Outriders** | 2 | `skirmish`, speed 165 | 3× a militia's march, over legs that are 0.9–1.7s to begin with — see the speed note below before pricing this as the opening |
 | **Halberds** | 4 | `sunder` 0.50 | Halves the defender's `siteDefMult` — the one term no amount of militia answers (a castle defends at ×1.60 before walls) |
 | **Sappers** | 3 | `repair` 1.9 | `breachSeconds()` returns `Infinity` the moment repair out-paces siege damage, so a wall they garrison is *arithmetically* uncrackable without engines |
+| **Archers** | 3 | `reach` 1 | Adds attack to a fight **one hex away** and takes none of the casualties — the only unit whose value depends on where it is STANDING rather than what it is doing |
 
-All three are share-scaled like `counters`: a token escort strips nothing, so committing to
+**The archer is the fourth, and it needed the melee layer to exist at all.** A fight used
+to be one tick long, so "shoot into the fight next door" had no fight to shoot into — the
+same reason the watchtower waited for fog. Its whole cost is positional: parked a tile back
+it is free damage, walked into the line it is an expensive militia. See "A fight takes
+time" above for why the support comp is kept out of the casualty pool.
+
+All are share-scaled like `counters`: a token escort strips nothing, so committing to
 the answer is what buys the answer.
 
 **Speed is a much weaker stat than the roster implies, and this was measured.**
@@ -1851,7 +2006,7 @@ inertness test would otherwise pass just as happily if every filter were dead co
 
 ## You bring five troop types, and only five
 
-`LOADOUT_TYPES_MAX` in `content/balance.js` is **5**. The roster reached eight and the
+`LOADOUT_TYPES_MAX` in `content/balance.js` is **5**. The roster reached nine and the
 loadout screen became a spreadsheet: with everything available at once the interesting
 question — *which answers am I bringing to this map* — collapses into "a bit of
 everything", which is both the dullest army and, because the specialists are share-scaled
@@ -2227,7 +2382,7 @@ frame while a build was armed, under a header asserting the scan allocates nothi
 not happening.
 
 **What did NOT turn up is worth recording too.** The site-kind and unit-colour tables are
-complete for all six kinds and all eight units (the doubled-colour-table gotcha has not
+complete for all six kinds and all nine units (the doubled-colour-table gotcha has not
 regressed). `enemyMult` and total sites are non-decreasing across all 24 rows and
 `castleGateFrac` never exceeds 0.60. No `h(tag, props, …)` misuse in ~200 call sites. No
 `shadowBlur`. `markBgDirty` is still throttled to 8/s. Every DOM screen still opts back into
@@ -2235,6 +2390,24 @@ pointer events. `checkpure`'s banned-global list matches this file's, and both C
 gate the deploy.
 
 ### Still open, and why
+
+- **THE CAMPAIGN RE-TUNE (third pass), against the melee layer. TOP OF THE LIST.**
+  The melee layer shipped with the campaign knowingly out of band — the scope call was
+  mechanics and tests now, tuning as its own pass — and the measurement is written up in
+  full at "A fight takes time" above. The short version, n=48: riverfen 96% TOO EASY,
+  kaldan 77% ok, gallowmoor 23% TOO SLOW, thanescar 2%, ravensmarch 4%.
+
+  **Start from the signature, not the win rate.** `losses=0` with thirty-one timeouts
+  while AHEAD is a bot running out of clock, not one being beaten — so the first lever
+  is `targetLengthMin` (which derives `hardCapMs`, so the promise and the cap are the
+  same number), not `enemyMult`. Two things are already measured and should not be
+  re-spent: `MELEE.seconds` is worth ~2 points a second (2s versus 6s is six points on
+  gallowmoor and eight on thanescar, with the all-run median pinned at the cap either
+  way), and the clock-reset bug that was masquerading as balance cost is fixed.
+
+  The honest open question is fight COUNT: interception creates fights that did not
+  exist before, and that — not per-fight duration — is where the length went. Nobody has
+  measured how many, which is the first thing to instrument.
 
 - ~~**THE CAMPAIGN RE-TUNE (second pass), against the finished battle layer.**~~
   **Closed.** It reopened when the battle redesign changed the ground under every

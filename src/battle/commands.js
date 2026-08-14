@@ -202,6 +202,30 @@ function cmdRetreat(state, cmd, by) {
   const site = siteById(state, cmd.site ?? cmd.from);
   if (!site) return 'unknown-site';
 
+  // PULLING OUT OF A FIGHT IS THE OTHER HALF OF GIVING IT A MIDDLE. Reinforcing
+  // a melee already works (a late column re-projects where it is going); without
+  // this branch the opposite order was simply refused — `nothing-to-retreat` on
+  // an assault you can watch losing — because a force in `site.melee` is in
+  // neither of the two places this verb knew about.
+  //
+  // It is NOT a free look at the projection. `meleeStep` writes the survivors
+  // to `m.comp` every tick, so a commander who breaks off at the halfway point
+  // leaves with what is left at the halfway point, not with the force they
+  // committed. Same bargain the siege branch already strikes.
+  if (site.melee && site.melee.owner === by && total(site.melee.comp) > 0) {
+    const target = retreatTarget(state, site, by);
+    if (!target) return 'nowhere-to-retreat';
+    const comp = site.melee.comp;
+    site.melee = null;
+    const squad = spawnSquad(state, {
+      owner: by, from: site.id, to: target.id, comp, retreating: true,
+    });
+    pushEvent(state, EVENTS.SIEGE_ABANDONED, {
+      siteId: site.id, owner: by, to: target.id, squadId: squad.id,
+    });
+    return null;
+  }
+
   if (site.siege && site.siege.owner === by && total(site.siege.comp) > 0) {
     const target = retreatTarget(state, site, by);
     if (!target) return 'nowhere-to-retreat';

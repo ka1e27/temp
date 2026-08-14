@@ -23,6 +23,7 @@ import {
 import { rallyPhase } from './rally.js';
 import { arrivalsPhase } from './arrivals.js';
 import { towersPhase } from './towers.js';
+import { meleePhase } from './meleephase.js';
 import { recomputeInfluence, territoryScore } from './influence.js';
 import { recomputeOccupancy } from './occupancy.js';
 import { recomputeVision, recordSquadSightings } from './vision.js';
@@ -347,6 +348,12 @@ export function step(state) {
   siegePhase(state);
   rallyPhase(state);
   arrivalsPhase(state);
+  // AFTER arrivals, because that is what OPENS a melee: a column that landed
+  // this tick has to be in the fight before the fight is stepped, or every
+  // engagement in the game would start one tick late. And before towers, for
+  // the reason the note below already gives — a force resolving an assault is
+  // not also shot at for standing on the doorstep.
+  meleePhase(state);
   // AFTER arrivals, so a column that reached its target this tick is resolved
   // as a fight rather than shot at while standing on the doorstep — being
   // taxed for passing and being taxed for arriving would double-charge the one

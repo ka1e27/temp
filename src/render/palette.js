@@ -34,6 +34,7 @@ const UNIT_VARS = {
   raiders: '--c-raiders',
   halberds: '--c-halberds',
   sappers: '--c-sappers',
+  archers: '--c-archers',
   rams: '--c-rams',
   marshal: '--c-marshal',
 };
@@ -56,6 +57,7 @@ export const FALLBACK = Object.freeze({
   militia: '#e8e8ec', spearmen: '#5bd6a6', raiders: '#ffc857',
   rams: '#b07cff', marshal: '#ff8a3d',
   outriders: '#7fd8ff', halberds: '#ff6fa5', sappers: '#c9a227',
+  archers: '#8be08b',
   floodAlpha: 0.2, floodStrongAlpha: 0.42, gridAlpha: 0.5, blockedAlpha: 0.9,
   riverAlpha: 0.5,
 });

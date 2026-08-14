@@ -144,6 +144,33 @@ test('fx: an event that names no site is not a positional claim', () => {
     'fxVisible invented a location for an event that has none');
 });
 
+test('fx: a fight on OPEN GROUND names a hex, and a hex is just as positional', () => {
+  // The leak the melee layer opened. Two hostile columns meeting on a bare tile
+  // push a `field-battle` carrying `hex` and no `siteId` — and the drain's
+  // shortcut was "no site id, so not a positional claim, let it through", so a
+  // clash anywhere on the map was AUDIBLE through fog while drawing nothing.
+  // Invisible and audible is the worst pair of the four.
+  const b = battleFor();
+  const dark = unseenEnemy(b);
+  assert.ok(dark, 'no unseen ground — this proves nothing');
+  const hex = { q: dark.hex[0], r: dark.hex[1] };
+
+  assert.equal(fxVisible(b, 'player', { type: 'field-battle', siteId: null, hex, attacker: 'enemy' }, null),
+    false, 'a clash on ground the player cannot see was reported to them');
+
+  // CONTROL 1 — the same tile, lit, plays. Without it this passes against a
+  // gate that refuses every hex event, which is a mute button rather than fog.
+  const key = `${hex.q},${hex.r}`;
+  const lit = { ...b, vision: { ...b.vision, player: { ...b.vision.player, [key]: 1 } } };
+  assert.equal(fxVisible(lit, 'player', { type: 'field-battle', siteId: null, hex, attacker: 'enemy' }, null),
+    true, 'a clash in plain sight went silent');
+
+  // CONTROL 2 — your OWN column fighting in the dark still reaches you, for the
+  // same reason your own farm falling does. The actor check runs first.
+  assert.equal(fxVisible(b, 'player', { type: 'field-battle', siteId: null, hex, attacker: 'player' }, null),
+    true, 'the player\'s own column was intercepted and they were never told');
+});
+
 // ---------------------------------------------------------------------------
 // 2. A rally line has two ends
 // ---------------------------------------------------------------------------

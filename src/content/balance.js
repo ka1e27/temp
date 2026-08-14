@@ -3,7 +3,8 @@
 // PURE DATA.
 
 export const UNIT_IDS = [
-  'militia', 'spearmen', 'outriders', 'raiders', 'halberds', 'sappers', 'rams', 'marshal',
+  'militia', 'spearmen', 'outriders', 'raiders', 'halberds', 'sappers', 'archers',
+  'rams', 'marshal',
 ];
 
 /**
@@ -71,6 +72,23 @@ export const UNITS = {
   sappers:  { gold: 55,  trainSec: 16, batch: 1, speed: 40,  atk: 3,  def: 7,  siege: 2.5,
               counters: {}, repair: 1.9,
               ground: { highland: 1.15, river: 0.95 } },
+  // ARCHERS OWN `reach`, the fourth verb, and it is the first one that is about
+  // WHERE a unit stands rather than what it does when it gets there. A camped
+  // squad within `reach` hexes of a melee adds its archers' attack to that fight
+  // without joining it — so bowmen kept a tile behind the line shoot for free,
+  // and bowmen marched into the line are just a soft unit. See
+  // battle/meleephase.js `reachSupport` for why they are a separate comp rather
+  // than part of the stack: `resolveField` returns survivors by scaling the comp
+  // it was handed, so archers folded in would take the casualties reach exists
+  // to buy them out of.
+  //
+  // Soft on purpose (def 4, below everything but a ram) — the counterplay is to
+  // reach them, and a unit that shoots from cover AND holds a line would have no
+  // answer. High `atk` for the same reason: what they are is damage you have to
+  // go and silence.
+  archers:  { gold: 40,  trainSec: 12, batch: 1, speed: 50,  atk: 11, def: 4,  siege: 0.5,
+              counters: {}, reach: 1,
+              ground: { highland: 1.15, river: 0.85 } },
 };
 
 /**
@@ -94,41 +112,6 @@ export const UNITS = {
  * interpolated toward 1.0 on merely hilly ground; a river is binary.
  */
 
-/**
- * What one of each unit costs against the EXPEDITION budget.
- *
- * Without this every unit costs one seat and the optimal loadout is trivially
- * "as many marshals/raiders as the roster allows" — no decision at all.
- *
- * The anchor is the gold price above, because gold is already this game's own
- * statement of what a unit is worth (every unit runs at 3.0-4.5 gold/sec, so a
- * gold ratio IS a value ratio). Raw ratios are 1 / 2 / 3.75 / 6.67 / 15, which
- * prices a marshal above a whole starting expedition — unbuyable, not a choice.
- * So the curve is compressed by roughly gold^0.83, giving gold-per-slot of
- * 12 / 12 / 15 / 22.5: militia and spearmen priced exactly at their gold value,
- * and the unlockables carrying a discount so a specialist is affordable.
- *
- * Anchored on militia = 1 on purpose: a leftover slot always buys exactly one
- * militia, so a budget is spendable to the last slot and an increase always has
- * somewhere to go.
- *
- * RAMS ARE THE ONE ROW THE ANCHOR CANNOT PRICE, and 5 -> 3 is why. It assumes
- * gold ratio IS value ratio, which holds only while a unit's contribution is
- * LINEAR in how many you bring — and since `SIEGE_FRONTAGE` exactly one unit's
- * is not: an ordinary body's structure damage saturates at forty at a wall, an
- * engine's never does. A linear anchor therefore overprices the one non-linear
- * unit, and worse the bigger the budget — precisely where the loadout screen is
- * supposed to have a decision in it.
- *
- * 3 is the table's only break of the gold order (more gold than halberds, fewer
- * slots); tests/loadout.test.js exempts engines and asserts there is exactly
- * one. It is a THRESHOLD, not a slope: 4 is inert (the five-region loadout table
- * read 75/60/46/27/31 against 75/60/46/33/29 at 5), 3 bites, because what
- * matters is whether the extra line troops carry an assault over ATTACK_MARGIN.
- */
-export const UNIT_SLOTS = {
-  militia: 1, spearmen: 2, outriders: 2, raiders: 3, halberds: 4, sappers: 3, rams: 3, marshal: 8,
-};
 
 /** Structure HP + regen is the master pacing knob: it sets BOTH battle length
  *  and the minimum-force threshold. A force whose siege DPS is below `hpRegen`
@@ -367,7 +350,7 @@ export const RALLY_MIN_GARRISON = 8;
 /**
  * How many DIFFERENT troop types one expedition may field.
  *
- * The roster reached eight and the loadout screen became a spreadsheet: with
+ * The roster reached nine and the loadout screen became a spreadsheet: with
  * every unit available at once the interesting question ("which three answers am
  * I bringing to this map") collapses into "a bit of everything", which is both
  * the dullest army and — because the specialists are share-scaled like
@@ -395,5 +378,6 @@ export const CENTIGOLD = 100;
 // file stays under the 400-line cap. Shape there, power here.
 // --------------------------------------------------------------------------
 export {
-  MOVEMENT, SQUAD_VISION_RADIUS, SIEGE_FRONTAGE, INFLUENCE, MAPGEN, RIVERS, TERRAIN,
+  MOVEMENT, SQUAD_VISION_RADIUS, SIEGE_FRONTAGE, MELEE, UNIT_SLOTS,
+  INFLUENCE, MAPGEN, RIVERS, TERRAIN,
 } from './balance.engine.js';

@@ -226,11 +226,27 @@ test('tactics: a specialist named in the loadout is really landed', () => {
   // never the ones peeled off to ride out alone), so only the rider case was
   // ever this timing-sensitive. 80 keeps comfortable margin over the measured
   // arrival without turning the test into a full battle.
+  // ...AND A GARRISON IS NO LONGER THE ONLY PLACE A LANDED TROOP CAN BE.
+  // Since battle/meleephase.js a column that reaches a hostile site comes off
+  // `state.squads` and lives in `site.melee.comp` for `MELEE.seconds` before the
+  // siege begins — so counting garrisons alone reported ZERO outriders for a
+  // detachment that had landed, ridden out, arrived and was at that moment
+  // fighting. What this test is about is whether the loadout reached the battle
+  // at all, so it counts every place on the player's side a body can be.
+  const onTheBoard = (battle, unit) => {
+    const inComp = (c) => (c ? (c[unit] || 0) : 0);
+    let n = 0;
+    for (const s of battle.sites) {
+      if (s.owner === 'player') n += inComp(s.garrison);
+      if (s.melee?.owner === 'player') n += inComp(s.melee.comp);
+      if (s.siege?.owner === 'player') n += inComp(s.siege.comp);
+    }
+    for (const sq of battle.squads) if (sq.owner === 'player') n += inComp(sq.comp);
+    return n;
+  };
   for (const unit of ['outriders', 'halberds', 'sappers']) {
     const { battle } = observe('gallowmoor', withSpecialists({ [unit]: 0.3 }), 1000, 80);
-    const landed = battle.sites
-      .filter((s) => s.owner === 'player')
-      .reduce((a, s) => a + (s.garrison[unit] || 0), 0);
+    const landed = onTheBoard(battle, unit);
     assert.ok(landed > 0,
       `--weights named ${unit} and none was landed: the loadout was silently discarded,`
       + ' so the run would report the default army under a specialist name');

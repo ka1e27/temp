@@ -7,71 +7,16 @@
 // the same-tick MERGE that makes synchronised strikes worth coordinating.
 // PURE.
 import { UNIT_IDS, UNITS } from '../content/balance.js';
-import {
-  resolveField, siegeDps, emptyComp, addComp, total,
-} from './combat.js';
+import { resolveField, siegeDps, emptyComp, addComp, total } from './combat.js';
 import { siteById, castleSealed } from './state.js';
 import { groundOf, siteDefMultOf, garrisonMultOf } from './terrain.js';
-import { spawnSquad } from './movement.js';
-import { retreatTarget } from './retreat.js';
 import { pushEvent, EVENTS } from './events.js';
 import { recordFailedAssault } from './vision.js';
-
-const modOf = (state, faction, key, fallback = 1) => state.mods[faction]?.[key] ?? fallback;
-/** Per-troop levels (contract v7). Sparse, and absent in every battle the
- *  balance table was measured with. */
-const vetOf = (state, faction) => state.mods[faction]?.unitMult;
-
-/** Both sides' ledgers, from one comparison. Lives here rather than in sim.js
- *  because arrivals is the only phase that kills anybody in a field battle. */
-function recordCasualties(state, loser, killer, before, after) {
-  const lost = total(before) - total(after);
-  if (lost <= 0) return;
-  if (state.factions[loser]) state.factions[loser].unitsLost += lost;
-  if (state.factions[killer]) state.factions[killer].unitsKilled += lost;
-}
+import { modOf, vetOf, recordCasualties, skirmishHome } from './fightaid.js';
+import { openSiteMelee } from './meleephase.js';
 
 // --- phase 7: arrivals ------------------------------------------------------
 
-/**
- * A failed attack sends part of each SKIRMISHING contingent home — why a bad
- * probe costs a fraction, not the squad.
- *
- * Driven off every unit's `skirmish` field, not off `comp.raiders` as it was.
- * The VALUE was already read from the spec, so the hardcoded UNIT was invisible
- * and a second skirmisher would have escaped nothing. tests/units.test.js pins
- * it with a negative control.
- */
-export function skirmishHome(state, site, group) {
-  for (const sq of group.squads) {
-    const escaped = {};
-    let back = 0;
-    for (const u of UNIT_IDS) {
-      const frac = UNITS[u].skirmish;
-      if (!frac) continue;
-      const n = Math.floor((sq.comp[u] || 0) * frac);
-      if (n > 0) { escaped[u] = n; back += n; }
-    }
-    if (back <= 0) continue;
-    const home = siteById(state, sq.from);
-    const target = home && home.owner === group.owner
-      ? home : retreatTarget(state, site, group.owner);
-    if (!target) continue;
-    const comp = { ...emptyComp(), ...escaped };
-    spawnSquad(state, {
-      owner: group.owner, from: site.id, to: target.id, comp, retreating: true,
-    });
-    state.factions[group.owner].unitsLost -= back;   // they got away after all
-    const foe = group.owner === 'player' ? 'enemy' : 'player';
-    if (state.factions[foe]) state.factions[foe].unitsKilled -= back;
-    pushEvent(state, EVENTS.SKIRMISH_ESCAPE, {
-      // `raiders` is kept as the headline count so existing consumers (the HUD
-      // toast, tests) keep reading a number rather than becoming undefined; it
-      // now means "bodies that got away", which is what it always displayed.
-      siteId: site.id, owner: group.owner, raiders: back, escaped, to: target.id,
-    });
-  }
-}
 
 /** Field battle against whoever is holding the ground, not against the walls. */
 export function fightStack(state, group, site, holders, holderFaction) {
@@ -134,51 +79,18 @@ export function resolveArrival(state, group) {
     return;
   }
 
-  // READ BEFORE resolveField MUTATES ANYTHING — "the garrison that was there"
-  // is this number, not whatever survives the fight. See the loss branch below.
-  const defendersBefore = total(site.garrison);
-  const r = resolveField(group.comp, site.garrison, {
-    // siteDefMultOf, not SITES[kind].defMult: the mountains around a fort are
-    // part of how hard it is to take, and sim/preview/AI/harness all read the
-    // same function rather than each drifting their own way.
-    siteDefMult: siteDefMultOf(state, site),
-    garrisonMult: garrisonMultOf(state, site),
-    defenderOwnsSite: true,
-    attMult: modOf(state, owner, 'unitAtkMult'),
-    defMult: modOf(state, site.owner, 'unitDefMult'),
-    attUnitMult: vetOf(state, owner), defUnitMult: vetOf(state, site.owner),
-    shielded: site.shieldTicks > 0,
-    ground: groundOf(state, site),
-  });
-  recordCasualties(state, owner, site.owner, group.comp, r.attSurvivors);
-  recordCasualties(state, site.owner, owner, site.garrison, r.defSurvivors);
-  pushEvent(state, EVENTS.FIELD_BATTLE, {
-    siteId: site.id, attacker: owner, win: r.win,
-    attPower: r.attPower, defPower: r.defPower,
-  });
-
-  if (r.win) {
-    // Beating the garrison does NOT capture: the siege begins.
-    site.garrison = emptyComp();
-    site.siege = { owner, comp: r.attSurvivors };
-    // `owner` is the BESIEGER; `defender` is whose ground is being taken, and
-    // the HUD needs both. Without the second one an enemy siege of a NEUTRAL
-    // farm is indistinguishable from an assault on the player, and the alert
-    // strip duly cried "UNDER SIEGE" within seconds of every battle opening —
-    // while the tutorial was still telling a new player where to drag.
-    pushEvent(state, EVENTS.SIEGE_BEGUN, {
-      siteId: site.id, kind: site.kind, owner, defender: site.owner, hp: site.hp,
-    });
-  } else {
-    // A FAILED ASSAULT LEAVES A MEMORY — the one deliberate, narrow exception
-    // to "a ghost carries nothing that changes" (battle/vision.js
-    // `recordFailedAssault`). `owner` is the ATTACKER, and it lost, so this is
-    // the size of the force that just beat it — witnessed firsthand, not a
-    // sightline snapshot going stale.
-    recordFailedAssault(state, owner, site.id, defendersBefore);
-    site.garrison = r.defSurvivors;
-    skirmishHome(state, site, group);
-  }
+  // THE FIGHT NO LONGER RESOLVES HERE. It used to be one `resolveField` call
+  // and one side was gone before the next tick; now it OPENS a melee that grinds
+  // for `MELEE.seconds` (battle/meleephase.js), which is what gives relief a
+  // chance to arrive and a losing attacker a chance to be pulled out. The
+  // projection is the same `resolveField` result, so what the pre-commit preview
+  // promised is still exactly where an uninterrupted fight lands.
+  //
+  // `defendersBefore` moved into the melee record as `before`, and for the same
+  // reason it was read here first: "the garrison that was there" is what the
+  // attacker met, not whatever survives — and it now has to survive several
+  // ticks and any number of re-projections to still be that number.
+  openSiteMelee(state, site, owner, group.comp, group.squads?.[0]?.from ?? null);
 }
 
 export function arrivalsPhase(state) {

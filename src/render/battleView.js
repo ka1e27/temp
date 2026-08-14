@@ -10,7 +10,6 @@
 // dash patterns are mutated in place, draws are batched by colour, `ctx.font`
 // is assigned exactly once per frame, and there is no `shadowBlur` anywhere
 // (it costs 10-50x a plain fill).
-import { UNIT_IDS } from '../content/balance.js';
 import { createSurface, createCamera, pointerPos } from './canvas.js';
 import { createBgCache } from './bgcache.js';
 import { palette as loadPalette } from './palette.js';
@@ -20,30 +19,27 @@ import {
 } from './hexRenderer.js';
 import {
   siteRadius, drawSiteBase, drawHpRing, drawSiegeRing, drawSiteState,
-  drawGarrisonPlaque, drawSelection, drawHover, garrisonLabelY, builtLevel,
+  drawGarrisonPlaque, drawSelection, drawHover, builtLevel,
 } from './siteGlyphs.js';
 import { siteHeadYAt } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
 import { drawBuildTargets } from './buildTargets.js';
 import {
-  drawSquads, drawSquadLabels, drawDragArc, drawBox, drawSquadRoutes,
+  drawSquads, drawDragArc, drawBox, drawSquadRoutes,
 } from './routes.js';
 import { drawRallies, drawRallyDrag } from './rallyLines.js';
 import { drawStaticFormation } from './formation.js';
-import { numStr } from '../ui/format.js';
 // FOG OF WAR. `perceivedSite`/`perceivedSquads` are the one resolver every
 // surface is meant to call (battle/vision.js); `fog.js` is the renderer's own
 // half — the drawn flood and the veil, neither of which is "hide one object".
 import { perceivedSite, perceivedSquads, siteKnown } from '../battle/vision.js';
 import {
-  perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA, drawAssaultWash, drawStaleGarrisons,
+  perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA, drawAssaultWash,
 } from './fog.js';
 import { capOf, signature } from './battleViewSig.js';
+import { createLabelPass } from './battleLabels.js';
 
 const HEX_SIZE = 34;   // world units; the camera does all the zooming
-const LABEL_PX = 14;   // constant on-screen size at any zoom
-const OWNERS3 = ['player', 'enemy', 'neutral'];
-const OWNERS2 = ['player', 'enemy'];
 
 const _a = { x: 0, y: 0 };
 const _bounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
@@ -69,7 +65,6 @@ export function createBattleView(opts) {
   let lastSig = NaN;
   let owners = new Uint8Array(0); let veil = new Uint8Array(0); // per-hex, grown in place
   let blockedSig = null; let spin = 0; let state0 = null;
-  let fontZoom = -1; let fontStr = ''; // always read/written together in drawLabels
 
   const onResize = (w, hgt) => { camera.setViewport(w, hgt); bgCache.markDirty(true); };
   let firstFit = true;
@@ -94,6 +89,9 @@ export function createBattleView(opts) {
   const hexPos = (q, r, o) => { o.x = hexCx(q, r, hexSize); o.y = hexCy(q, r, hexSize); return o; };
   const sitePos = (s2, out) => hexPos(s2.hex[0], s2.hex[1], out);
   const geo = { palette: p, hexSize, pos: sitePos, hexPos, byId };
+  const drawLabels = createLabelPass({
+    camera, palette: p, viewFaction, sitePos, hexSize, geo, scratch: _a,
+  });
 
   // PERCEIVED, not raw — every consumer below (hover/selection halos, the drag
   // and rally previews, a squad's endpoints) gets whatever this faction
@@ -314,12 +312,18 @@ export function createBattleView(opts) {
       drawHpRing(ctx, s, _a.x, _a.y, r, p, px);
       drawSiegeRing(ctx, s, _a.x, _a.y, r, p, px, spin);
       drawGarrisonPlaque(ctx, s.garrison, capOf(s), _a.x, _a.y, r, p, px, hexSize);
-      if (s.siege) drawSiegeStack(ctx, s, _a.x, _a.y, r, px);
+      // A MELEE DRAWS EXACTLY LIKE A SIEGE, and it has to: for `MELEE.seconds`
+      // the attacking column is off `state.squads` and lives in `site.melee`,
+      // so drawing only sieges makes an assault VANISH for six seconds and
+      // reappear as besiegers — the one opening the whole layer exists to give
+      // the player something to do in.
+      if (s.siege) drawSiteStack(ctx, s, s.siege.comp, s.siege.owner, _a.x, _a.y, r, px);
+      else if (s.melee) drawSiteStack(ctx, s, s.melee.comp, s.melee.owner, _a.x, _a.y, r, px);
     }
 
     drawSquads(ctx, visSquads, t, px, geo);
     opts.fxLayer?.draw(ctx, p, px);
-    drawLabels(ctx, state, visSquads, t, px);
+    drawLabels(ctx, state, visSquads, t, px, opts.fxLayer);
   }
 
   function drawHighlights(ctx, state, view, px, pulse) {
@@ -339,61 +343,25 @@ export function createBattleView(opts) {
     }
   }
 
-  /** A besieging stack sits ON the site it is grinding down, offset upward so it
-   *  never hides the garrison plaque beneath. Drawn as troops at the SAME piece
-   *  size drawSquads uses, because a siege is exactly when the player asks "is
-   *  this enough to hold?" against the relieving columns walking toward it, and
-   *  that comparison only works if a besieging soldier is the same size as a
-   *  marching one. `angle` faces the wall (+PI/2, down the screen), which puts
-   *  the militia screen against the structure. */
-  function drawSiegeStack(ctx, site, cx, cy, r, px) {
-    // Hung off the built roofline rather than a fixed 1.25r, because a level-3
-    // tower now grows up into where the besiegers used to sit. At L1 this is
-    // 1.22r, so an un-upgraded site is unchanged.
+  /** A stack that is AT a site rather than marching to one — besieging it, or
+   *  fighting its garrison outside the walls. It sits ON the site, offset upward
+   *  so it never hides the garrison plaque, at the SAME piece size drawSquads
+   *  uses: this is exactly when the player asks "is this enough to hold?"
+   *  against the relieving columns walking toward it, and that comparison only
+   *  works if a besieging soldier is the same size as a marching one. `angle`
+   *  faces the wall (+PI/2, down the screen). The offset is hung off the built
+   *  roofline rather than a fixed 1.25r, because a level-3 tower grows up into
+   *  where the besiegers used to sit; at L1 it is 1.22r, so an un-upgraded site
+   *  is unchanged. */
+  function drawSiteStack(ctx, site, comp, owner, cx, cy, r, px) {
     const head = siteHeadYAt(site.kind, builtLevel(site)) + 0.3;
-    drawStaticFormation(ctx, site.siege.comp, cx, cy - r * head - px * 20,
-      Math.PI / 2, Math.max(hexSize * 0.1, px * 2.2), site.siege.owner, px, p);
-  }
-
-  /** ONE text pass, ONE `ctx.font` assignment, batched by colour; the font string
-   *  is cached against zoom, and `squads` is the PERCEIVED list drawFrame built. */
-  function drawLabels(ctx, state, squads, t, px) {
-    if (camera.zoom !== fontZoom) {
-      fontZoom = camera.zoom;
-      fontStr = `700 ${(LABEL_PX * px).toFixed(2)}px ui-monospace, Menlo, monospace`;
-    }
-    ctx.font = fontStr;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    for (let o = 0; o < OWNERS3.length; o++) {
-      const owner = OWNERS3[o];
-      ctx.fillStyle = p.owner[owner];
-      for (let i = 0; i < state.sites.length; i++) {
-        // RAW OWNER FIRST, so a site resolves at most once per FRAME rather than
-        // once per OWNER: `perceivedSite` mints a ghost on a miss, for an answer
-        // that never depended on the owner. Identical set drawn — only a ghost's
-        // owner can differ from the true one, and a ghost carries no digits.
-        if (state.sites[i].owner !== owner) continue;
-        const s = perceivedSite(state, viewFaction, state.sites[i]);
-        if (s.ghost) continue;
-        let n = 0;
-        for (let k = 0; k < UNIT_IDS.length; k++) n += s.garrison[UNIT_IDS[k]] || 0;
-        sitePos(s, _a);
-        ctx.fillText(numStr(n), _a.x, _a.y + garrisonLabelY(s.kind, hexSize, px));
-      }
-    }
-    drawStaleGarrisons(ctx, state, viewFaction, sitePos, hexSize, px, p, _a);
-    ctx.textBaseline = 'middle';
-    for (let o = 0; o < OWNERS2.length; o++) {
-      ctx.fillStyle = p.owner[OWNERS2[o]];
-      drawSquadLabels(ctx, squads, t, px, geo, OWNERS2[o]);
-    }
-    // Floating numbers share this pass, so the font is still set exactly once.
-    opts.fxLayer?.drawText(ctx, p, px);
+    drawStaticFormation(ctx, comp, cx, cy - r * head - px * 20,
+      Math.PI / 2, Math.max(hexSize * 0.1, px * 2.2), owner, px, p);
   }
 
   return api;
 }
 
-// capOf/signature moved to ./battleViewSig.js at the 400-line cap — see the
-// import above; neither was exported from here, so nothing else changes.
+// capOf/signature moved to ./battleViewSig.js and the whole text pass to
+// ./battleLabels.js, both at the 400-line cap — see the imports above. Nothing
+// here was ever exported, so no consumer changes.

@@ -177,6 +177,8 @@ export const UPGRADES = Object.freeze([
 'Halves the defender’s site bonus. The answer to a castle militia bounce off.'),
   U('unlockSappers', 'unlocks', 'Sappers', 1, 1800, 1, [unlock('unit', 'sappers')],
 'Nearly doubles a site’s repair. A siege without engines never breaches it.'),
+  U('unlockArchers', 'unlocks', 'Archers', 1, 900, 1, [unlock('unit', 'archers')],
+'Adds their attack to a fight one tile away, and take none of its casualties.'),
   U('tactician', 'unlocks', 'Tactician', 1, 450, 1, [unlock('feature', 'doubleSpeed')],
     'Battle speeds past 2x. Slower speeds are free, and income never changes.'),
 
@@ -250,6 +252,8 @@ export const UPGRADES = Object.freeze([
     '+6% attack and defence for halberds. Sunder is a share, not a stat.'),
   R('vetSappers', 'sappers', 'Sapper Veterans', 6, 1.70,
     '+6% attack and defence for sappers. Their repair is untouched.'),
+  R('vetArchers', 'archers', 'Archer Veterans', 6, 1.70,
+    '+6% attack and defence for archers. Their reach is untouched.'),
   R('vetRams', 'rams', 'Ram Crews', 6, 1.70,
     '+6% attack and defence for rams. Siege damage rides Siegeworks, not this.'),
 ]);
@@ -277,6 +281,7 @@ export const RETIRED_UPGRADES = Object.freeze({
   forcedMarch: { base: 220, rate: 2.0 },
   biggerCamp: { base: 160, rate: 1.9 },
   sappers: { base: 260, rate: 2.1 },
+  archers: { base: 250, rate: 2.1 },
   wreckingCrew: { base: 500, rate: 2.2 },
   entrenchment: { base: 400, rate: 2.2 },
   fieldManual: { base: 150, rate: 1 },
@@ -343,7 +348,7 @@ export const DEFAULT_COMPOSITION_WEIGHTS = Object.freeze({
   // `distributeExpedition` — is byte-identical to what it was before they
   // existed. Adding a unit did not re-tune the campaign, which is the only
   // reason three of them could ship at once.
-  outriders: 0, halberds: 0, sappers: 0,
+  outriders: 0, halberds: 0, sappers: 0, archers: 0,
 });
 
 /**

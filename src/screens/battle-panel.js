@@ -382,6 +382,9 @@ function hpColor(site, frac) {
 function statusLine(site, intel) {
   if (intel?.gate?.sealed) return `UNDER SIEGE · ${gateLine(intel)}`;
   if (site.siege) return 'UNDER SIEGE';
+  // Above the shield and the rally for the reason UNDER SIEGE is: a fight
+  // happening now outranks a standing arrangement. One string for both sides.
+  if (site.melee) return 'FIELD BATTLE';
   if (site.shieldTicks > 0) return 'fortified';
   // One site may feed several neighbours in turn, so the status names all of
   // them — "rallying → a" when a two-way split is live would be a lie.

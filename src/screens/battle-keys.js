@@ -17,12 +17,12 @@ export const BOOSTER_KEYS = Object.freeze({
  * DECLARED IN `UNIT_IDS` ORDER, because tests/battleui.test.js asserts exactly
  * that — the chip row and the roster must not be able to disagree about which
  * units exist. The letters are NOT in that order on purpose: the original five
- * keep the keys they always had, and the three specialists take Y / U / I, so
- * adding units did not move anybody's hands.
+ * keep the keys they always had, the three specialists take Y / U / I and the
+ * archers take A, so adding units has never moved anybody's hands.
  */
 export const FILTER_KEYS = Object.freeze({
   militia: 'Q', spearmen: 'W', outriders: 'Y', raiders: 'E',
-  halberds: 'U', sappers: 'I', rams: 'R', marshal: 'T',
+  halberds: 'U', sappers: 'I', archers: 'A', rams: 'R', marshal: 'T',
 });
 
 const invert = (map) => Object.freeze(Object.fromEntries(

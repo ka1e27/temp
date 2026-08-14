@@ -20,12 +20,14 @@ any region, loadout, tier of idling, legacy or relic budget. Six previously-iner
 features and four sold-but-dead upgrades were found *by measurement* rather than by a
 bug report. That is unusual and it is what makes everything below tractable.
 
-**The campaign is tuned, for the second time, against the finished battle layer.** It was
-deliberately left untuned through the redesign — tuning between two structural changes is
-work thrown away — and then re-tuned end to end once free movement, the yard/wall split,
-construction, towers, the slower march, fog, squad sight and the site-existence gate had
-all landed. Every `enemyMult` and every advertised length moved; the method and the four
-transferable findings are in `CLAUDE.md` (`Still open` → the closed re-tune entry).
+**The campaign has been tuned twice against the finished battle layer — and is out of
+band again, on purpose.** It was deliberately left untuned through the redesign (tuning
+between two structural changes is work thrown away) and then re-tuned end to end once
+free movement, the yard/wall split, construction, towers, the slower march, fog, squad
+sight and the site-existence gate had landed; every `enemyMult` and every advertised
+length moved, and the method plus its four transferable findings are in `CLAUDE.md`
+(`Still open` → the closed re-tune entry). The melee layer has since moved the ground
+under all of it, knowingly, and that third pass is the top item below.
 
 **Siege binds again, and a ram is a purchase.** `SIEGE_FRONTAGE` caps how much structure
 damage ordinary bodies can do at one wall and exempts engines, closing the oldest measured
@@ -45,6 +47,39 @@ note in `CLAUDE.md`'s fog section.
 tactics of a battle stay rich for a long time — fog, sieges, rally timing, relief forces,
 where to build. The layer *around* each battle has one right answer, and once found it
 stays right to the last battle in the game.
+
+---
+
+## Do this first: re-tune the campaign against the melee layer
+
+A field battle now takes `MELEE.seconds` rather than a tick, a hostile tile is contested,
+and archers shoot into a fight from a hex away. That shipped with the campaign
+**knowingly out of band** — the scope call was mechanics and tests now, tuning as its own
+pass — so this is a debt with a due date rather than an idea. n=48:
+
+| region | win% | win-med | all-med | target | verdict |
+|---|---|---|---|---|---|
+| riverfen | 96% | 8.9m | 8.9m | 9.5m | TOO EASY |
+| kaldan | 77% | 9.0m | 9.9m | 8.5m | ok |
+| gallowmoor | 23% | 14.2m | 17.0m | 6.5m | TOO SLOW |
+| thanescar | 2% | 7.3m | 20.0m | 6.5m | TOO HARD |
+| ravensmarch | 4% | 15.2m | 24.0m | 7m | TOO HARD |
+
+**Start from the signature, not the win rate.** Every one of those rows is `losses=0` or
+close to it with a large timeout-*ahead* count — gallowmoor times out 31 times in 48 while
+winning on territory. That is a bot running out of clock, not one being beaten, so the
+first lever is `targetLengthMin` (which derives `hardCapMs`, so the promise and the cap
+are the same number), not `enemyMult`.
+
+**Two things are already measured; do not re-spend them.** `MELEE.seconds` is worth ~2
+points a second (2s versus 6s is six points on gallowmoor and eight on thanescar, with
+the all-run median pinned at the hard cap either way), so it is not the lever. And a
+clock-reset bug that read exactly like balance cost — every reinforcement restarting the
+melee clock, so a trickle of columns held a fight open forever — is fixed, and was worth
++13 points on gallowmoor and 3.3× the harness's throughput on its own.
+
+**The open question is fight COUNT.** Interception creates fights that did not exist
+before; nobody has measured how many, and that is the first thing to instrument.
 
 ---
 

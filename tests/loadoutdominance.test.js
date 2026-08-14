@@ -160,14 +160,30 @@ test('loadout: bringing only militia converts a real fight into a walkover', { t
     + 'close the bullet in CLAUDE.md -- or the weights stopped reaching the '
     + 'battle, which the first test in this file would normally catch.');
 
-  // The half that matters more than the win rate. A region advertised at five
-  // minutes is won in two and a bit, so the exploit does not merely win more
-  // often -- it deletes the battle. A win rate alone would miss this entirely:
-  // a change that left the rate here and doubled the length would read as fine.
-  const advertised = REGIONS.find((r) => r.id === REGION).targetLengthMin;
-  assert.ok(mono.winMed < advertised * 0.75,
-    `mono-militia win median ${mono.winMed.toFixed(1)}m against a ${advertised}m `
-    + 'advertised length -- if this stopped being true the exploit changed shape');
+  // The half that matters more than the win rate: the exploit does not merely
+  // win more often, it DELETES THE BATTLE. A win rate alone would miss this
+  // entirely -- a change that left the rate here and doubled the length would
+  // read as fine.
+  //
+  // MEASURED AGAINST THE DEFAULT SPREAD, NOT AGAINST THE ADVERTISED LENGTH, and
+  // that is a correction rather than a loosening. The original form asked
+  // `mono.winMed < targetLengthMin * 0.75`, which is a claim about the exploit
+  // only while the campaign's length promise is being kept. Since the melee
+  // layer it is not, for ANY loadout -- the honest four-type army wins gallowmoor
+  // in 16.9m against a 6.5m promise -- so the assertion started failing on the
+  // campaign's clock rather than on the loadout, which is the wrong thing for
+  // this file to be watching. It fails informatively either way, and it did:
+  // "if this stopped being true the exploit changed shape" is what sent us to
+  // look, and the shape that changed was the yardstick. Re-take the absolute
+  // form once the third re-tune lands (CLAUDE.md "Still open").
+  //
+  // Measured at this n: spread 16.9m, mono 7.8m -- the exploit finishes in 46%
+  // of an honest army's time. The 0.75 ceiling is deliberately loose, for the
+  // same reason the win-rate floor is: it says THE DEFECT IS STILL THE DEFECT.
+  assert.ok(mono.winMed < spread.winMed * 0.75,
+    `mono-militia win median ${mono.winMed.toFixed(1)}m against the default `
+    + `spread's ${spread.winMed.toFixed(1)}m -- if this stopped being true the `
+    + 'exploit changed shape');
 });
 
 test('the mixed spread marches at RAM speed — true, and measured NOT to be the exploit', () => {

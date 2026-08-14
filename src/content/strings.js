@@ -107,6 +107,14 @@ export const UNITS_UI = Object.freeze({
       + 'however long they sit there — so a site you hold with sappers needs '
       + 'engines to take, not numbers. x1.15 highland, x0.95 river.',
   }),
+  archers: Object.freeze({
+    name: 'Archers',
+    role: 'Shoots from behind',
+    desc: 'Fights a battle one tile away without standing in it: park them '
+      + 'beside a fight and they add their attack to it and take none of the '
+      + 'casualties. March them INTO the line and that is thrown away — they '
+      + 'are the softest thing you can field. x1.15 highland, x0.85 river.',
+  }),
   marshal: Object.freeze({
     name: 'Marshal',
     role: 'Commander',

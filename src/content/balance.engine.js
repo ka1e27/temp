@@ -76,6 +76,71 @@ export const SQUAD_VISION_RADIUS = 1;
  */
 export const SIEGE_FRONTAGE = 40;
 
+// UNIT_SLOTS lives here rather than beside UNITS, and it is the one entry in
+// this file that is PRICING rather than shape. It moved when balance.js hit the
+// 400-line cap on the archer, and this is the least-bad home: its documentation
+// is longer than the table, it is read only through balance.js (which
+// re-exports it, so no importer knows), and the alternative — splitting the
+// UNITS table itself — would put a unit's stats and its cost in two files.
+/**
+ * What one of each unit costs against the EXPEDITION budget.
+ *
+ * Without this every unit costs one seat and the optimal loadout is trivially
+ * "as many marshals/raiders as the roster allows" — no decision at all.
+ *
+ * The anchor is the gold price above, because gold is already this game's own
+ * statement of what a unit is worth (every unit runs at 3.0-4.5 gold/sec, so a
+ * gold ratio IS a value ratio). Raw ratios are 1 / 2 / 3.75 / 6.67 / 15, which
+ * prices a marshal above a whole starting expedition — unbuyable, not a choice.
+ * So the curve is compressed by roughly gold^0.83, giving gold-per-slot of
+ * 12 / 12 / 15 / 22.5: militia and spearmen priced exactly at their gold value,
+ * and the unlockables carrying a discount so a specialist is affordable.
+ *
+ * Anchored on militia = 1 on purpose: a leftover slot always buys exactly one
+ * militia, so a budget is spendable to the last slot and an increase always has
+ * somewhere to go.
+ *
+ * RAMS ARE THE ONE ROW THE ANCHOR CANNOT PRICE, and 5 -> 3 is why. It assumes
+ * gold ratio IS value ratio, which holds only while a unit's contribution is
+ * LINEAR in how many you bring — and since `SIEGE_FRONTAGE` exactly one unit's
+ * is not: an ordinary body's structure damage saturates at forty at a wall, an
+ * engine's never does. A linear anchor therefore overprices the one non-linear
+ * unit, and worse the bigger the budget — precisely where the loadout screen is
+ * supposed to have a decision in it.
+ *
+ * 3 is the table's only break of the gold order (more gold than halberds, fewer
+ * slots); tests/loadout.test.js exempts engines and asserts there is exactly
+ * one. It is a THRESHOLD, not a slope: 4 is inert (the five-region loadout table
+ * read 75/60/46/27/31 against 75/60/46/33/29 at 5), 3 bites, because what
+ * matters is whether the extra line troops carry an assault over ATTACK_MARGIN.
+ */
+export const UNIT_SLOTS = {
+  militia: 1, spearmen: 2, outriders: 2, raiders: 3, halberds: 4, sappers: 3,
+  archers: 3, rams: 3, marshal: 8,
+};
+
+
+/**
+ * A FIELD BATTLE TAKES THIS LONG. Two forces that meet do not delete each other
+ * on the tick they touch — they grind toward the outcome `resolveField` already
+ * projects, and the gap in between is the whole feature: it is when relief
+ * can arrive, when a retreat is still worth ordering, and when an archer one
+ * hex back is shooting into a fight it is not standing in.
+ *
+ * FLAT rather than scaled by headcount, and that is a design call rather than a
+ * simplification. A big battle taking longer reads well and is wrong here: the
+ * timer exists to open a relief gap, and one that grows with the size of the
+ * fight is widest exactly where the defender needs it least. It also has to be
+ * a number a player can learn — "a field battle is about six seconds" is usable
+ * where "it depends on the stacks" is not.
+ *
+ * SIX rather than something longer: a battle is 7-15 minutes and an assault
+ * chain can be a dozen fights deep, so this is paid many times over. Long
+ * enough that a relief column one hex away is a real answer, short enough that
+ * it never becomes the pace of the game.
+ */
+export const MELEE = { seconds: 6 };
+
 /** Territory flood. Strength falls off linearly with distance from the site;
  *  two factions within `contestRatio` of each other paint a hatched band. */
 export const INFLUENCE = { contestRatio: 0.15, levelBonus: 0.25 };

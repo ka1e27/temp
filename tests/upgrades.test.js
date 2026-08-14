@@ -44,8 +44,9 @@ test('the endless lines are the Empire six, the Crown four and one per troop', (
   const endless = UPGRADES.filter(isEndless).map((u) => u.id).sort();
   assert.deepEqual(endless, [
     'arms', 'citadels', 'drill', 'exchequer', 'grandArmy', 'siegeworks',
-    'standingArmy', 'treasury', 'vetHalberds', 'vetMilitia', 'vetOutriders',
-    'vetRaiders', 'vetRams', 'vetSappers', 'vetSpearmen', 'warChest', 'warCollege',
+    'standingArmy', 'treasury', 'vetArchers', 'vetHalberds', 'vetMilitia',
+    'vetOutriders', 'vetRaiders', 'vetRams', 'vetSappers', 'vetSpearmen',
+    'warChest', 'warCollege',
   ]);
   for (const id of endless) {
     const u = UPGRADE_BY_ID[id];

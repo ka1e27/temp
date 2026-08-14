@@ -178,7 +178,13 @@ test('a failed raid sends half the raiders home (skirmish)', () => {
   assert.equal(s.squads.length, 1);
   assert.equal(s.squads[0].retreating, true);
   runUntil(s, (x) => x.squads.length === 0);
-  assert.equal(total(at(s, 'camp').garrison), 2);
+  // THE RAIDERS THAT CAME HOME, not the camp's total headcount. This used to
+  // read `total(garrison) === 2` and that stopped being the same statement when
+  // field battles started taking `MELEE.seconds`: the camp goes on TRAINING
+  // through the fight, so by the time the survivors are back it holds them plus
+  // whatever it produced meanwhile. Asserting the total was only ever a proxy
+  // for "half the probe came back", and the proxy is what broke.
+  assert.equal(at(s, 'camp').garrison.raiders, 2, 'half the probe came home');
   assert.equal(s.factions.player.unitsLost, 2);
 });
 

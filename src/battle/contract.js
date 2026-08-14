@@ -113,7 +113,15 @@ import {
 // under the new engine — which happens to be the right default ("never fought
 // here"), not a wrong-looking one. The bump is still required: the rule is
 // "state shape changed", not "and it happened to fail safe this time".
-export const CONTRACT_VERSION = 11;
+/**
+ * v12 IS THE MELEE — the v8 lesson a fourth time: NO CONFIG FIELD MOVED. State
+ * did (`site.melee`, a squad's `melee`) and so did what the engine DOES with a
+ * blob: a field battle resolved on the tick a column landed and now grinds
+ * toward the same `resolveField` projection over `MELEE.seconds`, while two
+ * hostile forces on a hex fight rather than pass through. A v11 blob resumed
+ * here has fights in flight with no melee record: each silently un-happens.
+ */
+export const CONTRACT_VERSION = 12;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];

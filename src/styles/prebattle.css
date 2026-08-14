@@ -148,6 +148,7 @@
 .pb-unit[data-unit='raiders'] .pb-unit-name { color: var(--c-raiders); }
 .pb-unit[data-unit='halberds'] .pb-unit-name { color: var(--c-halberds); }
 .pb-unit[data-unit='sappers'] .pb-unit-name { color: var(--c-sappers); }
+.pb-unit[data-unit='archers'] .pb-unit-name { color: var(--c-archers); }
 .pb-unit[data-unit='rams'] .pb-unit-name { color: var(--c-rams); }
 .pb-unit[data-unit='marshal'] .pb-unit-name { color: var(--c-marshal); }
 
