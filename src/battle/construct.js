@@ -40,6 +40,17 @@ import { trainableUnit } from './training.js';
 
 const sec = (s) => Math.max(1, Math.round(s * TICK_HZ));
 
+// Scratch for `buildBlocker`'s separation scan, reused rather than allocated per
+// site — the same discipline ./vision.js `canSee` holds itself to at `_q`, and
+// for the same reason: this is on a PER-FRAME READ PATH even though it lives in
+// a pure sim module. `render/buildTargets.js` asks `buildBlocker` once per board
+// hex for as long as a build is armed, so an `{q, r}` literal per site per call
+// is cols x rows x sites objects a frame — ~18,500 on widowsgate, sixty times a
+// second, which is exactly the allocation the render budget forbids and the
+// hardest kind to notice, because the file paying it is not the file spending
+// it. It cannot escape: `distance` reads two fields and returns a number.
+const _s = { q: 0, r: 0 };
+
 /** Sites a faction has under construction right now. Exported because both the
  *  command and the UI need the same answer and two implementations of "am I
  *  already building" would drift the moment one of them grew a special case. */
@@ -74,7 +85,9 @@ export function buildBlocker(state, faction, at) {
   // standing HERE" and "is something too close", against every site on the
   // board regardless of owner — one pass, because a site is both.
   for (const s of state.sites) {
-    const d = distance({ q: s.hex[0], r: s.hex[1] }, at);
+    _s.q = s.hex[0];
+    _s.r = s.hex[1];
+    const d = distance(_s, at);
     if (d === 0) return 'occupied';
     if (d < BUILD_MIN_SEPARATION) return 'too-close';
   }

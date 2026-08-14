@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const LIMIT = 400;
 const DIRS = ['src', 'tools', 'tests'];
-const EXTS = new Set(['.js', '.css']);
+const EXTS = new Set(['.js', '.css', '.mjs']);
 
 async function walk(dir, out = []) {
   let entries;

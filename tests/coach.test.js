@@ -30,11 +30,20 @@ function battle(over = {}) {
     status: 'running',
     factions: { player: { goldCg: 0 }, enemy: { goldCg: 0 } },
     squads: [],
+    // `hex` and `seen` are here because the castle beat is FOG-GATED now
+    // (ui/coach.js castleTouchesPlayer): a hint is speech about the board, so it
+    // is bound by the same rule the board is. The default stub is a player who
+    // has already looked at the throne, because every test in this file is about
+    // the beat TABLE rather than about fog; the gate itself is pinned against a
+    // REAL battle in tests/fogleaks.test.js, beside the other surfaces that used
+    // to narrate what the board hides.
     sites: [
-      { id: 'camp', kind: 'camp', owner: 'player', adj: ['nf01'] },
-      { id: 'nf01', kind: 'farm', owner: 'neutral', adj: ['camp', 'castle'] },
-      { id: 'castle', kind: 'castle', owner: 'enemy', adj: ['nf01'] },
+      { id: 'camp', kind: 'camp', owner: 'player', hex: [0, 0], adj: ['nf01'] },
+      { id: 'nf01', kind: 'farm', owner: 'neutral', hex: [1, 0], adj: ['camp', 'castle'] },
+      { id: 'castle', kind: 'castle', owner: 'enemy', hex: [2, 0], adj: ['nf01'] },
     ],
+    vision: { player: {}, enemy: {} },
+    seen: { player: { castle: 'enemy' }, enemy: {} },
     ...over,
   };
 }
@@ -129,9 +138,12 @@ test('ordering: a later beat waits for its prerequisite, not for a timer', () =>
   // castle already bordering the camp — but the player has captured nothing.
   const b = battle({
     ...gold(300),
+    // `hex` for the same reason the default stub carries one: the castle beat
+    // resolves the throne through `siteKnown` now, and the fixture's `seen` says
+    // the player has looked at it. This test is about beat ORDER, not fog.
     sites: [
-      { id: 'camp', kind: 'camp', owner: 'player', adj: ['castle'] },
-      { id: 'castle', kind: 'castle', owner: 'enemy', adj: ['camp'] },
+      { id: 'camp', kind: 'camp', owner: 'player', hex: [0, 0], adj: ['castle'] },
+      { id: 'castle', kind: 'castle', owner: 'enemy', hex: [2, 0], adj: ['camp'] },
     ],
   });
 

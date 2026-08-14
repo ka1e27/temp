@@ -61,9 +61,50 @@ test('frontage: the MIX still matters, so this is not a headcount cap', () => {
   assert.ok(Math.abs(h / m - ratio) < 1e-9,
     `saturated halberds must out-dig saturated militia ${ratio}x, measured ${h / m}`);
 
-  // And a mixed crowd is the share-weighted blend rather than either end of it.
+  // A MIXED CROWD DIGS AT THE RATE OF ITS BEST BODIES, because the frontage is a
+  // queue and not an average. This assertion used to read `mixed > m && mixed < h`
+  // — the share-weighted blend — and that is precisely the defect it was encoding:
+  // averaging lets militia DISPLACE halberds at the wall instead of lining up
+  // behind them, which made siege damage fall as a stack grew.
   const mixed = siegeDps(comp({ militia: 250, halberds: 250 }));
-  assert.ok(mixed > m && mixed < h, 'half a crowd of diggers must land between the two');
+  assert.equal(mixed, h,
+    'with 250 halberds available, the forty at the wall are all halberds');
+
+  // The blend is real where it should be: too FEW good bodies to fill the
+  // frontage, and the rest of it is made up by whoever else is standing there.
+  // This is what keeps three `siege` columns live data rather than one number.
+  const thin = siegeDps(comp({ halberds: 10, militia: 500 }));
+  assert.ok(thin > m && thin < h, `ten diggers plus a crowd lands between: ${thin}`);
+  assert.ok(Math.abs(thin - (10 * UNITS.halberds.siege
+    + (SIEGE_FRONTAGE - 10) * UNITS.militia.siege)) < 1e-9,
+    'ten halberds at the wall, thirty militia filling the rest of the frontage');
+});
+
+test('frontage: MORE TROOPS NEVER DIG SLOWER — the rule is a queue, not an average', () => {
+  // THE REGRESSION GUARD, and the reason the assertion above changed. Scaling the
+  // whole body force by `FRONTAGE / bodies` made siege damage NON-MONOTONIC in
+  // headcount: 40 sappers dug at 100 dps, and 40 sappers with 400 militia behind
+  // them dug at 30.9 — so relief arriving at a siege made the wall three times
+  // harder, and `breachSeconds` could walk from a live countdown to Infinity as
+  // help landed. `ai.js retreat()` reads that Infinity and abandons the siege, so
+  // the AI could talk itself off a wall by reinforcing it.
+  //
+  // Monotonicity is the property that cannot be checked by looking at one stack,
+  // which is why nothing caught this: every single-stack number was defensible.
+  for (const filler of ['militia', 'spearmen', 'raiders']) {
+    let prev = 0;
+    for (let n = 0; n <= 600; n += 25) {
+      const dps = siegeDps(comp({ sappers: 40, [filler]: n }));
+      assert.ok(dps >= prev - 1e-9,
+        `${n} ${filler} behind 40 sappers dug ${dps}, less than ${prev} with fewer men`);
+      prev = dps;
+    }
+    // ...and the good bodies are never diluted at all: the forty diggers hold
+    // the wall no matter how big the crowd behind them gets.
+    assert.equal(siegeDps(comp({ sappers: 40, [filler]: 600 })),
+      siegeDps(comp({ sappers: 40 })),
+      `a crowd of ${filler} must not displace a full frontage of sappers`);
+  }
 });
 
 test('frontage: ENGINES are exempt, and that is the whole statement', () => {

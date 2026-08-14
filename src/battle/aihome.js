@@ -21,6 +21,7 @@ import { distance } from '../core/hex.js';
 import { asHex } from './influence.js';
 import { power, total, addComp, emptyComp } from './combat.js';
 import { siteById } from './state.js';
+import { squadHexOf } from './movement.js';
 import {
   ME, FOE, byId, floorFor, defenceOf, sourceFrom, threatOn,
 } from './aicore.js';
@@ -107,6 +108,25 @@ export function encroachment(state, site) {
     if (s.owner !== FOE || s.id === site.id) continue;
     if (hop[s.id] === undefined) continue;
     comp = addComp(comp, s.garrison);
+  }
+  // A CAMPED ARMY IS A STACK PARKED NEXT DOOR, and it was the one form of that
+  // this function could not see. It summed SITE garrisons only, so a column
+  // holding open ground contributed nothing — measured, an army of 300 camped ONE
+  // HEX from the throne scored `encroachment` 0, while the identical 300 in
+  // transit to the throne scored 300. That is the docstring above failing on its
+  // own terms: camping is precisely how you park a stack next door without
+  // "threatening" anything, so `homeGuard` and `defend` never pre-positioned and
+  // the player could stage their whole force on the doorstep unnoticed, then take
+  // the castle inside a single one-hex hop — well under `threatHorizonTicks`.
+  //
+  // Measured by hex rather than through `reach`, because `reach` is a map over
+  // SITE ids and a camped column is on ground that has no site on it.
+  const at = asHex(site.hex);
+  for (const sq of state.squads) {
+    if (sq.owner !== FOE || !sq.camped || sq.retreating) continue;
+    const where = squadHexOf(state, sq);
+    if (!where || distance(where, at) > AI.homeRadiusHexes) continue;
+    comp = addComp(comp, sq.comp);
   }
   return comp;
 }

@@ -75,6 +75,14 @@ test('round-trip preserves everything that matters', () => {
   assert.equal(r.state.meta.regions.ironwood.status, 'available');
   assert.equal(r.state.battle, null, 'battle is rebuilt, never loaded');
   assert.equal(r.state.session.sceneId, null);
+  // THE INCOME CACHE IS THE ONE FIELD THAT DOES NOT ROUND-TRIP, and that is the
+  // point of it: `fromPersisted` heals it to 0 so `recalcIncome` stays its only
+  // writer (meta/idle.js says so, meta/prestige.js repeats it, and meta/save.js's
+  // own v2->v3 migration already wrote 0 here). It is a cache of a pure function
+  // of regions and upgrades, so nothing is lost — and calling the one writer
+  // rebuilds it exactly, which is what the deep-equal below then proves.
+  assert.equal(r.state.meta.incomePerSec, 0, 'the cache is rebuilt, never loaded');
+  assert.equal(recalcIncome(r.state.meta), s.meta.incomePerSec);
   assert.deepEqual(toPersisted(r.state), toPersisted(s));
 });
 
@@ -264,6 +272,10 @@ test('export/import is a lossless base64 round-trip', () => {
   assert.match(code, /^[A-Za-z0-9+/]+=*$/);
   const r = importSave(code, { now: 2_000_000 });
   assert.equal(r.ok, true);
+  // The income cache arrives unknown rather than trusted — see the round-trip
+  // test above. `adoptCampaign` is what calls this on the real import path.
+  assert.equal(r.state.meta.incomePerSec, 0);
+  recalcIncome(r.state.meta);
   assert.deepEqual(toPersisted(r.state).meta, toPersisted(s).meta);
   // Whitespace from a copy-paste is tolerated.
   assert.equal(importSave(`${code.slice(0, 8)}\n ${code.slice(8)}`).ok, true);

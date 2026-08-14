@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import { createBattleState } from '../src/battle/state.js';
 import { recomputeInfluence, speedMultiplierFor } from '../src/battle/influence.js';
 import {
-  travelTicks, spawnSquad, retreatTarget, reverseSquad, pathBetween, clearPathCache, slowestSpeed,
-  squadHexOf, pathThrough, marchCamped,
+  travelTicks, spawnSquad, pathBetween, clearPathCache, slowestSpeed,
+  squadHexOf, pathThrough,
 } from '../src/battle/movement.js';
+// Finding friendly ground, turning around, and re-tasking a camped column split
+// out of movement.js for the 400-line cap — same seam, same tests.
+import { retreatTarget, reverseSquad, marchCamped } from '../src/battle/retreat.js';
 import { emptyComp, total } from '../src/battle/combat.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
 import { UNITS, MOVEMENT, TERRITORY_SPEED, MAPGEN } from '../src/content/balance.js';
@@ -198,6 +201,56 @@ test('a squad whose home fell retreats to the next friendly site', () => {
   assert.equal(reverseSquad(s, sq), true);
   assert.equal(sq.to, 'f1');
   assert.equal(total(sq.comp), 5);
+});
+
+test('a TWICE-CAMPED column can still retreat — both its site anchors are null', () => {
+  // THE BUG THIS PINS STRANDED ARMIES PERMANENTLY, and it reads as working
+  // right up to the second hop. `reverseSquad` anchored entirely on sites, via
+  // `retreatTarget(state, from ?? to, ...)`, which was sound while every column
+  // ran between two buildings. Free movement broke that: `marchCamped` sets
+  // `from = null` (a column re-tasked off open ground came from no building) and
+  // `to` is already null for a march onto bare ground. So a squad that camps, is
+  // re-tasked with MOVE_SQUAD, and camps again has NEITHER — `retreatTarget` got
+  // `undefined`, resolved no start, returned null, and `cmdRetreatSquad` answered
+  // `nowhere-to-retreat` with friendly sites two hexes away.
+  //
+  // A FIRST-generation camped squad still retreats fine, because `from` is still
+  // its origin site. That is exactly why nothing noticed.
+  const s = road();
+  const sq = spawnSquad(s, {
+    owner: 'player', from: 'camp', to: null, toHex: [3, 1], comp: comp({ militia: 6 }),
+  });
+  s.tick = sq.arriveTick;
+  sq.camped = true;
+  sq.hex = [3, 1];
+  // Hop two: re-tasked onto open ground, which is what clears the last anchor.
+  assert.equal(marchCamped(s, sq, { toHex: [5, 1] }), true, 'premise: the re-task must take');
+  assert.equal(sq.from, null, 'premise: a re-tasked column has no origin site');
+  assert.equal(sq.to, null, 'premise: ...and no destination site either');
+  s.tick = sq.arriveTick;
+  sq.camped = true;
+  sq.hex = [5, 1];
+
+  assert.equal(reverseSquad(s, sq), true, 'a column on open ground had nowhere to run to');
+  assert.equal(sq.to, 'camp', 'it must run to the friendly site, not nowhere');
+  assert.equal(sq.retreating, true, 'a retreat that does not flag itself is a march');
+  assert.equal(sq.camped, false, 'a retreating column is in flight, not holding ground');
+  assert.ok(sq.arriveTick > s.tick, 'the trip home has to take time');
+  assert.equal(total(sq.comp), 6, 'a retreat is a clean escape — it keeps every unit');
+
+  // NEGATIVE CONTROL: the identical column with no friendly ground anywhere must
+  // still fail, or the fix is "always succeed" rather than "anchor on the hex".
+  const alone = road();
+  const lost = spawnSquad(alone, {
+    owner: 'enemy', from: 'castle', to: null, toHex: [3, 1], comp: comp({ militia: 6 }),
+  });
+  alone.tick = lost.arriveTick;
+  lost.camped = true;
+  lost.hex = [3, 1];
+  lost.from = null;
+  for (const site of alone.sites) site.owner = 'player';
+  assert.equal(reverseSquad(alone, lost), false,
+    'a camped column with no friendly site left must still refuse');
 });
 
 test('a retreat with no friendly ground left fails cleanly', () => {

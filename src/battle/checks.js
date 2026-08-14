@@ -3,7 +3,67 @@
 // never exported), so there is nothing to re-export: `assertBattleConfig`
 // stays the one front door and simply imports what it needs from here.
 // PURE.
-import { UNIT_IDS } from '../content/balance.js';
+import { UNIT_IDS, SITE_LEVELS } from '../content/balance.js';
+
+/**
+ * A grid must be a real OFFSET rectangle, and this is checked FIRST because
+ * everything else about a map is checked against it.
+ *
+ * `core/hex.js inGrid` reads `grid.rows`/`grid.cols` straight off the object, so
+ * a config with no `grid` at all threw an uncaught `TypeError: reading 'rows'`
+ * out of the middle of the site loop — which is the one failure mode this whole
+ * file exists to prevent. The seam's job is to name the producer at fault and
+ * list every fault at once; a raw TypeError from two files away does neither, and
+ * `meta/resume.js steppable()` catches it as a bare `false` so a hand-editable
+ * blob became "unsteppable, reason unknown".
+ *
+ * The BOUNDS are the other half, and they are the same asymmetry `expedition`
+ * had. `cols: "9"` passed every `>` comparison in the codebase by coercion and
+ * then reached the renderer as a string; `cols: 1e9` passed too, and the first
+ * thing to walk the board — `verifyReachable`, the veil, `mapshape` — would try
+ * to allocate 1e18 hexes. `MAX_GRID_SIDE` is generous rather than tuned: the
+ * biggest authored region is 21x16, so 512 cannot refuse a map the game makes
+ * while still refusing every map it cannot draw.
+ *
+ * @returns {boolean} whether the grid is safe to hand to `inGrid`
+ */
+export const MAX_GRID_SIDE = 512;
+
+export function checkGrid(c, errs) {
+  const g = c.grid;
+  if (!g || typeof g !== 'object' || Array.isArray(g)) {
+    errs.push('grid: must be an object of {cols, rows, blocked?, rivers?}');
+    return false;
+  }
+  let ok = true;
+  for (const k of ['cols', 'rows']) {
+    if (!Number.isInteger(g[k]) || g[k] < 1 || g[k] > MAX_GRID_SIDE) {
+      errs.push(`grid.${k}: expected an integer in [1, ${MAX_GRID_SIDE}], got ${g[k]}`);
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+/**
+ * A site's build level, which is OPTIONAL — absent means level 1, which is what
+ * every hand-built fixture and the golden config rely on.
+ *
+ * Present and out of range is not survivable: `battle/state.js` indexes
+ * `SITE_LEVELS[lvl - 1]` to derive `hpMax`, so 0 or 99 threw a raw
+ * `TypeError: reading 'hp'` deep inside `createBattleState` — after the seam had
+ * already declared the config valid, which is precisely the inversion the seam
+ * exists to prevent. The ladder's length is stated in exactly one place
+ * (`SITE_LEVELS.length`, see content/balance.js), so this reads it rather than
+ * repeating a 5.
+ */
+export function checkSiteLevel(s, errs) {
+  if (s.level === undefined) return;
+  if (!Number.isInteger(s.level) || s.level < 1 || s.level > SITE_LEVELS.length) {
+    errs.push(`sites[${s.id}].level: expected an integer in [1, ${SITE_LEVELS.length}]`
+      + `, got ${s.level}`);
+  }
+}
 
 /**
  * A faction's mods object. `numericMods`/`featureIds` are passed in rather
@@ -31,9 +91,25 @@ export function checkMods(m, path, errs, numericMods, featureIds) {
       }
     }
   }
-  if (!m.expedition || typeof m.expedition !== 'object') {
-    errs.push(`${path}.expedition: must be a composition object`);
-  }
+  // THE ARMY, and until now it was the least-validated field on the object.
+  //
+  // The asymmetry was the tell: `unitMult` below is optional and cosmetic — a
+  // sparse map of per-troop multipliers — and it checks every key against
+  // `UNIT_IDS` and every value for finiteness. `expedition` is the force that
+  // lands on tick 0, and it got `typeof === 'object'`. So
+  // `{militia: 'lots'}` crossed the seam, `battle/state.js` added it to a
+  // garrison with `+=`, and the live sim held the STRING "0lots" as a headcount:
+  // every comparison against it is false, every arithmetic result NaN, and the
+  // board draws a garrison that cannot fight and cannot be killed. `{militia:
+  // -50}` was accepted as readily and lands a negative garrison, which is a site
+  // that can be captured by nobody and reinforced forever.
+  //
+  // Integers, not merely finite numbers: a fractional body is not a thing the
+  // simulation can kill (`resolveField` integerizes by largest remainder over
+  // whole bodies) and every producer already floors — meta/composition.js
+  // `distributeExpedition`, `withFreeMarshal`, and the `thinned` mutator in
+  // meta/incursion.js all emit whole numbers.
+  checkComposition(m.expedition, `${path}.expedition`, errs);
   // OPTIONAL and sparse. Absent is the normal case, so the check is on the
   // CONTENTS rather than on the field existing — a mods object from before v7
   // is a faction with no per-troop levels, not an invalid one.
@@ -47,6 +123,25 @@ export function checkMods(m, path, errs, numericMods, featureIds) {
           errs.push(`${path}.unitMult.${id}: expected finite number >= 0, got ${v}`);
         }
       }
+    }
+  }
+}
+
+/**
+ * A composition: unit id -> whole non-negative body count. Sparse is fine (an
+ * absent unit is none of it), an unknown key is not — a typo'd id in a
+ * hand-edited blob is silently zero troops, which is a battle the player loses
+ * for a reason nothing anywhere reports.
+ */
+export function checkComposition(comp, path, errs) {
+  if (!comp || typeof comp !== 'object' || Array.isArray(comp)) {
+    errs.push(`${path}: must be a composition object of unit id -> count`);
+    return;
+  }
+  for (const [id, n] of Object.entries(comp)) {
+    if (!UNIT_IDS.includes(id)) errs.push(`${path}: unknown unit "${id}"`);
+    else if (!Number.isInteger(n) || n < 0) {
+      errs.push(`${path}.${id}: expected a non-negative integer, got ${JSON.stringify(n)}`);
     }
   }
 }

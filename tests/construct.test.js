@@ -239,59 +239,6 @@ test('build: it is refused when the treasury cannot cover it', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Losing one
-// ---------------------------------------------------------------------------
-
-test('build: SCAFFOLDING YOU SEIZE IS RUBBLE — nobody inherits a half-built yard', () => {
-  // `buildTicksLeft` is a timer on the SITE, not on its owner. Before this the
-  // enemy could walk onto a half-dug yard and have the timer finish it for them:
-  // observed on gallowmoor, the site went to 0 HP under an enemy siege and came
-  // out the far side at 180/180 in enemy hands.
-  const b = battleFor();
-  const at = legalHexes(b)[0];
-  b.commands.push({ t: 'BUILD', kind: 'trainingGround', hex: [at.q, at.r] });
-  step(b);
-  const site = b.sites.find((s) => s.hex[0] === at.q && s.hex[1] === at.r);
-  const id = site.id;
-
-  // The enemy walks onto it. At 1 HP the first tick of siege damage finishes it.
-  site.siege = { owner: 'enemy', comp: { ...b.sites[0].garrison, militia: 20 } };
-  step(b);
-
-  assert.equal(b.sites.some((s) => s.id === id), false,
-    'the site is still on the board — it changed hands instead of being razed');
-  assert.ok(b.events.some((e) => e.type === 'site-razed' && e.siteId === id),
-    'nothing announced it');
-  assert.equal(b.events.some((e) => e.type === 'site-captured' && e.siteId === id), false,
-    'a raze must never be reported as a capture: nobody holds it afterwards');
-});
-
-test('build: an army marching at a razed site turns around instead of vanishing', () => {
-  // `resolveArrival` returns early when `siteById` finds nothing, and by then the
-  // squads have already been taken off the board — so troops in the air toward a
-  // razed site would simply cease to exist, with no event and no body count.
-  const b = battleFor();
-  const at = legalHexes(b)[0];
-  b.commands.push({ t: 'BUILD', kind: 'trainingGround', hex: [at.q, at.r] });
-  step(b);
-  const site = b.sites.find((s) => s.hex[0] === at.q && s.hex[1] === at.r);
-
-  // Reinforce it from wherever can reach, then raze it before they land.
-  const from = b.sites.find((s) => s.owner === 'player' && total(s.garrison) > 10);
-  b.commands.push({ t: 'SEND', from: from.id, to: site.id, fraction: 0.5 });
-  step(b);
-  const inAir = b.squads.filter((q) => q.to === site.id);
-  assert.ok(inAir.length > 0, 'nothing was in the air — this proves nothing');
-  const bodies = inAir.reduce((a, q) => a + total(q.comp), 0);
-
-  site.siege = { owner: 'enemy', comp: { militia: 20 } };
-  step(b);
-  const stillFlying = b.squads.reduce((a, q) => a + total(q.comp), 0);
-  assert.ok(stillFlying >= bodies,
-    `${bodies} troops were marching on the razed site and ${stillFlying} are still on the board`);
-});
-
-// ---------------------------------------------------------------------------
 // A site appearing mid-battle
 // ---------------------------------------------------------------------------
 

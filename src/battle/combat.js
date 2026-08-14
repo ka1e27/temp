@@ -244,6 +244,12 @@ function keepCheapestOne(comp) {
   return out;
 }
 
+// Scratch for `siegeDps`'s frontage selection, module-scope and reused: per-body
+// damage and remaining headcount for each body kind present in the stack. Sized
+// to the roster and never grown, so the hot path allocates nothing.
+const _perBody = new Float64Array(UNIT_IDS.length);
+const _count = new Float64Array(UNIT_IDS.length);
+
 /**
  * Siege damage per second from a besieging stack. Rams are 20x a militia.
  *
@@ -260,9 +266,34 @@ function keepCheapestOne(comp) {
  * a straight loss, and why "leave the rams at home" was worth +23 to +38 points
  * across the campaign.
  *
- * The scaling is applied to the bodies' summed damage rather than to a body
- * count, so a stack's MIX still matters: forty halberds out-dig forty militia
- * exactly as much as they always did. Only the crowd behind them stops counting.
+ * THE FORTY AT THE WALL ARE THE BEST FORTY, and this is the one thing about the
+ * rule that cannot be expressed as a multiplier. The first cut scaled the whole
+ * body force by `FRONTAGE / bodies` — an AVERAGE — which is not a queue: it lets
+ * ordinary troops DISPLACE the specialists instead of lining up behind them, so
+ * siege damage stopped being monotonic in headcount and reinforcing a siege made
+ * it slower. Measured, against a level-5 castle:
+ *
+ *     40 sappers                  100.0 dps   breach  18.6s
+ *     40 sappers + 100 militia     45.7 dps   breach  56.6s
+ *     40 sappers + 400 militia     30.9 dps   breach 128.2s
+ *
+ * Four hundred men arriving to help made the wall three times harder, and the
+ * HUD's "BREACH IN 19s" walked UP to "INSUFFICIENT" as the relief column landed
+ * — `breachSeconds` returns Infinity once repair out-paces damage, so `ai.js
+ * retreat()` would then abandon a siege because it had reinforced it. No reading
+ * of "queueing" makes help harmful. Filling the frontage best-first restores
+ * monotonicity: those three rows are now 100.0 dps flat.
+ *
+ * IT IS STILL THE MIX THAT MATTERS, and a one-type stack is byte-identical to
+ * the average form (every body is the same body, so which forty stand at the
+ * wall cannot matter): 700 militia read 24.0 dps under both. Forty halberds
+ * out-dig forty militia exactly as much as they always did. Only the crowd
+ * behind the frontage stops counting — which is what the rule always said.
+ *
+ * NO ALLOCATION AND NO SORT. Selection over `UNIT_IDS` is at most 8x8 = 64
+ * comparisons against a fixed-size module-scope scratch pair, because this is
+ * called per besieging site per tick and again for every candidate in the AI's
+ * and the harness's target scans.
  *
  * TERRAIN LANDS HERE TOO, and the frontage INVERTED what it asks of you. This
  * comment used to read "the answer to a mountain fastness is not more engines,
@@ -277,19 +308,39 @@ export function siegeDps(comp, mult = 1, ground = null) {
   let engines = 0;
   let bodyDmg = 0;
   let bodies = 0;
+  let kinds = 0;
   for (const u of UNIT_IDS) {
     const n = comp[u] || 0;
     if (!n) continue;
     const spec = UNITS[u];
-    const d = n * spec.siege * groundMult(spec, ground);
-    if (spec.engine) { engines += d; continue; }
-    bodyDmg += d;
+    const each = spec.siege * groundMult(spec, ground);
+    if (spec.engine) { engines += n * each; continue; }
+    bodyDmg += n * each;
     bodies += n;
+    _perBody[kinds] = each;
+    _count[kinds] = n;
+    kinds += 1;
   }
-  // Below the frontage this is exactly 1, so a small force is untouched — see
-  // the constant's own comment on why that inertness is the point.
-  const crowd = bodies > SIEGE_FRONTAGE ? SIEGE_FRONTAGE / bodies : 1;
-  return (engines + bodyDmg * crowd) * mult;
+  // Below the frontage every body is already at the wall, so the whole summed
+  // damage stands and this is byte-identical to no rule at all — see the
+  // constant's own comment on why that inertness is the point.
+  if (bodies <= SIEGE_FRONTAGE) return (engines + bodyDmg) * mult;
+  // Over it, seat the best bodies first and let the rest queue. Selection
+  // rather than a sort: at most 8 kinds, and nothing is allocated.
+  let room = SIEGE_FRONTAGE;
+  let dug = 0;
+  while (room > 0) {
+    let pick = -1;
+    for (let i = 0; i < kinds; i++) {
+      if (_count[i] > 0 && (pick < 0 || _perBody[i] > _perBody[pick])) pick = i;
+    }
+    if (pick < 0) break;
+    const take = Math.min(room, _count[pick]);
+    dug += take * _perBody[pick];
+    _count[pick] -= take;
+    room -= take;
+  }
+  return (engines + dug) * mult;
 }
 
 export function siteRegen(kind, level = 1, mult = 1) {

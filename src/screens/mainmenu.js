@@ -24,6 +24,7 @@ import { renderRefusal } from './mainmenu-recovery.js';
 import { renderExport, renderImport } from './mainmenu-io.js';
 import { canAbdicate, legacyPoints } from '../meta/legacy.js';
 import { createMeta, markDirty, metaOf } from '../core/store.js';
+import { clearBattle } from '../meta/resume.js';
 import { incomePerSec, recalcIncome } from '../meta/idle.js';
 import { REGION_IDS, regionsConquered, refreshUnlocks, isAttackable } from '../meta/world.js';
 import { defaultSelection } from '../meta/boosters.js';
@@ -77,6 +78,18 @@ export function adoptCampaign(ctx, next, now) {
   state.meta = next.meta;
   if (keptSettings) state.meta.settings = keptSettings;
   state.battle = null;
+  // AND THE ONE ON DISK, TOO. Clearing `state.battle` only drops the battle this
+  // session was holding; the resume blob lives in its own storage key and would
+  // survive to the next reload, where `loadBattle` runs before any screen does.
+  // The reasoning is ./mainmenu-legacy.js's, verbatim, and it applies to every
+  // campaign swap and not just to abdication: a mid-battle blob outlives the
+  // empire it belongs to, its config names a region this save no longer holds,
+  // and meta/resume.js validates the CONTRACT rather than the campaign — so it
+  // would happily drop the player back into a battle for ground that is not
+  // theirs. New Campaign, Import Save and a backup restore are all exactly that
+  // swap. Optional, like the autosaver hook below: `ctx.storage` is only present
+  // once main.js has handed it over, and `clearBattle` tolerates its absence.
+  clearBattle(ctx.storage);
   refreshUnlocks(state.meta, ctx.bus);
   recalcIncome(state.meta, ctx.bus);
   markDirty(state);

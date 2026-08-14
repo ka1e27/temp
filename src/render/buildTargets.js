@@ -10,8 +10,16 @@
 // One path for every legal hex, one fill, one stroke — batched exactly like
 // hexRenderer.js drawFlood, and for the same reason: a fillRect (or a stroke)
 // per hex on a 300-hex board is the kind of per-frame allocation the render
-// budget forbids. The scratch hex handed to buildBlocker is module-scope and
-// reused every iteration, so the scan itself allocates nothing either.
+// budget forbids.
+//
+// THE QUERY HEX IS MODULE-SCOPE, AND THAT WAS ONLY HALF THE COST. This comment
+// used to claim the scan "allocates nothing either" on the strength of `_hex`
+// alone, which was true of this file and false of the frame: `buildBlocker`
+// itself minted a `{q, r}` per SITE per call for its separation scan, so one
+// armed build cost cols x rows x sites object literals a frame — ~18,500 on
+// widowsgate. Fixed where it was spent (battle/construct.js `_s`), because the
+// alternative was this file second-guessing a rule the harness plays. Both
+// scratches together are what make the claim true; neither is on its own.
 import { hexRow, hexQ, hexCx, hexCy, traceHex } from './hexGeom.js';
 import { buildBlocker } from '../battle/commands.js';
 

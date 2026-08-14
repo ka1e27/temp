@@ -89,7 +89,33 @@ ctx.storage = storage;
 // people playing — so resume it rather than asking, since Withdraw is a real
 // button if they would rather leave. Anything stale, corrupt or from an older
 // contract was already discarded on the way out of storage.
-const interrupted = loadBattle(storage, Date.now());
+//
+// ...EXCEPT OVER A REFUSED SAVE, and that exception is the same bug this project
+// has already fixed once. `bootstrapGame` hands back a blank state when it cannot
+// read the file, and A BLANK STATE IS INDISTINGUISHABLE FROM A FRESH CAMPAIGN —
+// which is how the menu once took its "nothing to continue, straight into region
+// 1" early return twenty lines above the refusal message and silently started a
+// new game over somebody's empire (see screens/mainmenu-recovery.js, and the
+// `!params?.blocked` guard in screens/mainmenu.js that answers it there).
+//
+// The resume route is that same early return one layer out. `meta/resume.js`
+// validates the CONTRACT, never the campaign, so a live blob passes on its own
+// merits while the empire it belongs to is unreadable: the player is dropped
+// straight into a battle for region 21 against a level-0 meta, with no message,
+// no shop and no recovery affordance — and on finish `applyOutcome` pays a
+// first-clear bonus into a blank meta that autosave is (correctly) refusing to
+// write. A blocked boot must reach the one screen that can explain itself.
+//
+// NEITHER FILE IS DESTROYED HERE. The save is the player's progress and the whole
+// point of blocking is to preserve it; the blob is merely ephemeral, and it is not
+// this route's business to throw away a battle that may yet be resumable once the
+// save is restored from backup. Whatever the player chooses next — restore, wipe,
+// or import — goes through `adoptCampaign`, which drops the blob for the reason
+// screens/mainmenu-legacy.js states: a mid-battle blob must not outlive the empire
+// it belongs to.
+const interrupted = boot.blocked
+  ? { ok: false, reason: 'save-blocked' }
+  : loadBattle(storage, Date.now());
 if (interrupted.ok) {
   scenes.replace(ctx.screens.battle, { resume: interrupted });
 } else {

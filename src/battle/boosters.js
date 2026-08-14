@@ -73,9 +73,24 @@ export const BOOST = {
     let n = 0;
     for (const sq of state.squads) {
       if (sq.owner !== by) continue;
+      if (sq.camped) continue;                  // holding ground: nothing to hurry
       const left = sq.arriveTick - state.tick;
       if (left <= 1) continue;
+      // WHERE THE COLUMN IS, BEFORE THE CLOCK MOVES UNDER IT. `squadHexOf` reads
+      // position as `(tick - spawnTick) / (arriveTick - spawnTick)` along the
+      // path, so shortening `arriveTick` alone does not make the army faster — it
+      // makes it JUMP. Measured on a squad half way through a 100-tick march:
+      // the fraction went 0.50 to 0.735 in the tick the booster was fired, so the
+      // column teleported nearly a quarter of its route. Everything that reads a
+      // squad's position — the renderer, fog, and the towers that shoot at it —
+      // agreed with the jump, so it was a real skip past a wall, not a draw bug.
+      const span = Math.max(1, sq.arriveTick - sq.spawnTick);
+      const f = Math.max(0, Math.min(1, (state.tick - sq.spawnTick) / span));
       sq.arriveTick = state.tick + Math.max(1, Math.ceil(left * spec.factor));
+      // Back-date the spawn so the SAME fraction of the path is behind it. This
+      // is exactly what `retreat.js reverseSquad` already does, and for exactly
+      // the same reason; `f < 1` is guaranteed by `left > 1` above.
+      sq.spawnTick = Math.round((state.tick - f * sq.arriveTick) / (1 - f));
       n++;
     }
     return n ? null : 'nothing-in-flight';

@@ -27,7 +27,8 @@ import { recomputeInfluence, territoryScore } from './influence.js';
 import { recomputeOccupancy } from './occupancy.js';
 import { recomputeVision, recordSquadSightings } from './vision.js';
 import { groundOf, siteDefMultOf } from './terrain.js';
-import { spawnSquad, retreatTarget, reverseSquad, clearPathCache } from './movement.js';
+import { spawnSquad, clearPathCache, squadHexOf } from './movement.js';
+import { retreatTarget, reverseSquad } from './retreat.js';
 import { drainCommands } from './commands.js';
 import { runEconomy, attritionMods } from './economy.js';
 import { runTraining, garrisonCap } from './training.js';
@@ -39,14 +40,14 @@ const FACTIONS = ['player', 'enemy'];
 /**
  * Build a live battle from a validated config and paint the opening front.
  *
- * The river layer is attached HERE, in the same `"q,r"` string form as blocked,
- * so it serialises into a resume blob with everything else. A config without
- * rivers (a hand-built test fixture) simply has none.
+ * The river layer used to be attached HERE rather than in `createBattleState`,
+ * which meant every state built directly — i.e. every test fixture — was a
+ * riverless board that looked healthy. It has moved into the state builder
+ * beside `blocked`; see the comment on `grid` there for what it measured.
  */
 export function startBattle(config) {
   clearPathCache();
   const state = createBattleState(config);
-  state.grid.rivers = (config.grid?.rivers ?? []).map(([q, r]) => `${q},${r}`);
   // All three per-hex maps, together, because they are invalidated by exactly
   // the same event: a site changing hands or coming into existence. Vision is
   // the fog-of-war layer (battle/vision.js), and it is the SITE half only — a
@@ -111,6 +112,25 @@ function capture(state, site) {
   state.meta.lastFlipTick = state.tick;
 }
 
+/**
+ * Stop a column where it is and have it hold that ground.
+ *
+ * The same three fields `arrivals.js` writes when a squad's destination has
+ * vanished under it, kept in step with that branch deliberately: `camped` is
+ * what every consumer reads to tell holding ground from marching, and a second
+ * spelling of "camped" is how one of the two would drift. The hex comes from
+ * `squadHexOf`, so the army holds where it actually is rather than at the end of
+ * a path that leads to a site no longer on the board.
+ */
+function campWhereItStands(state, sq) {
+  sq.hex = sq.hex ?? squadHexOf(state, sq) ?? (sq.path?.length ? sq.path[0] : null);
+  sq.camped = true;
+  sq.to = null;
+  pushEvent(state, EVENTS.SQUAD_CAMPED, {
+    squadId: sq.id, owner: sq.owner, hex: sq.hex, count: total(sq.comp),
+  });
+}
+
 function siegePhase(state) {
   const att = attritionMods(state);
   let flipped = false;
@@ -167,9 +187,24 @@ function siegePhase(state) {
     // which is why it happens before the filter rather than after.
     for (const sq of state.squads) {
       if (!gone.has(sq.to) || sq.retreating) continue;
-      if (!reverseSquad(state, sq)) sq.arriveTick = Infinity; // nowhere to run: it holds
+      if (reverseSquad(state, sq)) continue;
+      // NOWHERE TO RUN, SO IT HOLDS WHERE IT STANDS — and this line used to
+      // DELETE it instead, which is the exact bug the comment above claims to
+      // have fixed. It read `sq.arriveTick = Infinity; // nowhere to run: it
+      // holds`, and the very next statement filtered the squad list on
+      // `Number.isFinite(sq.arriveTick)`: Infinity is not finite, so the sentinel
+      // meant for "keep this one" was read as "remove it". An army vanished with
+      // no event and no body count, and when it was the ENEMY's last column in
+      // flight, `endPhase`'s `!inFlight('enemy')` handed the player an instant
+      // win instead of a fight.
+      //
+      // Camping is the right answer rather than a better sentinel, because it is
+      // what the engine already does to a column whose destination disappeared —
+      // `arrivals.js` camps on a missing `dest` for precisely this case, and says
+      // so. Holding ground is a real state a squad can be in now; "in flight
+      // forever" is not.
+      campWhereItStands(state, sq);
     }
-    state.squads = state.squads.filter((sq) => Number.isFinite(sq.arriveTick));
     state.sites = state.sites.filter((s) => !s.razed);
     for (const s of state.sites) {
       // Anything pointing at ground that no longer exists: a standing rally

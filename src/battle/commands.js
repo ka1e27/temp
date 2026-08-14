@@ -14,9 +14,8 @@ import {
 } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
 import { siteById, clampRallyKeep, rallyTargetsOf, ralliesTo, isBlocked } from './state.js';
-import {
-  spawnSquad, retreatTarget, reverseSquad, pathBetween, pathThrough, marchCamped,
-} from './movement.js';
+import { spawnSquad, pathBetween, pathThrough } from './movement.js';
+import { retreatTarget, reverseSquad, marchCamped } from './retreat.js';
 import { asHex } from './influence.js';
 import { inGrid } from './mapgen.js';
 import { isTrainable } from './training.js';

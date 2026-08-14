@@ -243,5 +243,21 @@ export const MUTATOR_BY_ID = Object.freeze(
   Object.fromEntries(MUTATORS.map((m) => [m.id, m])),
 );
 
-/** Total drawing weight, precomputed so the draw is one pass. */
-export const MUTATOR_WEIGHT_TOTAL = MUTATORS.reduce((a, m) => a + m.weight, 0);
+// THERE IS NO `MUTATOR_WEIGHT_TOTAL` HERE, AND THERE MUST NOT BE ONE.
+//
+// There was: an export whose comment said "precomputed so the draw is one pass",
+// with zero readers anywhere in src/, tools/ or tests/ — while meta/incursion.js
+// `mutatorsFor` summed the same weights itself on every iteration. A constant
+// whose comment describes an optimisation that is not happening is the same
+// mistake as the four shop upgrades this project has refunded for being sold and
+// doing nothing: it reads as load-bearing, so the next person maintains it.
+//
+// DELETED rather than wired up, because the draw it claimed to serve cannot read
+// it as written. `mutatorsFor` draws WITHOUT REPLACEMENT, so the denominator
+// shrinks by the weight of each pick and a whole-table total is the right answer
+// only for the first one. Carrying it as a running total instead would be an edit
+// to the arithmetic of a seeded draw whose every rung is pinned by
+// tests/incursion.test.js, to save eight additions per rung, at most three times,
+// on a screen a player opens by hand. Not worth the risk of a re-rolled hand.
+
+

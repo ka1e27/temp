@@ -12,7 +12,8 @@ import {
 } from './combat.js';
 import { siteById, castleSealed } from './state.js';
 import { groundOf, siteDefMultOf, garrisonMultOf } from './terrain.js';
-import { spawnSquad, retreatTarget } from './movement.js';
+import { spawnSquad } from './movement.js';
+import { retreatTarget } from './retreat.js';
 import { pushEvent, EVENTS } from './events.js';
 import { recordFailedAssault } from './vision.js';
 

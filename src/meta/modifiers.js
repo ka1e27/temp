@@ -268,6 +268,17 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
 
   const rec = record(meta, regionId);
   const isRaid = isConquered(meta, regionId);
+  // THE SEED IS THE ONE FIELD `metaOf` CANNOT RESCUE, and that shipped a bug.
+  // Every other read here goes through `metaOf`, which accepts the root state OR
+  // the `meta` slice precisely so that "passing the wrong one is impossible" —
+  // but `seed` lives at the ROOT and simply is not in the slice, so a caller who
+  // hands over `state.meta` gets a silent `?? 1` and generates world 1 forever.
+  // `screens/battle.js` did exactly that, for the whole life of the project.
+  //
+  // So the fallback is stated rather than quiet: pass `options.seed` (what the
+  // harness and every test do) or the root state (what the live screen now does).
+  // A bare meta slice with no explicit seed is a seedless caller and gets 1, which
+  // is the right answer for the handful of tests that only care about the mods.
   const worldSeed = (options.seed ?? metaState?.seed ?? 1) >>> 0;
   const attempt = options.attempt ?? 0;
   // The depth is part of the seed for an incursion: the same rung retried is the

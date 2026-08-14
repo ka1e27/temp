@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createState } from '../src/core/store.js';
+import { createState, toPersisted, fromPersisted } from '../src/core/store.js';
 import { OFFLINE } from '../src/content/upgrades.data.js';
 import { REGION_BY_ID, REGIONS, fullConquestIncome } from '../src/content/regions.data.js';
 import {
@@ -319,4 +319,28 @@ test('idle: the threshold sits clear of a throttled background tab', () => {
   // fix's clothes.
   assert.ok(IDLE_CATCHUP_MS >= 2000,
     `${IDLE_CATCHUP_MS}ms is inside the background-tab throttle band`);
+});
+
+test('idle: the income cache has exactly ONE writer, so a save cannot bring its own', () => {
+  // `meta/idle.js recalcIncome` says "meta.incomePerSec has exactly one writer:
+  // this", meta/prestige.js repeats it, and meta/save.js's own v2->v3 migration
+  // writes `incomePerSec: 0, // recomputed on load; never trusted`. Against all
+  // three, `fromPersisted` used to restore the cached number straight off disk.
+  //
+  // It is a CACHE of a pure function of regions and upgrades, so the bytes carry
+  // nothing the rest of the load has not rebuilt — and a hand-edited (or
+  // older-build) file would display a rate the game will never pay. No money was
+  // ever at stake: every real route recalculates immediately. The point is that
+  // the single-writer sentence is now true rather than nearly true.
+  const s = world(['riverfen', 'ashford'], {}, 0);
+  const truth = s.meta.incomePerSec;
+  assert.ok(truth > 0, 'the fixture must have income to lie about');
+
+  const bytes = toPersisted(s);
+  bytes.meta.incomePerSec = 999;             // what a hand-edited save says
+  const back = fromPersisted(bytes, { now: 0 });
+  assert.equal(back.meta.incomePerSec, 0, 'a loaded cache must be unknown, not trusted');
+  // ...and the one writer still gets to the right answer from the healed state.
+  assert.equal(recalcIncome(back.meta), truth);
+  assert.equal(back.meta.incomePerSec, truth);
 });

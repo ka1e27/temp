@@ -55,7 +55,17 @@ export function createShopScene(ctx) {
 
       const header = h('div.shop-header.panel', {},
         h('h2#shop-title', { text: UI.shop }),
-        h('div.shop-treasury', { 'aria-live': 'polite' },
+        // NOT a live region, for the reason worldmap.js records at its own
+        // treasury: `polite` plus a 250ms tick plus a `compact` that renders
+        // sub-1000 values exactly is ~3-4 announcements a second, i.e. a queue
+        // that never drains. It is WORSE here than there, and that is why it
+        // ships gated rather than merely quieter: this panel is
+        // `role="dialog" aria-modal="true"` with focus moved to Close, so a
+        // screen-reader user is inside a modal whose only speech is a number
+        // repeating — the buy buttons, their prices and their levels never get
+        // a turn. The figures are still read on demand; they are simply no
+        // longer shouted.
+        h('div.shop-treasury', { 'aria-live': 'off' },
           h('span.label', { text: UI.treasury }), crowns,
           h('span.label', { text: UI.relics }), relics,
           h('span.label', { text: UI.income }), income),

@@ -89,10 +89,32 @@ export function projectMarchLosses(state, plan) {
   const sq = { path, owner, spawnTick, arriveTick, camped: false, hex: null };
   let live = comp;
   let carry = 0;
-  // Every tick the sim will run `towersPhase` on, in the same order, so the
-  // sub-body remainder accumulates identically. The loop is bounded by the
-  // flight time; a long march on the biggest board is a few hundred iterations.
-  for (let t = spawnTick + 1; t <= arriveTick; t++) {
+  // EXACTLY THE TICKS THE SIM WILL CHARGE, WHICH IS `spawnTick .. arriveTick-1`
+  // — and getting that window off by one is what broke the guarantee this whole
+  // function exists to keep. Read it off `sim.js step()`'s phase order, because
+  // it is a consequence of that order and of nothing local:
+  //
+  //   - the SPAWN tick IS charged. `drainCommands` creates the squad near the
+  //     top of the tick and `towersPhase` runs later in the same one, so the
+  //     column is taxed while still standing on its origin hex.
+  //   - the ARRIVE tick is NOT. `arrivalsPhase` runs BEFORE `towersPhase` and
+  //     takes the squad off the board, which is deliberate and documented there:
+  //     a column that reached its target is resolved as a fight rather than shot
+  //     at on the doorstep, or the one assault is charged for twice.
+  //
+  // This loop used to read `spawnTick + 1 .. arriveTick`, so it missed the
+  // origin hex and invented the destination hex instead. Driving the real
+  // `step()` against this projection over 180 gun placements found three
+  // disagreements, every one of them a gun adjacent to the DESTINATION that is
+  // not the target itself — the projection charged the column for a hex the sim
+  // never taxes, promised a smaller arriving force than arrives, and so moved
+  // the counter shares and `defPower` off the number the preview showed. That is
+  // invariant 3 (the preview is a guarantee, not an estimate) failing silently.
+  //
+  // The sub-body remainder accumulates over the same ticks in the same order, so
+  // it lands identically. The loop is bounded by the flight time; a long march
+  // on the biggest board is a few hundred iterations.
+  for (let t = spawnTick; t < arriveTick; t++) {
     const n = total(live);
     if (n <= 0) break;
     const at = squadHexOf({ ...state, tick: t }, sq);

@@ -96,8 +96,22 @@ export function createBattleScene(ctx) {
         // through the loadout screen. modifiers.js checks the region against the
         // rung's own plan, so a stale param cannot pick an easy map for a deep
         // rung — it throws at the seam instead.
+        // THE ROOT STATE, NOT `ctx.state.meta`, AND THE DIFFERENCE WAS THE WORLD
+        // SEED. `metaOf` accepts either object — that is its whole job — so
+        // passing the slice worked for everything except `metaState.seed`, which
+        // lives at the ROOT (`core/store.js createState`) and is not in the slice.
+        // It read as undefined and fell through to `?? 1`, so every real battle
+        // this game has ever generated came from world seed 1: `newCampaign`'s
+        // promise that "a new campaign is a new world, not a replay of the same
+        // maps" was false, and every player's Riverfen was the same Riverfen.
+        // Verified — two saves seeded 12345 and 999 both produced
+        // `riverfen#0#0#e4285f2e`.
+        //
+        // No balance number moves: `tools/simplayer.js` passes `seed` explicitly
+        // in `options`, so the harness always generated from a real seed and the
+        // whole table was measured on correctly-varied maps.
         config = buildBattleConfig(
-          ctx.state.meta, regionId, boosters, generateBattleMap,
+          ctx.state, regionId, boosters, generateBattleMap,
           { ...(composition ? { composition } : {}), ...(incursion ? { incursion } : {}) },
         );
         assertBattleConfig(config);

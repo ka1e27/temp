@@ -11,6 +11,10 @@
 // buffering, a replayable command log, and a UI that structurally cannot
 // corrupt the sim.
 import { UNIT_IDS } from '../content/balance.js';
+// FOG. The one predicate every player-facing surface asks — the board's own
+// hit-test (render/battleView.js siteAt), the panel, and now the drag magnet
+// below, which was quietly the fourth surface that never asked.
+import { siteKnown } from '../battle/vision.js';
 import { needsTarget } from './battle-keys.js';
 import { createArmedBuild } from './battle-build.js';
 import { createSquadPicker } from './battle-squadpick.js';
@@ -106,14 +110,33 @@ export function createOrders(o) {
   /** Snap the drag to whatever the pointer is over, else the nearest site of
    *  ANY owner nearby. It used to magnet only toward `from.adj` members,
    *  because that was the whole legal set; free movement makes every pair a
-   *  candidate, so snapping now only forgives a sloppy drag. */
+   *  candidate, so snapping now only forgives a sloppy drag.
+   *
+   *  AND THE MAGNET HAS TO BE FOG-GATED TOO — the fourth leak of exactly the
+   *  shape the other three had, and the nastiest, because the gate above it is
+   *  what created the case. `board.siteAt` already refuses a building this
+   *  faction has never looked at, so the one drag that fell through to the scan
+   *  below was PRECISELY the one aimed at an unscouted site: a raw pass over
+   *  `state.sites` with a ~1.4-hex pull then picked it up and returned it.
+   *  Both halves of that are a leak. Site ids encode owner and kind (`es04` is
+   *  an enemy stronghold), so the preview panel named a building that is not on
+   *  the board; and the SEND then went to that building instead of camping on
+   *  the open ground the player had actually dragged to — fog handing over the
+   *  enemy's layout and quietly changing the order at the same time.
+   *
+   *  `siteKnown` (battle/vision.js) is the one predicate the board, the panel
+   *  and the hit-test share, so asking it here is what makes the magnet agree
+   *  with the hit-test it exists to forgive. `view.rallyTo` resolves through
+   *  this same function, so one gate covers both gestures. */
   function snapTarget(from, wx, wy) {
-    const hit = board.siteAt(getState(), wx, wy);
+    const st = getState();
+    const hit = board.siteAt(st, wx, wy);
     if (hit) return hit;
     let best = null;
     let bestD = board.hexSize * 2.4;
-    for (const t of getState().sites) {
+    for (const t of st.sites) {
       if (t.id === from.id) continue;
+      if (!siteKnown(st, 'player', t)) continue;
       board.sitePos(t, _a);
       const d = Math.hypot(wx - _a.x, wy - _a.y);
       if (d < bestD) { bestD = d; best = t; }

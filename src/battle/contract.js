@@ -15,7 +15,9 @@ import { SITE_KINDS as SITE_KIND_LIST } from '../content/balance.js';
 // The two field-level validators split out to ./checks.js for the line
 // budget — nothing else in this file needed to move, since neither was ever
 // exported (only `assertBattleConfig` called them).
-import { checkMods, checkRivers } from './checks.js';
+import {
+  checkMods, checkRivers, checkGrid, checkSiteLevel,
+} from './checks.js';
 
 // v2: FactionMods gained `features` (shop unlocks that change battle or HUD
 // behaviour), and `boosters` is now validated. Before v2, five purchasable
@@ -252,6 +254,10 @@ export function assertBattleConfig(c) {
   if (!c.battleId) e.push('battleId: required');
   if (!Number.isInteger(c.seed)) e.push('seed: must be an integer');
 
+  // BEFORE the site loop, because every site's hex is checked against the grid
+  // and `inGrid` reads it without a guard — see ./checks.js `checkGrid`.
+  const gridOk = checkGrid(c, e);
+
   const sites = c.sites ?? [];
   const ids = new Set();
   if (sites.length < 2) e.push('sites: need at least 2');
@@ -260,9 +266,10 @@ export function assertBattleConfig(c) {
     ids.add(s.id);
     if (!SITE_KINDS.includes(s.kind)) e.push(`sites[${s.id}].kind: unknown "${s.kind}"`);
     if (!FACTIONS.includes(s.owner)) e.push(`sites[${s.id}].owner: unknown "${s.owner}"`);
+    checkSiteLevel(s, e);
     if (!Array.isArray(s.hex) || s.hex.length !== 2) {
       e.push(`sites[${s.id}].hex: expected [q,r]`);
-    } else if (!inGrid(c.grid, { q: s.hex[0], r: s.hex[1] })) {
+    } else if (gridOk && !inGrid(c.grid, { q: s.hex[0], r: s.hex[1] })) {
       // A SITE OFF THE MAP, which used to be survivable and is not any more.
       //
       // `grid` is an OFFSET rectangle — `axialFromOffset(col,row) = {q: col -
@@ -316,7 +323,17 @@ export function assertBattleConfig(c) {
 
   if (!c.rules || typeof c.rules !== 'object') e.push('rules: missing');
   else {
-    if (!(c.rules.hardCapMs > 0)) e.push('rules.hardCapMs: must be > 0');
+    // FINITE, and that word is doing the work: `Infinity > 0` is true, so the one
+    // rule that guarantees a battle ends was satisfied by the value that means it
+    // never does. A resumed blob with `hardCapMs: Infinity` runs until the tab
+    // closes — no timeout event, no result, no reward, and the idle economy paying
+    // out the whole time. `battle/state.js` derives `hardCapTicks` by dividing it
+    // (Infinity stays Infinity through `Math.round`) and `battle/sim.js` asks
+    // `state.tick >= hardCapTicks`, which is simply never true — so nothing
+    // downstream can notice, and the HUD counts down from infinity.
+    if (!Number.isFinite(c.rules.hardCapMs) || !(c.rules.hardCapMs > 0)) {
+      e.push(`rules.hardCapMs: must be a finite number > 0, got ${c.rules.hardCapMs}`);
+    }
     // OPTIONAL, like grid.rivers before it: absent means "no gate", not invalid.
     if (c.rules.castleGateFrac !== undefined) {
       const f = c.rules.castleGateFrac;

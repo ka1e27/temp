@@ -231,7 +231,22 @@ export function fromPersisted(data, { now = 0 } = {}) {
   // `num`'s default is for — an old save opens with none and earns them from
   // the next battle, rather than needing a migration.
   meta.relics = Math.max(0, Math.floor(num(m.relics, 0)));
-  meta.incomePerSec = Math.max(0, num(m.incomePerSec, 0));
+  // NOT RESTORED — healed to 0, which is what makes "meta.incomePerSec has
+  // exactly one writer: meta/idle.js recalcIncome" a true sentence rather than a
+  // comment three files repeat while a fourth quietly contradicts it (see also
+  // meta/save.js's own `incomePerSec: 0, // recomputed on load; never trusted`
+  // in the v2->v3 migration, which already does exactly this).
+  //
+  // It is a CACHE of a pure function of `regions` and `upgrades`, so the value on
+  // disk carries no information the rest of this function has not already
+  // rebuilt — and trusting it means a save hand-edited (or written by an older
+  // build with a different upgrade table) displays a rate the game will never pay.
+  // No money is at stake either way: every route that loads a save recalculates
+  // immediately — `bootstrapGame` before it grants offline income, and
+  // `adoptCampaign` before the menu redraws — so the only exposure was display,
+  // for the few milliseconds in between. Zero is the honest reading of "unknown
+  // until somebody computes it".
+  meta.incomePerSec = 0;
   meta.upgrades = sanitizeLevels(m.upgrades, KNOWN_UPGRADES);
   // ...and hand back the crowns for anything that no longer exists.
   meta.crowns += refundRetired(meta.upgrades);

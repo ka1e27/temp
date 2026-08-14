@@ -1,11 +1,24 @@
 // THE SURFACES THAT WENT ON ANNOUNCING WHAT THE BOARD HAD LEARNED TO HIDE.
 //
 // tests/fogrender.test.js covers the board itself — the drawn flood, the ghost
-// silhouettes, the veil. This file covers the three leaks found by review
-// AFTER that pass, and they share a shape worth naming: each one is a surface
-// that never asked about vision because, before fog, there was nothing to ask.
-// Hiding a site on the canvas buys nothing while a floating "+3" over its yard
-// announces every batch of troops it finishes.
+// silhouettes, the veil. This file covers the leaks found by review AFTER that
+// pass, and they share a shape worth naming: each one is a surface that never
+// asked about vision because, before fog, there was nothing to ask. Hiding a
+// site on the canvas buys nothing while a floating "+3" over its yard announces
+// every batch of troops it finishes.
+//
+// THE FOURTH ONE (section 3) is the reason this file grew a hit-test section at
+// all. The first three were surfaces that DREW something; the drag magnet is a
+// surface that ANSWERS something, and it changed the order the player issued as
+// well as naming the building. Review found the other three and no test drove
+// this one, so it shipped — a hit-test is exactly as much of a fog surface as a
+// draw call, and this file had no hit-test in it.
+//
+// AND THE FIFTH (section 4) is the coach, which is neither: it is the game
+// SPEAKING. The beat table itself is pinned headlessly in tests/coach.test.js
+// against a stub; the gate belongs here, against a real battle, beside the
+// other four — because what it has in common with them is the surface, not the
+// state machine.
 //
 // Every claim below is paired with a control that fails if the rule it pins is
 // simply deleted — a gate that returned false for everything would satisfy the
@@ -19,9 +32,12 @@ import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { REGIONS } from '../src/content/regions.data.js';
-import { canSee, perceivedSite } from '../src/battle/vision.js';
+import { canSee, perceivedSite, siteKnown } from '../src/battle/vision.js';
 import { fxVisible } from '../src/render/fog.js';
 import { drawRallies } from '../src/render/rallyLines.js';
+import { createOrders } from '../src/screens/battle-orders.js';
+import { castleTouchesPlayer, emptyLatch, observeState } from '../src/ui/coach.js';
+import { hexCx, hexCy } from '../src/render/hexGeom.js';
 
 /** A real battle on the real path — the same helper construct/vision use. */
 function battleFor(id = 'gallowmoor') {
@@ -173,4 +189,147 @@ test('rally: a line is checked at BOTH ends, not just at its source', () => {
   drawRallies(stubCtx(log), b, 'player', 1, g);
   assert.ok(log.filter((c) => c[0] === 'lineTo').length > 0,
     'a rally between two sites in plain sight drew nothing — the control is dead');
+});
+
+// ---------------------------------------------------------------------------
+// 3. The drag magnet is a hit-test, and nothing here ever asked it about fog
+// ---------------------------------------------------------------------------
+
+const HEX = 34;
+
+/** The `board` bundle `createOrders` closes over, cut to the three members
+ *  `snapTarget` actually uses.
+ *
+ *  `hit` stands in for render/battleView.js `siteAt`, and passing a BLIND one is
+ *  the point rather than a shortcut: that function's own fog gate is what
+ *  created the defect. It answers null for a building this faction has never
+ *  looked at, and null is exactly what fell through to the magnet — so the one
+ *  drag that reached the scan below was PRECISELY the one aimed at an unscouted
+ *  site. A real drag reaches the same line whenever the pointer lands between
+ *  two sites, which is what the magnet exists to forgive. */
+function boardFor(hit = () => null) {
+  return {
+    hexSize: HEX,
+    siteAt: hit,
+    sitePos: (s, out) => {
+      out.x = hexCx(s.hex[0], s.hex[1], HEX);
+      out.y = hexCy(s.hex[0], s.hex[1], HEX);
+      return out;
+    },
+  };
+}
+
+const centre = (s) => ({ x: hexCx(s.hex[0], s.hex[1], HEX), y: hexCy(s.hex[0], s.hex[1], HEX) });
+
+/** Real `createOrders`, not a re-implementation of `snapTarget` — the whole
+ *  reason the leak survived four fog passes is that no test drove this file. */
+function ordersFor(b, hit) {
+  return createOrders({
+    canvas: null,
+    board: boardFor(hit),
+    view: { selection: [], filter: {}, fraction: 0.5, pointer: { x: 0, y: 0 } },
+    getState: () => b,
+  });
+}
+
+test('snap: the drag magnet refuses a building the player has never seen', () => {
+  // THE FOURTH LEAK, and the only one that changes an ORDER rather than a
+  // drawing. `snapTarget` magnets to the nearest site within ~1.4 hexes, and it
+  // scanned `state.sites` raw. Two things came out of that. The preview panel
+  // NAMED the site, and a site id encodes owner and kind (`es04` is an enemy
+  // stronghold), so a player could read the enemy's layout by sweeping the dark
+  // with a drag. And the SEND then went to that invisible building instead of
+  // camping on the open ground the drag was actually aimed at — fog handing over
+  // the map and quietly rewriting the order at the same time.
+  const b = battleFor();
+  const mine = b.sites.find((s) => s.owner === 'player');
+  const orders = ordersFor(b);
+
+  const hidden = b.sites.filter((s) => !siteKnown(b, 'player', s));
+  assert.ok(hidden.length > 2, 'nothing on this board is unscouted — the test proves nothing');
+  for (const dark of hidden) {
+    const at = centre(dark);
+    const got = orders.snapTarget(mine, at.x, at.y);
+    assert.notEqual(got?.id, dark.id,
+      `the magnet named ${dark.id}, a building the player has never looked at`);
+    assert.ok(!got || siteKnown(b, 'player', got),
+      'the magnet snapped to some other site the player has never looked at');
+  }
+});
+
+test('snap: ...and still forgives a sloppy drag toward a site the player HAS seen', () => {
+  // THE NEGATIVE CONTROL, and it is the half that matters: the assertions above
+  // pass just as happily against a `snapTarget` that returns null for
+  // everything, which is not fog — it is a magnet that stopped working, and
+  // every drag released a few pixels off a site would silently become a march
+  // onto bare ground. This project's documented recurring failure is a test that
+  // asserts the wrong thing, so the gate has to be shown letting something
+  // through as well as refusing something.
+  const b = battleFor();
+  const mine = b.sites.find((s) => s.owner === 'player');
+  const orders = ordersFor(b);
+
+  const known = b.sites.find((s) => s.id !== mine.id && siteKnown(b, 'player', s));
+  assert.ok(known, 'no second known site — the control cannot be built');
+  const at = centre(known);
+  assert.equal(orders.snapTarget(mine, at.x, at.y)?.id, known.id,
+    'the magnet no longer snaps to a site in plain sight');
+
+  // ...and the direct hit-test still wins when it answers, so the gate did not
+  // turn into a second, disagreeing rule about what the pointer is over.
+  const seen = b.sites.find((s) => s.id !== mine.id && s.id !== known.id
+    && siteKnown(b, 'player', s));
+  assert.ok(seen, 'no third known site — the hand-off cannot be checked');
+  const direct = ordersFor(b, () => seen);
+  assert.equal(direct.snapTarget(mine, at.x, at.y)?.id, seen.id,
+    'snapTarget ignored what the board said the pointer was over');
+});
+
+// ---------------------------------------------------------------------------
+// 4. The coach is a surface too, and it is the game's own voice
+// ---------------------------------------------------------------------------
+
+test('coach: the castle beat does not name a throne the player has never seen', () => {
+  // COACH.takeCastle names the throne and tells the player to take the
+  // countryside before assaulting it, and `castleTouchesPlayer` fired it off the
+  // raw site list. So the hint both announced that the building is there and
+  // said where the war ends, about a castle fog has never shown anybody — the
+  // same leak as a rally line drawn into the dark, except that this one is the
+  // GAME talking, which reads as authoritative rather than as a guess.
+  //
+  // It is the ordinary case, not a corner one: `site.adj` means "within
+  // MOVEMENT.reachHexes (4)" since free movement, and an ordinary building sees
+  // radius 1 — so "the throne is in reach and nobody has looked at it" is most
+  // of the approach. (The comment above the function said "borders" until this
+  // pass, which is how the drift went unnoticed.)
+  const b = battleFor();
+  const castle = b.sites.find((s) => s.kind === 'castle');
+  assert.ok(castle && castle.owner !== 'player', 'no enemy castle on this board');
+  // Put the player on ground the castle counts as in reach, which is what the
+  // beat is looking for. Nothing derived is read here, so no recompute is owed.
+  const near = b.sites.find((s) => castle.adj.includes(s.id));
+  assert.ok(near, 'the castle has nothing in reach — the fixture cannot be built');
+  near.owner = 'player';
+  assert.equal(siteKnown(b, 'player', castle), false, 'the castle is already scouted');
+  assert.equal(castleTouchesPlayer(b), false,
+    'the coach pointed at a castle the player has never laid eyes on');
+
+  // ...and the latch is downstream of the same gate, or the beat simply fires on
+  // the next poll instead.
+  const latch = emptyLatch();
+  observeState(latch, b);
+  assert.equal(latch.castleAdjacent, false, 'the latch took the reading the gate refused');
+
+  // CONTROL 1 — REMEMBERED. The same board with the throne in `state.seen` must
+  // fire, or every assertion above is satisfied by a beat that never fires at
+  // all, which is a mute tutorial rather than a fogged one.
+  b.seen.player[castle.id] = 'enemy';
+  assert.equal(castleTouchesPlayer(b), true, 'a castle the player HAS scouted stopped firing');
+
+  // CONTROL 2 — IN SIGHT RIGHT NOW, through `vision` rather than through memory.
+  // `siteKnown` has two independent limbs and one of them working is no evidence
+  // about the other.
+  delete b.seen.player[castle.id];
+  b.vision.player[`${castle.hex[0]},${castle.hex[1]}`] = 1;
+  assert.equal(castleTouchesPlayer(b), true, 'a castle in plain sight did not fire');
 });

@@ -50,6 +50,38 @@ function board(kind, at, over = {}) {
 }
 
 /**
+ * Walk a squad's whole flight, charging EXACTLY the ticks `sim.js step()` charges.
+ *
+ * THE WINDOW LIVES HERE AND NOWHERE ELSE, because four copies of it is how this
+ * file came to pass 7/7 while being one tick off the engine. Every loop used to
+ * increment FIRST and run to `arriveTick` inclusive — which reproduced
+ * `projectMarchLosses`'s own (also wrong) window, so the two agreed with each
+ * other and neither agreed with the sim. A test that mirrors the thing under
+ * test cannot falsify it.
+ *
+ * The real window is `spawnTick .. arriveTick - 1`, and it is a consequence of
+ * `step()`'s phase order rather than of anything local: `drainCommands` spawns
+ * the squad and `towersPhase` runs later in that same tick, so the SPAWN tick is
+ * charged with the column still on its origin hex; `arrivalsPhase` runs BEFORE
+ * `towersPhase` and takes an arrived squad off the board, so the ARRIVE tick
+ * never is. Firing before the increment is what encodes both halves.
+ *
+ * @param {object} s battle state
+ * @param {object} sq the squad, already spawned
+ * @param {?function(?object, Array):void} onFire called per tick with the hex the
+ *   column occupied and the events the guns pushed there
+ */
+function walkFlight(s, sq, onFire = null) {
+  while (s.tick < sq.arriveTick) {
+    s.events = [];
+    const at = squadHexOf(s, sq);
+    towersPhase(s);
+    if (onFire) onFire(at, s.events);
+    s.tick++;
+  }
+}
+
+/**
  * March a column the whole length of the corridor and report what it lost.
  *
  * RUNS TO ARRIVAL, not for a fixed number of ticks. The first version of this
@@ -70,15 +102,10 @@ function marchPast(s) {
   const before = total(sq.comp);
   let closest = Infinity;
   let fired = 0;
-  const end = sq.arriveTick;
-  while (s.tick < end) {
-    s.tick++;
-    s.events = [];
-    const at = squadHexOf(s, sq);
+  walkFlight(s, sq, (at, events) => {
     if (at) closest = Math.min(closest, distance(gun, at));
-    towersPhase(s);
-    fired += s.events.filter((e) => e.type === EVENTS.TOWER_FIRED).length;
-  }
+    fired += events.filter((e) => e.type === EVENTS.TOWER_FIRED).length;
+  });
   const live = s.squads.find((x) => x.id === sq.id);
   return { lost: before - (live ? total(live.comp) : 0), fired, before, closest };
 }
@@ -195,12 +222,58 @@ test('the projection and the simulation agree exactly, body for body', () => {
     path: sq.path, owner: 'player', comp: comp({ militia: 100, raiders: 20 }),
     spawnTick: sq.spawnTick, arriveTick: sq.arriveTick, toId: 'far',
   });
-  while (s.tick < sq.arriveTick) { s.tick++; s.events = []; towersPhase(s); }
+  walkFlight(s, sq);
   const live = s.squads.find((x) => x.id === sq.id);
 
   assert.ok(total(projected) < 120, 'sanity: the march must actually cost something');
   assert.deepEqual(projected, live.comp,
     'the preview would have promised a different army than the one that arrived');
+});
+
+test('...and they agree over EVERY gun placement, not just one fixture', () => {
+  // THE SWEEP, and the reason it exists is that the single fixture above passed
+  // for the whole life of the feature while the projection was a tick out of
+  // step with the sim. One placement cannot find a window bug: the two windows
+  // differ only at the ends, so they disagree only when a gun happens to sit in
+  // reach of the ORIGIN hex or of the DESTINATION hex, and a fixture with its gun
+  // in the middle of the corridor agrees perfectly either way.
+  //
+  // Every placement along and beside the corridor, against three compositions,
+  // for both armed kinds. Run against the pre-fix engine this reports
+  // disagreements at `gun=[18,1]` — beside the destination, the case the old
+  // window invented a tax for — and passes everywhere else, which is exactly how
+  // it stayed hidden.
+  let checked = 0;
+  let inRange = 0;
+  const sent = [comp({ militia: 41 }), comp({ militia: 102, raiders: 20 })];
+  for (const kind of ARMED_KINDS) {
+    for (let q = 1; q <= 18; q++) {
+      for (const r of [0, 1, 2]) {
+        for (const c of sent) {
+          const s = board(kind, [q, r]);
+          const sq = spawnSquad(s, { owner: 'player', from: 'camp', to: 'far', comp: { ...c } });
+          const proj = projectMarchLosses(s, {
+            path: sq.path, owner: 'player', comp: { ...c },
+            spawnTick: sq.spawnTick, arriveTick: sq.arriveTick, toId: 'far',
+          });
+          walkFlight(s, sq);
+          const live = s.squads.find((x) => x.id === sq.id);
+          const arrived = live ? live.comp : emptyComp();
+          assert.deepEqual(arrived, proj,
+            `${kind} at [${q},${r}] with ${total(c)} sent: the preview promised `
+            + `${total(proj)} and ${total(arrived)} arrived`);
+          checked += 1;
+          if (total(arrived) < total(c)) inRange += 1;
+        }
+      }
+    }
+  }
+  // NEGATIVE CONTROL on the sweep itself: most of these placements have to
+  // actually cost the column men, or this is 200-odd assertions about a gun that
+  // never fires — which is this file's opening warning, one more time.
+  assert.ok(checked > 100, `the sweep must cover real ground, covered ${checked}`);
+  assert.ok(inRange > checked / 3,
+    `only ${inRange} of ${checked} marches took any damage — the sweep is mostly empty`);
 });
 
 test('a building never shoots the assault that is coming for it', () => {
@@ -213,7 +286,7 @@ test('a building never shoots the assault that is coming for it', () => {
   const gun = s.sites.find((x) => x.id === 'gun');
   const before = comp({ militia: 60 });
   const at = spawnSquad(s, { owner: 'player', from: 'camp', to: gun.id, comp: before });
-  while (s.tick < at.arriveTick) { s.tick++; s.events = []; towersPhase(s); }
+  walkFlight(s, at);
   const live = s.squads.find((x) => x.id === at.id);
   assert.deepEqual(live.comp, before, 'the target shot the column marching at it');
 
@@ -222,7 +295,7 @@ test('a building never shoots the assault that is coming for it', () => {
   // a stronghold that never fires.
   const past = board('stronghold', [9, 1]);
   const by = spawnSquad(past, { owner: 'player', from: 'camp', to: 'far', comp: comp({ militia: 60 }) });
-  while (past.tick < by.arriveTick) { past.tick++; past.events = []; towersPhase(past); }
+  walkFlight(past, by);
   const survivors = past.squads.find((x) => x.id === by.id);
   assert.ok(total(survivors.comp) < 60, 'a column marching past a wall must pay for it');
 });

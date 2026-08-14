@@ -2,6 +2,7 @@
 // and every number in the game is suspect.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   CONTRACT_VERSION, assertBattleConfig, assertBattleOutcome, hashBattleConfig,
@@ -234,6 +235,46 @@ test('config generation is deterministic for the same meta state', () => {
   // ...and a different world seed genuinely diverges.
   const c = buildBattleConfig({ ...world(['riverfen']), seed: 777 }, 'ashford', [], null);
   assert.notEqual(hashBattleConfig(a), hashBattleConfig(c));
+});
+
+test('the WORLD SEED reaches map generation on the live path, not just in tests', () => {
+  // THE TEST ABOVE PASSED FOR THE WHOLE LIFE OF THE PROJECT WHILE THIS WAS BROKEN,
+  // and the reason is the shape of defect this repo keeps shipping: it asserts the
+  // function works when called correctly, and nothing asserted the CALLER.
+  //
+  // `metaOf` accepts the root state or the `meta` slice, deliberately, so that
+  // "passing the wrong one is impossible rather than silently returning zeros".
+  // `seed` is the one field that promise does not cover — it lives at the root and
+  // is not in the slice — so `screens/battle.js`, which passed `ctx.state.meta`,
+  // got `undefined` and fell through to `?? 1`. Every real battle ever generated
+  // came from world seed 1: two saves seeded 12345 and 999 both produced
+  // `riverfen#0#0#e4285f2e`, so `newCampaign`'s "a new campaign is a new world"
+  // was false and every player's Riverfen was the same Riverfen.
+  //
+  // First: pin the trap itself, so nobody re-introduces it thinking the slice is
+  // enough. A slice genuinely cannot carry a seed; this is a claim about the
+  // ARGUMENT, and it is why the assertion below has to be about the call site.
+  const slice = buildBattleConfig(createState({ seed: 12345 }).meta, 'riverfen', [], null);
+  const otherSlice = buildBattleConfig(createState({ seed: 999 }).meta, 'riverfen', [], null);
+  assert.equal(slice.seed, otherSlice.seed,
+    'a bare meta slice carries no seed — if this ever differs, the trap is gone');
+
+  // ...and the root state does vary it, which is what the live screen must pass.
+  const a = buildBattleConfig(createState({ seed: 12345 }), 'riverfen', [], null);
+  const b = buildBattleConfig(createState({ seed: 999 }), 'riverfen', [], null);
+  assert.notEqual(a.seed, b.seed, 'two worlds must not generate the same map');
+  assert.notEqual(a.battleId, b.battleId);
+
+  // THE CALL SITE, asserted against source. `screens/battle.js` is a scene
+  // factory with no callable surface here (it needs a DOM), so the only way to
+  // state "it passes the root" as a test is to read the line — the same technique
+  // tests/resume.test.js uses for `main.js`'s boot order, and for the same reason.
+  const src = readFileSync(new URL('../src/screens/battle.js', import.meta.url), 'utf8');
+  const call = src.slice(src.indexOf('buildBattleConfig('), src.indexOf('assertBattleConfig('));
+  assert.ok(/buildBattleConfig\(\s*ctx\.state\s*,/.test(call),
+    'screens/battle.js must pass the ROOT state, or the world seed is dropped again');
+  assert.ok(!/buildBattleConfig\(\s*ctx\.state\.meta\s*,/.test(call),
+    'passing ctx.state.meta silently generates world seed 1 for every player');
 });
 
 test('configHash is NOT stored inside the config (it could never match itself)', () => {

@@ -56,7 +56,13 @@ export function createIncursionScene(ctx) {
       },
       h('div.shop-header.panel', {},
         h('h2#inc-title', { text: ENDGAME.incursionTitle }),
-        h('div.shop-treasury', { 'aria-live': 'polite' },
+        // NOT a live region — same rule and same measurement as worldmap.js's
+        // own treasury, and the same modal cost the shop pays: a `polite`
+        // region refreshed every 250ms by a `compact` that renders sub-1000
+        // values exactly announces several times a second and never drains,
+        // which inside `aria-modal` means the rung's briefing — its mutators,
+        // its reward, the Fight button — is never spoken at all.
+        h('div.shop-treasury', { 'aria-live': 'off' },
           h('span.label', { text: UI.treasury }), crowns),
         close),
       body));

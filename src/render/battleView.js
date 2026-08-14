@@ -67,11 +67,8 @@ export function createBattleView(opts) {
   const bgCache = createBgCache({ el: opts.bg, camera });
   let autoFit = true;
   let lastSig = NaN;
-  let owners = new Uint8Array(0);
-  let veil = new Uint8Array(0);
-  let blockedSig = null;
-  let spin = 0;
-  let state0 = null;
+  let owners = new Uint8Array(0); let veil = new Uint8Array(0); // per-hex, grown in place
+  let blockedSig = null; let spin = 0; let state0 = null;
   let fontZoom = -1; let fontStr = ''; // always read/written together in drawLabels
 
   const onResize = (w, hgt) => { camera.setViewport(w, hgt); bgCache.markDirty(true); };
@@ -358,9 +355,8 @@ export function createBattleView(opts) {
       Math.PI / 2, Math.max(hexSize * 0.1, px * 2.2), site.siege.owner, px, p);
   }
 
-  /** ONE text pass, ONE `ctx.font` assignment, batched by colour. The font
-   *  string is cached against zoom so a steady camera allocates nothing.
-   *  `squads` is the PERCEIVED list drawFrame already built. */
+  /** ONE text pass, ONE `ctx.font` assignment, batched by colour; the font string
+   *  is cached against zoom, and `squads` is the PERCEIVED list drawFrame built. */
   function drawLabels(ctx, state, squads, t, px) {
     if (camera.zoom !== fontZoom) {
       fontZoom = camera.zoom;
@@ -373,9 +369,13 @@ export function createBattleView(opts) {
       const owner = OWNERS3[o];
       ctx.fillStyle = p.owner[owner];
       for (let i = 0; i < state.sites.length; i++) {
-        // Ghost or not, no digits over ground you cannot currently verify.
+        // RAW OWNER FIRST, so a site resolves at most once per FRAME rather than
+        // once per OWNER: `perceivedSite` mints a ghost on a miss, for an answer
+        // that never depended on the owner. Identical set drawn — only a ghost's
+        // owner can differ from the true one, and a ghost carries no digits.
+        if (state.sites[i].owner !== owner) continue;
         const s = perceivedSite(state, viewFaction, state.sites[i]);
-        if (s.ghost || s.owner !== owner) continue;
+        if (s.ghost) continue;
         let n = 0;
         for (let k = 0; k < UNIT_IDS.length; k++) n += s.garrison[UNIT_IDS[k]] || 0;
         sitePos(s, _a);

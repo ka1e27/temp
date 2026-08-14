@@ -58,12 +58,26 @@ import { TICK_HZ } from '../core/loop.js';
  * @typedef {object} Squad
  * @property {number} id
  * @property {'player'|'enemy'} owner
- * @property {string} from
- * @property {string} to
+ * @property {?string} from        NULL for a column re-tasked off open ground —
+ *   `retreat.js marchCamped` clears it, because it came from no building
+ * @property {?string} to          NULL for a march onto BARE GROUND. `arrivals.js`
+ *   reads exactly that to choose between resolving a fight and making camp, so
+ *   the null is the order rather than a missing value. BOTH ends can be null at
+ *   once, and assuming otherwise stranded armies — see `retreat.js reverseSquad`
  * @property {Record<string,number>} comp
+ * @property {Array<{q:number,r:number}>} path  the route it actually walks.
+ *   `movement.js squadHexOf` reads a position off this as a pure function of
+ *   `state.tick`; the old model lerped a straight line between two sites, so
+ *   every consumer of a squad's position read a place the army was not
  * @property {number} spawnTick
  * @property {number} arriveTick   computed ONCE at spawn; movement is never integrated
  * @property {boolean} retreating  retreating forces do not fight and cannot be intercepted
+ * @property {boolean} camped      holding the ground it stands on rather than
+ *   marching. A camped squad stays in `state.squads`, so every existing consumer
+ *   sees it without learning a new container
+ * @property {?Array<number>} hex  `[q,r]` it is camped on; null while in flight
+ * @property {number} [towerHurt]  sub-body damage carried between ticks
+ *   (`towers.js`). Flooring it away is what would make that feature inert
  */
 
 const sec = (s) => Math.round(s * TICK_HZ);
@@ -210,10 +224,26 @@ export function createBattleState(config) {
     tick: 0,
     status: 'running',
 
+    // `grid` IS A SECOND HAND-PICKED SUBSET, exactly like `rules` below, and it
+    // had exactly the same defect. `rivers` used to be missing here and patched
+    // on by `startBattle` on the following line — so production was fine and
+    // `createBattleState`, which is a public export with ~25 direct callers in
+    // `tests/`, handed back a RIVERLESS BOARD. Measured on widowsgate seed 42
+    // (10 river hexes), the two disagreed on three sites of eight: a castle
+    // defending at x1.68 instead of x1.43 (18% harder throne) and a farm earning
+    // x1.00 instead of x1.35 (26% less income). Nothing failed; it was simply a
+    // different board.
+    //
+    // That is `rallyKeepDefault` a third time — a field both ends use, working
+    // only because someone remembered to list it, in a different function. It
+    // belongs here for the same reason occupancy and vision were moved in: a
+    // default that quietly differs from the real thing fails more convincingly
+    // than no default at all.
     grid: {
       cols: config.grid.cols,
       rows: config.grid.rows,
       blocked: (config.grid.blocked ?? []).map(([q, r]) => `${q},${r}`),
+      rivers: (config.grid.rivers ?? []).map(([q, r]) => `${q},${r}`),
     },
 
     sites,

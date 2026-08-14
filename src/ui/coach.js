@@ -18,6 +18,11 @@
 // Copy lives in content/strings.js (COACH). One beat's line is not there yet;
 // see COACH_EXTRA.
 import { COACH } from '../content/strings.js';
+// FOG. `siteKnown` is the one predicate every player-facing surface asks (see
+// battle/vision.js), and the coach is a player-facing surface: a hint is speech
+// about the board, so it is bound by the same rule the board is. Pure, so the
+// headless machine at the top of this file stays headless.
+import { siteKnown } from '../battle/vision.js';
 import { h, mount, unmount } from './dom.js';
 
 /** Region 1. Coach marks exist for a first-timer's first battle and nowhere
@@ -52,13 +57,35 @@ export function emptyLatch() {
   };
 }
 
-/** Does the enemy castle border anything the player holds? The site graph is
- *  symmetric (createBattleState adds both directions), so one side suffices. */
+/**
+ * Is the enemy castle within REACH of something the player holds — and has the
+ * player ever actually laid eyes on it?
+ *
+ * THIS COMMENT USED TO SAY "BORDERS" AND THAT STOPPED BEING TRUE UNDER IT.
+ * `site.adj` kept its name through free movement and changed meaning: it is
+ * every site within `MOVEMENT.reachHexes` (4) now, not the authored edge list
+ * that used to be the legal set. So this has been answering "the throne is a few
+ * hexes off my line", and the comment described a graph that no longer exists.
+ * Left AS reach rather than tightened to true adjacency, deliberately: the line
+ * it fires (COACH.takeCastle) warns that the gate holds until the countryside is
+ * yours, which is worth hearing on the APPROACH and merely late once the player
+ * is already at the wall. The graph is symmetric (recomputeReach fills both
+ * directions), so reading it from the castle's side suffices.
+ *
+ * THE VISION GATE IS THE REAL FIX. Nothing here asked, so the beat could fire —
+ * naming the castle, telling the player to take the countryside first — about a
+ * building fog has never shown them. That is the same class of leak as a rally
+ * line drawn into the dark: a surface going on narrating what the board learned
+ * to hide, and this one is the worst-sounding of them, because it is the game
+ * talking. Checked AFTER the owner test, so a castle the player already holds is
+ * still refused without a vision lookup at all.
+ */
 export function castleTouchesPlayer(battle) {
   const sites = battle?.sites;
   if (!sites?.length) return false;
   const castle = sites.find((s) => s.kind === 'castle');
   if (!castle || castle.owner === 'player') return false;
+  if (!siteKnown(battle, 'player', castle)) return false;
   const mine = new Set();
   for (const s of sites) if (s.owner === 'player') mine.add(s.id);
   return (castle.adj ?? []).some((id) => mine.has(id));

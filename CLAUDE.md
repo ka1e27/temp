@@ -103,10 +103,20 @@ home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
 `simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`/`simbuild.js`,
 `sim.js`←`arrivals.js`, `store.js`←`refund.js`, `ai.js`←`aicore.js`/`aihome.js`/
-`aiadapt.js`, `regions.rules.js`←`regions.fallback.js`, `core/hex.js`→`mapgen.js`
+`aiadapt.js`, `regions.rules.js`←`regions.fallback.js`, `movement.js`←`retreat.js`,
+`smoke.mjs`←`smoke-helpers`/`-battle`/`-orders`/`-checks`/`-meta`, `core/hex.js`→`mapgen.js`
 (the offset↔axial arithmetic lives in core and mapgen re-exports it, because
 `contract.js` has to ask "is this hex on the board" and the seam may not import
 map generation).
+
+**"Re-exported" is true of most of that list and NOT of all of it, so check before you
+assume an import path.** `rally.js`, `refund.js` and `retreat.js` are imported DIRECTLY by
+their consumers rather than re-exported from the parent, because in each case the parent
+imports from the child and a re-export back would make the pair a cycle — for `retreat.js`
+that cycle would put `movement.js`'s `const resolve` in its own temporal dead zone.
+`movement.js`←`retreat.js` is the seam between "where is this squad and how long does the
+trip take", which is pure geometry, and "where should it go instead", which has to know who
+owns what.
 
 **`regions.rules.js` now also holds the two load-bearing rules of the region table**
 (a region's step must be the size of the player's step into it; the player's step
@@ -133,8 +143,18 @@ mechanically. This is what lets the whole simulation run headless with zero mock
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **10**) — which is also what makes `meta/resume.js` discard a
-mid-battle blob whose shape the current engine would step wrongly.
+`CONTRACT_VERSION` (currently **11**) — which is also what makes `meta/resume.js` discard a
+mid-battle blob whose shape the current engine would step wrongly. **Read the version off
+`contract.js`, not off this line**: it said 10 for a whole release after v11 shipped, which
+is the same staleness this file warns about at "Still open".
+
+**v11 is three fog changes travelling together, and only one of them is a field.** Squad
+sight and a watchtower's counter-intelligence need no new state — both are answered fresh
+from `path`/`arriveTick`/`camped`/`hex`, which have crossed the seam since v10. What is
+new is `lastKnownGarrison`, the remembered size of a garrison that beat back a real lost
+assault. A v10 blob reads `undefined` for every site, which is the RIGHT default ("never
+fought here") rather than a wrong-looking one — and the bump is still required, because
+the rule is "state shape changed", not "and it happened to fail safe this time".
 
 **v10 is the squad rewrite, and it is v8's lesson a THIRD time.** A squad carries
 the `path` it walks, its `to` is nullable (a march onto bare ground), and it may be
@@ -479,8 +499,46 @@ the default spread (23 rams) vs the same     4s          4s
 4 militia vs a farm                        250s        250s
 ```
 
-**Two properties make it shippable, and both are negative controls.** It is a **hard cap
-rather than a curve**, so below forty bodies *nothing changes* — every early-region
+**THE FORTY AT THE WALL ARE THE BEST FORTY, and the first cut got that wrong in a way
+that made reinforcing a siege HARMFUL.** It scaled the whole body force by
+`FRONTAGE / bodies` — an average, not a queue — so ordinary troops *displaced* the
+specialists instead of lining up behind them, and siege damage stopped being monotonic in
+headcount. Against a level-5 castle:
+
+```
+                            before      after
+40 sappers                  100.0 dps   100.0
+40 sappers + 100 militia     45.7        100.0
+40 sappers + 400 militia     30.9        100.0
+40 halberds + 200 militia    28.0         48.0
+```
+
+Four hundred men arriving to help made the wall three times harder, and `breachSeconds`
+could walk from a live countdown to **Infinity** as the relief column landed — at which
+point `ai.js retreat()` reads that Infinity and abandons a siege *because it reinforced
+it*. No reading of "queueing" makes help harmful. Filling the frontage best-first is
+`O(kinds²)` selection over a fixed scratch pair, so the hot path still allocates nothing.
+
+**It is provably inert where the campaign was measured.** A one-type stack is
+byte-identical either way (every body is the same body, so which forty stand at the wall
+cannot matter) — 700 militia read 24.0 dps under both — and the default spread moves
+**0% below 60 slots and +1.9% to +3.0% at 200–700**, because rams are engines and carry
+most of that stack's siege output. Measured after the fix, gallowmoor reads **64% at n=96,
+verdict `ok`** against a documented 70% at n=240 — inside the tier-3 band and inside the
+n=96-vs-n=240 spread this file records elsewhere (5–13 points, and a smaller `--n` is a
+seed PREFIX rather than an unbiased draw). The loadouts that could actually move are
+sapper and halberd builds, which have zero default weight and which the harness has never
+fielded. **Not confirmed at n=240** — if a future pass needs that, gallowmoor and duskfell
+are the two rows to take first, since they ship within two points of the tier ceiling.
+
+`tests/frontage.test.js` gained the assertion that could not be written as a single-stack
+number: **monotonicity**. Its old "a mixed crowd is the share-weighted blend" assertion was
+*encoding* the defect, and is now "a mixed crowd digs at the rate of its best bodies", with
+the blend still pinned for the case that should blend — too few good bodies to fill the
+frontage.
+
+**Two more properties make it shippable, and both are negative controls.** It is a **hard
+cap rather than a curve**, so below forty bodies *nothing changes* — every early-region
 number and every small-force breach time is byte-identical, and the rule is provably
 inert except on the late stacks that broke the mechanic. A saturating curve would have
 shaved every assault in the game instead. And the scaling lands on the bodies' summed
@@ -823,9 +881,19 @@ On Nightharrow — the deepest region of the enemy's homeland — the player sta
 enemy holds outright, and the raid stopped being a raid exactly where it should be hardest.
 Every difficulty number passed, because difficulty was measured and ownership never was.
 
-It is now a flat **3–4 sites everywhere** — a beachhead, not a province — with the freed
+It is now a flat **3–5 sites everywhere** — a beachhead, not a province — with the freed
 sites turned **neutral** rather than deleted. `tests/campaign.test.js` pins the ceiling
 *and* the creep.
+
+**This paragraph said "a flat 3–4" for a long time and the table said otherwise**:
+`nightharrow`, `stormhalt`, `cinderwatch` and `widowsgate` all ship **5**, bought
+deliberately by the tier-5 pass ("a player starting site is worth ~13 points at tier 5,
+and it is the only lever that lowers the opening force ratio"). Nothing failed, because
+`campaign.test.js` enforces non-decreasing totals and a max-share ratio rather than a
+3–4 ceiling. The *premise* is intact — 5 of 55 sites on widowsgate is still a beachhead,
+where the old regime had the player holding 23 of 48 on nightharrow — but if you are
+reaching for this column, the honest range is 3–5 and the constraint that actually binds
+is the share, not the count.
 
 **But the site table was never what a player looks at.** The board is coloured by
 INFLUENCE, and `recomputeInfluence` skipped every site that wasn't player or enemy, so a
@@ -2008,6 +2076,125 @@ save), a world-map focus ring that `clip-path` painted and discarded (0 of 67,34
 changed on a real Tab), a treasury live region announcing 3× a second, and Space not
 activating focused buttons.
 
+## The five-layer audit, and the eleven things it found
+
+A second sweep, one engineer per layer (battle sim, meta/save/contract, render/screens,
+content tables, tooling), every finding reproduced with a runnable snippet before it was
+believed. **Nine of the eleven were silent** — they broke nothing visible, passed the whole
+suite, and several were contradicted by a comment sitting directly above them. The pattern
+worth carrying forward is in that last clause: on this codebase, **the comment is the
+specification, and where code and comment disagree the comment has usually been right and
+the code has usually been the thing that drifted.** Five of these were found by reading a
+docstring and then testing whether it was true.
+
+The two biggest are written up in their own sections above (`siegeDps`'s frontage becoming
+an average, and `projectMarchLosses` sampling a one-tick-shifted window). The rest:
+
+**THE WORLD SEED NEVER REACHED MAP GENERATION, so every player got the same maps.**
+`screens/battle.js` passed `ctx.state.meta` to `buildBattleConfig`, and `seed` lives on the
+ROOT state, not in the `meta` slice — so `metaState?.seed` read `undefined` and fell through
+to `?? 1` for the whole life of the project. Verified: two saves seeded 12345 and 999 both
+produced `riverfen#0#0#e4285f2e`. `newCampaign`'s promise that "a new campaign is a new
+world, not a replay of the same maps" was simply false.
+
+The mechanism is worth more than the fix, because it is a *safety feature* misfiring:
+`metaOf` accepts either the root state or the slice, deliberately, so that "passing the
+wrong one is impossible rather than silently returning zeros". `seed` is the one field that
+promise cannot cover, so the one place a caller could still pass the wrong object is the
+one place nothing guarded. **And an existing test asserted the seed varies** — it passed the
+root state, so it proved the function works when called correctly and never asked about the
+caller. `tests/modifiers.test.js` now pins the trap AND asserts the call site against
+source. No balance number moves: `tools/simplayer.js` always passed `seed` explicitly.
+
+**A TWICE-CAMPED ARMY COULD NEVER RETREAT.** `reverseSquad` anchored entirely on sites, which
+was sound while every column ran between two buildings and is not sound under free movement:
+`marchCamped` clears `from`, and `to` is already null for a march onto bare ground, so a
+column that camps, is re-tasked, and camps again has NEITHER. `retreatTarget` got
+`undefined` and returned null, so Retreat answered `nowhere-to-retreat` — permanently, with
+friendly ground two hexes away. A *first*-generation camped squad retreats fine, which is
+why it read as working. It compounds with the towers: park such a column beside a stronghold
+and it is ground down with no order that can save it. The anchor now falls back to the hex
+it stands on, which is exactly what the squad-path rewrite made knowable.
+
+**AND `siegePhase` DELETED THE ARMY ITS OWN COMMENT SAID IT SAVED.** The razing path read
+`sq.arriveTick = Infinity; // nowhere to run: it holds`, and the next statement filtered on
+`Number.isFinite(sq.arriveTick)` — so the sentinel meaning "keep this one" was read as
+"remove it". An army vanished with no event and no body count, which is verbatim the bug the
+comment block above it claims to have fixed; for the enemy's last column in flight it handed
+the player an instant win through `!inFlight('enemy')`. It camps now, which is what
+`arrivals.js` already does for a vanished destination. **Nothing had ever executed that
+branch** — the existing test only reaches the success path, because the player still holds
+their camp.
+
+**A FOURTH FOG LEAK, in the drag magnet.** `snapTarget` calls the fog-gated `siteAt` and
+then — *precisely when that returned null because the site is unscouted* — fell through to a
+raw scan of `state.sites` with a reach ~2–3× wider. Dragging near a never-seen building
+named it in the preview panel, and site ids encode owner and kind (`es04` = enemy
+stronghold), so it disclosed the two facts the site-existence gate exists to hide. Worse, the
+order *fired at the invisible building* instead of camping on open ground, while the board
+drew a dashed "no target" arc — the HUD and the canvas contradicting each other, which is
+the "one bug fixed and two left live" shape this file warns about at `perceivedSite`.
+
+**THE MARCH BOOSTER TELEPORTED COLUMNS.** `squadHexOf` reads position as
+`(tick - spawnTick) / (arriveTick - spawnTick)`, so shortening `arriveTick` alone does not
+make an army faster, it makes it JUMP — measured, 0.50 to 0.735 of the route in one tick.
+`reverseSquad` back-dates `spawnTick` for exactly this reason and the booster did not. Every
+position consumer agreed with the jump, so it was a real skip past a wall rather than a
+draw bug.
+
+**`state.grid` IS A SECOND HAND-PICKED SUBSET, and it dropped `rivers`.** `startBattle`
+patched it back on the next line, so production was fine and `createBattleState` — a public
+export with ~25 direct callers in `tests/` — handed back a riverless board. On widowsgate
+seed 42 that is three sites of eight different: a throne defending 18% harder, a farm
+earning 26% less. That is `rallyKeepDefault` a third time, and the fix is where occupancy
+and vision already went — into the state builder.
+
+**THE AI WAS BLIND TO CAMPED ARMIES, INCLUDING ONE HEX FROM ITS THRONE.** `encroachment`
+summed SITE garrisons only, so an army of 300 camped beside the castle scored 0 where the
+same 300 in transit scored 300 — while its own docstring says the whole point is "what is
+merely STANDING within `homeRadiusHexes`… waiting for it to move is waiting until it is too
+late". Camping is precisely how you park a stack next door without threatening anything, so
+the player could stage their entire force on the doorstep unnoticed. Balance-neutral by
+construction: **the harness never issues `MOVE_SQUAD` and never camps**, so no measured
+number can move — this only closes a hole a human can walk through. `threatOn` deliberately
+still ignores camped squads, because it answers "what is committed at this site right now"
+and a camped column is not.
+
+**A REFUSED SAVE PLUS A LIVE BATTLE BLOB STARTED A BLANK CAMPAIGN, silently.** `loadBattle`
+wins over every other boot route and validates the CONTRACT, never the campaign — so a
+player mid-battle on region 21 whose save got corrupted was dropped into that battle against
+a level-0 meta, and on finish `applyOutcome` paid a first-clear bonus that never persisted.
+Same shape as the already-refunded "a refused save silently started a new game": an early
+return above the refusal message. The resume route is now gated on `boot.blocked`, and
+neither file is destroyed.
+
+**`assertBattleConfig` was strict about the cosmetic field and lax about the army.** It
+validated optional sparse `unitMult` against `UNIT_IDS` with finite non-negative values,
+while `expedition` — the actual troops — got `typeof === 'object'`. So
+`{militia: 'lots'}` was ACCEPTED and produced the string `"0lots"` as a live garrison;
+`{militia: -50}` was accepted; `hardCapMs: Infinity` passed `> 0` and made a battle that can
+never time out; a bad `site.level` threw a raw `TypeError` deep in state construction rather
+than a named seam error. This is the one boundary that matters, because `resume.js` runs it
+deliberately as the shield over a hand-editable `localStorage` key. **No version bump** —
+tightening validation is not changing what the engine does with a blob.
+
+Also closed on the way: `adoptCampaign` never dropped the mid-battle blob (`mainmenu-legacy`
+does it for abdication with reasoning that applies verbatim); `meta.incomePerSec` had a
+second writer restoring it off disk against three comments claiming one; the treasury live
+region fix had landed on one of three identical surfaces, leaving the shop announcing four
+times a second inside a modal with focus on Close; `buildBlocker` allocated ~18k objects per
+frame while a build was armed, under a header asserting the scan allocates nothing; and
+`MUTATOR_WEIGHT_TOTAL` was a dead export whose comment described a precomputation that was
+not happening.
+
+**What did NOT turn up is worth recording too.** The site-kind and unit-colour tables are
+complete for all six kinds and all eight units (the doubled-colour-table gotcha has not
+regressed). `enemyMult` and total sites are non-decreasing across all 24 rows and
+`castleGateFrac` never exceeds 0.60. No `h(tag, props, …)` misuse in ~200 call sites. No
+`shadowBlur`. `markBgDirty` is still throttled to 8/s. Every DOM screen still opts back into
+pointer events. `checkpure`'s banned-global list matches this file's, and both CI jobs still
+gate the deploy.
+
 ### Still open, and why
 
 - ~~**THE CAMPAIGN RE-TUNE (second pass), against the finished battle layer.**~~
@@ -2139,6 +2326,20 @@ activating focused buttons.
   brings the default four-type spread. See the `--idle` / `--relics` bullet below and
   the dominant-loadout bullet above — the second of those is a bigger lever on the
   felt difficulty of this game than any row in `regions.data.js`.
+- **ABDICATION DESTROYS RELIC-BOUGHT BOOSTER CHARGES, and `prestige.js` contradicts itself
+  about whether it should.** `meta.boosters = {}` on reset, and every entry in
+  `BOOSTER_SHOP` is `currency: 'relics'` at 1–3 relics a charge — up to ~27 relics of stock
+  evaporating per reset. The file lists "booster stock" under Gone, and then eight lines
+  later states the governing rule: *"relics are the PLAYER's, like the ladder they are
+  half-earned from, and so is what they bought; crowns and everything crowns bought are the
+  RUN's"* — which is also the exact "a hard currency whose purchases evaporate is a rental,
+  and the player will hoard it and never spend" failure the same file warns against.
+  `march` and `fortify` need no unlock, so their charges are pure relic value. The "booster
+  stock" line looks stale relative to the crowns→relics repricing, but that is a guess:
+  **this needs an intent decision, not a patch.** Left alone deliberately.
+- **`site.garrison` is still unvalidated at the seam**, which is the same shape as the
+  `expedition` hole the audit closed — a string count would concatenate into live sim state.
+  It was not part of that pass. Same file, same fix pattern (`checkComposition`).
 - **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
   rule — a yard while it holds fewer than three, a farm after that — and never a
   stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
@@ -2388,8 +2589,13 @@ activating focused buttons.
   worker are all there, so the browser's own install prompt is the only route in;
   `beforeinstallprompt` is not captured, so there is no button anywhere that says the
   game can be installed.
-- `tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 625 lines against a
-  400-line cap and `npm run check` reports ok.
+- ~~`tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 625 lines against a
+  400-line cap and `npm run check` reports ok.~~ **CLOSED.** `EXTS` gained `.mjs`, which
+  meant paying the 663 lines `smoke.mjs` had reached by then: it is now a 95-line entry
+  point over `smoke-helpers`/`-battle`/`-orders`/`-checks`/`-meta`, split along what it
+  tests rather than at a line number, with the step list diffed before and after to prove
+  the integration check is unchanged. Invariant 4 is now actually enforced everywhere it
+  claims to be — `.mjs` was the only extension escaping it, and only one file was over.
 - ~~Neither `tools/smoke.mjs` nor `tools/mobile.mjs` is in CI~~ — **CLOSED.** Both run in
   a `browser` job that serves the game and drives real Chrome through `tools/cdp.js`, and
   the deploy waits on it. `tools/offline.mjs` runs there too, last, because it installs a

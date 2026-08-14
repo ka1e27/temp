@@ -6,6 +6,7 @@
 // is EPHEMERAL (anything suspicious is discarded, never repaired).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   saveBattle, loadBattle, clearBattle, RESUME_KEY, RESUME_MAX_AGE_MS,
 } from '../src/meta/resume.js';
@@ -15,6 +16,7 @@ import { buildBattleConfig } from '../src/meta/modifiers.js';
 import { generateBattleMap } from '../src/battle/mapgen.js';
 import { startBattle, step } from '../src/battle/sim.js';
 import { CONTRACT_VERSION } from '../src/battle/contract.js';
+import { adoptCampaign } from '../src/screens/mainmenu.js';
 
 const NOW = 1_700_000_000_000;
 
@@ -122,6 +124,73 @@ test('unreadable storage never takes the boot down', () => {
   assert.doesNotThrow(() => saveBattle(hostile, battle, config, NOW));
   assert.equal(saveBattle(hostile, battle, config, NOW).ok, false);
   assert.doesNotThrow(() => clearBattle(hostile));
+});
+
+// --- the blob must not outlive the empire it belongs to -------------------
+
+test('adopting a campaign drops the mid-battle blob from disk', () => {
+  // `adoptCampaign` is New Campaign, Import Save and a backup restore — every
+  // route that swaps one campaign for another. It set `state.battle = null` and
+  // stopped there, which drops only the battle THIS SESSION was holding: the blob
+  // lives in its own storage key and `loadBattle` runs before any screen does on
+  // the next boot. screens/mainmenu-legacy.js already made exactly this call for
+  // abdication, and its reasoning is not specific to abdication — the config names
+  // a region this save no longer holds, and meta/resume.js validates the CONTRACT
+  // rather than the campaign, so it would happily drop the player back into a
+  // battle for ground that is not theirs.
+  const storage = createMemoryStorage();
+  const { battle, config } = liveBattle(20);
+  assert.ok(saveBattle(storage, battle, config, NOW).ok);
+  assert.ok(loadBattle(storage, NOW).ok, 'the fixture must start resumable');
+
+  const ctx = { state: createState({ seed: 5, now: 0 }), bus: null, storage };
+  ctx.state.meta.crowns = 4321;
+  adoptCampaign(ctx, { meta: createState({ seed: 6, now: 0 }).meta, seed: 6 }, NOW);
+
+  assert.equal(ctx.state.meta.crowns, 0, 'the campaign really was replaced');
+  assert.equal(ctx.state.battle, null, 'the in-memory battle went');
+  assert.equal(storage.getItem(RESUME_KEY), null, 'and so did the one on disk');
+});
+
+test('adopting a campaign survives having no storage at all', () => {
+  // `ctx.storage` is handed over by main.js after the scenes are built, and every
+  // headless test builds its own ctx — so this call has to be as optional as the
+  // autosaver flush beside it.
+  const ctx = { state: createState({ seed: 5, now: 0 }), bus: null };
+  assert.doesNotThrow(() => adoptCampaign(
+    ctx, { meta: createState({ seed: 6, now: 0 }).meta, seed: 6 }, NOW,
+  ));
+});
+
+// A SOURCE-LEVEL ASSERTION, and it is one deliberately: src/main.js is a boot
+// script whose top level constructs a storage adapter, a loop and the scene stack
+// against a real `document`, so there is no function here to call. What it pins is
+// a rule rather than a shape.
+//
+// THE RULE: the resume route must not win over a BLOCKED boot. `bootstrapGame`
+// hands back a blank state when the save cannot be read, a blank state is
+// indistinguishable from a fresh campaign, and the recovery affordance (the "save
+// could not be read / autosave is off / export my broken save" drawer) is only
+// reachable through the mainmenu branch. So a player mid-battle on region 21 whose
+// save is corrupted was dropped straight into that battle against a level-0 meta
+// with no message at all, and on finish `applyOutcome` paid a first-clear bonus
+// into a blank meta that autosave was correctly refusing to write. It is the same
+// early-return-above-the-refusal-message bug screens/mainmenu-recovery.js exists
+// because of, one layer further out.
+test('a refused save is not overridden by the resume route', async () => {
+  const src = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+  const call = src.match(/^.*loadBattle\(storage[^\n]*$/m)?.[0] ?? '';
+  assert.ok(call, 'main.js no longer calls loadBattle — update this test');
+  const guarded = /boot\.blocked[\s\S]{0,120}loadBattle\(storage/.test(src);
+  assert.ok(guarded,
+    'the loadBattle call must be gated on boot.blocked, or a corrupt save plus a '
+    + `live battle blob silently starts a blank campaign. Found: ${call.trim()}`);
+  // The save itself is never destroyed on this path — that is the whole point of
+  // blocking — and neither is the blob, which may still be resumable once a backup
+  // is restored. Nothing in main.js may reach for either remover.
+  assert.doesNotMatch(src, /clearSave|removeItem/,
+    'a blocked boot must preserve both files; whatever the player chooses next '
+    + 'goes through adoptCampaign');
 });
 
 test('the resume slot never touches the save slot', () => {

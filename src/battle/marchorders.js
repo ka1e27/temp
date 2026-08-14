@@ -12,7 +12,8 @@
 import { UNIT_IDS } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
 import { siteById, isBlocked } from './state.js';
-import { spawnSquad, pathThrough, marchCamped } from './movement.js';
+import { spawnSquad, pathThrough } from './movement.js';
+import { marchCamped } from './retreat.js';
 import { asHex } from './influence.js';
 import { inGrid } from './mapgen.js';
 import { pushEvent, EVENTS } from './events.js';
