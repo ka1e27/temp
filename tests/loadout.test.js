@@ -83,16 +83,31 @@ test('slot costs are integers anchored on militia = 1, ordered by gold', () => {
   // to the last slot and every budget INCREASE have somewhere to go.
   assert.equal(UNIT_SLOTS.militia, 1);
   // NON-DECREASING, with a strict step once one unit is worth twice another.
-  // This demanded a strict increase at EVERY step, which is the same rule as
-  // "slots are 1..N" and only worked while there were five units: at eight it
-  // would have forced rams from 5 slots to 7 to make room, and rams-cost-5 is a
-  // number the campaign is tuned against (regions.data.js — unlocking them
-  // shrinks the landing force 54 -> 48). Near-equal units SHOULD tie; what must
-  // not happen is the ladder going flat.
-  const byGold = [...UNIT_IDS].sort((a, b) => UNITS[a].gold - UNITS[b].gold);
+  // This demanded a strict increase at EVERY step, which only worked while there
+  // were five units: at eight it would have forced rams from 5 slots to 7 to
+  // make room. Near-equal units SHOULD tie; what must not happen is the ladder
+  // going flat.
+  //
+  // ENGINES ARE EXEMPT FROM THE GOLD ORDER, and it is the same fact `engine`
+  // already states rather than a second one. The anchor assumes gold ratio IS
+  // value ratio, which holds only while a unit's contribution is LINEAR in how
+  // many you bring — and since `SIEGE_FRONTAGE`, exactly one unit's is not:
+  // every ordinary body's structure damage saturates at forty, engines' does
+  // not. A price derived from a linear anchor therefore overprices the one
+  // non-linear unit, and does so worse the bigger the budget gets, which is
+  // exactly where the loadout screen has its decision. Rams cost 3 against
+  // halberds' 4 for that reason and no other.
+  const engines = UNIT_IDS.filter((u) => UNITS[u].engine);
+  assert.deepEqual(engines, ['rams'],
+    'the exemption below is written for ONE unit. A second engine would take a '
+    + 'second unit out of the gold order silently — re-read this test first');
+  const byGold = [...UNIT_IDS].filter((u) => !UNITS[u].engine)
+    .sort((a, b) => UNITS[a].gold - UNITS[b].gold);
+  for (const u of UNIT_IDS) {
+    assert.ok(Number.isInteger(UNIT_SLOTS[u]) && UNIT_SLOTS[u] >= 1, `${u} slot cost`);
+  }
   for (let i = 1; i < byGold.length; i++) {
     const [prev, cur] = [byGold[i - 1], byGold[i]];
-    assert.ok(Number.isInteger(UNIT_SLOTS[cur]) && UNIT_SLOTS[cur] >= 1, `${cur} slot cost`);
     assert.ok(
       UNIT_SLOTS[cur] >= UNIT_SLOTS[prev],
       `${cur} costs more gold than ${prev} and must not cost fewer slots`,
@@ -102,6 +117,11 @@ test('slot costs are integers anchored on militia = 1, ordered by gold', () => {
         `${cur} is worth twice ${prev} in gold and must cost strictly more slots`);
     }
   }
+  // The exemption is a DISCOUNT, not a blank cheque: an engine still costs more
+  // than the cheapest thing it displaces, or the loadout has no decision in it
+  // again — from the other direction this time.
+  assert.ok(UNIT_SLOTS.rams > UNIT_SLOTS.militia,
+    'an engine priced at a militia is a free pick, which is what this file exists to stop');
   // Compressed relative to raw gold, or a marshal (15x a militia) would cost
   // more than a whole starting expedition and never be a choice at all.
   const goldRatio = UNITS.marshal.gold / UNITS.militia.gold;

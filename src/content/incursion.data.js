@@ -97,17 +97,19 @@
  * apply to a raid. `node tools/simrunner.js --incursion=1,5,10,20,30,40 --n=48`:
  *
  *     depth      1    5   10   20   30   40
- *     win%      98   88   71   50   19    2
- *     win-med  2.9  3.9  5.3  5.3 11.3  6.7   (minutes)
+ *     win%      98   96   69   46   17    6
+ *     win-med  2.1  3.1  3.6  7.7  9.2 20.9   (minutes)
  *     target    94   88   75   38   19   ~0
  *
- * The shape survived, which is the finding: 90%+ at the opening rung, a real
- * climb through the middle, a coin flip in the low 20s and nothing past 40.
- * NOTHING WAS CHANGED FOR IT. Five of the six rungs are within four points of
- * target and depth 30 is exact; the one outlier is depth 20 at +12, which is
- * 1.7 standard errors on an n=48 sample and cannot be corrected without a
- * knob that moves the rungs already sitting on target — `baseDial` shifts the
- * whole curve and `perDepth` is pinned from below by the doubling assertion.
+ * The shape survived that pass with nothing changed for it. It did NOT survive
+ * the ram slot reprice (UNIT_SLOTS 5 -> 3, content/balance.js): the ladder is
+ * fought with the default spread and the default spread is what got cheaper, so
+ * the same six rungs read 98/92/83/65/33/6 — up to +21 in the MIDDLE, which is
+ * a curve that went flat rather than a curve that moved. So this is the first
+ * pass where `perDepth` had to move too: `baseDial` 4.38 -> 4.42 lifts the whole
+ * line and 0.012 -> 0.0135 restores the climb, giving 98/96/69/46/17/6 and the
+ * same "coin-flip at depth 20, wall at depth 40" verdict the shape is defined
+ * by. The doubling floor is still clear with room (1.0135^59 = 2.21 > 2).
  * Recorded as an open observation rather than tuned, the same way `split`'s
  * uniform -6 is in CLAUDE.md: re-take it at n>=96 before spending a change.
  *
@@ -146,9 +148,9 @@ export const INCURSION = Object.freeze({
    */
   gateCeiling: 0.75,
   /** Where the curve starts, independent of what the arena's own row says. */
-  baseDial: 4.38,
+  baseDial: 4.42,
   /** Compounding growth on `baseDial`, per rung. */
-  perDepth: 0.012,
+  perDepth: 0.0135,
   /** Depth at which the 1st, 2nd and 3rd mutator arrive. Three is the ceiling
    *  because the table has eight entries: a fourth would mean half the table
    *  applies at once, and a hand of mutators that is always "most of them" is

@@ -103,18 +103,31 @@ export const UNITS = {
  * The anchor is the gold price above, because gold is already this game's own
  * statement of what a unit is worth (every unit runs at 3.0-4.5 gold/sec, so a
  * gold ratio IS a value ratio). Raw ratios are 1 / 2 / 3.75 / 6.67 / 15, which
- * prices a marshal above an entire starting expedition — unbuyable, not a
- * choice. So the curve is compressed by roughly gold^0.83, giving gold-per-slot
- * of 12 / 12 / 15 / 16 / 22.5: militia and spearmen priced exactly at their
- * gold value, and the unlockables carrying a deliberate discount so a
- * specialist is affordable rather than theoretical.
+ * prices a marshal above a whole starting expedition — unbuyable, not a choice.
+ * So the curve is compressed by roughly gold^0.83, giving gold-per-slot of
+ * 12 / 12 / 15 / 22.5: militia and spearmen priced exactly at their gold value,
+ * and the unlockables carrying a discount so a specialist is affordable.
  *
  * Anchored on militia = 1 on purpose: a leftover slot always buys exactly one
  * militia, so a budget is spendable to the last slot and an increase always has
  * somewhere to go.
+ *
+ * RAMS ARE THE ONE ROW THE ANCHOR CANNOT PRICE, and 5 -> 3 is why. It assumes
+ * gold ratio IS value ratio, which holds only while a unit's contribution is
+ * LINEAR in how many you bring — and since `SIEGE_FRONTAGE` exactly one unit's
+ * is not: an ordinary body's structure damage saturates at forty at a wall, an
+ * engine's never does. A linear anchor therefore overprices the one non-linear
+ * unit, and worse the bigger the budget — precisely where the loadout screen is
+ * supposed to have a decision in it.
+ *
+ * 3 is the table's only break of the gold order (more gold than halberds, fewer
+ * slots); tests/loadout.test.js exempts engines and asserts there is exactly
+ * one. It is a THRESHOLD, not a slope: 4 is inert (the five-region loadout table
+ * read 75/60/46/27/31 against 75/60/46/33/29 at 5), 3 bites, because what
+ * matters is whether the extra line troops carry an assault over ATTACK_MARGIN.
  */
 export const UNIT_SLOTS = {
-  militia: 1, spearmen: 2, outriders: 2, raiders: 3, halberds: 4, sappers: 3, rams: 5, marshal: 8,
+  militia: 1, spearmen: 2, outriders: 2, raiders: 3, halberds: 4, sappers: 3, rams: 3, marshal: 8,
 };
 
 /** Structure HP + regen is the master pacing knob: it sets BOTH battle length

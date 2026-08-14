@@ -18,7 +18,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { UNIT_IDS, UNITS, UNIT_SLOTS } from '../src/content/balance.js';
+import { UNIT_IDS, UNITS, UNIT_SLOTS, SIEGE_FRONTAGE } from '../src/content/balance.js';
 import { UNITS_UI } from '../src/content/strings.js';
 import { UNIT_LABEL } from '../src/screens/prebattle.js';
 import { FILTER_KEYS } from '../src/screens/battle-keys.js';
@@ -130,12 +130,22 @@ test('the spear bulwark and the marshal banner are quoted, not approximated', ()
   assert.equal(UNIT_SLOTS.militia, 1);
 });
 
-test('the ram is described by the only number that makes it worth five slots', () => {
+test('the ram is described by the two numbers that make it worth its slots', () => {
   const { desc } = UNITS_UI.rams;
   assert.ok(desc.includes(String(UNITS.rams.siege)), `siege is ${UNITS.rams.siege}`);
   assert.ok(desc.includes(mult(UNITS.rams.base)),
     `a ram is worth x${mult(UNITS.rams.base)} of a normal unit in a field fight`);
-  assert.equal(UNIT_SLOTS.rams, 5, 'if the price moved, re-read the copy');
+
+  // THE FRONTAGE IS A PLAYER-FACING RULE AND THIS IS THE ONLY PLACE IT IS SAID.
+  // A player who brings a crowd and reads "BREACH IN 385s" off the HUD has no
+  // other way to learn why: `SIEGE_FRONTAGE` caps ordinary bodies at one wall
+  // and exempts engines, which is the entire reason a ram earns its slots. The
+  // number is asserted against the constant so the copy cannot drift from the
+  // rule the way four sold-but-dead upgrades once did.
+  assert.ok(desc.includes(String(SIEGE_FRONTAGE)),
+    `the copy must quote the frontage (${SIEGE_FRONTAGE}) — it is the rule that `
+    + 'makes engines different from a bigger crowd, and nothing else states it');
+  assert.equal(UNIT_SLOTS.rams, 3, 'if the price moved, re-read the copy');
 });
 
 test('the raider escape is quoted as the half it actually is', () => {

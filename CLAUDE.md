@@ -2022,12 +2022,20 @@ activating focused buttons.
 
   ```
   tier 1   riverfen 88  ashford 86  ironwood 89  saltmere 80
-  tier 2   kaldan 75  highmarch 79  greywater 68  thornmoor 75  emberholt 74
-  tier 3   gallowmoor 61  sunder 58  vaelstrand 57  duskfell 65  karrowmere 55
-  tier 4   thanescar 43  blackspire 43  ironcrown 51  obsidian 47
-  tier 5   ravensmarch 33  gravenreach 30  nightharrow 37
-  tier 6   stormhalt 28  cinderwatch 30  widowsgate 33
+  tier 2   kaldan 75  highmarch 79  greywater 74  thornmoor 75  emberholt 71
+  tier 3   gallowmoor 70  sunder 64  vaelstrand 63  duskfell 71  karrowmere 56
+  tier 4   thanescar 44  blackspire 52  ironcrown 50  obsidian 52
+  tier 5   ravensmarch 35  gravenreach 33  nightharrow 32
+  tier 6   stormhalt 31  cinderwatch 24  widowsgate 30
   ```
+
+  **Re-confirmed a second time after the RAM SLOT REPRICE** (`UNIT_SLOTS.rams` 5 → 3),
+  which is where the tier-3-and-up numbers above come from. That change is worth ~+10
+  across tiers 3–6 and ~0 at tiers 1–2 — a 12-slot opening budget carries no rams to
+  make cheaper — so the dial rose on regions 10–24 only: gallowmoor 4.08 → 4.16 through
+  widowsgate 5.48 → 5.64, plus karrowmere's neutral pool. `duskfell` (71) and
+  `gallowmoor` (70) ship within two points of their tier ceiling, which is the tightest
+  pair in the table; re-check them first if anything downstream moves.
 
   **The frontage cost four numbers and no more**, which is the useful figure: it is a
   rule that is provably inert below forty bodies, so most of the table did not notice.
@@ -2155,19 +2163,19 @@ activating focused buttons.
   and the closed re-tune, n=48, matched seeds:
 
   ```
-  region        default   no rams   mono militia     win-median (def -> mono)
-  kaldan          75%       75%        83%           9.2m -> 7.5m
-  gallowmoor      60%       85%        96%           6.0m -> 3.2m
-  thanescar       46%       71%        94%           7.7m -> 3.9m
-  ravensmarch     33%       63%        94%           7.1m -> 3.5m
-  widowsgate      29%       52%        92%           7.3m -> 3.5m
+  region        default   no rams   mono militia    no-rams gap   was
+  kaldan          75%       75%        83%             +0         +0
+  gallowmoor      71%       85%        98%            +14        +25
+  thanescar       48%       65%        92%            +17        +25
+  ravensmarch     42%       63%        85%            +21        +30
+  widowsgate      48%       44%        81%             -4        +23
   ```
 
-  Two things to take from it. **Dropping one unit from the default spread is worth +23
-  to +30 points** — free, no trade — everywhere past kaldan; the full mono-militia
-  exploit is +36 to +63. And the exploit still gets *wider* as the campaign gets harder,
-  so the part meant to be a wall is the part it trivialises most. Kaldan is the control:
-  +0 and +8 there, so this is a late-campaign hole, not a global one. Pinned by
+  **The `no rams` column is the cheapest half of the exploit and the RAM SLOT REPRICE
+  halved it** (mean +20.6 → +9.6), turning it negative at tier 6 — bringing engines is
+  now strictly right at the last gate. The full mono-militia exploit went +43.2 → +31.0
+  mean and is NOT fixed: it is still +27 to +44 from gallowmoor on. Kaldan is the
+  control at +0/+8, so this is a late-campaign hole, not a global one. Pinned by
   `tests/loadoutdominance.test.js`, which encodes it as a DEFECT and fails informatively
   in both directions.
 
@@ -2280,14 +2288,27 @@ activating focused buttons.
   entirely in the opening, by the landing force — which is the same conclusion "the
   mechanism is tempo" reached, arriving from a third direction.
 
-  **Six fixes measured, five rejected: two militia nerfs, a slot-share cap, share-scaled
-  march speed, siege scarcity, and the concentration counter-pick.** The frontage shipped
-  — for `breachSeconds`, not for this. Anything proposed next should say which of those
-  six shapes it is not, and it should act on the LANDING FORCE, because that is the only
-  place the two armies differ. The one candidate that has never been tried and is not on
-  the list: **`UNIT_SLOTS.rams` is 5, and nothing re-priced it when the frontage made a
-  ram worth twelve times a body at a wall.** What a ram DOES was re-priced; what it COSTS
-  was not.
+  **⚠ THE ONE THING THAT HAS WORKED IS THE RAM'S SLOT PRICE, and it worked because it
+  acts on the LANDING FORCE.** `UNIT_SLOTS.rams` 5 → 3: the frontage re-priced what a ram
+  DOES and nothing re-priced what it COSTS. It is the only candidate with the property
+  the concentration lever was ranked for and turned out not to have — a mono army brings
+  no rams, so `distributeExpedition` returns a byte-identical force and the exploit
+  cannot be helped **by construction** (verified: the `no rams` and `mono` columns above
+  are identical before and after, run for run).
+
+  Two things about it are worth more than the win rates. It is a **THRESHOLD, not a
+  slope** — cost 4 is inert (75/60/46/27/31 against 75/60/46/33/29 at cost 5) and cost 3
+  bites, because what matters is whether the extra line troops carry an assault over
+  `ATTACK_MARGIN`. And it is a **region-dependent** knob, which is why it cost a full
+  re-tune rather than a dial nudge: engines matter in proportion to how much wall a
+  region has, so the same reprice was worth +14 to duskfell and +3 to karrowmere on the
+  identical dial. It re-weights the campaign's relative difficulty, not just its level.
+
+  **Seven fixes measured, five rejected, two shipped: two militia nerfs, a slot-share
+  cap, share-scaled march speed, and the concentration counter-pick are dead; the siege
+  frontage shipped for `breachSeconds` and the slot reprice shipped for this.** Anything
+  proposed next should say which of those seven shapes it is not, and it should act on
+  the landing force, because that is the only place the two armies differ.
 - ~~**Ownership's second channel is half-built.**~~ **CLOSED, both halves.**
   `render/ownerDash.js` did the site STROKE (solid yours, dashed theirs, fine dotted
   for nobody's and for a fogged ghost). The other half was the territory FLOOD, which

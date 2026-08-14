@@ -172,24 +172,24 @@ export const REGIONS = Object.freeze([
   // site count and battle length scale together across tiers") for why the
   // campaign-wide monotonic length claim is still NOT restored here.
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    4.08, 16, 12, [[2, 3, 6], 12, 4], 1.8, 0.55, 11.4, 6.5,
+    4.16, 16, 12, [[2, 3, 6], 12, 4], 1.8, 0.55, 11.4, 6.5,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.',
     'narrow'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
-    4.2, 16, 12, [[2, 3, 6], 12, 4], 1.92, 0.56, 13.7, 6.5,
+    4.29, 16, 12, [[2, 3, 6], 12, 4], 1.92, 0.56, 13.7, 6.5,
     'A canyon rift halves the map; both castles are reachable only through the two bridges.',
     'split'),
   T('vaelstrand', 'Vaelstrand', 3, [3, 0],
     ['kaldan', 'greywater', 'sunder', 'duskfell', 'ironcrown', 'blackspire'],
-    4.52, 17, 13, [[2, 3, 7], 12, 4], 2, 0.57, 16.4, 6,
+    4.58, 17, 13, [[2, 3, 7], 12, 4], 2, 0.57, 16.4, 6,
     'Coastal sprawl with the richest farm belt in the game — starve it and the castle falls itself.'),
   T('duskfell', 'Duskfell', 3, [3, 1],
     ['greywater', 'karrowmere', 'vaelstrand', 'thanescar', 'ironcrown', 'obsidian'],
-    4.58, 17, 13, [[2, 3, 7], 12, 4], 2.05, 0.58, 19.7, 6,
+    4.68, 17, 13, [[2, 3, 7], 12, 4], 2.05, 0.58, 19.7, 6,
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.',
     'branch'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    4.58, 17, 13, [[2, 4, 7], 14, 4], 2.08, 0.59, 23.6, 6,
+    4.68, 17, 13, [[2, 4, 7], 14, 4], 2.08, 0.59, 23.6, 6,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.',
     'choke'),
 
@@ -220,11 +220,11 @@ export const REGIONS = Object.freeze([
   // 15 by blackspire's TOTAL (tier-2 header) — already spent. 2.20 -> 2.45 is
   // the whole gap to blackspire, and reads 46% against 71% at n=48.
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    5.2, 17, 13, [[2, 4, 7], 15, 4], 2.45, 0.6, 28.4, 6.5,
+    5.32, 17, 13, [[2, 4, 7], 15, 4], 2.45, 0.6, 28.4, 6.5,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.',
     'branch'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
-    5.2, 17, 13, [[2, 4, 7], 15, 4], 2.45, 0.6, 34, 7.5,
+    5.32, 17, 13, [[2, 4, 7], 15, 4], 2.45, 0.6, 34, 7.5,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.',
     'choke'),
   // IRONCROWN'S NEUTRAL POOL IS THE LEVER HERE, and it is the tier-2 header's
@@ -238,12 +238,12 @@ export const REGIONS = Object.freeze([
   // that costs nothing anywhere else.
   T('ironcrown', 'Ironcrown', 4, [4, 0],
     ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
-    5.2, 17, 13, [[2, 4, 7], 19, 4], 2.48, 0.6, 40.8, 7,
+    5.38, 17, 13, [[2, 4, 7], 19, 4], 2.48, 0.6, 40.8, 7,
     'A Marshal holds the throne: the castle guard fights 25% harder and trains 40% faster.',
     'choke'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1],
     ['ironcrown', 'duskfell', 'thanescar', 'gravenreach', 'nightharrow'],
-    5.2, 17, 13, [[2, 4, 7], 20, 4], 2.52, 0.6, 49, 6,
+    5.38, 17, 13, [[2, 4, 7], 20, 4], 2.52, 0.6, 49, 6,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. Their capital.',
     'branch'),
 
@@ -293,16 +293,16 @@ export const REGIONS = Object.freeze([
   // frontage cost the whole back half ~7 points and the dial sat on tier 4's
   // own 5.20 plateau. 23% -> 32%, the middle of the band.
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach', 'stormhalt'],
-    5.2, 18, 13, [[2, 5, 8], 18, 4], 2.6, 0.6, 61, 7,
+    5.38, 18, 13, [[2, 5, 8], 18, 4], 2.6, 0.6, 61, 7,
     'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.',
     'branch'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],
     ['ironcrown', 'obsidian', 'ravensmarch', 'nightharrow', 'stormhalt', 'cinderwatch'],
-    5.22, 18, 14, [[2, 5, 8], 22, 4], 2.8, 0.6, 76, 6.5,
+    5.38, 18, 14, [[2, 5, 8], 22, 4], 2.8, 0.6, 76, 6.5,
     'Every wall here is built and manned. Half the enemy yards retrain to answer whatever you brought.',
     'split'),
   T('nightharrow', 'Nightharrow', 5, [5, 1], ['obsidian', 'gravenreach', 'cinderwatch', 'widowsgate'],
-    5.43, 19, 15, [[2, 5, 8], 27, 5], 2.85, 0.6, 95, 6.5,
+    5.55, 19, 15, [[2, 5, 8], 27, 5], 2.85, 0.6, 95, 6.5,
     'The last of them, behind level-four walls with a Marshal on the gate. Bring engines and bring time.',
     'choke'),
 
@@ -355,14 +355,14 @@ export const REGIONS = Object.freeze([
   // off an n=48 sample and 9.6m at n=240, so a table tuned on the small sample
   // tells the player a region takes half again as long as it does.
   T('stormhalt', 'Stormhalt', 6, [6, -1], ['ravensmarch', 'gravenreach', 'cinderwatch'],
-    5.43, 20, 15, [[2, 5, 9], 28, 5], 3.1, 0.6, 118, 9,
+    5.60, 20, 15, [[2, 5, 9], 28, 5], 3.1, 0.6, 118, 9,
     'A storm coast fortress fed from the sea. Five attacks at once, and every one of them means it.'),
   T('cinderwatch', 'Cinderwatch', 6, [6, 0],
     ['gravenreach', 'nightharrow', 'stormhalt', 'widowsgate'],
-    5.45, 20, 15, [[2, 5, 9], 30, 5], 3.15, 0.6, 147, 7,
+    5.62, 20, 15, [[2, 5, 9], 30, 5], 3.15, 0.6, 147, 7,
     'They burned their own farms rather than leave them standing. Take the ashes and hold them.'),
   T('widowsgate', 'The Widow’s Gate', 6, [6, 1], ['nightharrow', 'cinderwatch'],
-    5.48, 21, 16, [[3, 5, 9], 32, 5], 3.3, 0.6, 183, 7.5,
+    5.64, 21, 16, [[3, 5, 9], 32, 5], 3.3, 0.6, 183, 7.5,
     'The last gate, two banners behind it, and no throne left to retreat to. Finish it.'),
 ]);
 

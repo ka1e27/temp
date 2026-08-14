@@ -27,12 +27,13 @@ construction, towers, the slower march, fog, squad sight and the site-existence 
 all landed. Every `enemyMult` and every advertised length moved; the method and the four
 transferable findings are in `CLAUDE.md` (`Still open` → the closed re-tune entry).
 
-**Siege binds again.** `SIEGE_FRONTAGE` caps how much structure damage ordinary bodies
-can do at one wall and exempts engines, which closes the oldest measured defect in the
-file — "`breachSeconds` stopped binding around region 8" — and makes rams a purchase
-rather than a tax on your slots. It cost a four-number re-tune, no more. It did *not*
-fix the loadout problem below, and the section says exactly how the measurement of that
-nearly went wrong.
+**Siege binds again, and a ram is a purchase.** `SIEGE_FRONTAGE` caps how much structure
+damage ordinary bodies can do at one wall and exempts engines, closing the oldest measured
+defect in the file — "`breachSeconds` stopped binding around region 8". `UNIT_SLOTS.rams`
+5 → 3 then re-priced what a ram COSTS to match what the frontage made it worth. Together
+they halve the cheapest half of the loadout exploit below and make engines strictly right
+at the last gate; they do not close it. The campaign and the ladder were re-tuned against
+both and every region reports `ok` at n=240.
 
 The one thing to carry forward: **the table describes a bot that earns no relics, idles
 far less than a real player, brings the default four-type spread, and still knows where
@@ -57,17 +58,18 @@ frontage, n=48, matched seeds:
 | region | default | **no rams** | militia only |
 |---|---|---|---|
 | kaldan (tier 2) | 75% | 75% | 83% |
-| gallowmoor (tier 3) | 60% | **85%** | **96%**, a 6.5-minute region won in 3.2 |
-| thanescar (tier 4) | 46% | **71%** | **94%** |
-| ravensmarch (tier 5) | 33% | **63%** | **94%** |
-| widowsgate (tier 6, the incursion arena) | 29% | **52%** | **92%** |
+| gallowmoor (tier 3) | 71% | **85%** | **98%**, a 6.5-minute region won in 3.2 |
+| thanescar (tier 4) | 48% | **65%** | **92%** |
+| ravensmarch (tier 5) | 42% | **63%** | **85%** |
+| widowsgate (tier 6, the incursion arena) | 48% | 44% | **81%** |
 
-**The cheapest half of the exploit is one click: don't bring rams.** That alone is +23 to
-+30 points past kaldan, for free. The full mono-militia version is +36 to +63, and it
-does not merely win more often — it deletes the battle, finishing in half the advertised
-time. It gets *wider* as the campaign gets harder, so the part of the game meant to be a
-wall is the part it trivialises most. Kaldan is the control at +0/+8: this is a
-late-campaign hole. Pinned by `tests/loadoutdominance.test.js`.
+**The cheapest half used to be one click — don't bring rams — and the RAM SLOT REPRICE
+halved it.** `UNIT_SLOTS.rams` 5 → 3 took that gap from +23/+25/+25/+30 down to
++14/+17/+21 and turned it NEGATIVE at tier 6: bringing engines is now strictly right at
+the last gate. The full mono-militia version is unfixed at +27 to +44, and it does not
+merely win more often — it deletes the battle, finishing in half the advertised time.
+Kaldan is the control at +0/+8: this is a late-campaign hole. Pinned by
+`tests/loadoutdominance.test.js`.
 
 **This is the reason the specialists, the relic troop lines, and most of the strategic
 layer are dead content.** Nobody re-opens a screen that already wins everything.
@@ -130,11 +132,19 @@ paid for it. Reverted.
 
 **That retires a class, not a knob: nothing keyed on what the player FIELDS can work**,
 because the two armies are identical from two minutes in. The gap is created entirely in
-the opening, by the landing force. Which is where the next candidate has to act — and
-there is one nobody has tried: **`UNIT_SLOTS.rams` is 5, and nothing re-priced it when the
-frontage made a ram worth twelve times a body at a wall.** What a ram *does* was
-re-priced; what it *costs* was not. That is a one-number change to the exact place the two
-armies differ, and it needs its own measurement.
+the opening, by the landing force — which is where the one lever that HAS worked acts.
+
+**The ram's slot price is the fix that landed.** `UNIT_SLOTS.rams` 5 → 3: the frontage
+re-priced what a ram *does* and nothing re-priced what it *costs*. It has exactly the
+property the counter-pick was ranked for and did not have — a mono army brings no rams,
+so `distributeExpedition` returns a byte-identical force and the exploit cannot be helped
+by construction. Two things about it are worth more than the win rates. It is a
+**threshold, not a slope**: cost 4 is inert, cost 3 bites, because what matters is whether
+the extra line troops carry an assault over `ATTACK_MARGIN`. And it is
+**region-dependent** — engines matter in proportion to how much wall a region has, so the
+same reprice was worth +14 to duskfell and +3 to karrowmere on the identical dial. That is
+why it cost a full re-tune of tiers 3–6 and a ladder re-tune rather than a one-number
+change: it re-weights the campaign's relative difficulty, not just its level.
 
 **Five things NOT to try, because they have been built and measured.** Two militia nerfs
 (both *widen* the gap — the mixed army sits on the steep part of the win curve and the

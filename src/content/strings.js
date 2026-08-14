@@ -76,10 +76,10 @@ export const UNITS_UI = Object.freeze({
   rams: Object.freeze({
     name: 'Rams',
     role: 'Breaks walls',
-    desc: 'Siege 12 against a wall — twenty times a militia — and the only '
-      + 'reliable way to out-pace a stronghold repairing itself. Worth x0.40 '
-      + 'of a normal unit in the field unless it is spearmen in the way (up to '
-      + '+260%). Slowest thing you own: x0.65 highland, x0.75 river.',
+    desc: 'Siege 12, and the only siege that never stops counting: past 40 '
+      + 'ordinary troops at one wall the rest queue, engines do not. Worth '
+      + 'x0.40 of a normal unit in the field unless it is spearmen in the way '
+      + '(up to +260%). Slowest thing you own: x0.65 highland, x0.75 river.',
   }),
   outriders: Object.freeze({
     name: 'Outriders',
