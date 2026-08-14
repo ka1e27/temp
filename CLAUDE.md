@@ -246,6 +246,34 @@ subsampled, never truncated, because truncating marches the army to the middle o
 gesture and stops. **A drag that WIGGLES is not a detour** — in hex space a diagonal step
 still closes the distance, so an S-curve is exactly as long as the straight line.
 
+**AND THE ARROW IS THAT ROUTE.** The drag previewed as a bowed arc from source to target,
+which was honest while a send was *aimed* and became a lie the moment waypoints shipped:
+the army walks hexes around mountains and bases, and the arc drew straight over all of it,
+so a player choosing the long way round a wall that shoots at passers-by could not see
+whether the road they drew was the road they got. `battle-waypoints.js previewPath` builds
+the same `stops` array `cmdSend` builds and hands it to the same `pathThrough` — the
+`resolveField` discipline, one layer up — and the renderer strokes those hexes. It is
+recomputed only when the finger crosses into a new hex or the snap flips, because
+pointermove fires far faster than either and the path costs an A* leg per waypoint. No
+legal route falls back to the dashed arc, which is honest: `cmdSend` would refuse it too.
+
+**THE SNAP MAGNET WAS EATING THE ROUTE, and that is why a road could not be drawn past
+your own gate.** `snapTarget` pulled to any known site within **2.4 hexes** — nearly three
+tiles, so every hex you might route *through* beside a building was inside its reach, and
+a drag that went round one was captured and reissued as a send AT it. It is `SNAP_HEXES`
+0.85 now, under a single hex, and a **drawn route turns it off entirely**: a player who
+curved a road has already said where the army goes, and `board.siteAt` still fires, so
+ending a drawn route on a building works — it just has to be *on* the building.
+
+**Chaining through your own buildings was never a sim rule** — `passableFor` has always
+let a faction cross its own hexes, and a waypoint on your own yard routes fine. The magnet
+was the whole obstacle. What the shrink DID expose is a real hole: `passableFor` gives the
+GOAL hex a free pass so an army can path onto a site it means to assault, which made a
+bare-ground order naming an enemy base's own tile an order to CAMP inside it — and
+`arrivals.js` obliges, because a camped squad never consults occupancy again. Both march
+verbs now refuse it (`occupied-hex`); your own ground stays legal, which is the half the
+feature is for.
+
 **BUILDINGS SHOOT** (`battle/towers.js`, `content/balance.towers.js`). Stronghold range 1,
 watchtower range 2 — the two kinds that earn nothing, because arming a farm would make the
 economic buildings the military ones and undo the yard/wall split. Two rules carry it:
@@ -1306,23 +1334,29 @@ still selectable with the cursor. That symmetry is the point: a thing that draws
 and still answers a click is a worse tell than drawing it, because the player finds it by
 sweeping empty dark.
 
-**UNCLAIMED GROUND IS COMMON KNOWLEDGE, and leaving it out was a shipping bug caught by
-one measurement.** With only the rule above, the campaign OPENER measured — on all twelve
-seeds — a player board holding their own three sites and **nothing else**: no neutral farm
-anywhere on it, while `COACH.drag`, the first line a new player is ever shown, says *"Drag
-from your camp to the grey farm."* An instruction pointing at something not on the board.
-So `recomputeVision` records a site whose owner is `neutral` into BOTH factions' `seen`.
-It is the honest reading of the ask (the thing to hide is where the ENEMY's buildings
-are), it keeps the opening land grab legible, and it goes in `seen` rather than being a
-live "is it neutral right now?" test in `siteKnown` — otherwise a farm the enemy captured
-while you were elsewhere would BLINK OUT, where the ghost should say "nobody's, last I
-knew". Riverfen now opens at 6 sites known of 11, gallowmoor 16 of 28, widowsgate 37 of
-55, and **zero enemy buildings on any of them.**
+**NOTHING IS COMMON KNOWLEDGE — and unclaimed ground was the last exemption to go.**
+`recomputeVision` used to record a site whose owner is `neutral` into BOTH factions'
+`seen`, on the reasoning that a farm nobody holds is not intelligence: no garrison is
+hiding it, and the opening race for it is the whole shape of the first two minutes. That
+exemption is gone. "There is a building over there" is the fact being hidden, and who
+happens to hold it does not make it less of a disclosure — a neutral farm is a place
+worth marching to, which is exactly what made knowing about it for free worth something.
+A site enters `seen` by being LOOKED AT, and that is now the entire rule.
 
-**It is provably balance-neutral rather than merely within noise**: with the dial fixed,
-the n=96 sweep before and after is *identical region by region* from gallowmoor to
-widowsgate. Nothing in `ai.js`, `aihome.js` or the harness branches on the difference
-between a ghost owned by `null` and one owned by `neutral` — both are "not the foe".
+**It cost the tutorial's first line, which is the thing to re-check if the opening ever
+reads as a blank screen.** `COACH.drag` used to say *"Drag from your camp to the grey
+farm"*, and with neutrals hidden the campaign opener puts the player's board at their own
+three sites of eleven — an instruction pointing at nothing. The line now teaches the
+GROUND rather than a building (*"Drag from your camp across the map. Your troops march
+the road you draw."*), which needs nothing on the board to point at and is the better
+lesson anyway, because a march can end on any tile.
+
+**It is provably balance-neutral rather than merely within noise, twice over.** By
+construction: `beliefFor` does not ask `siteKnown`, so the enemy commander and the harness
+bot keep a ghost for every site regardless, and nothing branches on a ghost owned by
+`null` versus one owned by `neutral` — both are "not the foe". And by measurement:
+eighteen matched runs across riverfen, gallowmoor and widowsgate are **byte-identical**
+with the clause and without it, status, tick count, site counts and top level.
 
 **`beliefFor` deliberately does NOT ask it.** `perceivedSite` keeps handing the enemy AI
 and the harness bot a ghost for every site on the map, because `aicore.js frontDistance`

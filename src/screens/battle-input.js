@@ -14,7 +14,7 @@ import { createHotkeys } from './battle-hotkeys.js';
 import { createOrders, cmd } from './battle-orders.js';
 // The drag trail is accumulated HERE and trimmed in battle-orders.js — one
 // rule, in ./battle-waypoints.js, so the two halves cannot drift.
-import { trackHex } from './battle-waypoints.js';
+import { trackHex, previewPath } from './battle-waypoints.js';
 
 export { cmd, filterList } from './battle-orders.js';
 export { createView } from './battle-view.js';
@@ -51,6 +51,8 @@ export function createBattleInput(o) {
     // reassigned: the renderer holds this array to draw the route as it is
     // being drawn, and swapping it would leave the board pointing at the old one.
     view.dragTrail.length = 0;
+    view.dragPath = null;
+    view.dragPathKey = '';
     view.rallyFrom = null;
     view.rallyTo = null;
     view.box = null;
@@ -161,7 +163,9 @@ export function createBattleInput(o) {
     if (view.dragFrom) {
       const from = ord.site(view.dragFrom);
       if (from) {
-        const t = ord.snapTarget(from, w.x, w.y);
+        // The trail is passed so the magnet can stand down once this is a
+        // DRAWN route rather than a pull — see battle-orders.js `snapTarget`.
+        const t = ord.snapTarget(from, w.x, w.y, view.dragTrail);
         view.dragTo = t && t.id !== from.id ? t.id : null;
         // THE ROAD THE PLAYER IS DRAWING. Recorded on the way past rather than
         // reconstructed on release: a pointer trail is the only record of which
@@ -169,6 +173,17 @@ export function createBattleInput(o) {
         // moment the gesture ends. Deduped inside `trackHex`, because
         // pointermove fires far faster than a finger crosses a hex.
         trackHex(view.dragTrail, w.x, w.y, board.hexSize);
+        // THE PREVIEWED ROUTE, recomputed only when it could have changed —
+        // when the finger crossed into a new hex or the snap flipped. A
+        // pointermove fires far faster than either, and `previewPath` costs an
+        // A* leg per waypoint, so recomputing per event would put twenty
+        // searches on the pointer handler for a line that did not move.
+        const key = `${t ? t.id : ''}|${view.dragTrail.length}`;
+        if (key !== view.dragPathKey) {
+          view.dragPathKey = key;
+          view.dragPath = previewPath(getState(), from, view.dragTo ? t : null,
+            view.dragTrail);
+        }
       }
     } else if (view.box) {
       view.box.x1 = w.x;

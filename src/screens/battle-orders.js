@@ -15,6 +15,10 @@ import { UNIT_IDS } from '../content/balance.js';
 // hit-test (render/battleView.js siteAt), the panel, and now the drag magnet
 // below, which was quietly the fourth surface that never asked.
 import { siteKnown } from '../battle/vision.js';
+
+/** How far past a building's own glyph the drag magnet still reaches, in hexes.
+ *  See `snapTarget` for why this is under one. */
+const SNAP_HEXES = 0.85;
 import { needsTarget } from './battle-keys.js';
 import { createArmedBuild } from './battle-build.js';
 import { createSquadPicker } from './battle-squadpick.js';
@@ -128,12 +132,26 @@ export function createOrders(o) {
    *  and the hit-test share, so asking it here is what makes the magnet agree
    *  with the hit-test it exists to forgive. `view.rallyTo` resolves through
    *  this same function, so one gate covers both gestures. */
-  function snapTarget(from, wx, wy) {
+  function snapTarget(from, wx, wy, trail = null) {
     const st = getState();
     const hit = board.siteAt(st, wx, wy);
     if (hit) return hit;
+    // A DRAWN ROUTE TURNS THE MAGNET OFF, and that is the whole of "let me draw
+    // a road past my own gate". The magnet exists so a quick pull at a
+    // neighbour lands on it without precision; a player who has taken the
+    // trouble to curve a route around a building has already said where they
+    // want the army, and having the building they steered around reach out and
+    // claim the order is the exact opposite of the gesture. `board.siteAt`
+    // above still fires, so ENDING a drawn route on a building works — it just
+    // has to be on the building rather than near it.
+    if (trail && isDrawnRoute(trail)) return null;
     let best = null;
-    let bestD = board.hexSize * 2.4;
+    // SNAP_HEXES was 2.4, which is nearly the width of three tiles: any hex you
+    // could route THROUGH beside a building was inside its pull, so a drag that
+    // went round one was captured by it and reissued as a send AT it. Under one
+    // hex means the magnet only ever covers ground the building is standing on
+    // or touching, which is what it was for.
+    let bestD = board.hexSize * SNAP_HEXES;
     for (const t of st.sites) {
       if (t.id === from.id) continue;
       if (!siteKnown(st, 'player', t)) continue;

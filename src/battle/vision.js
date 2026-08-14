@@ -149,31 +149,31 @@ export function recomputeVision(state) {
   // this faction has ever looked at; only a site CURRENTLY visible (in sight
   // right now, or held outright) gets overwritten with the truth.
   //
-  // UNCLAIMED GROUND IS COMMON KNOWLEDGE, and that clause is what keeps the
-  // opening land grab playable now that `siteKnown` hides a building nobody has
-  // looked at. Measured on the campaign OPENER, all twelve seeds: without it the
-  // player's board holds their own three sites and nothing else — no neutral
-  // farm anywhere on it — while the tutorial's very first line says "drag from
-  // your camp to the grey farm". An instruction pointing at something that is
-  // not on the board is the failure this project keeps paying for, one step
-  // worse than the half-written coach beats that reached no player at all.
+  // NOTHING IS COMMON KNOWLEDGE. A site enters `seen` by being LOOKED AT, and
+  // that is the whole rule — an unclaimed farm is hidden on exactly the same
+  // terms as an enemy stronghold, because "there is a building over there" is
+  // the fact being hidden and who happens to hold it does not change that.
   //
-  // It is also the honest reading of what was asked for: the thing to hide is
-  // where the ENEMY's buildings are. A farm nobody holds is not intelligence —
-  // nobody is garrisoning it, nobody is hiding it, and the opening race for it
-  // is the whole shape of the first two minutes.
+  // THIS CLAUSE USED TO EXEMPT NEUTRALS and the reason is worth keeping, because
+  // it is the thing to re-check if the opening ever reads as a blank screen.
+  // Measured on the campaign opener across all twelve seeds, hiding them takes
+  // the player's board from six sites known of eleven down to their own three —
+  // and the tutorial's first line used to read "drag from your camp to the grey
+  // farm", an instruction pointing at something not on the board. That line is
+  // now about the ground rather than a building (content/strings.js COACH.drag),
+  // which is also the better lesson: a march can end on any tile.
   //
-  // Recorded into `seen` rather than special-cased inside `siteKnown` so that
-  // capturing one does not make it BLINK OUT: the moment the enemy takes a
-  // neutral farm the player never approached, `seen` still says "neutral", which
-  // is a true past-tense statement of exactly the kind this map exists to carry.
+  // It costs nothing in balance BY CONSTRUCTION rather than by measurement.
+  // `beliefFor` deliberately does not ask `siteKnown` — the enemy commander and
+  // the harness bot both keep a ghost for every site on the map, because their
+  // planners are whole-map geometry (see this file's header) — so this moves
+  // what the SCREEN shows and nothing either side reasons about.
   const prev = state.seen ?? { player: {}, enemy: {} };
   const seen = {};
   for (const faction of FACTIONS) {
     const merged = { ...prev[faction] };
     for (const site of state.sites) {
       const visible = site.owner === faction
-        || site.owner === 'neutral'
         || vision[faction][kOf(asHex(site.hex))] !== undefined;
       if (visible) merged[site.id] = site.owner;
     }

@@ -12,6 +12,7 @@
 import { UNIT_IDS } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
 import { siteById, isBlocked } from './state.js';
+import { occupantAt } from './occupancy.js';
 import { spawnSquad, pathThrough } from './movement.js';
 import { marchCamped } from './retreat.js';
 import { asHex } from './influence.js';
@@ -58,6 +59,15 @@ export function cmdSend(state, cmd, by) {
   if (toHex && (!inGrid(state.grid, toHex) || isBlocked(state, toHex.q, toHex.r))) {
     return 'bad-hex';
   }
+  // ...AND IT HAS TO BE GROUND, not somebody else's front step. `passableFor`
+  // gives the GOAL hex a free pass so an army can path onto a site it means to
+  // assault — right for an order aimed AT a building, wrong for a march to a
+  // bare tile: without this, a hex order naming the tile an enemy base stands on
+  // is an order to CAMP inside it, and arrivals.js obliges, because a camped
+  // squad never consults occupancy again. Own ground stays legal — standing in
+  // your own yard is exactly what occupancy already allows, and it is how a
+  // drawn route chains through your own buildings.
+  if (toHex && (occupantAt(state, toHex.q, toHex.r) ?? by) !== by) return 'occupied-hex';
 
   // THE RULE THAT REPLACED ADJACENCY. A send used to be legal only along an
   // authored edge; now it is legal wherever an army can actually walk, and the
@@ -118,6 +128,15 @@ export function cmdMoveSquad(state, cmd, by) {
   if (toHex && (!inGrid(state.grid, toHex) || isBlocked(state, toHex.q, toHex.r))) {
     return 'bad-hex';
   }
+  // ...AND IT HAS TO BE GROUND, not somebody else's front step. `passableFor`
+  // gives the GOAL hex a free pass so an army can path onto a site it means to
+  // assault — right for an order aimed AT a building, wrong for a march to a
+  // bare tile: without this, a hex order naming the tile an enemy base stands on
+  // is an order to CAMP inside it, and arrivals.js obliges, because a camped
+  // squad never consults occupancy again. Own ground stays legal — standing in
+  // your own yard is exactly what occupancy already allows, and it is how a
+  // drawn route chains through your own buildings.
+  if (toHex && (occupantAt(state, toHex.q, toHex.r) ?? by) !== by) return 'occupied-hex';
   if (!marchCamped(state, squad, {
     to: to ? to.id : null,
     toHex: to ? null : toHex,

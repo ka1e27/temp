@@ -237,7 +237,7 @@ export const SAVE = Object.freeze({
 });
 
 export const COACH = Object.freeze({
-  drag: 'Drag from your camp to the grey farm.',
+  drag: 'Drag from your camp across the map. Your troops march the road you draw.',
   fieldWon: "You've beaten the defenders — now hold position while your troops break the walls.",
   captured: 'Farms fund your army.',
   gold100: 'Strongholds turn gold into soldiers, and take more troops to crack.',

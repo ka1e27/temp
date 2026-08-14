@@ -7,7 +7,16 @@ export async function runDrag(page, step, OUT) {
     const g = window.__game;
     const b = g.state.battle;
     const camp = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
-    const target = b.sites.find((s) => camp.adj.includes(s.id) && s.owner !== 'player');
+    // KNOWN, not merely present. Since fog hid unclaimed ground too, the first
+    // adjacent non-player site is usually one the player cannot SEE — and a
+    // drag onto an invisible building does not snap to it, it lands as a march
+    // to that tile. The step still passed, because a squad was still in flight,
+    // which is precisely the kind of test that stops asserting what it names.
+    const seen = b.seen?.player ?? {};
+    const target = b.sites.find((s) => camp.adj.includes(s.id) && s.owner !== 'player'
+      && (s.owner === 'neutral' || s.owner === 'enemy') && seen[s.id] !== undefined)
+      || b.sites.find((s) => camp.adj.includes(s.id) && s.id !== camp.id
+        && s.owner === 'player');
     if (!g.__view || !target) return null;
     const a = g.__view.siteScreen(camp, {});
     const z = g.__view.siteScreen(target, {});
@@ -41,8 +50,15 @@ export async function runRally(page, h, step, note) {
     const b = g.state.battle;
     // The target need not be yours — a rally into enemy ground is a legal
     // standing attack order — it only has to be adjacent.
-    const from = b.sites.find((s) => s.owner === 'player' && s.adj.length > 0);
-    const to = from && b.sites.find((s) => from.adj.includes(s.id));
+    // Same rule as the send above: a rally can only be dragged onto a site the
+    // player's board actually shows, so the target has to be one `siteKnown`
+    // would admit. Everything the player holds qualifies by definition.
+    const seen = b.seen?.player ?? {};
+    const known = (s) => s.owner === 'player' || seen[s.id] !== undefined;
+    const from = b.sites.find((s) => s.owner === 'player' && s.adj.length > 0
+      && b.sites.some((t) => from0(s, t) && known(t)));
+    function from0(s, t) { return s.adj.includes(t.id) && t.id !== s.id; }
+    const to = from && b.sites.find((s) => from0(from, s) && known(s));
     if (!from || !to) return null;
     from.rallyTargets = [];
     const a = g.__view.siteScreen(from, {});
@@ -82,7 +98,11 @@ export async function runRally(page, h, step, note) {
     const g = window.__game;
     const b = g.state.battle;
     const from = b.sites.find((s) => s.id === fromId);
-    const to = from && b.sites.find((s) => from.adj.includes(s.id) && s.id !== takenId);
+    // Known, for the same reason the two steps above are: an invisible site
+    // cannot be dragged onto, so aiming at one tests the fog and not the mode.
+    const seen = b.seen?.player ?? {};
+    const to = from && b.sites.find((s) => from.adj.includes(s.id) && s.id !== takenId
+      && s.id !== from.id && (s.owner === 'player' || seen[s.id] !== undefined));
     if (!to) return null;
     const z = g.__view.siteScreen(to, {});
     return { to: { x: Math.round(z.x), y: Math.round(z.y) }, toId: to.id };
@@ -138,47 +158,66 @@ export async function runRally(page, h, step, note) {
  * at a hex that merely looks legal.
  */
 export async function runBuild(page, h, step) {
+  const camp = await page.eval(() => {
+    const g = window.__game;
+    const b = g.state.battle;
+    b.factions.player.goldCg = 1_000_000;   // affordability is not what this tests
+    const c = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
+    if (!c) return null;
+    const at = g.__view.siteScreen(c, {});
+    return { x: Math.round(at.x), y: Math.round(at.y) };
+  });
+  if (!camp) throw new Error('no player camp to build from');
+
+  await h.clickAt(camp.x, camp.y);                // select a player site, opens the panel
+  await h.click('.hud-build-farm', 'the Build Farm action');
+  const armed = await page.eval(() => window.__game.__ui?.armedBuild ?? null);
+  if (armed !== 'farm') throw new Error(`Build Farm did not arm: armedBuild=${armed}`);
+
+  // THE HEX IS CHOSEN AFTER THE PANEL IS OPEN, and that ordering is the fix for
+  // a flake this step shipped with. It used to pick the legal hex FARTHEST from
+  // the camp — reasoned as "far enough that the click cannot land on the site
+  // panel" — and on a map whose camp sits in a corner, farthest is the opposite
+  // corner: sometimes off-screen, sometimes under the HUD, sometimes under the
+  // panel that had not opened yet when the choice was made. It failed on one
+  // generated map and passed on the next with no code change between, which is
+  // the worst kind of red.
+  //
+  // `document.elementFromPoint` is the honest question and this file already
+  // answers it everywhere else — a release once shipped completely unclickable
+  // because a synthetic `el.click()` bypassed hit testing. So: farthest legal
+  // hex WHOSE POINT ACTUALLY REACHES THE BOARD, asked of the layout as it will
+  // be at the moment of the click.
   const build = await page.eval(async () => {
     const { buildBlocker } = await import('/src/battle/commands.js');
     const { axialFromOffset, distance } = await import('/src/core/hex.js');
     const { hexCx, hexCy } = await import('/src/render/hexGeom.js');
     const g = window.__game;
     const b = g.state.battle;
-    b.factions.player.goldCg = 1_000_000;   // affordability is not what this tests
-    const camp = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
-    if (!camp) return null;
-    const home = { q: camp.hex[0], r: camp.hex[1] };
+    const c = b.sites.find((s) => s.kind === 'camp' && s.owner === 'player');
+    const home = { q: c.hex[0], r: c.hex[1] };
     let best = null;
     let bestD = -1;
     for (let r = 0; r < b.grid.rows; r++) {
       for (let col = 0; col < b.grid.cols; col++) {
         const hex = axialFromOffset(col, r);
         if (buildBlocker(b, 'player', hex)) continue;
-        // Farthest from the camp, so the second click below cannot land on
-        // the site panel — anchored on the camp for the whole step.
+        const pt = g.__view.camera.worldToScreen(
+          hexCx(hex.q, hex.r, g.__view.hexSize), hexCy(hex.q, hex.r, g.__view.hexSize), {},
+        );
+        const x = Math.round(pt.x);
+        const y = Math.round(pt.y);
+        const el = document.elementFromPoint(x, y);
+        if (!el || el.tagName !== 'CANVAS') continue;
         const d = distance(home, hex);
-        if (d > bestD) { bestD = d; best = hex; }
+        if (d > bestD) { bestD = d; best = { q: hex.q, r: hex.r, x, y }; }
       }
     }
-    if (!best) return null;
-    const at = g.__view.siteScreen(camp, {});
-    const to = g.__view.camera.worldToScreen(
-      hexCx(best.q, best.r, g.__view.hexSize), hexCy(best.q, best.r, g.__view.hexSize), {},
-    );
-    return {
-      camp: { x: Math.round(at.x), y: Math.round(at.y) },
-      hex: { x: Math.round(to.x), y: Math.round(to.y) },
-      q: best.q, r: best.r,
-    };
+    return best;
   });
-  if (!build) throw new Error('no legal build hex found on this map — nothing to click');
+  if (!build) throw new Error('no legal build hex on this map reaches the board — nothing to click');
 
-  await h.clickAt(build.camp.x, build.camp.y);    // select a player site, opens the panel
-  await h.click('.hud-build-farm', 'the Build Farm action');
-  const armed = await page.eval(() => window.__game.__ui?.armedBuild ?? null);
-  if (armed !== 'farm') throw new Error(`Build Farm did not arm: armedBuild=${armed}`);
-
-  await h.clickAt(build.hex.x, build.hex.y);      // the second click: a hex, not a site
+  await h.clickAt(build.x, build.y);              // the second click: a hex, not a site
   await page.sleep(500);
   const built = await page.eval((q, r) => window.__game.state.battle.sites
     .find((s) => s.hex[0] === q && s.hex[1] === r) ?? null, build.q, build.r);

@@ -17,6 +17,7 @@ export const REJECTIONS = Object.freeze({
   'not-your-site': 'You do not hold that site.',
   // Adjacency is gone; a base in the way is what refuses a march now.
   'no-route': 'No way through — an enemy base blocks every route.',
+  'occupied-hex': 'A base is standing there. March beside it, or attack it.',
   'same-site': 'That is where they already are.',
   'not-adjacent': 'That is out of reach.',
   'bad-fraction': 'Nothing selected to send.',

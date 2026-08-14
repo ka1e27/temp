@@ -341,47 +341,54 @@ test('siteKnown: never looked is not the same as looked once and lost sight', ()
     'the player\'s own beachhead was handed to the enemy for free');
 });
 
-test('siteKnown: unclaimed ground is common knowledge, enemy buildings are not', () => {
-  // THE OPENING LAND GRAB HAS TO STAY LEGIBLE. Measured on the campaign opener
-  // across twelve seeds before this clause existed: the player's board held
-  // their own three sites and NOTHING else — no neutral farm anywhere on it —
-  // while COACH.drag, the first line a new player is ever shown, says "drag
-  // from your camp to the grey farm". An instruction pointing at something not
-  // on the board is a worse version of the half-written coach beats this
-  // project already had to go and find.
+test('siteKnown: NOTHING is common knowledge — an unclaimed farm hides too', () => {
+  // THE RULE USED TO EXEMPT UNCLAIMED GROUND and this test used to pin that
+  // exemption, so it is worth saying what changed. The argument for it was
+  // legibility: the opening is a race for neutral ground and COACH.drag pointed
+  // at "the grey farm". The argument against is that "there is a building over
+  // there" is the fact being hidden, and who happens to hold it does not make it
+  // less of a disclosure — a neutral farm is a place worth marching to, which is
+  // exactly why knowing about it for free was worth something. The tutorial line
+  // now teaches the GROUND, and needs nothing on the board to point at.
   const b = battleFor('riverfen');
   const neutrals = b.sites.filter((s) => s.owner === 'neutral');
   const enemies = b.sites.filter((s) => s.owner === 'enemy');
   assert.ok(neutrals.length > 0 && enemies.length > 0, 'fixture has no both — proves nothing');
 
-  for (const s of neutrals) {
-    assert.equal(siteKnown(b, 'player', s), true,
-      `unclaimed ${s.kind} ${s.id} was hidden — the opening race is invisible`);
-  }
-  // NEGATIVE CONTROL, and it is the whole point of the rule being narrow: an
-  // enemy building nobody has looked at is NOT on the board, even though a
-  // neutral one on the same map is.
-  const dark = enemies.filter((s) => !canSee(b, 'player', s.hex[0], s.hex[1]));
-  assert.ok(dark.length > 0, 'every enemy site is already in sight — proves nothing');
-  for (const s of dark) {
-    assert.equal(siteKnown(b, 'player', s), false,
-      `enemy ${s.kind} ${s.id} is on the board without anyone having looked at it`);
+  const unlit = (s2) => !canSee(b, 'player', s2.hex[0], s2.hex[1]);
+  const darkN = neutrals.filter(unlit);
+  const darkE = enemies.filter(unlit);
+  assert.ok(darkN.length > 0 && darkE.length > 0,
+    'every site is already lit on this fixture — proves nothing');
+  for (const s2 of darkN.concat(darkE)) {
+    assert.equal(siteKnown(b, 'player', s2), false,
+      `${s2.owner} ${s2.kind} ${s2.id} is on the board without anyone having looked`);
   }
 
-  // ...and it holds BOTH WAYS, so this cannot be read as a player-side freebie.
-  for (const s of neutrals) assert.equal(siteKnown(b, 'enemy', s), true);
+  // NEGATIVE CONTROL: the rule is about LOOKING, not ownership, so what you hold
+  // and what you can see are both still known. Without this the assertion above
+  // would pass just as happily if `siteKnown` returned false for everything,
+  // which is a blackout rather than fog.
+  const lit = b.sites.filter((s2) => !unlit(s2) || s2.owner === 'player');
+  assert.ok(lit.length > 0, 'the player can see nothing at all — that is not fog');
+  for (const s2 of lit) assert.equal(siteKnown(b, 'player', s2), true);
+
+  // ...and it holds BOTH WAYS, so this cannot be read as a player-side handicap.
+  for (const s2 of darkN) assert.equal(siteKnown(b, 'enemy', s2), false);
 });
 
 test('vision: a captured neutral does not blink out — seen keeps the past tense', () => {
-  // WHY THE RULE IS RECORDED IN `seen` RATHER THAN SPECIAL-CASED IN `siteKnown`.
-  // If "is it neutral RIGHT NOW" were the test, then the moment the enemy took
-  // a farm the player had never approached, the building would vanish off the
-  // board — a flicker, which is the exact failure `state.seen` exists to
-  // prevent for owner colouring.
+  // WHY A LAST-KNOWN OWNER IS RECORDED IN `seen` RATHER THAN DERIVED FROM THE
+  // SITE. If "who owns it RIGHT NOW" were the test, then the moment the enemy
+  // took a farm the player had scouted, the building would vanish off the board
+  // — a flicker, which is the exact failure `state.seen` exists to prevent for
+  // owner colouring. The farm has to be SEEN first now, which is the only line
+  // of this test that changed when unclaimed ground lost its exemption.
   const b = battleFor('riverfen');
   const far = b.sites.find((s) => s.owner === 'neutral'
     && !canSee(b, 'player', s.hex[0], s.hex[1]));
   assert.ok(far, 'no out-of-sight neutral site — this proves nothing');
+  b.seen.player[far.id] = 'neutral';   // the player marched past it once
   assert.equal(siteKnown(b, 'player', far), true, 'sanity: it starts on the board');
 
   far.owner = 'enemy';   // the enemy takes it while the player is looking elsewhere

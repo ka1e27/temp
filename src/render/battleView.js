@@ -279,9 +279,9 @@ export function createBattleView(opts) {
       const from = byId(view.dragFrom);
       const to = view.dragTo ? byId(view.dragTo) : null;
       if (from) {
-        // One arc, straight from the source: free movement means a send is
-        // never routed through a waypoint drawn on the way, only aimed.
-        drawDragArc(ctx, from, to, view.pointer, px, geo);
+        // The ROUTE, not an arc — see routes.js and battle-waypoints.js
+        // `previewPath`. Null falls back to the old dashed arc.
+        drawDragArc(ctx, from, to, view.pointer, px, geo, view.dragPath);
         if (to) {
           sitePos(to, _a);
           drawSelection(ctx, to, _a.x, _a.y, siteRadius(to.kind, hexSize), p, px, 1);

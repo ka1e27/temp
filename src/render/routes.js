@@ -253,24 +253,52 @@ export function drawSquadRoutes(ctx, squads, px, g) {
  * learned by feel rather than read in a tooltip.
  * @returns {object|null} the snapped target site
  */
-export function drawDragArc(ctx, from, to, pointer, px, g) {
+export function drawDragArc(ctx, from, to, pointer, px, g, path = null) {
   const p = g.palette;
+  const colour = to ? p.selection : p.border.neutral;
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = px * 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // THE ROUTE, HEX BY HEX, whenever the sim could give us one. `path` comes
+  // from screens/battle-waypoints.js `previewPath`, which calls the SAME
+  // `pathThrough` the order will be validated by — so the line drawn here is
+  // the line the army walks, around mountains, around bases, and the long way
+  // round a wall if that is what the finger drew. The bowed arc below is what
+  // this used to be for every send, and it is now only the fallback: no legal
+  // route, which is also the case `cmdSend` refuses, so it keeps the dashed
+  // "this will not go" look rather than promising a road that does not exist.
+  if (path && path.length > 1) {
+    ctx.beginPath();
+    for (let i = 0; i < path.length; i++) {
+      g.hexPos(path[i].q, path[i].r, _a);
+      if (i === 0) ctx.moveTo(_a.x, _a.y); else ctx.lineTo(_a.x, _a.y);
+    }
+    if (!to) { DASH[0] = px * 5; DASH[1] = px * 5; ctx.setLineDash(DASH); }
+    ctx.stroke();
+    ctx.setLineDash(NO_DASH);
+    g.hexPos(path[path.length - 1].q, path[path.length - 1].r, _c);
+    g.hexPos(path[path.length - 2].q, path[path.length - 2].r, _d);
+    chevron(ctx, _c.x, _c.y, Math.atan2(_c.y - _d.y, _c.x - _d.x),
+      g.hexSize * 0.3, colour);
+    return to;
+  }
+
   g.pos(from, _a);
   if (to) g.pos(to, _b);
   else { _b.x = pointer.x; _b.y = pointer.y; }
 
   arcPath(ctx, _a.x, _a.y, _b.x, _b.y, 1);
-  ctx.strokeStyle = to ? p.selection : p.border.neutral;
-  ctx.lineWidth = px * 3;
-  ctx.lineCap = 'round';
-  if (!to) { DASH[0] = px * 5; DASH[1] = px * 5; ctx.setLineDash(DASH); }
+  DASH[0] = px * 5; DASH[1] = px * 5;
+  ctx.setLineDash(DASH);
   ctx.stroke();
   ctx.setLineDash(NO_DASH);
 
   arcPoint(_a.x, _a.y, _b.x, _b.y, 1, 1, _c);
   arcPoint(_a.x, _a.y, _b.x, _b.y, 1, 0.94, _d);
   chevron(ctx, _c.x, _c.y, Math.atan2(_c.y - _d.y, _c.x - _d.x),
-    g.hexSize * 0.3, to ? p.selection : p.border.neutral);
+    g.hexSize * 0.3, colour);
   return to;
 }
 

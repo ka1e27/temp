@@ -121,16 +121,17 @@ test('vision: a neutral site grants nobody sight — there is no neutral CLAIM',
   assert.equal(canSee(s, 'enemy', HEX[0], HEX[1]), false);
   assert.deepEqual(s.vision.player, {}, 'a neutral farm painted a partial claim');
 
-  // BUT ITS EXISTENCE IS COMMON KNOWLEDGE, and that is a different fact from
-  // sight — which is exactly why they are two maps. `vision` is "what ground
-  // can I watch"; `seen` is "what do I know is out there". An unclaimed farm
-  // is watched by nobody and hidden by nobody: no garrison is holding it, no
-  // fog is covering it, and the race for it is the whole shape of a battle's
-  // opening. Without this, `siteKnown` measured the campaign OPENER at three
-  // sites on the player's board and zero neutral farms — while the first line
-  // of the tutorial says to drag from the camp to the grey farm.
-  assert.equal(s.seen.player.n, 'neutral', 'unclaimed ground must be common knowledge');
-  assert.equal(s.seen.enemy.n, 'neutral', '...to both sides, or it is a player-side freebie');
+  // ...AND NOBODY REMEMBERS IT EITHER, which is a different fact from sight and
+  // is exactly why they are two maps: `vision` is "what ground can I watch",
+  // `seen` is "what do I know is out there". This clause used to EXEMPT
+  // unclaimed ground — recording a neutral into both factions' `seen` on the
+  // grounds that a farm nobody holds is not intelligence — and the exemption is
+  // gone: "there is a building over there" is the fact being hidden, and who
+  // happens to hold it does not make it less of one. A neutral farm is worth
+  // marching to, which is precisely why knowing about it for free was worth
+  // something.
+  assert.equal(s.seen.player.n, undefined, 'an unlooked-at farm was remembered anyway');
+  assert.equal(s.seen.enemy.n, undefined, '...by either side');
 
   // NEGATIVE CONTROL 1: the identical site and hex, OWNED, grants sight — so
   // the darkness above is the neutral rule, not a fixture dark regardless.

@@ -19,6 +19,7 @@
 // accumulates the trail as the gesture happens, battle-orders.js trims it as
 // the order is issued, and a copy in each is two rules that drift.
 import { fromPixel } from '../core/hex.js';
+import { pathThrough } from '../battle/movement.js';
 
 /**
  * Ceiling on how many hexes one drag may name.
@@ -92,4 +93,38 @@ export function isDrawnRoute(trail, slackHexes = 2) {
   const dr = a[1] - b[1];
   const straight = (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
   return (trail.length - 1) >= straight + slackHexes;
+}
+
+/**
+ * The hexes a send issued RIGHT NOW would actually walk, or null.
+ *
+ * THE ARROW IS THE ROUTE. A drag used to preview as a bowed arc from source to
+ * target, which was honest while a send was "aimed" and became a lie the moment
+ * waypoints shipped: the army walks a hex path around mountains, bases and
+ * anything else in the way, and the arc drew straight over all of it. A player
+ * choosing the long way round a wall that shoots at passers-by could not see
+ * whether the road they drew was the road they got.
+ *
+ * So this builds the SAME `stops` array `cmdSend` builds and hands it to the
+ * SAME `pathThrough`, for the same reason the pre-commit battle preview calls
+ * `resolveField` rather than approximating it: a preview that disagrees with
+ * the order is worse than no preview. Null means no legal route, and the
+ * renderer says so by falling back to the dashed "no target" line — which is
+ * also the honest answer, because `cmdSend` would refuse it too.
+ *
+ * @param {object} state the battle
+ * @param {object} from the source site
+ * @param {?object} to the snapped destination site, or null for bare ground
+ * @param {Array<[number,number]>} trail the live drag trail
+ */
+export function previewPath(state, from, to, trail) {
+  if (!from) return null;
+  const end = to ? to.hex : (trail && trail[trail.length - 1]);
+  if (!end) return null;
+  const stops = [{ q: from.hex[0], r: from.hex[1] }];
+  if (isDrawnRoute(trail)) {
+    for (const w of trimWaypoints(trail)) stops.push({ q: w[0], r: w[1] });
+  }
+  stops.push({ q: end[0], r: end[1] });
+  return pathThrough(state, stops, 'player');
 }

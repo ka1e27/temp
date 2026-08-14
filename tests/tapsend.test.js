@@ -23,6 +23,9 @@ const { drainCommands } = await import('../src/battle/commands.js');
 const { makeMods, CONTRACT_VERSION } = await import('../src/battle/contract.js');
 const { emptyComp, total } = await import('../src/battle/combat.js');
 const { createBattleInput, createView } = await import('../src/screens/battle-input.js');
+const { createOrders } = await import('../src/screens/battle-orders.js');
+const { recomputeOccupancy } = await import('../src/battle/occupancy.js');
+const { previewPath, trimWaypoints, isDrawnRoute } = await import('../src/screens/battle-waypoints.js');
 
 function fixture() {
   return createBattleState({
@@ -81,7 +84,8 @@ function harness(state) {
     fire('pointermove', { pointerId: 1, clientX: b, clientY: 0, preventDefault() {} });
     fire('pointerup', { pointerId: 1, clientX: b, clientY: 0, button: 0, preventDefault() {} });
   };
-  return { view, input, tap, drag };
+  const ord = createOrders({ board, view, getState: () => state, push: (c) => state.commands.push(c) });
+  return { view, input, tap, drag, ord };
 }
 
 const sends = (state) => state.commands.filter((c) => c.t === 'SEND');
@@ -221,4 +225,98 @@ test('rally mode: an armed booster still outranks it', () => {
   view.armedBooster = 'bombard';
   drag('a', 'b');
   assert.deepEqual(rallies(state), [], 'aiming was overridden by the mode');
+});
+
+// ---------------------------------------------------------------------------
+// THE ROUTE THE PLAYER DREW, AND THE MAGNET THAT USED TO EAT IT
+// ---------------------------------------------------------------------------
+
+test('orders: a hex march is refused onto a base, and allowed onto your own', () => {
+  // `passableFor` gives the GOAL hex a free pass so an army can path onto a
+  // site it means to assault. Right for an order aimed AT a building, wrong for
+  // a march to bare ground: `to: null` plus an enemy base's own tile is an order
+  // to CAMP inside it, and arrivals.js obliges — a camped squad never consults
+  // occupancy again. Nothing caught it because the drag could not reach the case
+  // until the snap magnet shrank.
+  const state = fixture();
+  recomputeOccupancy(state);
+  const foe = state.sites.find((s) => s.id === 'c');
+  const mine = state.sites.find((s) => s.id === 'b');
+
+  state.commands.push({
+    t: 'SEND', by: 'player', from: 'a', toHex: { q: foe.hex[0], r: foe.hex[1] }, fraction: 0.5,
+  });
+  drainCommands(state);
+  assert.equal(state.squads.length, 0, 'a march onto an enemy base was accepted');
+
+  // NEGATIVE CONTROL, and it is the half the feature is FOR: your own building
+  // is ground you may stand on, which is what lets a drawn route chain through
+  // your own yard rather than stopping at its door.
+  state.commands.push({
+    t: 'SEND', by: 'player', from: 'a', toHex: { q: mine.hex[0], r: mine.hex[1] }, fraction: 0.5,
+  });
+  drainCommands(state);
+  assert.equal(state.squads.length, 1, 'a march onto my OWN building was refused');
+});
+
+test('orders: the previewed route is the route the order walks', () => {
+  // A PREVIEW THAT DISAGREES WITH THE ORDER IS WORSE THAN NO PREVIEW — the same
+  // rule the pre-commit battle preview follows by calling `resolveField` rather
+  // than approximating it. `previewPath` builds the same `stops` array cmdSend
+  // builds and hands it to the same `pathThrough`, so this asserts the drawn
+  // line against the walked one hex for hex rather than against a second
+  // implementation of the pathfinder.
+  const state = fixture();
+  recomputeOccupancy(state);
+  const from = state.sites.find((s) => s.id === 'a');
+  // A trail long enough to count as DRAWN: straight-line distance 2, so it needs
+  // at least two hexes of slack (see isDrawnRoute).
+  const trail = [[0, 0], [0, 1], [1, 1], [2, 1], [3, 1], [3, 0]];
+  assert.equal(isDrawnRoute(trail), true, 'fixture trail is not a drawn route — proves nothing');
+
+  const preview = previewPath(state, from, null, trail);
+  assert.ok(preview && preview.length > 3, 'no route previewed for a legal drawn road');
+
+  state.commands.push({
+    t: 'SEND', by: 'player', from: 'a', toHex: { q: 3, r: 0 },
+    waypoints: trimWaypoints(trail), fraction: 0.5,
+  });
+  drainCommands(state);
+  const sq = state.squads[0];
+  assert.ok(sq, 'the order the preview described was refused');
+  assert.deepEqual(sq.path.map((h) => [h.q, h.r]), preview.map((h) => [h.q, h.r]),
+    'the army walked a different road from the one the arrow drew');
+});
+
+test('orders: a DRAWN route turns the snap magnet off', () => {
+  // The magnet exists so a quick pull at a neighbour lands on it without
+  // precision. A player who has curved a route around a building has already
+  // said where they want the army, and having the building they steered around
+  // reach out and claim the order is the opposite of the gesture — which is
+  // exactly why a road past your own gate could not be drawn.
+  const state = fixture();
+  const { ord } = harness(state);
+  const from = state.sites.find((s) => s.id === 'a');
+
+  // 30px from site 'b' (at x=100): outside the 20px exact hit, inside the old
+  // 2.4-hex (72px) magnet, outside the new one.
+  assert.equal(ord.snapTarget(from, 130, 0, null)?.id, undefined,
+    'the magnet still reaches most of a hex away — the radius did not shrink');
+  assert.equal(ord.snapTarget(from, 105, 0, null)?.id, 'b',
+    'a release ON a building must still snap, or nothing can be targeted');
+
+  // ...and with a drawn trail the magnet stands down entirely: only the exact
+  // hit-test decides, so ENDING a drawn route on a building still works, it
+  // just has to be on the building rather than near it.
+  const drawn = [[0, 0], [0, 1], [1, 1], [2, 1], [3, 1], [3, 0]];
+  assert.equal(isDrawnRoute(drawn), true, 'fixture trail is not drawn — proves nothing');
+  assert.equal(ord.snapTarget(from, 105, 0, drawn)?.id, 'b',
+    'an exact hit must still resolve, drawn route or not');
+  // x=123 is past this fixture's 20px exact hit and inside the 25.5px magnet —
+  // the only window where the two rules can be told apart at all.
+  assert.equal(ord.snapTarget(from, 123, 0, drawn), null,
+    'a drawn route was captured by a building it merely passed');
+  // NEGATIVE CONTROL: the SAME near miss with no drawn trail still snaps, so
+  // the line above is the drawn-route rule and not the radius a second time.
+  assert.equal(ord.snapTarget(from, 123, 0, null)?.id, 'b');
 });
