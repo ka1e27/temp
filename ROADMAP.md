@@ -72,8 +72,12 @@ region, a broken one":
 | | first 24 | escalated | verdict |
 |---|---|---|---|
 | gallowmoor / thanescar / ravensmarch / gravenreach / cinderwatch | 1–2 wins | — | pass, on a knife edge |
+| widowsgate | 0 | 1/48 | pass, only via escalation |
 | **nightharrow** | 0 | **0/48** | **FAIL** |
 | **stormhalt** | 0 | **0/48** | **FAIL** |
+
+(Eight regions measured — the ones plausibly at risk, at ~20 min each. The other
+sixteen are untaken.)
 
 **Start from the signature, not the win rate.** Every one of those rows is `losses=0` or
 close to it with a large timeout-*ahead* count — gallowmoor times out 31 times in 48 while

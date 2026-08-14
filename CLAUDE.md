@@ -640,15 +640,16 @@ batch; its failure message is *"it is not a hard region, it is a broken one"*. R
 region by region with that test's own seeds and its own `playOnce`:
 
 ```
-gallowmoor    2/24  pass      nightharrow   0/48  FAIL
-thanescar     1/24  pass      stormhalt     0/48  FAIL
-ravensmarch   1/24  pass      cinderwatch   1/24  pass
-gravenreach   2/24  pass      widowsgate    not in this sample
+gallowmoor    2/24  pass      cinderwatch   1/24  pass
+thanescar     1/24  pass      widowsgate    1/48  pass — on the ESCALATED batch
+ravensmarch   1/24  pass      nightharrow   0/48  FAIL
+gravenreach   2/24  pass      stormhalt     0/48  FAIL
 ```
 
-*(Only the eight rows plausibly at risk were run — the twenty-three-minute-per-region
-cost is why. `widowsgate` was still measuring when this was written and is the tightest
-margin in the game, so assume it fails until someone takes it.)*
+*(Only the eight rows plausibly at risk were run; the other sixteen are untaken, at
+roughly twenty minutes a region. `widowsgate` is the one that shows how thin this is —
+zero in its first twenty-four seeds, one in the next twenty-four, so the escalation
+branch is the only reason the suite has three failures rather than four.)*
 
 **Every passing row is a knife-edge — one or two wins in twenty-four — and the two
 failures are a CLOCK, not a defeat.** Every single seed of both ends `timeout` at
