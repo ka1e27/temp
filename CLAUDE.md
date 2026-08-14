@@ -523,13 +523,18 @@ it*. No reading of "queueing" makes help harmful. Filling the frontage best-firs
 byte-identical either way (every body is the same body, so which forty stand at the wall
 cannot matter) — 700 militia read 24.0 dps under both — and the default spread moves
 **0% below 60 slots and +1.9% to +3.0% at 200–700**, because rams are engines and carry
-most of that stack's siege output. Measured after the fix, gallowmoor reads **64% at n=96,
-verdict `ok`** against a documented 70% at n=240 — inside the tier-3 band and inside the
-n=96-vs-n=240 spread this file records elsewhere (5–13 points, and a smaller `--n` is a
-seed PREFIX rather than an unbiased draw). The loadouts that could actually move are
-sapper and halberd builds, which have zero default weight and which the harness has never
-fielded. **Not confirmed at n=240** — if a future pass needs that, gallowmoor and duskfell
-are the two rows to take first, since they ship within two points of the tier ceiling.
+most of that stack's siege output. The loadouts that could actually move are sapper and
+halberd builds, which have zero default weight and which the harness has never fielded.
+
+**CONFIRMED AT n=240 on the two rows that ship closest to their tier ceiling** —
+`gallowmoor 67%` and `duskfell 71%`, both `ok` against the tier-3 band and both inside
+their advertised length (6.0m against 6.5m, 5.8m against 6.0m). Against the pre-best-first
+n=240 pair (70 / 71) that is −3 and 0: the fix is inert on the campaign to within the
+noise of the sample, exactly as the arithmetic above says it must be. Worth noting how the
+smaller sample behaved, because it is the reverse of the usual warning: gallowmoor read
+**64% at n=96 and 67% at n=240**, i.e. the seed prefix ran three points LOW here where
+saltmere's ran five points HIGH. The prefix bias is per-region and has no sign you can
+assume — which is the argument for n=240 rather than for a correction factor.
 
 `tests/frontage.test.js` gained the assertion that could not be written as a single-stack
 number: **monotonicity**. Its old "a mixed crowd is the share-weighted blend" assertion was
