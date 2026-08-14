@@ -65,11 +65,28 @@ pass — so this is a debt with a due date rather than an idea. n=48:
 | thanescar | 2% | 7.3m | 20.0m | 6.5m | TOO HARD |
 | ravensmarch | 4% | 15.2m | 24.0m | 7m | TOO HARD |
 
+**`campaignplay.test.js` IS RED, so the Pages deploy is gated until this pass lands.**
+Two regions are won 0 times in 48 seeds — the floor that exists to catch "not a hard
+region, a broken one":
+
+| | first 24 | escalated | verdict |
+|---|---|---|---|
+| gallowmoor / thanescar / ravensmarch / gravenreach / cinderwatch | 1–2 wins | — | pass, on a knife edge |
+| **nightharrow** | 0 | **0/48** | **FAIL** |
+| **stormhalt** | 0 | **0/48** | **FAIL** |
+
 **Start from the signature, not the win rate.** Every one of those rows is `losses=0` or
 close to it with a large timeout-*ahead* count — gallowmoor times out 31 times in 48 while
-winning on territory. That is a bot running out of clock, not one being beaten, so the
-first lever is `targetLengthMin` (which derives `hardCapMs`, so the promise and the cap
-are the same number), not `enemyMult`.
+winning on territory. The two failures are the same thing at the limit: every seed ends
+`timeout` at exactly the hard cap, not one is a defeat, and several end ahead (nightharrow
+62 sites v 15, 53 v 26, 45 v 28). They are **unfinishable, not unwinnable**. So the first
+lever is `targetLengthMin` (which derives `hardCapMs`, so the promise and the cap are the
+same number), not `enemyMult`.
+
+**And mind the order, because the usual procedure has no input here.** Authoring
+`targetLengthMin` from measured win-medians is the house method, and those two regions
+have no wins to take a median of. Lift the caps first, get win-medians, then set the
+promises from them and re-confirm.
 
 **Two things are already measured; do not re-spend them.** `MELEE.seconds` is worth ~2
 points a second (2s versus 6s is six points on gallowmoor and eight on thanescar, with

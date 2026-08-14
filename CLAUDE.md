@@ -633,6 +633,40 @@ is where a relief column one hex away is a real answer, which is the whole featu
 It was taken BEFORE the clock fix, so it was measuring the stuck-fight bug at a shorter
 clock. The pair above is matched.)*
 
+**AND TWO REGIONS ARE NOT MERELY OUT OF BAND, THEY ARE UNFINISHABLE — `campaignplay`
+IS RED AND THE PAGES DEPLOY IS GATED.** `tests/campaignplay.test.js`'s floor is that
+every region is won at least once in 24 seeds, escalating to 48 on an empty first
+batch; its failure message is *"it is not a hard region, it is a broken one"*. Run
+region by region with that test's own seeds and its own `playOnce`:
+
+```
+gallowmoor    2/24  pass      nightharrow   0/48  FAIL
+thanescar     1/24  pass      stormhalt     0/48  FAIL
+ravensmarch   1/24  pass      cinderwatch   1/24  pass
+gravenreach   2/24  pass      widowsgate    not in this sample
+```
+
+*(Only the eight rows plausibly at risk were run — the twenty-three-minute-per-region
+cost is why. `widowsgate` was still measuring when this was written and is the tightest
+margin in the game, so assume it fails until someone takes it.)*
+
+**Every passing row is a knife-edge — one or two wins in twenty-four — and the two
+failures are a CLOCK, not a defeat.** Every single seed of both ends `timeout` at
+exactly the hard cap, and several end AHEAD on territory:
+
+```
+nightharrow (advertised 6.5m, cap 24.0m)     stormhalt (advertised 9m, cap 28.0m)
+  timeout 24.0/24.0  sites 62 v 15             timeout 28.0/28.0  sites 47 v 35
+  timeout 24.0/24.0  sites 53 v 26             timeout 28.0/28.0  sites 43 v 44
+  timeout 24.0/24.0  sites 45 v 28             timeout 28.0/28.0  sites 29 v 39
+```
+
+Not one loss in either sample. So the late campaign is not too hard, it is **promising
+a length it can no longer deliver** — and because `targetLengthMin` derives
+`hardCapMs`, the promise and the cap are the same number, so an honest promise is also
+the fix. That is the first lever the re-tune should reach for, and this is the evidence
+for it: it is not a difficulty finding at all.
+
 ### Two-stage capture
 
 Taking a site is a field battle (proportional attrition, largest-remainder
@@ -2397,6 +2431,12 @@ gate the deploy.
   full at "A fight takes time" above. The short version, n=48: riverfen 96% TOO EASY,
   kaldan 77% ok, gallowmoor 23% TOO SLOW, thanescar 2%, ravensmarch 4%.
 
+  **`campaignplay` IS RED, so the Pages deploy is gated until this lands.**
+  `nightharrow` and `stormhalt` are won 0 times in 48 — but every one of those runs is
+  a `timeout` at exactly the hard cap with NO defeats and several ending ahead on
+  territory, so they are unfinishable rather than unwinnable. Full table and the
+  per-seed evidence at "A fight takes time" above.
+
   **Start from the signature, not the win rate.** `losses=0` with thirty-one timeouts
   while AHEAD is a bot running out of clock, not one being beaten — so the first lever
   is `targetLengthMin` (which derives `hardCapMs`, so the promise and the cap are the
@@ -2404,6 +2444,13 @@ gate the deploy.
   re-spent: `MELEE.seconds` is worth ~2 points a second (2s versus 6s is six points on
   gallowmoor and eight on thanescar, with the all-run median pinned at the cap either
   way), and the clock-reset bug that was masquerading as balance cost is fixed.
+
+  **A warning about method, learned here.** There are no wins on those two rows, so
+  there is no win-median to author `targetLengthMin` FROM — the usual procedure has no
+  input. The order has to be: raise the caps first (or measure with them lifted), get
+  win-medians, then set the advertised lengths from those and re-confirm. Setting a
+  promise blind, from a region that has never once been finished, is a guess wearing
+  a measurement's clothes.
 
   The honest open question is fight COUNT: interception creates fights that did not
   exist before, and that — not per-fight duration — is where the length went. Nobody has
