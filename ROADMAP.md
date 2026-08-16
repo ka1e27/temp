@@ -113,6 +113,85 @@ harness by the reviewer.
       *Rejected on the reviewer's own recommendation and mine: login streaks / daily
       bonuses. A hook, not a decision, and against this project's stated principles.*
 
+**Simulation-state defects in the melee layer.** Found by the bug hunt, every one
+reproduced with a runnable probe before being believed.
+
+- [x] ~~**`site.garrison` was owned by one system and assumed by five.**~~ **FIXED** —
+      `meleephase.js reprojectDefender`, pinned by `tests/meleestate.test.js`. A rally on
+      a site under assault turned 300 troops into 10,084; defender reinforcement, retreat,
+      bombard and finished training were all silently reverted. One mechanism for all five.
+- [ ] **ARCHERS ARE DEAD EVERYWHERE THAT MATTERS — sold and doing nothing.**
+      `reachSupport`/`sidePower` are called ONLY from `openHexMelee`. `openSiteMelee`,
+      `fightStack` and `computePreview` never call either, so the unit's whole selling
+      point works only when two mobile squads collide on bare ground and never for
+      attacking or defending a farm, yard, stronghold, camp or castle — which is nearly
+      all of this game's combat. Reproduced: 10 v 9 at a farm with and without 40 archers
+      one hex away is **byte-identical**. `tests/melee.test.js` only calls `reachSupport`
+      directly, so nothing catches it. **Fix:** thread it into `openSiteMelee` (both
+      sides) and `fightStack`, AND into `computePreview`'s assault branch or the preview
+      stops being a guarantee. **Cost S/M.** *(Next up.)*
+- [ ] **Fog ghosts your own live battle.** A squad absorbed into `site.melee` leaves
+      `state.squads`, so it stops being a sight source — the site you are actively
+      fighting at becomes a ghost on the very tick the melee opens
+      (`melee=true, ghost=true` measured on consecutive ticks). `battleView.js:309` skips
+      ghosts *before* `drawSiteStack`, so the assault vanishes anyway — defeating the fix
+      shipped for exactly that — and the panel returns early with `UNSCOUTED`, never
+      reaching `FIELD BATTLE`. Hits essentially every assault onto ground you have no
+      vision infrastructure over, i.e. the norm on an 85–90% dark board. **Fix:** a
+      faction party to a site's melee/siege sees that site's hex — its army is standing
+      there. **Cost M.**
+
+**Battle feel — what a fight tells you while you are in it.** All reproduced live in a
+real browser or against an instrumented headless battle.
+
+- [x] ~~**A SIXTH FOG LEAK, in the rejection copy.**~~ **FIXED** — `rejectionText` takes
+      state and answers "something blocks the way there" for a building this faction has
+      never seen. `bad-hex` (the one reason with no entry in a table of 26, leaking
+      `Order refused (bad-hex).`) got its text at the same time.
+- [ ] **A won fight looks exactly like a lost one, and neither is announced.**
+      `battle-hud.js:266-292` wires three bus listeners; `field-battle` has NO alert
+      listener at all, and `siege-begun` only alerts when the ENEMY is attacking you. FX
+      and sound fire identically regardless of `ev.win`. Reproduced both directions: a
+      500-militia curb-stomp (`win:true`, attPower 2799 v 63) and a 5-militia wipeout
+      (`win:false`) both left `.hud-alert` empty at every sample. Riverfen fires 87
+      `field-battle` events in one battle. The melee layer's whole premise is a window the
+      player can act inside — and nothing tells them the window is open. **Fix:** two more
+      branches in the listener block that already exists; the payload already carries
+      `attacker`/`win`/`siteId`, and the `good`/`danger` tone system is already built.
+      **Cost S.**
+- [ ] **Tower fire has zero player-facing feedback — a whole shipped mechanic that cannot
+      be learned by playing.** `EVENTS.TOWER_FIRED` is pushed with everything needed
+      (`squadId, owner, siteId, kind, hex, lost`) and grepping `render/`, `ui/`, `screens/`
+      finds **no consumer at all**. Volume, measured: riverfen 347 events / 94 squads;
+      duskfell 1012 / 233; ravensmarch 1408 / 280. Troop counts just quietly shrink on the
+      march. **Fix:** an `fx.js` case and a `sound.js` cue — but **throttled/aggregated**
+      (one flash per squad per second, not per tick); that design is the actual work.
+      **Cost M.**
+- [ ] **Your own army's size vanishes the instant it starts fighting.** `drawSquadLabels`
+      only iterates MARCHING squads; once a column opens a melee or siege it lives in
+      `site.melee.comp`/`site.siege.comp` and `drawSiteStack` draws pieces with no label.
+      `formation.js` compresses above ~10 and caps at 30 pieces, so a 71-troop and a
+      700-troop siege draw identically — and `formation.js`'s own comment says compression
+      is safe *because* "the count label carries the exact figure at every size". That
+      promise breaks exactly when it matters. **Fix:** label `site.melee.comp` /
+      `site.siege.comp` in `battleLabels.js`'s site loop. **Cost M** (needs the
+      `siteHeadYAt` offset, which currently lives only in `battleView.js`).
+- [ ] **Nothing tells you who is winning.** No screen imports `sitesOwned`/`armySize`
+      (they exist and are used only by the sim/AI); no minimap; the HUD clock counts UP
+      with the cap shown once, on the pre-battle brief. On a 20×15 board over 7–24
+      minutes, "am I winning?" can only be answered by panning and adding up. Related:
+      a winning riverfen run goes quiet for minutes at a stretch in its last third, with
+      no signal whether quiet means converging or stalled. **Fix:** a persistent
+      mine/enemy readout beside the gold panel; show remaining time, not just elapsed.
+      **Cost M** (data exists; it is new surface plus a design call).
+- [ ] **Concentrating force costs one drag per site, always.** `battle-input.js onDown`
+      takes `view.dragFrom` from the single site under the pointer, never from
+      `view.selection`; no `sendFromSelection` exists. The AI pools up to `AI.maxSources`
+      (3) sites into one assault automatically and the free-movement balance argument
+      rests on concentration — the player has no equivalent, and the cost scales with
+      exactly the late maps where it matters. **Cost L** — changes core drag semantics and
+      needs real interaction design, not plumbing.
+
 **Open thread, NOT a finding (n=10, below this project's own trust threshold):** mono
 militia scored 20% at incursion depth 3 under the `sealed` mutator against the ladder's
 documented ~90% at shallow depths. If that survives n≥48 it would make the incursion
