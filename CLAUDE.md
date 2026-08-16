@@ -629,6 +629,29 @@ more than either number alone: had the campaign been re-tuned before these fixes
 landed, a session would have been spent moving dials to compensate for defenders
 silently dropping half the orders given to them — and then spent again undoing it.
 
+**AND STORMHALT IS TOO HARD, NOT TOO SLOW — the third correction in this area, and it
+reverses the two above it.** Diagnosed on the fixed engine with the cap lifted to sixty
+minutes:
+
+```
+seed  8919   LOSS    @  8m    3 sites v 49    crushed in the opening
+seed 16838   LOSS    @  6m    1 site  v 53    crushed in the opening
+seed 24757   timeout @ 60m   47 sites v 56    contested; the throne is never touched
+```
+
+Two of three are **outright defeats inside eight minutes**, holding one to three sites
+— the opposite of the `losses=0, timeout while ahead` signature the whole "it is a
+clock problem" reading was built on. The fixes cut both ways: the ENEMY's defenders can
+now be reinforced too, and on the hardest board in the game that is what a tier-6
+opening does with it. The castle sits at full HP and unbesieged in all three runs, so
+the bot is not failing to close — it never arrives.
+
+**So stormhalt's first lever is difficulty (`enemyMult`, `develop`, the ground, the AI
+tier), NOT `targetLengthMin` and not `HARD_CAP_MIN_BY_TIER`.** Every earlier note in
+this section pointing at the clock was measuring either the buggy engine or the wrong
+region; this is the one taken on the shipped code, and it is where the re-tune should
+start on that row.
+
 **⚠ THE TABLES BELOW MEASURE A BUILD WITH FIVE SIMULATION BUGS IN IT.** The melee layer shipped with `site.garrison` written every
 tick from a frozen baseline, so a defender could not be reinforced, a rally on a
 besieged site printed troops, a retreat cloned a garrison, and bombard and finished

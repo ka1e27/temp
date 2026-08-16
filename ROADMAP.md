@@ -46,6 +46,13 @@ commit. Do not re-derive the list.
       **Mind the order:** those rows have no wins, so there is no win-median to author a
       promise from. Lift the caps, get medians, then set promises from them and
       re-confirm.
+      **⇒ STORMHALT'S LEVER IS DIFFICULTY, NOT THE CLOCK — measured on the shipped
+      code, cap lifted to 60m: two seeds of three are outright LOSSES at 6–8 minutes
+      holding one to three sites, and the third is contested 47 v 56 with the castle at
+      full HP, never besieged. It is not failing to close, it never arrives. So reach
+      for `enemyMult` / `develop` / the ground / the AI tier on that row, and ignore the
+      `targetLengthMin` and `HARD_CAP_MIN_BY_TIER` advice below for it — that was
+      derived from the buggy engine and from nightharrow, which has since fixed itself.
       **⚠⚠ AND RE-TAKE EVERY NUMBER ABOVE BEFORE ACTING ON IT.** They were measured on a
       build with five simulation bugs in it (defender reinforcement doing nothing, a
       rally printing troops, a retreat cloning a garrison, bombard and training
