@@ -46,8 +46,78 @@ commit. Do not re-derive the list.
 
 ### The fun pass — findings from the specialist review
 
-*(Being filled in as the review team reports. Each item carries its own evidence pointer
-so it can be executed without re-reading the review.)*
+*(Filled in as the review team reports. Each item carries its own evidence so it can be
+executed without re-reading the review. Measured numbers here are the REVIEW's, at the
+sample size stated — anything that survives into a shipped change gets re-taken at the
+project's own n and written up in `CLAUDE.md`.)*
+
+**Meta / progression / retention.** All five confirmed against the real game or the real
+harness by the reviewer.
+
+- [ ] **The world map lets a new player walk into a region they cannot win, and says
+      nothing.** `meta/world.js touchesEmpire`/`isAttackable` gate on hex adjacency
+      ALONE — no tier gate, no conquest-count gate. Ashford's `adjacentTo` includes
+      Kaldan (tier 2), so at two regions conquered the map offers Kaldan with the same
+      green Attack button as its tier-1 neighbours. Measured, n=16 each: **rushing it at
+      2 conquered wins 0 of 16; arriving on schedule at 4 wins 69%** (win-med 9.7m). The
+      first fork (Riverfen→Ironwood, 1 vs 2 conquered) is 88% vs 94%, so tier 1 is
+      forgiving and the cliff is specifically the tier-1→2 boundary. **Fix:** not a hard
+      gate — that contradicts the free-movement philosophy. Compare the region's index in
+      `REGION_IDS` against `regionsConquered(meta)` (both already computed) and render an
+      inline warning in `worldmap.js renderDetail` past a slack. **Cost S.**
+- [ ] **No bulk buy: an idle payout costs 40–150 identical clicks to spend.** Measured
+      clicks-to-fully-spend through the real `shopListing`/`buy`: 1k crowns → 10 clicks,
+      100k → 66, 1M → 96, 50M → 146. Each re-renders the whole 25–34 row list
+      (`screens/shop.js:140`). The return banner itself is good and honest; the PAYOFF is
+      a chore, which is the exact opposite of what an idle game's return moment is for.
+      **Fix:** `tools/simshop.js spendPurse` already implements spend-everything-
+      cheapest-first — port it to the shop screen as a "Spend all" (and/or ×10).
+      **Cost S.**
+- [ ] **The shop hides a 33-point decision and its own copy sells the losing move.**
+      Holding region, conquest count, idle budget and army composition constant and
+      varying ONLY allocation, n=48 each: cheapest-first **33%**, "power rush"
+      (Standing Army first) **2%**, "income rush" (Treasury first) **0%**. Both intuitive
+      human strategies are catastrophic, and `upgrades.data.js:148` labels Standing Army
+      *"The most directly felt purchase"* — which reads as "buy this repeatedly". **Fix:**
+      a passive suggested-buy ring on the cheapest affordable Empire line (teaches
+      cheapest-first by demonstration, adds no screen and no number to read), plus soften
+      that line. **Cost S.**
+- [ ] **The Crown tier is a reskin of the Empire six, and the meta never ramps.** The
+      battle layer ramps hard (`AI_TIERS` concurrent 1→5, reaction 45→13 ticks, boards
+      13×10→17×13, marshals from tier 4). The layer the player TOUCHES between battles is
+      the same six lines bought the same way from region 1 to 24 — and the post-campaign
+      reward tier maps one-to-one onto the same four buckets (`upgrades.data.js` 213–224
+      against 140–157): Exchequer=Treasury, Grand Army=Standing Army,
+      War College=Arms+Drill, Citadels=Siegeworks+Drill. This is precisely the "same six
+      buttons at bigger numbers" outcome this file worried about. **Fix:** not a sixth
+      bucket (`STACKING_ORDER` forbids it and it was already rejected) — (a) make the
+      Crown section READ as a different tier, **S**; (b) surface `siteCounts.enemyMix`
+      on the pre-battle screen as a contextual specialist callout ("this region is
+      wall-heavy: halberds halve `siteDefMult`"), turning an ignorable layer situational.
+      Advisory text only, zero balance risk. **S/M.**
+- [ ] **The three endgame loops do not compound.** A raid is a timer with a lump at the
+      end, and `harderPerClear: 0.15` compounds forever but is never surfaced as its own
+      stat — it is folded silently into the same "Enemy strength" figure a fresh attack
+      shows. Abdication's replay is 81–100% by run 2 BY DESIGN (`prestige.js` says so),
+      so its content evaporates after the first reset. **Fix (the reviewer's pick, and I
+      agree it is the best value):** apply incursion-style mutators to REPLAYED campaign
+      regions on run 2+. The wiring is a generalisation of `meta/incursion.js`, which
+      already rides fields that cross the seam. **Cost M, and it needs a measurement pass**
+      — it touches the region table, so it cannot ship unmeasured.
+- [ ] **Short-session lever: auto-resolve a RAID only.** Combat is deterministic
+      (invariant 3) and the bot that plays every measured battle already exists headless.
+      A raid is documented as a rerun with no new tactical content, so resolving one in
+      the background is not cheapening the core promise — first conquests and incursions
+      are explicitly excluded, because those are where the real-time battle IS the
+      content. **Cost M.**
+      *Rejected on the reviewer's own recommendation and mine: login streaks / daily
+      bonuses. A hook, not a decision, and against this project's stated principles.*
+
+**Open thread, NOT a finding (n=10, below this project's own trust threshold):** mono
+militia scored 20% at incursion depth 3 under the `sealed` mutator against the ladder's
+documented ~90% at shallow depths. If that survives n≥48 it would make the incursion
+mutators the one place in the game that forces loadout diversity — which is directly
+relevant to the dominant-loadout problem below. Worth a measured look.
 
 ---
 
