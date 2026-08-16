@@ -10,6 +10,42 @@ or explicitly flagged as an opinion.
 
 ---
 
+## ⇒ START HERE: the fun pass, live work list
+
+**This section is the one piece of this file that carries STATE, and it exists so a
+session that dies mid-pass loses nothing.** Everything below it is reference. If you are
+picking this up cold: read this section, take the first unchecked item, do it, tick it,
+commit. Do not re-derive the list.
+
+**The protocol, and it is the whole point of the section:**
+
+1. One item per commit. Tick the box **in the same commit** as the work.
+2. If an item turns out to be wrong, or a measurement kills it, **strike it through and
+   write why** rather than deleting it. A deleted item gets proposed again in three
+   weeks; a struck one is an argument nobody has to have twice.
+3. Anything a measurement establishes goes to `CLAUDE.md` — this file keeps the ordering,
+   that one keeps the facts. Do not record numbers here.
+4. `npm run verify` before every commit. `node tools/smoke.mjs` and `node tools/mobile.mjs`
+   before any commit that touches a screen (both need `npm start` running).
+
+### Blocking — the deploy is red until this is done
+
+- [ ] **The campaign re-tune against the melee layer.** Full brief in the section below
+      (`Do this first`). `tests/campaignplay.test.js` FAILS: nightharrow and stormhalt are
+      won 0 times in 48. They are unfinishable, not unwinnable — every seed times out at
+      the hard cap with no defeats, several while ahead on territory. `targetLengthMin`
+      derives `hardCapMs`, so the promise and the cap are one number and an honest promise
+      is also the fix. **Mind the order:** those two rows have no wins, so there is no
+      win-median to author the promise from. Lift the caps, get medians, then set the
+      promises from them and re-confirm.
+
+### The fun pass — findings from the specialist review
+
+*(Being filled in as the review team reports. Each item carries its own evidence pointer
+so it can be executed without re-reading the review.)*
+
+---
+
 ## Where the game actually stands
 
 **The engine is finished and the measurement culture is the real asset.** Deterministic
