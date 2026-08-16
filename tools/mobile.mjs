@@ -154,10 +154,25 @@ const audit = (min) => page.eval((minTap) => {
     }
   }
   // Interactive things: reachable, and big enough to hit.
-  const tappable = 'button, [role="button"], input, select, a[href], .chip, .seg, [data-interactive]';
+  // A TAP TARGET IS SOMETHING YOU CAN ACTIVATE, and the bare `.chip, .seg` in
+  // this list were not that. They matched `span.chip.bubble` (the GOLD/TRAIN/NET
+  // readouts) and, via `[data-interactive]`, `span.bar-comp-seg` — all of them
+  // hover-tooltip targets carrying `tabindex="-1"`, i.e. explicitly not
+  // focusable and not pressable. That produced twelve to fifteen "tap target
+  // under 44px" complaints on a screen whose actual controls are all fine,
+  // which is the other way an audit stops being useful: one that cries wolf
+  // gets skimmed exactly like one that stays silent.
+  //
+  // Nothing is lost by dropping them — every real control using those classes
+  // is a `button.chip` or `button.seg`, already matched by `button`.
+  const tappable = 'button, [role="button"], input, select, a[href], [data-interactive]';
   for (const el of document.querySelectorAll(tappable)) {
     const st = getComputedStyle(el);
     if (st.display === 'none' || st.visibility === 'hidden' || el.disabled) continue;
+    // Reachable by hover, not by tap. Read the DOM PROPERTY, not the attribute:
+    // ui/dom.js `h()` assigns these as properties, so getAttribute('tabindex')
+    // comes back null for an element that is plainly `tabIndex === -1`.
+    if (el.tabIndex < 0) continue;
     const b = el.getBoundingClientRect();
     if (b.width === 0 || b.height === 0) continue;
     const label = `${name(el)}${el.textContent ? ` "${el.textContent.trim().slice(0, 18)}"` : ''}`;

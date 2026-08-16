@@ -196,10 +196,14 @@ test('vision: seen keeps the STALE owner once a site drops out of sight', () => 
 // ---------------------------------------------------------------------------
 
 test('perceivedSite: a ghost carries only common knowledge plus a last-known owner', () => {
+  // NO PLAYER SIEGE ON THIS ONE, and that is a rule rather than fixture tidying:
+  // since `siteFightSight`, a faction assaulting or besieging a site can SEE it,
+  // so "the player is besieging this" and "this is a ghost to the player" cannot
+  // both be true. `siege`-stripping is asserted below, on a fight it is not in.
   const real = {
     id: 'x', kind: 'stronghold', hex: [5, 5], owner: 'enemy', adj: ['a', 'b'],
     garrison: { militia: 40 }, hp: 250, level: 3, trainType: 'spearmen',
-    siege: { owner: 'player', comp: { militia: 5 } }, upgradeTicksLeft: 12,
+    upgradeTicksLeft: 12,
   };
   const s = { sites: [real], seen: { player: { x: 'enemy' }, enemy: {} } }; // unseen: no state.vision at all
   const ghost = perceivedSite(s, 'player', real);
@@ -207,9 +211,22 @@ test('perceivedSite: a ghost carries only common knowledge plus a last-known own
   assert.equal(ghost.ghost, true);
   assert.deepEqual(Object.keys(ghost).sort(), ['adj', 'ghost', 'hex', 'id', 'kind', 'owner']);
   assert.equal(ghost.owner, 'enemy', 'the last-known owner, read off state.seen');
-  for (const key of ['garrison', 'hp', 'level', 'trainType', 'siege', 'upgradeTicksLeft']) {
+  for (const key of ['garrison', 'hp', 'level', 'trainType', 'upgradeTicksLeft']) {
     assert.ok(!(key in ghost), `a ghost carried "${key}" — fog is leaking the one number that matters`);
   }
+
+  // ...and a siege the player is NOT part of is stripped too — the enemy
+  // storming a neutral farm the player once saw is exactly the intelligence
+  // fog exists to withhold.
+  const besieged = {
+    id: 'y', kind: 'farm', hex: [7, 7], owner: 'neutral', adj: [],
+    garrison: { militia: 3 }, hp: 90,
+    siege: { owner: 'enemy', comp: { militia: 20 } },
+  };
+  const s2 = { sites: [besieged], seen: { player: { y: 'neutral' }, enemy: {} } };
+  const g2 = perceivedSite(s2, 'player', besieged);
+  assert.equal(g2.ghost, true, 'a siege the player is not in must not light the site');
+  assert.ok(!('siege' in g2), 'a ghost carried the siege the player cannot see');
 
   // NEGATIVE CONTROL: owning the site returns the REAL object, every field
   // intact — so the stripping above is fog, not a resolver that always copies.
