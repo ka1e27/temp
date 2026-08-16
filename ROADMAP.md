@@ -31,9 +31,12 @@ commit. Do not re-derive the list.
 ### Blocking — the deploy is red until this is done
 
 - [ ] **The campaign re-tune against the melee layer.** Full brief in the section below
-      (`Do this first`). `tests/campaignplay.test.js` FAILS: nightharrow and stormhalt are
-      won 0 times in 48. They are unfinishable, not unwinnable — every seed times out at
-      the hard cap with no defeats, several while ahead on territory.
+      (`Do this first`). `tests/campaignplay.test.js` still FAILS, but on **one** row now:
+      re-run on the fixed engine, `nightharrow` went 0/48 → **1/24 PASS** (the five state
+      bugs were its whole problem) while `stormhalt` is still **0/48** and is therefore a
+      real balance problem rather than a defect wearing balance's clothes. Current
+      campaign table (n=48, fixed engine) is in `CLAUDE.md` — riverfen 90 ok, kaldan 73
+      ok, gallowmoor 17 TOO SLOW, thanescar 6, ravensmarch 2.
       **⚠ `targetLengthMin` is NOT the binding lever on those two rows**, though it is
       everywhere else: the cap is a MAX against a per-tier floor
       (`HARD_CAP_MIN_BY_TIER = [12,14,17,20,24,28]`, ratio 1.9), and both are pinned to

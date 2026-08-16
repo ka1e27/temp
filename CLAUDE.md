@@ -610,11 +610,24 @@ ravensmarch     2%   23.7m    24.0m      7m   TOO HARD     4% TOO HARD
 ```
 
 **The five state fixes moved the campaign without a single dial being touched**, which
-is the point: riverfen came back inside its band from TOO EASY, and `nightharrow` —
-won 0 times in 48 on the buggy engine, the row that made `campaignplay` red — now wins
-**1 in 24**. Two rows got harder and two easier, so this was not a uniform buff; it is
-what happens when reinforcement, retreat and training start working for both sides.
-Tiers 3–5 are still out of band and the re-tune is still owed.
+is the point: riverfen came back inside its band from TOO EASY. Two rows got harder and
+two easier, so this was not a uniform buff; it is what happens when reinforcement,
+retreat and training start working for both sides. Tiers 3–5 are still out of band and
+the re-tune is still owed.
+
+**ONE OF THE TWO UNWINNABLE REGIONS WAS A BUG AND THE OTHER IS REAL, and that
+separation is the useful part.** Re-run with `campaignplay`'s own seeds and `playOnce`:
+
+```
+nightharrow   0/48 FAIL  →  1/24 PASS      the state bugs were the whole problem
+stormhalt     0/48 FAIL  →  0/48 FAIL      genuinely unwinnable; the re-tune owns it
+```
+
+So `campaignplay` is still red, on ONE row rather than two, and that row is now known
+to be a balance problem rather than a defect wearing balance's clothes. That is worth
+more than either number alone: had the campaign been re-tuned before these fixes
+landed, a session would have been spent moving dials to compensate for defenders
+silently dropping half the orders given to them — and then spent again undoing it.
 
 **⚠ THE TABLES BELOW MEASURE A BUILD WITH FIVE SIMULATION BUGS IN IT.** The melee layer shipped with `site.garrison` written every
 tick from a frozen baseline, so a defender could not be reinforced, a rally on a
