@@ -32,6 +32,9 @@ const kOf = (h) => `${h.q},${h.r}`;
 /** Same bodies, unit for unit. Used to notice that something OUTSIDE this phase
  *  moved a garrison — see reprojectDefender. */
 const sameComp = (a, b) => a === b || UNIT_IDS.every((u) => (a?.[u] || 0) === (b?.[u] || 0));
+/** Nobody to exclude. Shared rather than minted per call so the fight path
+ *  allocates nothing, same rule as every other hot scan here. */
+const NO_ENGAGED = new Set();
 const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r)
   + Math.abs(a.r - b.r)) / 2;
 
@@ -214,6 +217,14 @@ function hexMelees(state) {
  *  because reprojectDefender has to rebuild the SAME fight from a new baseline,
  *  and a second copy of this list is a second thing to keep in step. */
 function meleeOpts(state, site, owner) {
+  // BOTH SIDES GET THEIR ARCHERS. The support is read fresh on every
+  // projection, so bowmen that walk up mid-fight start counting and bowmen that
+  // march off stop — the same "re-project from where things actually are" rule
+  // the rest of this file runs on. `NO_ENGAGED` because the attacking column is
+  // already off `state.squads` (it lives in `site.melee`) and the defenders are
+  // a garrison, not a squad — so there is nobody to double-count, and
+  // `reachSupport` already refuses a squad standing ON the hex.
+  const at = { q: site.hex[0], r: site.hex[1] };
   return {
     siteDefMult: siteDefMultOf(state, site),
     garrisonMult: garrisonMultOf(state, site),
@@ -224,6 +235,8 @@ function meleeOpts(state, site, owner) {
     defUnitMult: vetOf(state, site.owner),
     shielded: site.shieldTicks > 0,
     ground: groundOf(state, site),
+    attSupport: reachSupport(state, owner, at, NO_ENGAGED),
+    defSupport: reachSupport(state, site.owner, at, NO_ENGAGED),
   };
 }
 

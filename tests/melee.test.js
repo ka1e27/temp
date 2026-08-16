@@ -196,6 +196,38 @@ test('reach: archers a hex away add their attack and take none of the casualties
     'a second unit gained `reach` — re-read meleephase.js reachSupport first');
 });
 
+test('reach: archers work AT A SITE, which is where nearly every fight happens', () => {
+  // THE TEST THAT WAS MISSING, and its absence is why the unit shipped inert.
+  // `reachSupport` was reachable only from `openHexMelee`, so archers helped
+  // when two mobile columns collided on bare ground and did NOTHING for
+  // attacking or defending a farm, a yard, a wall, a camp or a throne. The
+  // reach tests above all call `reachSupport` directly — they proved the helper
+  // works and never asked whether anything called it, which is exactly how a
+  // dead feature keeps a green suite.
+  const run = (withArchers) => {
+    const s = fixture({ attack: { militia: 10 }, defend: { militia: 9 } });
+    if (withArchers) {
+      s.squads.push({
+        id: 900, owner: 'player', from: null, to: null, comp: comp({ archers: 40 }),
+        path: [{ q: 2, r: 3 }], spawnTick: 0, arriveTick: 0,
+        retreating: false, camped: true, hex: { q: 2, r: 3 }, melee: null,
+      });
+    }
+    s.commands.push({ t: 'SEND', from: 'home', to: 'foe', fraction: 1 });
+    // TO THE END OF THE FIGHT, not to its start. At the tick a melee opens the
+    // interpolation is at frac 0, so `m.comp` is still the force that set off —
+    // reading there compares two identical starting stacks and answers "the
+    // archers did nothing" no matter how well they are wired.
+    runUntil(s, (x) => site(x, 'foe').siege);
+    return total(site(s, 'foe').siege.comp);
+  };
+  const alone = run(false);
+  const helped = run(true);
+  assert.ok(helped > alone,
+    `40 archers a hex from a site assault changed nothing (${alone} -> ${helped}) — `
+    + 'reachSupport is not reaching the site path');
+});
+
 test('reach: support is added to POWER, never to the casualty pool', () => {
   // The whole point of the unit. If archers were folded into the stack instead,
   // `resolveField` would scale them along with everybody else and they would

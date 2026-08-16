@@ -13,21 +13,31 @@ import { groundOf, siteDefMultOf, garrisonMultOf } from './terrain.js';
 import { pushEvent, EVENTS } from './events.js';
 import { recordFailedAssault } from './vision.js';
 import { modOf, vetOf, recordCasualties, skirmishHome } from './fightaid.js';
-import { openSiteMelee } from './meleephase.js';
+import { openSiteMelee, reachSupport } from './meleephase.js';
 
 // --- phase 7: arrivals ------------------------------------------------------
+
+/** Nobody to exclude from archer support: the arriving column is already off
+ *  `state.squads` and the holders are a stack, not a squad. */
+const NO_ENGAGED = new Set();
 
 
 /** Field battle against whoever is holding the ground, not against the walls. */
 export function fightStack(state, group, site, holders, holderFaction) {
   // No walls and no bulwark — but the ground is still the ground, so terrain
   // applies here too. Only the FORTIFICATION bonus is absent.
+  // Archers a hex back shoot into THIS fight too — relieving a besieged site and
+  // the three-way scrap over one are field battles like any other, and the unit
+  // being inert outside an open-ground clash was the whole defect.
+  const at = { q: site.hex[0], r: site.hex[1] };
   const r = resolveField(group.comp, holders, {
     siteDefMult: 1, defenderOwnsSite: false,
     attMult: modOf(state, group.owner, 'unitAtkMult'),
     defMult: modOf(state, holderFaction, 'unitDefMult'),
     attUnitMult: vetOf(state, group.owner), defUnitMult: vetOf(state, holderFaction),
     ground: groundOf(state, site),
+    attSupport: reachSupport(state, group.owner, at, NO_ENGAGED),
+    defSupport: reachSupport(state, holderFaction, at, NO_ENGAGED),
   });
   recordCasualties(state, group.owner, holderFaction, group.comp, r.attSurvivors);
   recordCasualties(state, holderFaction, group.owner, holders, r.defSurvivors);

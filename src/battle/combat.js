@@ -199,16 +199,33 @@ export function resolveField(attackers, defenders, opts = {}) {
     siteDefMult = 1, garrisonMult = 1, defenderOwnsSite = true,
     attMult = 1, defMult = 1, shielded = false, ground = null,
     attUnitMult = null, defUnitMult = null,
+    // SHOOTING IN FROM A HEX AWAY. Two comps that add POWER and are never
+    // scaled for survivors, which is the whole of what `reach` buys: archers
+    // parked a tile back raise the side they shoot for and are not in the
+    // casualty pool, because the pool is derived by scaling `attackers` /
+    // `defenders` and they are in neither.
+    //
+    // It lives here rather than only in the open-ground clash because that is
+    // where it was, and the unit was therefore inert everywhere that matters:
+    // `reachSupport` was reachable ONLY from `openHexMelee`, so archers did
+    // nothing at all for attacking or defending a farm, a yard, a wall, a camp
+    // or a throne. Measured before this: ten attackers against nine at a farm
+    // resolved byte-identically with and without forty archers a hex away.
+    attSupport = null, defSupport = null,
   } = opts;
 
   let attPower = power(attackers, defenders,
     { statMult: attMult, unitMult: attUnitMult, ground });
+  if (attSupport) {
+    attPower += power(attSupport, defenders,
+      { statMult: attMult, unitMult: attUnitMult, ground });
+  }
   if (shielded) attPower *= 0.5; // Emergency Fortify
   // Halberds strip the ground out from under the garrison before the round is
   // fought — see `sunderedDefMult`. Applied HERE rather than inside `power` so
   // it reads as what it is: a property of the force attacking, not of the
   // defenders being measured.
-  const defPower = power(defenders, attackers, {
+  const defOpts = {
     defending: true,
     onOwnSite: defenderOwnsSite,
     siteDefMult: sunderedDefMult(attackers, siteDefMult),
@@ -218,7 +235,15 @@ export function resolveField(attackers, defenders, opts = {}) {
     statMult: defMult,
     unitMult: defUnitMult,
     ground,
-  });
+  };
+  let defPower = power(defenders, attackers, defOpts);
+  // Relief archers a hex outside the walls are NOT in the garrison, so they get
+  // the ground and the stat multipliers but not the fortification the men
+  // behind the wall are standing in.
+  if (defSupport) {
+    defPower += power(defSupport, attackers,
+      { defending: true, statMult: defMult, unitMult: defUnitMult, ground });
+  }
 
   if (attPower > defPower) {
     const ratio = 1 - defPower / attPower;

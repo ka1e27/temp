@@ -10,6 +10,9 @@
 // every existing import path still works.
 // PURE: no DOM, no clock.
 import { UNIT_IDS, UNITS, SITES, SITE_LEVELS } from '../content/balance.js';
+import { reachSupport } from '../battle/meleephase.js';
+/** Nobody to exclude — same as the sim's own site-melee projection. */
+const NO_ENGAGED = new Set();
 import { resolveField, breachSeconds, projectHp, scaleComp, total, emptyComp }
   from '../battle/combat.js';
 import { travelTicks, pathBetween } from '../battle/movement.js';
@@ -141,6 +144,7 @@ export function computePreview(state, fromId, toId, o = {}) {
   // preview that ignored the ground would be a lie in exactly the places the
   // player most needs the truth — the mountain fort and the river farm.
   const ground = groundOf(state, to);
+  const atHex = { q: to.hex[0], r: to.hex[1] };
   const defenders = relieving ? to.siege.comp : projectGarrison(state, to, eta);
   const res = resolveField(send, defenders, {
     siteDefMult: relieving ? 1 : siteDefMultOf(state, to),
@@ -157,6 +161,15 @@ export function computePreview(state, fromId, toId, o = {}) {
     defUnitMult: mods[relieving ? to.siege.owner : to.owner]?.unitMult,
     shielded: !relieving && (to.shieldTicks || 0) > 0,
     ground,
+    // Archers a hex back, on BOTH sides, for the same reason the per-troop
+    // levels above are here: the preview is a guarantee, and it only stays one
+    // if every term the sim reads reaches this call. The sim reads its support
+    // fresh at projection time, so a bowman who has not moved is counted the
+    // same way here — and a squad standing ON the site is refused by
+    // `reachSupport` in both places, so the two cannot disagree about who is
+    // shooting and who is fighting.
+    attSupport: reachSupport(state, 'player', atHex, NO_ENGAGED),
+    defSupport: reachSupport(state, relieving ? to.siege.owner : to.owner, atHex, NO_ENGAGED),
   });
 
   pv.kind = relieving ? 'relieve' : 'assault';
