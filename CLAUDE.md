@@ -663,10 +663,23 @@ nightharrow (advertised 6.5m, cap 24.0m)     stormhalt (advertised 9m, cap 28.0m
 ```
 
 Not one loss in either sample. So the late campaign is not too hard, it is **promising
-a length it can no longer deliver** — and because `targetLengthMin` derives
-`hardCapMs`, the promise and the cap are the same number, so an honest promise is also
-the fix. That is the first lever the re-tune should reach for, and this is the evidence
-for it: it is not a difficulty finding at all.
+a length it can no longer deliver**, and it is not a difficulty finding at all.
+
+**⚠ BUT `targetLengthMin` IS NOT THE BINDING LEVER ON THESE TWO ROWS, and the obvious
+reading of "the promise derives the cap" sends you at the wrong knob.** The derivation
+is a MAX against a per-tier floor:
+
+```
+hardCapMs = max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO)
+HARD_CAP_MIN_BY_TIER = [12, 14, 17, 20, 24, 28]      HARD_CAP_RATIO = 1.9
+```
+
+nightharrow is tier 5 at 6.5m advertised, so its cap is `max(24, 12.4)` = **24, the
+floor** — and stormhalt tier 6 at 9m is `max(28, 17.1)` = **28, the floor again**.
+Raising either promise changes the cap by nothing at all until it passes 12.6m and
+14.7m respectively. The tier floor is what these two are actually hitting, so the
+re-tune's first decision is whether tiers 5–6 get a bigger floor or a faster battle —
+`targetLengthMin` alone cannot move them.
 
 ### Two-stage capture
 

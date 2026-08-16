@@ -33,11 +33,16 @@ commit. Do not re-derive the list.
 - [ ] **The campaign re-tune against the melee layer.** Full brief in the section below
       (`Do this first`). `tests/campaignplay.test.js` FAILS: nightharrow and stormhalt are
       won 0 times in 48. They are unfinishable, not unwinnable — every seed times out at
-      the hard cap with no defeats, several while ahead on territory. `targetLengthMin`
-      derives `hardCapMs`, so the promise and the cap are one number and an honest promise
-      is also the fix. **Mind the order:** those two rows have no wins, so there is no
-      win-median to author the promise from. Lift the caps, get medians, then set the
-      promises from them and re-confirm.
+      the hard cap with no defeats, several while ahead on territory.
+      **⚠ `targetLengthMin` is NOT the binding lever on those two rows**, though it is
+      everywhere else: the cap is a MAX against a per-tier floor
+      (`HARD_CAP_MIN_BY_TIER = [12,14,17,20,24,28]`, ratio 1.9), and both are pinned to
+      the FLOOR (nightharrow `max(24, 12.4)`, stormhalt `max(28, 17.1)`). Raising either
+      promise moves nothing until it passes 12.6m / 14.7m. So the first decision is
+      whether tiers 5–6 get a bigger floor or a faster battle.
+      **Mind the order:** those rows have no wins, so there is no win-median to author a
+      promise from. Lift the caps, get medians, then set promises from them and
+      re-confirm.
 
 ### The fun pass — findings from the specialist review
 
