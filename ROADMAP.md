@@ -120,7 +120,13 @@ reproduced with a runnable probe before being believed.
       `meleephase.js reprojectDefender`, pinned by `tests/meleestate.test.js`. A rally on
       a site under assault turned 300 troops into 10,084; defender reinforcement, retreat,
       bombard and finished training were all silently reverted. One mechanism for all five.
-- [ ] **ARCHERS ARE DEAD EVERYWHERE THAT MATTERS — sold and doing nothing.**
+- [x] ~~**ARCHERS ARE DEAD EVERYWHERE THAT MATTERS — sold and doing nothing.**~~
+      **FIXED** — `resolveField` takes `attSupport`/`defSupport`; wired into the site
+      melee, `fightStack` and `computePreview`. Provably inert on the measured campaign
+      (zero archer bodies in 4000 ticks each on gallowmoor and thanescar), so no dial
+      moved. The test that was missing now drives a real site assault instead of calling
+      the helper directly.
+- [ ] ~~ARCHERS (original entry, kept for the evidence):~~
       `reachSupport`/`sidePower` are called ONLY from `openHexMelee`. `openSiteMelee`,
       `fightStack` and `computePreview` never call either, so the unit's whole selling
       point works only when two mobile squads collide on bare ground and never for
@@ -130,7 +136,9 @@ reproduced with a runnable probe before being believed.
       directly, so nothing catches it. **Fix:** thread it into `openSiteMelee` (both
       sides) and `fightStack`, AND into `computePreview`'s assault branch or the preview
       stops being a guarantee. **Cost S/M.** *(Next up.)*
-- [ ] **Fog ghosts your own live battle.** A squad absorbed into `site.melee` leaves
+- [x] ~~**Fog ghosts your own live battle.**~~ **FIXED** — `vision.js siteFightSight`; the
+      perceived view moved to `perceive.js` at the cap. Original evidence:
+- [ ] ~~Fog ghosting (original entry):~~ A squad absorbed into `site.melee` leaves
       `state.squads`, so it stops being a sight source — the site you are actively
       fighting at becomes a ghost on the very tick the melee opens
       (`melee=true, ghost=true` measured on consecutive ticks). `battleView.js:309` skips
@@ -184,6 +192,17 @@ real browser or against an instrumented headless battle.
       no signal whether quiet means converging or stalled. **Fix:** a persistent
       mine/enemy readout beside the gold panel; show remaining time, not just elapsed.
       **Cost M** (data exists; it is new surface plus a design call).
+- [ ] **Two comp-bar segments are focusable at 15px tall.** `battle-bars.js:91` sets
+      `tabIndex = 0` on a segment that holds troops, so it is a keyboard-reachable
+      target well under the 44px minimum — `tools/mobile.mjs` flags it now that the
+      audit distinguishes controls from tooltip anchors. Either make them non-focusable
+      (they duplicate the garrison plaque's information) or give the bar a real height.
+      **Cost S**, and it is a genuine a11y item rather than a cosmetic one.
+- [ ] **The site panel eats the board on a phone.** Step 6 of the audit reads
+      **54%** against its own 55% floor with a site panel open (76% with nothing
+      selected), and the reviewer additionally screenshotted the first-run coach mark
+      sitting on top of the panel's own Upgrade button. Both are the same squeeze.
+      **Cost M** — a layout call, not a patch.
 - [ ] **Concentrating force costs one drag per site, always.** `battle-input.js onDown`
       takes `view.dragFrom` from the single site under the pointer, never from
       `view.selection`; no `sendFromSelection` exists. The AI pools up to `AI.maxSources`
