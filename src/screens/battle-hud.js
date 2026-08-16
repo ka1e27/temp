@@ -266,7 +266,8 @@ export function createBattleHud(o) {
   if (bus) {
     off(bus.on('battle:command-rejected', (ev) => {
       const t = now();
-      alert.show(rejectionText(ev), t);
+      // State is passed so the refusal can be FOG-SAFE — see rejectionText.
+      alert.show(rejectionText(ev, getState()), t);
       const i = ev?.cmd?.t === 'BOOSTER' ? boosterIds.indexOf(ev.cmd.id) : -1;
       if (i >= 0) { shaken = i; shakeUntil = t + 420; boostShake[i](true); }
     }));
@@ -364,7 +365,9 @@ export function createBattleHud(o) {
     const id = view.trainPickerFor;
     const s = id ? siteOf(state, id) : null;
     if (!s) return;
-    placeFan(board, s, set);
+    // The viewport, so the fan can be kept inside it — see placeFan. Read off
+    // the camera, which already tracks it, rather than touching `window`.
+    placeFan(board, s, set, board.camera?.vw, board.camera?.vh);
   }
 
   function updateTrain(state) {

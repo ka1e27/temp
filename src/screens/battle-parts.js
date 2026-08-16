@@ -17,7 +17,9 @@ import { UNIT_IDS } from '../content/balance.js';
 import { UNITS_UI } from '../content/strings.js';
 import { TRAINABLE_UNITS } from '../battle/training.js';
 import { siteOf, computePreview } from './battle-preview.js';
-import { TRAIN_FAN_R, TRAIN_FAN_DEG } from './battle-anchor.js';
+import {
+  TRAIN_FAN_R, TRAIN_FAN_DEG, TRAIN_CHIP_PX, clampBox, panelBounds,
+} from './battle-anchor.js';
 
 const _p = { x: 0, y: 0 };
 const INSUFFICIENT = 'INSUFFICIENT — walls repair faster than you break them';
@@ -130,11 +132,34 @@ export function renderCaveats(host, pv) {
 }
 
 /** Put the fan on its site. Split from battle-hud.js with the fan itself so the
- *  scratch point `_p` stays next to the only thing that writes it. */
-export function placeFan(board, site, set) {
+ *  scratch point `_p` stays next to the only thing that writes it.
+ *
+ *  ...AND KEEP IT ON THE SCREEN, which it did not do. It anchored on the site's
+ *  raw projected position with no clamping at all, while the site PANEL right
+ *  next to it has a whole `clampBox`/`placePanel` system built for exactly this
+ *  — that machinery was simply never pointed at the fan. Measured at 390px on a
+ *  phone, a camp near the left edge put `Train Militia` at x −45 and
+ *  `Train Spearmen` at −29: the two staples of the default spread, entirely
+ *  off-screen, with no error and no scroll affordance. `tools/mobile.mjs` now
+ *  catches it (it could not before — see the two dead lookups fixed there).
+ *
+ *  The fan is an arc from −175° to −5°, so it reaches `R` left, `R` right and
+ *  `R` UP from the anchor and essentially nothing down. Clamping its box rather
+ *  than the anchor is what keeps that asymmetry honest. */
+export function placeFan(board, site, set, vw, vh) {
   board.siteScreen(site, _p);
-  set.trainX(`${Math.round(_p.x)}px`);
-  set.trainY(`${Math.round(_p.y)}px`);
+  let { x, y } = _p;
+  if (vw && vh) {
+    const half = TRAIN_CHIP_PX / 2;
+    const w = TRAIN_FAN_R * 2 + TRAIN_CHIP_PX;
+    const hgt = TRAIN_FAN_R + TRAIN_CHIP_PX;
+    const at = clampBox(x - TRAIN_FAN_R - half, y - TRAIN_FAN_R - half, w, hgt,
+      panelBounds(vw, vh, null));
+    x = at.x + TRAIN_FAN_R + half;
+    y = at.y + TRAIN_FAN_R + half;
+  }
+  set.trainX(`${Math.round(x)}px`);
+  set.trainY(`${Math.round(y)}px`);
 }
 
 /**

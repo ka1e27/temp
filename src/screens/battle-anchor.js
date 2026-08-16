@@ -52,7 +52,7 @@ export const CARET_EDGE = Object.freeze({
  * placement (battle-hud.js) and the site panel's clearance (this file) read
  * these, so the panel cannot end up under a fan that outgrew it.
  */
-const TRAIN_CHIP_PX = 44;   // the tap target; matches .train-chip in hud.css
+export const TRAIN_CHIP_PX = 44;   // tap target; matches .train-chip in screens.css
 const TRAIN_CHIP_GAP = 6;
 export const TRAIN_FAN_DEG = 170;
 export const TRAIN_FAN_R = Math.round(

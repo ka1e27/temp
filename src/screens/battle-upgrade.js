@@ -5,6 +5,7 @@
 // battle-panel.js re-exports them so nothing downstream has to care they moved.
 import { SITE_UPGRADE, CENTIGOLD } from '../content/balance.js';
 import { goldOf } from '../battle/economy.js';
+import { siteKnown } from '../battle/vision.js';
 
 /**
  * Player-facing text for every reason battle/commands.js can reject an order
@@ -18,6 +19,15 @@ export const REJECTIONS = Object.freeze({
   // Adjacency is gone; a base in the way is what refuses a march now.
   'no-route': 'No way through — an enemy base blocks every route.',
   'occupied-hex': 'A base is standing there. March beside it, or attack it.',
+  // The same refusal, for ground the player has never looked at — see
+  // rejectionText below for why naming the building would be a fog leak.
+  'occupied-hex-unseen': 'Something blocks the way there.',
+  // Terrain, unlike a building, is ALWAYS visible — so naming it leaks nothing,
+  // and this needs no fog-safe twin. It was the one reason in this table with no
+  // entry at all, so a drag onto a mountain answered the raw `Order refused
+  // (bad-hex).` — the single place an otherwise fully humanised error system
+  // showed the player what reads like a leftover debug string.
+  'bad-hex': 'That ground cannot be reached — a mountain or the map edge is in the way.',
   'same-site': 'That is where they already are.',
   'not-adjacent': 'That is out of reach.',
   'bad-fraction': 'Nothing selected to send.',
@@ -62,11 +72,33 @@ export const REJECTIONS = Object.freeze({
 });
 
 /** @param {{reason?:string, cmd?:object}} ev @returns {string} */
-export function rejectionText(ev) {
+export function rejectionText(ev, state = null, faction = 'player') {
   const reason = ev?.reason ?? '';
-  const said = REJECTIONS[reason] || `Order refused (${reason || 'unknown'}).`;
+  let said = REJECTIONS[reason] || `Order refused (${reason || 'unknown'}).`;
+  // A REFUSAL IS A DISCLOSURE, and this one was the sixth fog leak.
+  // `occupied-hex` fires for ANY non-owned building's hex, before the route
+  // check and regardless of whether this faction has ever looked there — so
+  // dragging into unscouted dark answered "a base is standing there" while the
+  // board drew nothing at all. More informative than the screen, which is the
+  // exact shape of every fog leak this project has already fixed, and the
+  // tutorial's own first line ("drag from your camp across the map") coaches
+  // precisely the gesture that trips it. Naming a building the player has never
+  // seen is the disclosure; that something stopped the march is not, because
+  // they just watched it stop.
+  if (reason === 'occupied-hex' && state && !hexKnown(state, faction, ev?.cmd?.toHex)) {
+    said = REJECTIONS['occupied-hex-unseen'];
+  }
   const id = ev?.cmd?.id;
   return id && reason !== 'needs-target' ? `${id.toUpperCase()}: ${said}` : said;
+}
+
+/** Is the building standing on this hex one `faction` may be told about?
+ *  Unknown hex, or no building there at all, reads as NOT known — a caller with
+ *  no target to check has nothing to disclose either. */
+function hexKnown(state, faction, hex) {
+  if (!hex) return false;
+  const site = state.sites?.find((s) => s.hex[0] === hex.q && s.hex[1] === hex.r);
+  return site ? siteKnown(state, faction, site) : false;
 }
 
 /**

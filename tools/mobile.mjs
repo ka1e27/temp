@@ -250,8 +250,25 @@ try {
   if (await scene() === 'shop') {
     report(await audit(MIN_TAP), '3 shop   ');
     await shot('3-shop');
-    for (const sel of ['.shop-back', '.btn-back', '[data-nav="map"]', '.scene-back']) {
-      if (await has(sel)) { await click(sel); break; }
+    // `.shop-close` IS THE BUTTON, and the four selectors that used to be
+    // guessed at here (`.shop-back`, `.btn-back`, `[data-nav="map"]`,
+    // `.scene-back`) match nothing in src/ and never did — so the shop never
+    // closed, `button.wm-go` was never there, and steps 4, 5 and 6 SILENTLY DID
+    // NOT RUN on any invocation of this tool, ever, including the CI job that
+    // gates the deploy. The tool reported "no layout problems found" for three
+    // screens it had not looked at, which is worse than reporting nothing.
+    //
+    // Absent is a FAILURE, per this project's own rule about smoke selectors.
+    // A navigation step that quietly no-ops takes every assertion downstream of
+    // it with it, and the whole point of that rule is that the tool must not be
+    // able to lie about coverage again.
+    if (!await has('.shop-close')) {
+      console.log('\n  !! shop Close (.shop-close) is not on the page — the shop cannot be');
+      console.log('     closed, so the loadout, in-battle and site-panel steps below would');
+      console.log('     silently not run. Fix the selector rather than the symptom.');
+      problems += 1;
+    } else {
+      await click('.shop-close');
     }
   }
 
@@ -282,8 +299,15 @@ try {
       // selector that names a container: it keeps passing once the thing moves.
       const s = b.sites.find((x) => x.owner === 'player' && x.trainType);
       if (!s) return null;
-      const p = g.view?.board?.siteScreen?.(s, { x: 0, y: 0 })
-        ?? g.board?.siteScreen?.(s, { x: 0, y: 0 });
+      // `__view` IS THE BOARD. The two names tried here before (`g.view.board`
+      // and `g.board`) are neither of the things screens/battle.js exposes —
+      // it sets `__view` for the geometry and `__ui` for the presentation state,
+      // and says so in a comment about those two having been confused once
+      // already. So this returned null every run and the step below printed
+      // "could not locate a trainable site" forever: a second dead lookup
+      // hiding behind the dead selector above, which is why fixing one only
+      // uncovered the other.
+      const p = g.__view?.siteScreen?.(s, { x: 0, y: 0 });
       return p ? { x: Math.round(p.x), y: Math.round(p.y), id: s.id } : null;
     });
     if (at) {
