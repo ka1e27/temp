@@ -597,6 +597,18 @@ carries `melee` and so does a squad, so a v11 blob resumed here is a board mid-a
 whose fights are not happening — no melee record, nothing steps toward an outcome, and
 both stacks stand there intact forever.
 
+**⚠⚠ EVERY WIN RATE IN THIS SECTION IS STALE — IT MEASURES A BUILD WITH FIVE
+SIMULATION BUGS IN IT.** The melee layer shipped with `site.garrison` written every
+tick from a frozen baseline, so a defender could not be reinforced, a rally on a
+besieged site printed troops, a retreat cloned a garrison, and bombard and finished
+training were silently discarded (see "Nothing else may quietly overwrite the
+defenders"). Fixing that changed how battles RESOLVE, not merely how they are scored:
+a nightharrow seed that could not be won in ninety minutes on the old engine is won in
+**fourteen** on the fixed one. So the tables below describe an engine that no longer
+exists, and the same is true of the winnability table further down. Re-take before
+trusting any of it; the numbers are kept because the SHAPE of the finding (a bot ahead
+on territory running out of clock) is what the re-tune starts from.
+
 **⚠ THE CAMPAIGN IS OUT OF BAND AND THIS IS THE MEASUREMENT, not an estimate.** Shipped
 deliberately ahead of the re-tune, which is its own pass. n=48, after the clock fix:
 
@@ -664,6 +676,16 @@ nightharrow (advertised 6.5m, cap 24.0m)     stormhalt (advertised 9m, cap 28.0m
 
 Not one loss in either sample. So the late campaign is not too hard, it is **promising
 a length it can no longer deliver**, and it is not a difficulty finding at all.
+
+**...AND THAT DIAGNOSIS WAS ONLY HALF RIGHT, which is worth more than the table.**
+With the cap lifted to NINETY minutes, nightharrow and stormhalt still won 0 of 12 —
+eleven of twelve runs simply never resolved. So they were not slow, they were
+**stalemates**, and "raise the cap" would have burned a session proving it. What that
+was actually measuring is the five-bug engine described above: the same seeds on the
+fixed build behave differently, one of them finishing in fourteen minutes. Two lessons
+that outlive the numbers: **lift the cap before concluding a region is merely slow**,
+and a long-running background measurement started before a fix is measuring the code
+as it was when it STARTED, not as it is when it prints.
 
 **⚠ BUT `targetLengthMin` IS NOT THE BINDING LEVER ON THESE TWO ROWS, and the obvious
 reading of "the promise derives the cap" sends you at the wrong knob.** The derivation

@@ -43,6 +43,15 @@ commit. Do not re-derive the list.
       **Mind the order:** those rows have no wins, so there is no win-median to author a
       promise from. Lift the caps, get medians, then set promises from them and
       re-confirm.
+      **⚠⚠ AND RE-TAKE EVERY NUMBER ABOVE BEFORE ACTING ON IT.** They were measured on a
+      build with five simulation bugs in it (defender reinforcement doing nothing, a
+      rally printing troops, a retreat cloning a garrison, bombard and training
+      discarded — all fixed since). That changed how battles RESOLVE: a nightharrow seed
+      unwinnable in ninety minutes on the old engine wins in fourteen on the fixed one.
+      Two lessons kept because they outlive the figures: **lift the cap before concluding
+      a region is slow rather than stalemated** (with the cap at 90m those two still won
+      0 of 12, so "slow" was wrong), and a long background measurement reports the code
+      as it was when it STARTED, not as it is when it prints.
 
 ### The fun pass — findings from the specialist review
 
