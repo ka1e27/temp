@@ -597,8 +597,26 @@ carries `melee` and so does a squad, so a v11 blob resumed here is a board mid-a
 whose fights are not happening — no melee record, nothing steps toward an outcome, and
 both stacks stand there intact forever.
 
-**⚠⚠ EVERY WIN RATE IN THIS SECTION IS STALE — IT MEASURES A BUILD WITH FIVE
-SIMULATION BUGS IN IT.** The melee layer shipped with `site.garrison` written every
+**RE-TAKEN ON THE FIXED ENGINE, n=48** — this is the current table; everything below
+it is the provenance that produced it.
+
+```
+region        win%  win-med  all-med  target   verdict     was (buggy engine)
+riverfen       90%    8.0m     8.5m    9.5m   ok          96% TOO EASY
+kaldan         73%    9.7m    11.1m    8.5m   ok          77% ok
+gallowmoor     17%   13.5m    17.0m    6.5m   TOO SLOW    23% TOO SLOW
+thanescar       6%   12.8m    20.0m    6.5m   TOO HARD     2% TOO HARD
+ravensmarch     2%   23.7m    24.0m      7m   TOO HARD     4% TOO HARD
+```
+
+**The five state fixes moved the campaign without a single dial being touched**, which
+is the point: riverfen came back inside its band from TOO EASY, and `nightharrow` —
+won 0 times in 48 on the buggy engine, the row that made `campaignplay` red — now wins
+**1 in 24**. Two rows got harder and two easier, so this was not a uniform buff; it is
+what happens when reinforcement, retreat and training start working for both sides.
+Tiers 3–5 are still out of band and the re-tune is still owed.
+
+**⚠ THE TABLES BELOW MEASURE A BUILD WITH FIVE SIMULATION BUGS IN IT.** The melee layer shipped with `site.garrison` written every
 tick from a frozen baseline, so a defender could not be reinforced, a rally on a
 besieged site printed troops, a retreat cloned a garrison, and bombard and finished
 training were silently discarded (see "Nothing else may quietly overwrite the
