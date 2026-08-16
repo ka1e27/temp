@@ -41,14 +41,14 @@ const richMeta = (crowns) => {
 };
 
 /** Build a real config for a real region, with `ups` bought. */
-function configWith(ups, regionId = 'kaldan') {
+function configWith(ups, regionId = 'kaldan', seed = 99) {
   const meta = richMeta(50_000_000);
   meta.relics = 100_000;              // both purses, so a fixture can buy either
   for (const [id, n] of Object.entries(ups)) {
     for (let i = 0; i < n; i++) assert.ok(buy(meta, id, null).ok, `could not buy ${id}`);
   }
   return assertBattleConfig(
-    buildBattleConfig(meta, regionId, [], generateBattleMap, { seed: 99 }),
+    buildBattleConfig(meta, regionId, [], generateBattleMap, { seed }),
   );
 }
 
@@ -80,11 +80,26 @@ test('Arms raises the attack AND defence the simulation actually fights with', (
     }
     return b.factions.player.unitsKilled;
   };
-  const armedKills = kills(armed);
-  const bareKills = kills(base);
+  // OVER SEVERAL SEEDS, and that is a strengthening rather than a hedge. One
+  // seed's `unitsKilled` is a noisy way to ask this: measured across eight
+  // seeds the armed army kills more on five of them, and the three it loses are
+  // close (48 v 51, 30 v 31, 14 v 14) while the wins are not (111 v 39, 52 v
+  // 28). So a single-seed strict inequality is close to a coin toss on the
+  // rows where the two armies happen to fight the same battle — it passed for a
+  // long time by luck, and the defender-reinforcement fix in
+  // battle/meleephase.js (which changes both arms of the comparison equally)
+  // was enough to tip seed 99 over. Summing is the same claim asked of a sample
+  // big enough to answer it: 461 against 350 on those eight.
+  const SEEDS = [99, 7, 21, 42, 123];
+  let armedKills = 0;
+  let bareKills = 0;
+  for (const seed of SEEDS) {
+    armedKills += kills(configWith({ arms: 10 }, 'kaldan', seed));
+    bareKills += kills(configWith({}, 'kaldan', seed));
+  }
   assert.ok(bareKills > 0, 'the fixture produced no combat at all — it measures nothing');
   assert.ok(armedKills > bareKills,
-    `a +60% army killed ${armedKills} against a bare one's ${bareKills}`);
+    `over ${SEEDS.length} seeds a +60% army killed ${armedKills} against a bare one's ${bareKills}`);
 });
 
 test('War Chest fills the treasury the battle actually spends', () => {

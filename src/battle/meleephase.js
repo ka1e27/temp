@@ -29,6 +29,9 @@ import { skirmishHome, recordCasualties, modOf, vetOf } from './fightaid.js';
 const FACTIONS = ['player', 'enemy'];
 const other = (f) => (f === 'player' ? 'enemy' : 'player');
 const kOf = (h) => `${h.q},${h.r}`;
+/** Same bodies, unit for unit. Used to notice that something OUTSIDE this phase
+ *  moved a garrison — see reprojectDefender. */
+const sameComp = (a, b) => a === b || UNIT_IDS.every((u) => (a?.[u] || 0) === (b?.[u] || 0));
 const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r)
   + Math.abs(a.r - b.r)) / 2;
 
@@ -207,8 +210,11 @@ function hexMelees(state) {
  * live there. Reinforcing MERGES and re-projects from the merged force, so a
  * second column arriving at 60% does not fight its own separate battle.
  */
-export function openSiteMelee(state, site, owner, comp, from = null) {
-  const opts = {
+/** The `resolveField` options a site melee is fought under. Factored out
+ *  because reprojectDefender has to rebuild the SAME fight from a new baseline,
+ *  and a second copy of this list is a second thing to keep in step. */
+function meleeOpts(state, site, owner) {
+  return {
     siteDefMult: siteDefMultOf(state, site),
     garrisonMult: garrisonMultOf(state, site),
     defenderOwnsSite: true,
@@ -219,6 +225,10 @@ export function openSiteMelee(state, site, owner, comp, from = null) {
     shielded: site.shieldTicks > 0,
     ground: groundOf(state, site),
   };
+}
+
+export function openSiteMelee(state, site, owner, comp, from = null) {
+  const opts = meleeOpts(state, site, owner);
   const prior = site.melee && site.melee.owner === owner ? site.melee : null;
   // BANK WHAT HAS ALREADY DIED before the re-projection throws its baseline
   // away. `comp0`/`garrison0` are what the CURRENT projection started from, and
@@ -254,17 +264,61 @@ export function openSiteMelee(state, site, owner, comp, from = null) {
   });
 }
 
+/**
+ * SOMETHING ELSE MOVED THE GARRISON — re-project the fight around it.
+ *
+ * This is the defender's half of "a reinforcement changes where a fight is
+ * going", and leaving it out was not one bug but five, because `siteMelees`
+ * writes `site.garrison` every tick from a FROZEN baseline: every other system
+ * that touches a defending garrison had its work silently reverted on the next
+ * tick, and two of them then looped.
+ *
+ *   reinforce a defended site   200 troops arrived, SQUAD_ARRIVED fired, and the
+ *                               outcome was byte-identical to sending nobody
+ *   RALLY out of a site         the garrison was revived every tick and rallied
+ *                               again — 300 troops became 10,084, which is a
+ *                               determinism and economy break, not a nuisance
+ *   RETREAT a garrison          the men both walked away intact AND stayed in
+ *                               the fight, so the site lost anyway
+ *   BOMBARD                     the kill was erased; the charge was still spent
+ *   training finishing          gold spent, UNITS_TRAINED fired, no troops
+ *
+ * One mechanism answers all five, and it is the one `openSiteMelee` already
+ * applies to the attacker: bank what has died so far, re-baseline from where
+ * both sides ACTUALLY are now, and carry the remaining clock. `site.garrison`
+ * goes back to being the single source of truth for who is defending, which is
+ * what every one of those systems already assumed it was.
+ */
+function reprojectDefender(state, site, m) {
+  // The casualties so far are the difference against what THIS phase last
+  // wrote — not against the new garrison, whose delta is the external change
+  // and is not a casualty of anything.
+  recordCasualties(state, m.owner, site.owner, m.comp0, m.comp);
+  recordCasualties(state, site.owner, m.owner, m.garrison0, m.defWrote);
+  const p = beginMelee(m.comp, site.garrison, state.tick, meleeOpts(state, site, m.owner));
+  m.comp0 = m.comp;
+  m.garrison0 = addComp(emptyComp(), site.garrison);
+  m.attEnd = p.attEnd;
+  m.defEnd = p.defEnd;
+  m.ticks = meleeTicksLeft(m, state.tick);
+  m.tick0 = state.tick;
+}
+
 /** Step every field battle happening outside a wall. */
 function siteMelees(state) {
   for (const site of state.sites) {
     const m = site.melee;
     if (!m) continue;
+    // Nothing else may quietly overwrite the defenders. `defWrote` is what this
+    // phase put there last tick; anything different came from outside.
+    if (m.defWrote && !sameComp(site.garrison, m.defWrote)) reprojectDefender(state, site, m);
     const step = meleeStep({
       att0: m.comp0, attEnd: m.attEnd, def0: m.garrison0, defEnd: m.defEnd,
       tick0: m.tick0, ticks: m.ticks,
     }, state.tick);
     m.comp = step.att;
     site.garrison = step.def;
+    m.defWrote = step.def;   // the yardstick the check above reads next tick
     if (!step.done && total(step.att) > 0 && total(step.def) > 0) continue;
 
     recordCasualties(state, m.owner, site.owner, m.comp0, step.att);
