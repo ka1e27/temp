@@ -205,7 +205,9 @@ real browser or against an instrumented headless battle.
       march. **Fix:** an `fx.js` case and a `sound.js` cue — but **throttled/aggregated**
       (one flash per squad per second, not per tick); that design is the actual work.
       **Cost M.**
-- [ ] **Your own army's size vanishes the instant it starts fighting.** `drawSquadLabels`
+- [x] ~~**Your own army's size vanishes the instant it starts fighting.**~~ **FIXED** —
+      `battleLabels.js drawSiteStackLabels`, with the stack geometry shared rather than
+      re-derived. Original evidence: `drawSquadLabels`
       only iterates MARCHING squads; once a column opens a melee or siege it lives in
       `site.melee.comp`/`site.siege.comp` and `drawSiteStack` draws pieces with no label.
       `formation.js` compresses above ~10 and caps at 30 pieces, so a 71-troop and a
@@ -214,7 +216,9 @@ real browser or against an instrumented headless battle.
       promise breaks exactly when it matters. **Fix:** label `site.melee.comp` /
       `site.siege.comp` in `battleLabels.js`'s site loop. **Cost M** (needs the
       `siteHeadYAt` offset, which currently lives only in `battleView.js`).
-- [ ] **Nothing tells you who is winning.** No screen imports `sitesOwned`/`armySize`
+- [x] ~~**Nothing tells you who is winning.**~~ **FIXED** — a `Sites N v M` tally and the
+      hard cap on the clock, both RAILED-ONLY because every phone placement cost board
+      share against a floor that layout is already failing. Original evidence: No screen imports `sitesOwned`/`armySize`
       (they exist and are used only by the sim/AI); no minimap; the HUD clock counts UP
       with the cap shown once, on the pre-battle brief. On a 20×15 board over 7–24
       minutes, "am I winning?" can only be answered by panning and adding up. Related:
