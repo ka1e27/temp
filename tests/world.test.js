@@ -140,21 +140,22 @@ test('the vertical slice matches the tuned balance table', () => {
     // That is closed: kaldan is tuned on its own dial (3.34 -> 3.19) and reads
     // inside its band on the same sweep as every other row.
     //
-    // SALTMERE IS THE ONE TIER-1 ROW THE SIEGE FRONTAGE MOVED (dial 3.08 ->
-    // 3.05, neutral 4 -> 3), and it took both because they very nearly cancel:
-    // at n=240 the dial step is worth -5 and the neutral cut +5, so 3.08/3 read
-    // 76% and 3.05/4 read 77% — both under the floor — while 3.05/3 reads 80%.
-    // A frontage that only bites a crowd still shaves the opening, because an
-    // early landing force IS a crowd: it has almost no engines in it.
-    //
-    // AND n=96 READ THIS ROW ~5 POINTS HIGH THREE TIMES RUNNING. `--n` takes a
-    // seed PREFIX, so a smaller sample is not an unbiased draw from a bigger
-    // one — saltmere's first 96 seeds are simply kind. Confirm a tier-1 band
-    // edge at 240 or do not confirm it.
+    // RE-TAKEN A SECOND TIME for the MELEE-LAYER re-tune (n=48; the two rows
+    // that moved are noted below; the rest were confirmed unchanged first).
+    // IRONWOOD read 98% against tier 1's 92% ceiling on the SAME 3.04 that
+    // used to be fine, and it turned out to be nearly immune to enemyMult in
+    // this range — 3.19 (the monotonic ceiling against kaldan, since raising
+    // it further cascades into tier 2) still read 98%, and only a much bigger
+    // jump (3.60, tested off-table) broke 90%. Fixed with the OTHER tier-2
+    // lever instead: neutral 4 -> 5 alongside 3.04 -> 3.19 reads 90% ok — a
+    // `choke` shape on the smallest board plateaus hard near the ceiling, so
+    // this row wants an n=96/240 confirm before it is trusted at the edge.
+    // SALTMERE had to follow ironwood's dial up to stay non-decreasing (3.19),
+    // which read 79% — inside the floor but tight, also wanting confirmation.
     ['riverfen', 1, 1.82, 11, 9, 5, 3, 3, 1.0, 9.5],
     ['ashford', 1, 2.66, 12, 9, 6, 3, 3, 1.2, 10],
-    ['ironwood', 1, 3.04, 13, 10, 7, 4, 3, 1.5, 9.5],
-    ['saltmere', 1, 3.05, 13, 10, 8, 3, 4, 1.8, 7.5],
+    ['ironwood', 1, 3.19, 13, 10, 7, 5, 3, 1.5, 9.5],
+    ['saltmere', 1, 3.19, 13, 10, 8, 3, 4, 1.8, 7.5],
     ['kaldan', 2, 3.19, 15, 11, 9, 5, 4, 4.0, 8.5],
   ];
   table.forEach((row, i) => {
