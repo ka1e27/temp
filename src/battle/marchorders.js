@@ -13,7 +13,7 @@ import { UNIT_IDS } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total } from './combat.js';
 import { siteById, isBlocked } from './state.js';
 import { occupantAt } from './occupancy.js';
-import { spawnSquad, pathThrough } from './movement.js';
+import { spawnSquad, pathThrough, squadHexOf } from './movement.js';
 import { marchCamped } from './retreat.js';
 import { asHex } from './influence.js';
 import { inGrid } from './mapgen.js';
@@ -114,6 +114,15 @@ export function cmdSend(state, cmd, by) {
  * spends nothing at all — the bodies are already in the field. Folding them
  * together would mean every garrison check growing an "unless it is camped"
  * arm, which is how a rule quietly stops applying.
+ *
+ * IT SPLITS, exactly as a send does. `fraction` and `filter` mean here what
+ * they mean there, and the half that is not ordered anywhere STAYS PUT — same
+ * hex, still camped — which is the direct analogue of a garrison's hold-back.
+ * Without this a camped force was the one body of troops on the board you
+ * could not divide: the whole army went or none of it did, so the moment you
+ * stopped on open ground you lost a power you had while standing in a yard.
+ * The order was always half of the "troops on a tile behave like troops in a
+ * building" rule; only the interaction was missing (see battle-input.js).
  */
 export function cmdMoveSquad(state, cmd, by) {
   const squad = state.squads.find((s) => s.id === cmd.squadId);
@@ -137,14 +146,55 @@ export function cmdMoveSquad(state, cmd, by) {
   // your own yard is exactly what occupancy already allows, and it is how a
   // drawn route chains through your own buildings.
   if (toHex && (occupantAt(state, toHex.q, toHex.r) ?? by) !== by) return 'occupied-hex';
-  if (!marchCamped(state, squad, {
+
+  const frac = Math.min(1, Math.max(0, Number(cmd.fraction ?? 1)));
+  if (!(frac > 0)) return 'bad-fraction';
+  const march = scaleComp(filterComp(squad.comp, cmd.filter), frac);
+  if (total(march) === 0) return 'empty-send';
+  const stay = subComp(squad.comp, march);
+  const waypoints = Array.isArray(cmd.waypoints) ? cmd.waypoints : null;
+
+  // THE WHOLE FORCE GOES: re-task the squad in place. This is the older path
+  // and it is kept as its own branch rather than folded into the split below,
+  // because moving every body is not a division — a squad that spawned a
+  // sibling and then emptied itself would leave a zero-strength camp on the
+  // board that every consumer would have to learn to ignore.
+  if (total(stay) === 0) {
+    if (!marchCamped(state, squad, {
+      to: to ? to.id : null, toHex: to ? null : toHex, waypoints,
+    })) return 'no-route';
+    pushEvent(state, EVENTS.SQUAD_SENT, {
+      squadId: squad.id, owner: by, from: null, to: squad.to, arriveTick: squad.arriveTick,
+    });
+    return null;
+  }
+
+  // PART OF IT GOES. The route is validated BEFORE anything is taken out of
+  // the camp, for the reason cmdSend validates before it debits a garrison:
+  // `spawnSquad` answers an impossible route with a straight line rather than
+  // a refusal, so ordering first and asking later produces a column walking
+  // through a mountain and a camp that has already paid for it.
+  const at = squadHexOf(state, squad);
+  if (!at) return 'no-route';
+  const stops = [
+    at,
+    ...(waypoints ? waypoints.map(asHex) : []),
+    to ? asHex(to.hex) : toHex,
+  ];
+  if (!pathThrough(state, stops, by)) return 'no-route';
+
+  squad.comp = stay;
+  const moved = spawnSquad(state, {
+    owner: by,
+    from: null,
+    fromHex: at,
     to: to ? to.id : null,
     toHex: to ? null : toHex,
-    waypoints: Array.isArray(cmd.waypoints) ? cmd.waypoints : null,
-  })) return 'no-route';
-
+    waypoints,
+    comp: march,
+  });
   pushEvent(state, EVENTS.SQUAD_SENT, {
-    squadId: squad.id, owner: by, from: null, to: squad.to, arriveTick: squad.arriveTick,
+    squadId: moved.id, owner: by, from: null, to: moved.to, arriveTick: moved.arriveTick,
   });
   return null;
 }

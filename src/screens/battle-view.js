@@ -37,6 +37,11 @@ export function createView(init = {}) {
     hoverId: null,
     dragFrom: null,
     dragTo: null,
+    /** A drag that began on a CAMPED force rather than on a building: the
+     *  squad's id, and `dragFrom` stays null because there is no site to name.
+     *  Troops standing in a field answer the drag gesture exactly as troops in
+     *  a yard do — see battle-orders.js `issueMove`. */
+    dragFromSquad: null,
     /**
      * THE ROAD A SEND DRAG IS DRAWING, hex by hex, as packed [q,r] pairs.
      *

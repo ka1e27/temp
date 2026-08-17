@@ -22,6 +22,7 @@ const SNAP_HEXES = 0.85;
 import { createArmedBoosters } from './battle-boosters.js';
 import { createArmedBuild } from './battle-build.js';
 import { createSquadPicker } from './battle-squadpick.js';
+import { createSelection } from './battle-select.js';
 // The drag trail and its trimming live in ./battle-waypoints.js — both this
 // file and battle-input.js need them. Imported AND re-exported: one import
 // for callers, and one rule rather than two that drift.
@@ -60,9 +61,12 @@ export const cmd = {
   send: (from, to, fraction, filter, o = {}) => ({
     t: 'SEND', from, to, fraction, filter, ...route(o),
   }),
-  /** Re-task an army already standing on open ground. */
-  moveSquad: (squadId, to, o = {}) => ({
-    t: 'MOVE_SQUAD', squadId, to: to ?? null, ...route(o),
+  /** Re-task an army already standing on open ground. `fraction` and `filter`
+   *  are the same two fields SEND carries and mean the same thing — a camped
+   *  force divides exactly as a garrison does, and what is not ordered
+   *  anywhere stays camped where it stood. */
+  moveSquad: (squadId, to, fraction, filter, o = {}) => ({
+    t: 'MOVE_SQUAD', squadId, to: to ?? null, fraction, filter, ...route(o),
   }),
   // `mode` is omitted entirely when unset rather than sent as undefined: these
   // objects are asserted to be plain serializable data, and a key that only
@@ -176,6 +180,25 @@ export function createOrders(o) {
   }
 
   /**
+   * The camped twin of `issueSend`, and deliberately the same three lines: an
+   * army standing in a field answers the drag gesture exactly as one standing
+   * in a yard does, down to the send-strength control and the troop filter.
+   *
+   * `MOVE_SQUAD` had been in the engine since the day squads learned to camp,
+   * with four comments naming it as the way a camped army is re-tasked — and
+   * NOTHING in the game could issue one. The only caller in the whole tree was
+   * a test. So the rule "stop on open ground and you keep your options" was
+   * true of the simulation and false of the game.
+   */
+  function issueMove(squad, to, opts = {}) {
+    if (!squad || !squad.camped) return false;
+    if (!to && !opts.toHex) return false;
+    push(cmd.moveSquad(squad.id, to ? to.id : null,
+      view.fraction, filterList(view.filter), opts));
+    return true;
+  }
+
+  /**
    * A chained RALLY is not one long standing order — it is a rally on EVERY
    * site along the road. Rallies already cascade (A→B and B→C flows troops
    * through B), so setting the chain is all it takes, and the sim needs no
@@ -259,113 +282,13 @@ export function createOrders(o) {
     return true;
   }
 
-  function selectOnly(id) {
-    view.selection.length = 0;
-    if (id) view.selection.push(id);
-    view.selectedSquad = null;
-    const sel = id ? site(id) : null;
-    // The picker is for sites that can actually train. Farms cannot, and used
-    // to open NOTHING at all as a result — they now open the site panel, which
-    // hangs off `selection` and so covers every site on the board.
-    view.trainPickerFor = sel && sel.owner === 'player' && sel.kind !== 'farm' ? id : null;
-    bus?.emit('ui:selection', view.selection);
-  }
-
-  /** Double-tap grabs the whole connected friendly front — the fast way to
-   *  order a whole flank without a box drag. */
-  function selectFront(id) {
-    const seen = new Set([id]);
-    const queue = [id];
-    while (queue.length) {
-      const cur = site(queue.shift());
-      if (!cur) continue;
-      for (const n of cur.adj) {
-        if (!seen.has(n) && site(n)?.owner === 'player') { seen.add(n); queue.push(n); }
-      }
-    }
-    view.selection.length = 0;
-    for (const k of seen) view.selection.push(k);
-    view.trainPickerFor = null;
-    view.selectedSquad = null;
-    bus?.emit('ui:selection', view.selection);
-  }
-
-  function boxSelect(box) {
-    if (!box) return;
-    const st = getState();
-    const x0 = Math.min(box.x0, box.x1); const x1 = Math.max(box.x0, box.x1);
-    const y0 = Math.min(box.y0, box.y1); const y1 = Math.max(box.y0, box.y1);
-    view.selection.length = 0;
-    for (const si of st.sites) {
-      if (si.owner !== 'player') continue;
-      board.sitePos(si, _a);
-      if (_a.x >= x0 && _a.x <= x1 && _a.y >= y0 && _a.y <= y1) view.selection.push(si.id);
-    }
-    view.armed = view.selection.length === 1 ? view.selection[0] : null;
-    view.trainPickerFor = null;
-    view.selectedSquad = null;
-    bus?.emit('ui:selection', view.selection);
-  }
-
-  /** Rally makes a site auto-send once its garrison passes the threshold — the
-   *  idle affordance inside the battle, and the cure for back-line micro.
-   *
-   *  The click form: whatever is selected rallies to the site under the pointer.
-   *  Kept because it is the only way to point a whole flank at one target in a
-   *  single action; the drag form (battle-input.js) handles one site at a time. */
-  function setRally(wx, wy) {
-    const target = board.siteAt(getState(), wx, wy);
-    // Copied: a `ui:command` listener is allowed to change the selection.
-    const sources = view.selection.length ? view.selection.slice()
-      : (view.armed ? [view.armed] : []);
-    if (!sources.length) return;
-    for (const id of sources) issueRally(site(id), target);
-  }
-
-  function retreatSelection() {
-    for (const id of view.selection) {
-      const src = site(id);
-      if (!src) continue;
-      if (src.owner === 'player' || src.siege?.owner === 'player') push(cmd.retreat(id));
-    }
-  }
-
-  /**
-   * CONCENTRATING FORCE: one order per player-owned site in the selection, all
-   * aimed at the same target — the missing third member of the family
-   * `setRally`/`retreatSelection` already belong to. SEND was the one verb
-   * that made you drag from every site in turn, costliest on exactly the late
-   * maps where `AI.maxSources` already lets the enemy pool three sites into
-   * one assault for free. Each source validates and prices INDEPENDENTLY
-   * through the same `issueSend` a lone drag uses, so a site with nothing to
-   * send simply contributes nothing. No source cap: `AI.maxSources` bounds
-   * the AI's SEARCH, not a rule of the game — the player's bound is whatever
-   * they selected.
-   *
-   * NO WAYPOINTS. A drawn route is the hexes ONE drag crossed, from ONE site;
-   * a column standing somewhere else has no relationship to those hexes, and
-   * threading them through it anyway would march it over ground the player
-   * never pointed at. Every source paths however `cmdSend` decides on its
-   * own — what an un-drawn single send already does. See battle-input.js
-   * `onDown` for where a drag is decided to be this rather than `issueSend`,
-   * and battle-waypoints.js `updateDragPreview` for the arrow.
-   * @param {?object} to snapped target site, or null for bare ground
-   * @param {{toHex?:number[]}} [opts]
-   * @returns {number} how many sends were actually issued
-   */
-  function sendFromSelection(to, opts = {}) {
-    const { toHex } = opts;
-    // Copied, same reason as setRally above: issueSend can trigger a
-    // `ui:command` listener that changes the selection mid-loop.
-    const sources = view.selection.slice();
-    let n = 0;
-    for (const id of sources) {
-      const from = site(id);
-      if (!from || from.owner !== 'player') continue;
-      if (issueSend(from, to, { toHex })) n++;
-    }
-    return n;
-  }
+  // Selection, and the orders that address all of it at once, live in
+  // ./battle-select.js — handed this file's own `site`/`push`/`issueSend` so a
+  // selection order and a single one can never take different routes to the
+  // simulation.
+  const {
+    selectOnly, selectFront, boxSelect, setRally, retreatSelection, sendFromSelection,
+  } = createSelection({ view, bus, site, push, cmd, issueSend, issueRally });
 
   // Armed boosters (arm one of five, resolve the next click to a target) are
   // the same one-shot shape as armed construction below, so both moved out
@@ -385,7 +308,7 @@ export function createOrders(o) {
   const { squadAt, retreatSelectedSquad, selectSquad } = picker;
 
   return {
-    push, site, canSend, snapTarget, issueSend, trimWaypoints, isDrawnRoute,
+    push, site, canSend, snapTarget, issueSend, issueMove, trimWaypoints, isDrawnRoute,
     issueRally, toggleRally, issueRallyChain, issueRallyKeep,
     selectOnly, selectFront, boxSelect, setRally, retreatSelection, sendFromSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,

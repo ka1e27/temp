@@ -99,7 +99,8 @@ src/ui/        DOM helpers, formatting, coach marks, dev overlay
 Several files are split purely for the 400-line cap and re-exported from their original
 home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data.js`←
 `regions.rules.js`, `sim.js`←`rally.js`, `commands.js`←`boosters.js`,
-`battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`/`battle-status.js`, `mainmenu.js`←
+`battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`/`battle-status.js`,
+`battle-input.js`←`battle-drag.js`, `battle-orders.js`←`battle-select.js`, `mainmenu.js`←
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
 `simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`/`simbuild.js`,
 `sim.js`←`arrivals.js`, `store.js`←`refund.js`, `ai.js`←`aicore.js`/`aihome.js`/
@@ -313,6 +314,53 @@ preview promised the other number. `projectMarchLosses` projects the attacker fo
 exactly as `projectGarrison` already projects the defender's training; both are
 deterministic, both known at commit time. `tests/towers.test.js` runs the projection and
 the simulation over the same march and demands the same survivors, body for body.
+
+### Troops on a tile behave like troops in a building
+
+**`MOVE_SQUAD` was in the engine, documented in four places as the way a camped army
+is re-tasked, and NOTHING in the game could issue one.** The only caller in the whole
+tree was a fixture in `tests/vision.test.js`. So the rule the squad rewrite was built to
+buy — stop on open ground and you keep your options — was true of the simulation and
+false of the game. Same shape as the four refunded upgrades and the inert archer: built,
+described in comments as working, unreachable.
+
+Two halves were missing, and both are the *garrison* rule applied to a field.
+
+**THE ORDER DIVIDES.** `cmdMoveSquad` takes `fraction` and `filter`, meaning exactly
+what they mean on a send, and **what is not ordered anywhere stays put** — same hex,
+still camped. A camped force used to be the one body of troops on the board that could
+not be split: the whole army went or none of it did. The whole-force case keeps its own
+branch (`marchCamped`, re-tasking in place) rather than being folded into the split,
+because a squad that spawned a sibling and then emptied itself would leave a
+zero-strength camp on the board that every consumer would have to learn to ignore. The
+route is validated **before** anything leaves the camp, for the reason `cmdSend` debits
+a garrison last: `spawnSquad` answers an impossible route with a straight line rather
+than a refusal, so ordering first and asking later produces a column walking through a
+mountain and a camp that has already paid for it.
+
+**THE GESTURE RESOLVES.** `battle-input.js onDown` took its drag source from
+`board.siteAt` alone, so a press on open ground meant one thing — start a box select.
+A camped force is checked first now, because a press that lands on an army plainly means
+that army; empty ground still boxes. It reuses the same `squadAt` the tap path already
+calls, so an army you can select is an army you can drag and both stay fog-gated for
+free.
+
+**No contract bump.** No field moved and nothing about how a blob is stepped changed —
+a split just puts a second ordinary squad on the board.
+
+`battle-drag.js` is new and holds the whole answer to "which of the four march orders
+did that drag mean" (camped or garrison × site or bare ground). One function, so a
+camped force and a garrison cannot drift into two different answers to the same gesture;
+`battle-input.js` recognises the gesture, `battle-orders.js` turns intent into a command,
+and this is the piece between them. `battle-select.js` came off the same pass —
+selection, and the three orders that address a selection rather than one site, which
+were written one at a time, which is how SEND came to be the only one missing.
+
+**Verified in the real game, not only in a fake DOM**: a 5-troop camped force dragged at
+the default 50% left 2 camped on the same hex and marched 3 off as a new column.
+`tests/campedmove.test.js` pins both halves, and its negative controls are the point —
+a split that quietly moved everything, or a camped branch that intercepted an ordinary
+send, would both look perfectly healthy from outside.
 
 ### Free movement, and the four bounds the site graph was supplying by accident
 

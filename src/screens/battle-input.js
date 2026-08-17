@@ -17,6 +17,12 @@ import { createOrders, cmd } from './battle-orders.js';
 // preview itself — one path for an ordinary drag, one per source for a
 // concentrated one — is computed there too, by `updateDragPreview`.
 import { updateDragPreview, dragSourcesFor } from './battle-waypoints.js';
+// A camped force's position, read the same way every other consumer reads it:
+// squads store no coordinate, so `squadHexOf` derives one from the path and the
+// tick. Two copies of that derivation disagree about exactly which tick a
+// column appears on, which is a bug nobody can reproduce from a report.
+import { squadHexOf } from '../battle/movement.js';
+import { resolveDrag, campedAt } from './battle-drag.js';
 
 export { cmd, filterList } from './battle-orders.js';
 export { createView } from './battle-view.js';
@@ -47,6 +53,7 @@ export function createBattleInput(o) {
 
   function clearDrag() {
     view.dragFrom = null;
+    view.dragFromSquad = null;
     view.dragTo = null;
     // The road drawn by the gesture, hex by hex. Emptied in place rather than
     // reassigned: the renderer holds this array to draw the route as it is
@@ -116,7 +123,24 @@ export function createBattleInput(o) {
       view.dragSources = dragSourcesFor(ord, view, hit.id);
       canvas.classList.add('is-dragging');
     } else if (!hit) {
-      view.box = { x0: w.x, y0: w.y, x1: w.x, y1: w.y };
+      // TROOPS ON A TILE DRAG LIKE TROOPS IN A BUILDING. Nothing under the
+      // pointer used to mean one thing — start a box select — so a force that
+      // had stopped on open ground could be selected and could retreat, and
+      // could not be ordered anywhere at all. `MOVE_SQUAD` has been in the
+      // engine since squads learned to camp, with four comments calling it the
+      // way a camped army is re-tasked, and the only caller in the tree was a
+      // test. This is the gesture that was missing.
+      //
+      // A camped force is checked BEFORE the box, because a press that lands
+      // on an army plainly means that army; empty ground still boxes.
+      const camped = campedAt(ord, getState(), w.x, w.y);
+      if (camped) {
+        view.dragFromSquad = camped.id;
+        view.dragTo = null;
+        canvas.classList.add('is-dragging');
+      } else {
+        view.box = { x0: w.x, y0: w.y, x1: w.x, y1: w.y };
+      }
     }
   }
 
@@ -166,7 +190,16 @@ export function createBattleInput(o) {
     const hover = board.siteAt(getState(), w.x, w.y);
     view.hoverId = hover?.id ?? null;
 
-    if (view.dragFrom) {
+    if (view.dragFromSquad != null) {
+      // The camped force draws its road exactly as a building does. It is
+      // handed a `{hex}` stand-in rather than a site because that is all
+      // `updateDragPreview` ever reads of a source — the same reason
+      // `siteScreen` projects a bare hex through the camera the sites use.
+      const st = getState();
+      const sq = st.squads.find((x) => x.id === view.dragFromSquad);
+      const at = sq && squadHexOf(st, sq);
+      if (at) updateDragPreview(getState(), ord, view, { hex: [at.q, at.r] }, w.x, w.y, board.hexSize);
+    } else if (view.dragFrom) {
       const from = ord.site(view.dragFrom);
       // THE ROAD THE PLAYER IS DRAWING, and the route(s) it previews — one for
       // an ordinary drag, one per source for a concentrated one. Both live in
@@ -226,50 +259,15 @@ export function createBattleInput(o) {
 
     board.pointer(ev, s);
     cam.screenToWorld(s.x, s.y, w);
-    const from = view.dragFrom ? ord.site(view.dragFrom) : null;
-
-    if (from && press.moved) {
-      // Drag order. Releasing back on the source is an explicit cancel.
-      const to = view.dragTo ? ord.site(view.dragTo) : null;
-      if (view.dragSources) {
-        // CONCENTRATING FORCE. No waypoints — see battle-orders.js
-        // `sendFromSelection` for why a drawn route cannot generalise to
-        // more than one origin. The SELECTION SURVIVES the send, unlike the
-        // single-source branch below: collapsing it back to one site would
-        // charge a re-select for every subsequent target, which is most of
-        // the cost this gesture exists to remove.
-        if (to && to.id !== from.id) {
-          ord.sendFromSelection(to);
-        } else if (!to) {
-          const at = view.dragTrail[view.dragTrail.length - 1];
-          if (at) ord.sendFromSelection(null, { toHex: at });
-        }
-        view.armed = from.id;
-      } else {
-        // WAYPOINTS ONLY WHEN THE DRAG MEANT THEM. A straight pull from a site
-        // to its neighbour crosses hexes it means nothing by — the player was
-        // pointing, not drawing — and pinning the army to those would refuse
-        // the whole order if one of them happened to be occupied.
-        // `isDrawnRoute` is the test for "meaningfully longer than the
-        // straight line".
-        const drawn = ord.isDrawnRoute(view.dragTrail);
-        const waypoints = drawn ? ord.trimWaypoints(view.dragTrail) : [];
-        if (to && to.id !== from.id) {
-          ord.issueSend(from, to, { waypoints });
-        } else if (!to) {
-          // RELEASED ON OPEN GROUND: take the position rather than abandoning
-          // the gesture. This is the other half of what the squad rewrite
-          // bought — an army can hold a tile, so a drag has somewhere to end
-          // that is not a building. `snapTarget` already magnets to a nearby
-          // site, so landing here means the player really did release in
-          // open country.
-          const at = view.dragTrail[view.dragTrail.length - 1];
-          if (at) ord.issueSend(from, null, { toHex: at, waypoints });
-        }
-        ord.selectOnly(from.id);
-        view.armed = from.id;
-      }
-    } else if (view.box && press.moved) {
+    // Which of the four march orders a completed drag meant lives in
+    // ./battle-drag.js — one function, so a camped force and a garrison
+    // cannot drift into two different answers to the same gesture.
+    if (press.moved && resolveDrag(ord, view, getState())) {
+      clearDrag();
+      press = null;
+      return;
+    }
+    if (view.box && press.moved) {
       ord.boxSelect(view.box);
     } else {
       tap(board.siteAt(getState(), w.x, w.y));
