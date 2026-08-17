@@ -73,8 +73,10 @@ project's own n and written up in `CLAUDE.md`.)*
 **Meta / progression / retention.** All five confirmed against the real game or the real
 harness by the reviewer.
 
-- [ ] **The world map lets a new player walk into a region they cannot win, and says
-      nothing.** `meta/world.js touchesEmpire`/`isAttackable` gate on hex adjacency
+- [x] ~~**The world map lets a new player walk into a region they cannot win, and says
+      nothing.**~~ **FIXED** — `meta/world.js campaignGap` + a warn-styled hint, threshold
+      measured at gap 2 (gap 1 is 56% and playable, gap 2 is 0 of 16). Told, not blocked.
+      Original evidence: `meta/world.js touchesEmpire`/`isAttackable` gate on hex adjacency
       ALONE — no tier gate, no conquest-count gate. Ashford's `adjacentTo` includes
       Kaldan (tier 2), so at two regions conquered the map offers Kaldan with the same
       green Attack button as its tier-1 neighbours. Measured, n=16 each: **rushing it at
@@ -194,8 +196,9 @@ real browser or against an instrumented headless battle.
       branches in the listener block that already exists; the payload already carries
       `attacker`/`win`/`siteId`, and the `good`/`danger` tone system is already built.
       **Cost S.**
-- [ ] **Tower fire has zero player-facing feedback — a whole shipped mechanic that cannot
-      be learned by playing.** `EVENTS.TOWER_FIRED` is pushed with everything needed
+- [x] ~~**Tower fire has zero player-facing feedback.**~~ **FIXED** — a throttled spark
+      (one per column per 650ms) plus the longest gap in the sound cue table, player's
+      own columns only. Original evidence: `EVENTS.TOWER_FIRED` is pushed with everything needed
       (`squadId, owner, siteId, kind, hex, lost`) and grepping `render/`, `ui/`, `screens/`
       finds **no consumer at all**. Volume, measured: riverfen 347 events / 94 squads;
       duskfell 1012 / 233; ravensmarch 1408 / 280. Troop counts just quietly shrink on the
