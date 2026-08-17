@@ -13,12 +13,12 @@ import { UNIT_IDS, SITES, SEND_FRACTIONS, BOOSTERS } from '../content/balance.js
 import { UNITS_UI } from '../content/strings.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
-import { compact, clock, percent, rate, spaceCase } from '../ui/format.js';
+import { compact, clock, percent, rate } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
 import { siteOf } from './battle-preview.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import {
-  createSitePanel, createWithdraw, createAlert, rejectionText, createBuildRail,
+  createSitePanel, createWithdraw, createAlert, createBuildRail, wireAlerts,
 } from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
@@ -26,8 +26,8 @@ import { createSpeedControl } from './battle-speed.js';
 import {
   buildTrainPicker, updatePreview, placeFan, placeRails,
 } from './battle-parts.js';
-// `updateTrain` indexes the chips against the SAME list they were built from —
-// see the loop in it — so this stays here even though the fan itself moved.
+// `updateTrain` indexes the chips against the SAME list they were built from,
+// so this stays here even though the fan itself moved.
 import { TRAINABLE_UNITS } from '../battle/training.js';
 
 export {
@@ -263,34 +263,13 @@ export function createBattleHud(o) {
 
   // The simulation never touches the bus; screens/battle.js re-emits every sim
   // event as `battle:<type>`. A rejected order used to end here, unheard.
+  // WHAT THE HUD SAYS WHEN THE SIM SPEAKS lives in battle-alert.js, beside the
+  // control that shows it — split at the 400-line cap along that seam.
   if (bus) {
-    off(bus.on('battle:command-rejected', (ev) => {
-      const t = now();
-      // State is passed so the refusal can be FOG-SAFE — see rejectionText.
-      alert.show(rejectionText(ev, getState()), t);
-      const i = ev?.cmd?.t === 'BOOSTER' ? boosterIds.indexOf(ev.cmd.id) : -1;
-      if (i >= 0) { shaken = i; shakeUntil = t + 420; boostShake[i](true); }
-    }));
-    off(bus.on('ui:armed-booster', (id) => alert.hold(id ? AIMING(id) : '')));
-
-    // GROUND CHANGING HANDS, IN WORDS. The HUD listened to one of seventeen
-    // event types, so the enemy could take a stronghold off you and leave no
-    // trace but a ring in their colour on a 41px glyph.
-    off(bus.on('battle:site-captured', (ev) => {
-      if (ev.from === 'player') alert.show(`LOST — ${spaceCase(ev.kind).toLowerCase()} taken`, now(), 'danger');
-      else if (ev.to === 'player') alert.show(`TAKEN — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'good');
-    }));
-    // BOTH ENDS, and the second one is the fix. `owner` is who is besieging;
-    // `defender` is whose ground it is. Checking only the first meant the enemy
-    // sweeping up empty NEUTRAL farms three hexes away fired a red UNDER SIEGE
-    // banner — reliably within seconds of every battle starting, while the
-    // opening tutorial line was still on screen. A new player cannot tell that
-    // from their own farm being stormed; they read identically.
-    off(bus.on('battle:siege-begun', (ev) => {
-      if (ev.owner === 'enemy' && ev.defender === 'player') {
-        alert.show(`UNDER SIEGE — ${spaceCase(ev.kind).toLowerCase()}`, now(), 'danger');
-      }
-    }));
+    wireAlerts({
+      bus, off, alert, getState, boosterIds, boostShake, aiming: AIMING,
+      onShake: (i, until) => { shaken = i; shakeUntil = until; },
+    });
   }
 
   /**

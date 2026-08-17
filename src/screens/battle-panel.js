@@ -37,7 +37,7 @@ import { createKeepRow, createRecruitRow } from './battle-actions.js';
 // rail beside the troop-type and booster ones, not as part of this panel.
 export { setKeep, recruit, recruitOffer, createBuildRail } from './battle-actions.js';
 
-export { createWithdraw, createAlert } from './battle-alert.js';
+export { createWithdraw, createAlert, fightAlert, wireAlerts } from './battle-alert.js';
 export { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
 
 // ---------------------------------------------------------------------------
