@@ -19,7 +19,7 @@ import { siteKnown } from '../battle/vision.js';
 /** How far past a building's own glyph the drag magnet still reaches, in hexes.
  *  See `snapTarget` for why this is under one. */
 const SNAP_HEXES = 0.85;
-import { needsTarget } from './battle-keys.js';
+import { createArmedBoosters } from './battle-boosters.js';
 import { createArmedBuild } from './battle-build.js';
 import { createSquadPicker } from './battle-squadpick.js';
 // The drag trail and its trimming live in ./battle-waypoints.js — both this
@@ -330,45 +330,49 @@ export function createOrders(o) {
     }
   }
 
-  // ---- armed boosters -----------------------------------------------------
-  // Rally, Bombard and Fortify all answer 'needs-target', and every input path
-  // in the game sent `site: null` — three of five boosters were unreachable
-  // through the keyboard AND the HUD. Pressing one now ARMS it, and the next
-  // site click fires it there.
-
-  function syncArm() {
-    canvas?.classList.toggle('is-targeting', !!view.armedBooster);
-    bus?.emit('ui:armed-booster', view.armedBooster);
-  }
-
-  /** @returns {boolean} true when the booster is now armed and waiting. */
-  function armBooster(id) {
-    if (!needsTarget(id)) {           // march and tithe act on what you already have
-      view.armedBooster = null;
-      syncArm();
-      push(cmd.booster(id, null));
-      return false;
+  /**
+   * CONCENTRATING FORCE: one order per player-owned site in the selection, all
+   * aimed at the same target — the missing third member of the family
+   * `setRally`/`retreatSelection` already belong to. SEND was the one verb
+   * that made you drag from every site in turn, costliest on exactly the late
+   * maps where `AI.maxSources` already lets the enemy pool three sites into
+   * one assault for free. Each source validates and prices INDEPENDENTLY
+   * through the same `issueSend` a lone drag uses, so a site with nothing to
+   * send simply contributes nothing. No source cap: `AI.maxSources` bounds
+   * the AI's SEARCH, not a rule of the game — the player's bound is whatever
+   * they selected.
+   *
+   * NO WAYPOINTS. A drawn route is the hexes ONE drag crossed, from ONE site;
+   * a column standing somewhere else has no relationship to those hexes, and
+   * threading them through it anyway would march it over ground the player
+   * never pointed at. Every source paths however `cmdSend` decides on its
+   * own — what an un-drawn single send already does. See battle-input.js
+   * `onDown` for where a drag is decided to be this rather than `issueSend`,
+   * and battle-waypoints.js `updateDragPreview` for the arrow.
+   * @param {?object} to snapped target site, or null for bare ground
+   * @param {{toHex?:number[]}} [opts]
+   * @returns {number} how many sends were actually issued
+   */
+  function sendFromSelection(to, opts = {}) {
+    const { toHex } = opts;
+    // Copied, same reason as setRally above: issueSend can trigger a
+    // `ui:command` listener that changes the selection mid-loop.
+    const sources = view.selection.slice();
+    let n = 0;
+    for (const id of sources) {
+      const from = site(id);
+      if (!from || from.owner !== 'player') continue;
+      if (issueSend(from, to, { toHex })) n++;
     }
-    view.armedBooster = view.armedBooster === id ? null : id;  // press again to cancel
-    syncArm();
-    return !!view.armedBooster;
+    return n;
   }
 
-  function cancelBooster() {
-    if (!view.armedBooster) return false;
-    view.armedBooster = null;
-    syncArm();
-    return true;
-  }
-
-  function fireBooster(siteId) {
-    const id = view.armedBooster;
-    if (!id) return false;
-    view.armedBooster = null;
-    syncArm();
-    push(cmd.booster(id, siteId));
-    return true;
-  }
+  // Armed boosters (arm one of five, resolve the next click to a target) are
+  // the same one-shot shape as armed construction below, so both moved out
+  // to their own file at the 400-line cap — see ./battle-boosters.js.
+  const { armBooster, cancelBooster, fireBooster } = createArmedBoosters({
+    view, canvas, bus, push, cmd,
+  });
 
   // Armed construction (arm a kind, resolve the next click to a hex, push
   // BUILD) is the same one-shot shape as an armed booster above but needs
@@ -383,7 +387,7 @@ export function createOrders(o) {
   return {
     push, site, canSend, snapTarget, issueSend, trimWaypoints, isDrawnRoute,
     issueRally, toggleRally, issueRallyChain, issueRallyKeep,
-    selectOnly, selectFront, boxSelect, setRally, retreatSelection,
+    selectOnly, selectFront, boxSelect, setRally, retreatSelection, sendFromSelection,
     armBooster, cancelBooster, fireBooster, squadAt, selectSquad, retreatSelectedSquad,
     armBuild, cancelBuild, fireBuild,
   };

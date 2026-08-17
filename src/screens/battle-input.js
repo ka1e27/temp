@@ -13,8 +13,10 @@ import { createDisposer } from '../ui/dom.js';
 import { createHotkeys } from './battle-hotkeys.js';
 import { createOrders, cmd } from './battle-orders.js';
 // The drag trail is accumulated HERE and trimmed in battle-orders.js — one
-// rule, in ./battle-waypoints.js, so the two halves cannot drift.
-import { trackHex, previewPath } from './battle-waypoints.js';
+// rule, in ./battle-waypoints.js, so the two halves cannot drift. The route
+// preview itself — one path for an ordinary drag, one per source for a
+// concentrated one — is computed there too, by `updateDragPreview`.
+import { updateDragPreview, dragSourcesFor } from './battle-waypoints.js';
 
 export { cmd, filterList } from './battle-orders.js';
 export { createView } from './battle-view.js';
@@ -22,7 +24,6 @@ export { createView } from './battle-view.js';
 const TAP_SLOP = 6;       // CSS px of travel still counted as a tap
 const TWO_FINGER_MS = 260;
 const DOUBLE_TAP_MS = 320;
-
 
 /**
  * @param {{canvas:HTMLCanvasElement, board:object, view:object,
@@ -53,6 +54,8 @@ export function createBattleInput(o) {
     view.dragTrail.length = 0;
     view.dragPath = null;
     view.dragPathKey = '';
+    view.dragSources = null;
+    view.dragPaths = null;
     view.rallyFrom = null;
     view.rallyTo = null;
     view.box = null;
@@ -108,6 +111,9 @@ export function createBattleInput(o) {
     if (hit && hit.owner === 'player') {
       view.dragFrom = hit.id;
       view.dragTo = null;
+      // CONCENTRATING FORCE: a drag off an already-selected site commits the
+      // whole selection — see battle-waypoints.js `dragSourcesFor`.
+      view.dragSources = dragSourcesFor(ord, view, hit.id);
       canvas.classList.add('is-dragging');
     } else if (!hit) {
       view.box = { x0: w.x, y0: w.y, x1: w.x, y1: w.y };
@@ -162,29 +168,12 @@ export function createBattleInput(o) {
 
     if (view.dragFrom) {
       const from = ord.site(view.dragFrom);
-      if (from) {
-        // The trail is passed so the magnet can stand down once this is a
-        // DRAWN route rather than a pull — see battle-orders.js `snapTarget`.
-        const t = ord.snapTarget(from, w.x, w.y, view.dragTrail);
-        view.dragTo = t && t.id !== from.id ? t.id : null;
-        // THE ROAD THE PLAYER IS DRAWING. Recorded on the way past rather than
-        // reconstructed on release: a pointer trail is the only record of which
-        // way round an obstacle the finger actually went, and it is gone the
-        // moment the gesture ends. Deduped inside `trackHex`, because
-        // pointermove fires far faster than a finger crosses a hex.
-        trackHex(view.dragTrail, w.x, w.y, board.hexSize);
-        // THE PREVIEWED ROUTE, recomputed only when it could have changed —
-        // when the finger crossed into a new hex or the snap flipped. A
-        // pointermove fires far faster than either, and `previewPath` costs an
-        // A* leg per waypoint, so recomputing per event would put twenty
-        // searches on the pointer handler for a line that did not move.
-        const key = `${t ? t.id : ''}|${view.dragTrail.length}`;
-        if (key !== view.dragPathKey) {
-          view.dragPathKey = key;
-          view.dragPath = previewPath(getState(), from, view.dragTo ? t : null,
-            view.dragTrail);
-        }
-      }
+      // THE ROAD THE PLAYER IS DRAWING, and the route(s) it previews — one for
+      // an ordinary drag, one per source for a concentrated one. Both live in
+      // battle-waypoints.js now: it already owned the trail-trimming half of
+      // this rule, and the preview half is the same "recompute only when a
+      // new hex is crossed or the snap flips" throttle either way.
+      if (from) updateDragPreview(getState(), ord, view, from, w.x, w.y, board.hexSize);
     } else if (view.box) {
       view.box.x1 = w.x;
       view.box.y1 = w.y;
@@ -242,26 +231,44 @@ export function createBattleInput(o) {
     if (from && press.moved) {
       // Drag order. Releasing back on the source is an explicit cancel.
       const to = view.dragTo ? ord.site(view.dragTo) : null;
-      // WAYPOINTS ONLY WHEN THE DRAG MEANT THEM. A straight pull from a site to
-      // its neighbour crosses hexes it means nothing by — the player was
-      // pointing, not drawing — and pinning the army to those would refuse the
-      // whole order if one of them happened to be occupied. `isDrawnRoute` is
-      // the test for "meaningfully longer than the straight line".
-      const drawn = ord.isDrawnRoute(view.dragTrail);
-      const waypoints = drawn ? ord.trimWaypoints(view.dragTrail) : [];
-      if (to && to.id !== from.id) {
-        ord.issueSend(from, to, { waypoints });
-      } else if (!to) {
-        // RELEASED ON OPEN GROUND: take the position rather than abandoning the
-        // gesture. This is the other half of what the squad rewrite bought —
-        // an army can hold a tile, so a drag has somewhere to end that is not a
-        // building. `snapTarget` already magnets to a nearby site, so landing
-        // here means the player really did release in open country.
-        const at = view.dragTrail[view.dragTrail.length - 1];
-        if (at) ord.issueSend(from, null, { toHex: at, waypoints });
+      if (view.dragSources) {
+        // CONCENTRATING FORCE. No waypoints — see battle-orders.js
+        // `sendFromSelection` for why a drawn route cannot generalise to
+        // more than one origin. The SELECTION SURVIVES the send, unlike the
+        // single-source branch below: collapsing it back to one site would
+        // charge a re-select for every subsequent target, which is most of
+        // the cost this gesture exists to remove.
+        if (to && to.id !== from.id) {
+          ord.sendFromSelection(to);
+        } else if (!to) {
+          const at = view.dragTrail[view.dragTrail.length - 1];
+          if (at) ord.sendFromSelection(null, { toHex: at });
+        }
+        view.armed = from.id;
+      } else {
+        // WAYPOINTS ONLY WHEN THE DRAG MEANT THEM. A straight pull from a site
+        // to its neighbour crosses hexes it means nothing by — the player was
+        // pointing, not drawing — and pinning the army to those would refuse
+        // the whole order if one of them happened to be occupied.
+        // `isDrawnRoute` is the test for "meaningfully longer than the
+        // straight line".
+        const drawn = ord.isDrawnRoute(view.dragTrail);
+        const waypoints = drawn ? ord.trimWaypoints(view.dragTrail) : [];
+        if (to && to.id !== from.id) {
+          ord.issueSend(from, to, { waypoints });
+        } else if (!to) {
+          // RELEASED ON OPEN GROUND: take the position rather than abandoning
+          // the gesture. This is the other half of what the squad rewrite
+          // bought — an army can hold a tile, so a drag has somewhere to end
+          // that is not a building. `snapTarget` already magnets to a nearby
+          // site, so landing here means the player really did release in
+          // open country.
+          const at = view.dragTrail[view.dragTrail.length - 1];
+          if (at) ord.issueSend(from, null, { toHex: at, waypoints });
+        }
+        ord.selectOnly(from.id);
+        view.armed = from.id;
       }
-      ord.selectOnly(from.id);
-      view.armed = from.id;
     } else if (view.box && press.moved) {
       ord.boxSelect(view.box);
     } else {

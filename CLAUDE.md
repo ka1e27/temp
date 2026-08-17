@@ -2610,6 +2610,31 @@ gate the deploy.
   full at "A fight takes time" above. The short version, n=48: riverfen 96% TOO EASY,
   kaldan 77% ok, gallowmoor 23% TOO SLOW, thanescar 2%, ravensmarch 4%.
 
+  **⚠ FOUR TEST FILES ARE RED, NOT ONE, AND THEY ARE ONE ROOT CAUSE.** Measured
+  against a pristine checkout, each long harness file run alone: `harness` 11/0 ok,
+  but `scout` ("never completed a single watchtower across twelve tier-5/6
+  battles"), `tactics` ("only 6 squads carried a rider at all"), `loadoutdominance`
+  and `campaignplay` each fail one test. All four run real battles on the tiers
+  where the table no longer holds, so all four are the re-tune's acceptance test
+  rather than separate work — **but two of them read like independent defects.**
+
+  **`loadoutdominance` is the trap.** Its own failure message offers two readings and
+  invites the wrong one: *"Either somebody FIXED the dominant loadout — in which case
+  re-take these numbers, retire this framing and close the bullet in CLAUDE.md — or
+  the weights stopped reaching the battle."* Neither happened. The figures are default
+  **17%**, mono **25%**: the gap closed because the DEFAULT SPREAD collapsed to
+  gallowmoor's out-of-band 17%, not because the exploit got weaker. A test that
+  reports a real regression in the vocabulary of a fix is worth knowing about — this
+  is the same shape as the harness declining to play and reading as a balance win.
+
+  **And they are only visible one file at a time.** `npm test` exits 0 having printed a
+  truncated TAP stream when several sessions share the machine — twice in one session,
+  once with no summary at all. `for f in tests/*.test.js; do node --test "$f"; done`
+  with a per-file timeout is what actually reports; the five harness files need ≥180s
+  each, and balance-sensitive ones must be run from a clean worktree
+  (`git worktree add --detach <dir> HEAD`) if `regions.data.js` is dirty, or they
+  measure somebody's in-flight probe.
+
   **`campaignplay` IS RED, so the Pages deploy is gated until this lands.**
   `nightharrow` and `stormhalt` are won 0 times in 48 — but every one of those runs is
   a `timeout` at exactly the hard cap with NO defeats and several ending ahead on

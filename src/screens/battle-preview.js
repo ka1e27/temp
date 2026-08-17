@@ -13,7 +13,7 @@ import { UNIT_IDS, UNITS, SITES, SITE_LEVELS } from '../content/balance.js';
 import { reachSupport } from '../battle/meleephase.js';
 /** Nobody to exclude — same as the sim's own site-melee projection. */
 const NO_ENGAGED = new Set();
-import { resolveField, breachSeconds, projectHp, scaleComp, total, emptyComp }
+import { resolveField, breachSeconds, projectHp, scaleComp, total, emptyComp, addComp }
   from '../battle/combat.js';
 import { travelTicks, pathBetween } from '../battle/movement.js';
 import { projectMarchLosses } from '../battle/towers.js';
@@ -206,4 +206,60 @@ export function previewLine(pv) {
   if (pv.win && pv.breachSec !== undefined) parts.push(`BREACH ${duration(pv.breachSec)}`);
   parts.push(`ETA ${duration(pv.eta)}`);
   return parts.join(' · ');
+}
+
+/**
+ * CONCENTRATING FORCE: the preview for a drag that commits every player-owned
+ * site in the selection, not just the one under the pointer.
+ *
+ * NO COMBINED OUTCOME, and that is the point rather than a gap. Summing the
+ * comps and calling `resolveField` once would be a plausible, confident,
+ * WRONG number: the columns are at different distances, so `travelTicks`
+ * differs per source and they arrive as SEPARATE waves — and since the melee
+ * layer, a later wave REINFORCES an ongoing fight rather than joining one
+ * simultaneous one. Invariant 3 is that the preview never claims a number it
+ * cannot keep; withholding the outcome here is how a multi-source send keeps
+ * that promise the same way a single send keeps it by calling `resolveField`
+ * directly.
+ *
+ * What IS honestly knowable at commit time: how many columns, how many
+ * troops in total, and the arrival SPREAD — first and last ETA, off the same
+ * `travelTicks` the sim will stamp on every squad (`travelSecondsFor` is the
+ * exact function the single-source preview above already wraps).
+ * @param {object} state @param {string[]} fromIds every candidate source
+ * @param {string} toId @param {{fraction?:number, filter?:string[],
+ *          travelSeconds?:Function}} [o]
+ * @returns {object|null} null when nothing would actually be sent
+ */
+export function computeMultiPreview(state, fromIds, toId, o = {}) {
+  const to = siteOf(state, toId);
+  if (!to) return null;
+  const fraction = o.fraction ?? 0.5;
+  let send = emptyComp();
+  let etaMin = Infinity;
+  let etaMax = 0;
+  let columns = 0;
+  for (const fromId of fromIds) {
+    const from = siteOf(state, fromId);
+    if (!from || from.owner !== 'player' || from.id === to.id) continue;
+    const sent = scaleComp(filtered(from.garrison, o.filter), fraction);
+    if (total(sent) <= 0) continue;
+    const eta = (o.travelSeconds || travelSecondsFor)(state, from, to, sent);
+    send = addComp(send, sent);
+    if (eta < etaMin) etaMin = eta;
+    if (eta > etaMax) etaMax = eta;
+    columns++;
+  }
+  if (columns === 0) return null;
+  const sendN = total(send);
+  return {
+    kind: 'multi', to: to.id, columns, send, sendN, etaMin, etaMax,
+    line: multiPreviewLine(columns, sendN, etaMin, etaMax),
+  };
+}
+
+/** `3 columns · 214 troops · arriving 4.2s–9.8s` */
+export function multiPreviewLine(columns, sendN, etaMin, etaMax) {
+  const spread = etaMax > etaMin ? `${duration(etaMin)}–${duration(etaMax)}` : duration(etaMin);
+  return `${plural(columns, 'column', 'columns')} · ${sendN} troops · arriving ${spread}`;
 }

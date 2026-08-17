@@ -52,6 +52,19 @@ export function createView(init = {}) {
      */
     dragTrail: [],
     /**
+     * CONCENTRATING FORCE. Null for an ordinary drag; every player-owned site
+     * in the selection when the drag started ON one of them — decided once,
+     * at press time, by battle-waypoints.js `dragSourcesFor`. Presence of
+     * this (not its length) is what battle-orders.js `sendFromSelection` and
+     * the renderer both key off, so a selection of exactly one still reads as
+     * "not multi" and every ordinary single-source drag is untouched.
+     * @type {?string[]}
+     */
+    dragSources: null,
+    /** One previewed route per `dragSources` entry, parallel by index — see
+     *  battle-waypoints.js `updateDragPreview`. Null outside a multi-send. */
+    dragPaths: null,
+    /**
      * Every plain drag sets a rally instead of sending.
      *
      * A rally had exactly one input and it was a RIGHT-drag. That does not

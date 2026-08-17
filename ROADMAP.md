@@ -30,6 +30,34 @@ commit. Do not re-derive the list.
 
 ### Blocking — the deploy is red until this is done
 
+> **⚠ IT IS FOUR TEST FILES, NOT ONE, AND THEY ARE ONE ROOT CAUSE.** Everything below
+> says `campaignplay` is the single red row. Measured against a pristine checkout of
+> `da4ca6b`, running each long harness file alone (they need ≥180s each and the runner
+> truncates when several sessions share the box):
+>
+> ```
+> harness            11 pass  0 fail   ok
+> scout               2 pass  1 fail   "never completed a single watchtower across
+>                                        twelve tier-5/6 battles"
+> tactics             9 pass  1 fail   "only 6 squads carried a rider at all"
+> loadoutdominance    2 pass  1 fail   "mono-militia beat the default spread by only
+>                                        8 points (17% -> 25%)"
+> campaignplay        4 pass  1 fail   the documented stormhalt row
+> ```
+>
+> All four are downstream of the campaign being out of band against the melee layer —
+> three of them run real battles on tiers 5–6, which is exactly where the table no
+> longer holds. **None is an independent defect, and two of them read like one.**
+>
+> **`loadoutdominance` is the dangerous one.** Its failure message offers two readings
+> and invites you to take the wrong one: *"Either somebody FIXED the dominant loadout —
+> in which case re-take these numbers, retire this framing and close the bullet in
+> CLAUDE.md — or the weights stopped reaching the battle."* Neither happened. Read the
+> figures: default **17%**, mono **25%**. The gap collapsed because the DEFAULT SPREAD
+> fell to gallowmoor's out-of-band 17%, not because mono got worse. Do not retire that
+> bullet. Re-take all four *after* the re-tune lands; they are its acceptance test, not
+> separate work.
+
 - [ ] **The campaign re-tune against the melee layer.** Full brief in the section below
       (`Do this first`). `tests/campaignplay.test.js` still FAILS, but on **one** row now:
       re-run on the fixed engine, `nightharrow` went 0/48 → **1/24 PASS** (the five state

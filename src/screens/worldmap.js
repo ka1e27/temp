@@ -22,6 +22,8 @@ import {
 import { incursionView } from '../meta/incursion.js';
 import { incomePerSec } from '../meta/idle.js';
 import { previewReward } from '../meta/rewards.js';
+import { createAutoResolveUI } from './worldmap-autobattle.js';
+import { createDetailRenderer } from './worldmap-detail.js';
 import { bootRoute, launchFirstRegion } from './mainmenu.js';
 import { HEX, layoutHexes, createMapPanner } from './worldmap-pan.js';
 
@@ -31,13 +33,36 @@ export function createWorldMapScene(ctx) {
   let banner = null;
   let selected = null;
   let detailEl = null;
+  let boardEl = null;
+  /** The header buttons that leave this screen — held here (not just inside
+   *  enter()) so beginAutoResolve can disable them for the duration. */
+  let navButtons = [];
   let detailMode = null;
   let tickDetail = null;
   let pending = null;
   let panner = null;
   let centred = false;
+  /** Rebuilt every enter() — see worldmap-autobattle.js. Guards select() and
+   *  the header actions so nothing else on this screen can move while a raid
+   *  is resolving in the background. */
+  let autoResolve = null;
 
   const meta = () => ctx.state.meta;
+
+  // The panel says what a region IS and offers the one button it earns; this
+  // file owns the board, the selection and the scene. `autoResolve` is passed
+  // as a getter because it is rebuilt every enter() — a reference captured
+  // here once would go stale on the second visit to this screen.
+  const renderDetail = createDetailRenderer({
+    dom: { h, clear, mount, bindText },
+    meta,
+    now: () => Date.now(),
+    launch: (id) => launch(id),
+    autoResolve: () => autoResolve,
+    setMode: (m) => { detailMode = m; },
+    setTick: (fn) => { tickDetail = fn; },
+    tick: () => tickDetail?.(),
+  });
 
   return {
     id: 'worldmap',
@@ -63,6 +88,33 @@ export function createWorldMapScene(ctx) {
       const setCrowns = bindText(crowns);
       const setRelics = bindText(relics);
       const setIncome = bindText(income);
+      // Hoisted rather than built inline: while a raid auto-resolves in the
+      // background these three are the only things that could carry the
+      // player off this screen while the results of that resolve still need
+      // ctx.scenes.replace(...results...) to land HERE (see
+      // beginAutoResolve) — so each is disabled for the duration rather than
+      // guarded ad hoc in a handler that could be added later and forget to.
+      const incursionBtn = incursionView(meta()).open ? h('button.btn.wm-incursion', {
+        text: ENDGAME.incursionTitle, type: 'button',
+        'aria-label': 'Open the incursion briefing',
+        on: { click: () => ctx.scenes.push(ctx.screens.incursion) },
+      }) : null;
+      // `.wm-shop` on the control itself, not "the first button in the
+      // header": tools/smoke.mjs used to select `.wm-actions button`, and the
+      // moment a second button joined that row the smoke test would have been
+      // hit-testing whichever one came first in the DOM while still reporting
+      // that it had checked the shop.
+      const shopBtn = h('button.btn.wm-shop', {
+        text: UI.shop, type: 'button',
+        'aria-label': 'Open the upgrade shop',
+        on: { click: () => ctx.scenes.push(ctx.screens.shop) },
+      });
+      const menuBtn = h('button.btn.ghost.wm-menu', {
+        text: 'Menu', type: 'button',
+        'aria-label': 'Open the main menu',
+        on: { click: () => ctx.scenes.push(ctx.screens.mainmenu) },
+      });
+      navButtons = [incursionBtn, shopBtn, menuBtn].filter(Boolean);
       const header = h('div.wm-header.panel', {},
         // NOT a live region. It was `polite` and refreshes every 250ms, and
         // `compact` renders values under 1000 as whole numbers — measured at
@@ -75,37 +127,18 @@ export function createWorldMapScene(ctx) {
           h('span.label', { text: UI.treasury }), crowns,
           h('span.label', { text: UI.relics }), relics,
           h('span.label', { text: UI.income }), income),
-        h('div.wm-actions', {},
-          // The endless ladder, and only once there is one. Built here rather
-          // than in the detail panel because a rung has no hex of its own: it is
-          // fought on ground the player already holds. Absent until the campaign
-          // is finished, so it can never be a button that explains why it is
-          // disabled — see meta/incursion.js `campaignComplete`.
-          ...(incursionView(meta()).open ? [h('button.btn.wm-incursion', {
-            text: ENDGAME.incursionTitle, type: 'button',
-            'aria-label': 'Open the incursion briefing',
-            on: { click: () => ctx.scenes.push(ctx.screens.incursion) },
-          })] : []),
-          // `.wm-shop` on the control itself, not "the first button in the
-          // header": tools/smoke.mjs used to select `.wm-actions button`, and the
-          // moment a second button joined that row the smoke test would have been
-          // hit-testing whichever one came first in the DOM while still reporting
-          // that it had checked the shop.
-          h('button.btn.wm-shop', {
-            text: UI.shop, type: 'button',
-            'aria-label': 'Open the upgrade shop',
-            on: { click: () => ctx.scenes.push(ctx.screens.shop) },
-          }),
-          h('button.btn.ghost.wm-menu', {
-            text: 'Menu', type: 'button',
-            'aria-label': 'Open the main menu',
-            on: { click: () => ctx.scenes.push(ctx.screens.mainmenu) },
-          })));
+        // The endless ladder, and only once there is one. Built here rather
+        // than in the detail panel because a rung has no hex of its own: it is
+        // fought on ground the player already holds. Absent until the campaign
+        // is finished, so it can never be a button that explains why it is
+        // disabled — see meta/incursion.js `campaignComplete`.
+        h('div.wm-actions', {}, ...navButtons));
 
       // The window and the world. `map` clips and hears the gesture; `board` is
       // the one layer that moves, so panning costs a single composited
       // transform no matter how many plates are on it.
       const board = h('div.wm-board', { role: 'group', 'aria-label': 'Regions' });
+      boardEl = board;
       const map = h('div.wm-map', {}, board,
         h('button.btn.ghost.wm-recentre', {
           text: 'Centre', type: 'button',
@@ -154,6 +187,22 @@ export function createWorldMapScene(ctx) {
       };
       map.addEventListener('focusin', onFocus);
 
+      // Rebuilt per enter() rather than per module, because it holds the one
+      // piece of state a resolve has (is one in flight) and that must not
+      // survive leaving the screen. It is handed this file's own DOM helpers
+      // rather than importing its own, so there is one `h`, and the two things
+      // it cannot know: how to lock the rest of the screen, and what to draw
+      // when a cancelled resolve hands the panel back.
+      autoResolve = createAutoResolveUI({
+        ctx,
+        dom: { h, clear, mount, bindText },
+        duration,
+        lockNav: setNavLocked,
+        onCancelled: (region) => {
+          if (detailEl && selected === region.id) renderDetail(detailEl, region);
+        },
+      });
+
       buildBoard(board, detail);
       refresh(setCrowns, setRelics, setIncome);
 
@@ -164,6 +213,11 @@ export function createWorldMapScene(ctx) {
         () => clearInterval(timer), off,
         () => map.removeEventListener('focusin', onFocus),
         () => panner?.dispose(), () => root?.remove(),
+        // Defensive: nothing on this screen can normally exit it while a raid
+        // is resolving (see beginAutoResolve), but a stray error elsewhere
+        // forcing the stack must not leave an animation-frame loop running
+        // against a torn-down scene.
+        () => autoResolve?.dispose(),
       ];
     },
 
@@ -172,7 +226,9 @@ export function createWorldMapScene(ctx) {
       // panner is already torn down; exit() only drops references.
       cells.clear();
       selected = detailMode = tickDetail = pending = detailEl = panner = null;
-      root = banner = null;
+      root = banner = boardEl = null;
+      navButtons = [];
+      autoResolve = null;
       centred = false;
       delete document.body.dataset.scene;
     },
@@ -249,6 +305,9 @@ export function createWorldMapScene(ctx) {
   }
 
   function select(id, detail) {
+    // A raid resolving in the background is the one thing on this screen that
+    // must not be interrupted mid-flight — see beginAutoResolve.
+    if (autoResolve?.isActive) return;
     const region = regionById(id);
     if (!region) return;
     selected = id;
@@ -268,85 +327,19 @@ export function createWorldMapScene(ctx) {
    * 250ms while a conquered region was selected, which threw focus off the Raid
    * button four times a second; now the countdown updates its own text node.
    */
-  function renderDetail(detail, region) {
-    clear(detail);
-    tickDetail = null;
-    const m = meta();
-    const now = Date.now();
-    detailMode = modeOf(m, region.id, now);
-    const reward = previewReward(m, region.id);
-
-    const rows = [
-      ['Tier', `${region.tier}`],
-      ['Enemy strength', `x${region.enemyMult.toFixed(2)}`],
-      ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
-      ['Enemy sites', `${region.siteCounts.enemy}`],
-      ['Typical length', `~${region.targetLengthMin} min`],
-      ['Income if taken', rate(region.rewardPerSec)],
-    ];
-
-    mount(detail,
-      h('h2#wm-detail-h', { text: region.name }),
-      h('p.wm-flavour', { text: region.flavour ?? '' }),
-      h('dl.wm-stats', {}, ...rows.flatMap(([k, v]) => [
-        h('dt.label', { text: k }), h('dd.num', { text: v }),
-      ])));
-
-    if (detailMode === 'locked') {
-      mount(detail, h('p.wm-hint', { text: `${UI.locked}. ${WORLD.lockedHint}` }));
-      return;
-    }
-
-    if (detailMode === 'attack') {
-      // AHEAD OF THE CAMPAIGN'S OWN PACING — see meta/world.js `campaignGap`.
-      // Told, not blocked: the region stays attackable, because a player who
-      // wants a hard fight should get one. What was missing was any way to know.
-      const gap = campaignGap(m, region.id);
-      if (gap >= CAMPAIGN_GAP_WARN) {
-        mount(detail, h('p.wm-hint.is-warn', { text: WORLD.aheadOfSchedule }));
-      }
-      mount(detail,
-        h('p.wm-hint', {
-          text: `${WORLD.rewardPermanent} ${rate(reward.incomeAdded)}.`,
-        }),
-        h('button.btn.primary.wm-go', {
-          text: `${UI.attack} ${region.name}`, type: 'button',
-          'aria-label': `Plan the invasion of ${region.name}`,
-          on: { click: () => launch(region.id) },
-        }));
-      return;
-    }
-
-    if (detailMode === 'raid') {
-      mount(detail,
-        h('p.wm-hint', {
-          text: `${UI.conquered}. ${WORLD.rewardLump} ${compact(reward.crowns)} crowns, once.`,
-        }),
-        h('button.btn.wm-go', {
-          text: UI.raid, type: 'button',
-          'aria-label': `Plan a raid on ${region.name}`,
-          on: { click: () => launch(region.id) },
-        }));
-      return;
-    }
-
-    // Cooldown: the only volatile line on the panel. Update the text, never the
-    // subtree, and re-render once when the mode actually flips to 'raid'.
-    // aria-live off: a countdown announced once a second is a denial of service.
-    const line = h('p.wm-hint', { 'aria-live': 'off' });
-    const setLine = bindText(line);
-    mount(detail, line, h('p.wm-hint.dim', { text: WORLD.raidHarder }));
-    tickDetail = () => setLine(
-      `${UI.conquered}. ${WORLD.cooldownHint} `
-      + `${duration(raidCooldownRemaining(meta(), region.id, Date.now()) / 1000)}.`,
-    );
-    tickDetail();
-  }
-
   /** The world map no longer starts battles. It picks the region; the loadout
    *  screen decides what lands there. */
   function launch(regionId) {
     ctx.scenes.replace(ctx.screens.prebattle, { regionId });
+  }
+
+  /** Disable everything else on this screen for the duration of an
+   *  auto-resolve. The one thing that must not happen mid-flight is leaving
+   *  this scene: completion replaces it with the results screen (below), and
+   *  that replace has to find THIS scene on top, not the shop or the menu. */
+  function setNavLocked(locked) {
+    for (const btn of navButtons) btn.disabled = locked;
+    boardEl?.classList.toggle('is-locked', locked);
   }
 
   function refresh(setCrowns, setRelics, setIncome) {

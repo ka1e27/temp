@@ -128,3 +128,81 @@ export function previewPath(state, from, to, trail) {
   stops.push({ q: end[0], r: end[1] });
   return pathThrough(state, stops, 'player');
 }
+
+/**
+ * The route ONE source of a CONCENTRATED send would walk to a shared end hex,
+ * ignoring any drawn trail — see `updateDragPreview` below for why a
+ * multi-source drag's sources other than the one under the pointer never see
+ * the trail at all. Takes the end hex directly rather than deriving it from
+ * `to`/`trail` the way `previewPath` does, because a bare-ground multi-target
+ * has no site to read `.hex` off in the first place.
+ */
+function previewPathToHex(state, from, endHex) {
+  if (!from || !endHex) return null;
+  const stops = [{ q: from.hex[0], r: from.hex[1] }, { q: endHex[0], r: endHex[1] }];
+  return pathThrough(state, stops, 'player');
+}
+
+/**
+ * Does a drag starting on `hitId` commit the whole selection, or just the one
+ * site under the finger? Called ONCE, at the moment the press lands
+ * (battle-input.js `onDown`) — see battle-orders.js `sendFromSelection` for
+ * the verb this feeds. A selection of one, or a press on a site the drag did
+ * not start from, is not a surprise worth a new code path: this returns null
+ * for both, so every existing single-source drag stays byte-for-byte what it
+ * always was.
+ * @returns {?string[]} every player-owned site in the selection, or null
+ */
+export function dragSourcesFor(ord, view, hitId) {
+  const owned = view.selection.filter((id) => ord.site(id)?.owner === 'player');
+  return view.selection.includes(hitId) && owned.length > 1 ? owned : null;
+}
+
+/**
+ * Advance a live SEND drag: the snapped target, the drawn trail, and the
+ * previewed route(s). ONE path for an ordinary drag; ONE PER SOURCE for a
+ * drag that started on a multi-selected site (`view.dragSources`, decided
+ * once in battle-input.js `onDown`) — because each source marches from a
+ * different hex, and drawing a single arrow while several columns take
+ * several roads would be the exact lie the battle redesign's arrow exists to
+ * refuse (see CLAUDE.md, "the battle redesign: a squad walks a real path").
+ *
+ * Recomputed only when the snap target flips or the trail grows by a new
+ * hex — a pointermove fires far faster than either, and an A* leg is not
+ * free. The single-source branch below is BYTE-IDENTICAL to the code it
+ * replaced inline in battle-input.js; `view.dragSources` is null for every
+ * ordinary drag, so that branch is the only one an existing gesture can
+ * ever reach.
+ *
+ * A CONCENTRATED SEND NEVER CARRIES WAYPOINTS, for any source — see
+ * battle-orders.js `sendFromSelection`. The drawn trail belongs to whichever
+ * site the pointer actually left; threading it through a column standing
+ * somewhere else would march that column over ground the player never
+ * pointed at for IT. So every source previews the plain path `cmdSend` will
+ * find on its own, exactly what an un-drawn single send already shows.
+ *
+ * Mutates `view.dragTo`, `view.dragPathKey`, and either `view.dragPath`
+ * (single) or `view.dragPaths` (multi, one entry per `view.dragSources`).
+ * @param {object} state @param {object} ord createOrders()'s return value
+ * @param {object} view @param {object} from the site the drag started on
+ */
+export function updateDragPreview(state, ord, view, from, wx, wy, hexSize) {
+  const t = ord.snapTarget(from, wx, wy, view.dragTrail);
+  view.dragTo = t && t.id !== from.id ? t.id : null;
+  trackHex(view.dragTrail, wx, wy, hexSize);
+
+  if (view.dragSources) {
+    const key = `${view.dragTo || ''}|${view.dragTrail.length}`;
+    if (key === view.dragPathKey) return;
+    view.dragPathKey = key;
+    const end = view.dragTo ? t.hex : view.dragTrail[view.dragTrail.length - 1];
+    view.dragPaths = view.dragSources.map((id) => previewPathToHex(state, ord.site(id), end));
+    return;
+  }
+
+  const key = `${t ? t.id : ''}|${view.dragTrail.length}`;
+  if (key !== view.dragPathKey) {
+    view.dragPathKey = key;
+    view.dragPath = previewPath(state, from, view.dragTo ? t : null, view.dragTrail);
+  }
+}
