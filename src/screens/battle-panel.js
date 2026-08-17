@@ -29,7 +29,8 @@ import {
 import {
   siteIntel, trainLine, gateLine, upgradePreview,
 } from './battle-econ.js';
-import { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
+import { rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
+import { squadById, hpColor, statusLine, offerTitle } from './battle-status.js';
 import { createKeepRow, createRecruitRow } from './battle-actions.js';
 // Re-exported so nothing downstream has to know the actions group moved out.
 // `createBuildRail` in particular never touches the selected site at all any
@@ -99,26 +100,35 @@ export function createSitePanel(o) {
   // Four visual groups, so the eye chunks "what this site IS" from "what it's
   // WORTH" from "why it's hard / what's happening to it" from "what you can do
   // about it", instead of scanning one flat stack of same-size lines. Each
-  // group vanishes on its own — see the `:has()` rules in screens.css — so a
+  // group vanishes on its own — see the `:has()` rules in sitepanel.css — so a
   // farm with nothing to say about terrain shows no stray divider either.
   const head = h('div.hud-site-head', {}, title, sub, hpBar.el, compBar.el);
   const econ = h('div.hud-site-econ', {}, money, trains, trainBar.el, trainStats);
   const context = h('div.hud-site-context', {}, terrain, buildBar.el, stat);
   const actions = h('div.hud-site-actions', {},
     keep.el, hire.el, upgradePreviewRow, upgrade);
+  // THE TWO MIDDLE GROUPS ARE WRAPPED SO THEY CAN SCROLL TOGETHER, and on any
+  // screen with room the wrapper is `display: contents` — it is not a fifth
+  // group and it changes no layout. What it buys is a panel whose height is
+  // BOUNDED: `head` says what you are looking at and `actions` is what you can
+  // do about it, so those two are the ones that must always be on a phone
+  // screen, and everything between them is a readout that can be swiped to.
+  // Capping without this wrapper would scroll the head and the buttons off
+  // instead, which is the failure the record drawer already documented.
+  const mid = h('div.hud-site-mid', {}, econ, context);
   // `data-interactive` (see base.css) is what makes the panel a real surface.
   // #hud is pointer-events:none, so a panel that let clicks through would take
   // a click on its own text as a click on empty ground, clear the selection,
   // and vanish under the cursor that was reaching for it.
   const el = h('div.hud-selection.panel', { 'data-interactive': true },
-    head, econ, context, actions);
+    head, mid, actions);
   const follower = createFollower(el, board, siteOf);
   let anchor = null;
 
   const set = {
     open: bindClass(el, 'is-open'),
     // The WHOLE panel reads danger under a hostile siege, not just one line —
-    // see screens.css `.hud-selection.is-siege`.
+    // see sitepanel.css `.hud-selection.is-siege`.
     siege: bindClass(el, 'is-siege'),
     title: bindText(title, ''),
     sub: bindText(sub, ''),
@@ -348,52 +358,4 @@ export function createSitePanel(o) {
     },
     get side() { return follower.side; },
   };
-}
-
-
-function squadById(state, id) {
-  // FOG. A squad carries no ghost (battle/vision.js) — `perceivedSquads`
-  // drops one the instant it leaves vision, on the board (battle-orders.js
-  // `squadAt`) and here. Scanning `state.squads` directly, as this used to,
-  // kept the panel reporting an enemy column's live strength and route long
-  // after its glyph had faded from the canvas — the same leak decision 13
-  // closes, found one surface later. `view.selectedSquad` itself is left
-  // alone: if the same column marches back into a watchtower's ring it
-  // should reappear, not stay gone forever.
-  const squads = perceivedSquads(state, 'player');
-  for (let i = 0; i < squads.length; i++) {
-    if (squads[i].id === id) return squads[i];
-  }
-  return null;
-}
-
-/**
- * The HP bar's fill colour: the owning faction's own hue at full health — the
- * same signal `p.owner[site.owner]` gives the on-canvas HP ring (siteGlyphs.js
- * `drawHpRing`) — and, under an active siege, the SAME danger/warn split that
- * ring already uses (`frac < 0.35 ? danger : warn`), so a wall reads as
- * draining identically on the board and in the panel.
- */
-function hpColor(site, frac) {
-  if (site.siege) return frac < 0.35 ? 'var(--c-danger)' : 'var(--c-warn)';
-  return `var(--c-${site.owner})`;
-}
-
-function statusLine(site, intel) {
-  if (intel?.gate?.sealed) return `UNDER SIEGE · ${gateLine(intel)}`;
-  if (site.siege) return 'UNDER SIEGE';
-  // Above the shield and the rally for the reason UNDER SIEGE is: a fight
-  // happening now outranks a standing arrangement. One string for both sides.
-  if (site.melee) return 'FIELD BATTLE';
-  if (site.shieldTicks > 0) return 'fortified';
-  // One site may feed several neighbours in turn, so the status names all of
-  // them — "rallying → a" when a two-way split is live would be a lie.
-  const rally = rallyTargetsOf(site);
-  if (rally.length) return `rallying → ${rally.join(' · ')}`;
-  return '';
-}
-
-function offerTitle(o) {
-  if (o.can) return `Spend ${o.cost} gold · ${o.sec}s to build`;
-  return REJECTIONS[o.why] || 'Cannot upgrade';
 }

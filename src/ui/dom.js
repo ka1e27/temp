@@ -95,6 +95,23 @@ export function bindClass(el, name) {
   };
 }
 
+/** Same contract for a single ATTRIBUTE — the member of this family that was
+ *  missing, and its absence is why `aria-hidden` on the unit hover card was
+ *  written once at construction and never toggled again. A null or false value
+ *  REMOVES the attribute rather than writing the string "null", because that is
+ *  what `aria-hidden` and friends mean by absent. */
+export function bindAttr(el, name) {
+  let last = null;
+  return (value) => {
+    const v = value === null || value === false ? null : String(value);
+    if (v === last) return false;
+    last = v;
+    if (v === null) el.removeAttribute(name);
+    else el.setAttribute(name, v);
+    return true;
+  };
+}
+
 /** Same contract for one CSS custom property or style field. */
 export function bindStyle(el, prop) {
   let last = null;

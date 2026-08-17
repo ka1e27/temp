@@ -17,13 +17,56 @@ export async function runDrag(page, step, OUT) {
       && (s.owner === 'neutral' || s.owner === 'enemy') && seen[s.id] !== undefined)
       || b.sites.find((s) => camp.adj.includes(s.id) && s.id !== camp.id
         && s.owner === 'player');
-    if (!g.__view || !target) return null;
+    if (!g.__view || !camp) return null;
+    // ...AND FAILING THAT, BARE GROUND — which is not a consolation prize, it
+    // is the interaction the coach mark now teaches ("drag from your camp
+    // across the map"), so the step asserts the shipped gesture either way.
+    // It exists because the site branches above are a claim about a LIVE
+    // battle ten seconds in and were observed to come up empty: measured, a
+    // camp whose whole reach was one unseen neutral farm and one friendly
+    // site. A step that cannot find its fixture is a step that stops
+    // asserting, which is this project's signature test failure.
+    const hexTarget = () => {
+      const blocked = new Set(b.grid?.blocked ?? []);
+      const occ = b.occupancy ?? {};
+      const [cq, cr] = camp.hex;
+      // Outward in rings, so the pick is the nearest legal tile rather than a
+      // corner of the map — a long drag is a long march and the assertion
+      // below only waits 900ms for a squad to exist.
+      for (let rad = 2; rad <= 4; rad++) {
+        for (let dq = -rad; dq <= rad; dq++) {
+          for (let dr = Math.max(-rad, -dq - rad); dr <= Math.min(rad, -dq + rad); dr++) {
+            if (Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr)) !== rad) continue;
+            const q = cq + dq;
+            const r = cr + dr;
+            const kk = `${q},${r}`;
+            if (blocked.has(kk) || occ[kk]) continue;
+            const col = q + Math.floor(r / 2);
+            if (r < 0 || r >= b.grid.rows || col < 0 || col >= b.grid.cols) continue;
+            return { q, r };
+          }
+        }
+      }
+      return null;
+    };
     const a = g.__view.siteScreen(camp, {});
-    const z = g.__view.siteScreen(target, {});
+    if (target) {
+      const z = g.__view.siteScreen(target, {});
+      return {
+        from: { x: Math.round(a.x), y: Math.round(a.y) },
+        to: { x: Math.round(z.x), y: Math.round(z.y) },
+        fromId: camp.id, toId: target.id,
+      };
+    }
+    const hx = hexTarget();
+    if (!hx) return null;
+    // `siteScreen` only ever reads `.hex`, so a bare hex projects through the
+    // same camera the sites do rather than through a second copy of it.
+    const z = g.__view.siteScreen({ hex: [hx.q, hx.r] }, {});
     return {
       from: { x: Math.round(a.x), y: Math.round(a.y) },
       to: { x: Math.round(z.x), y: Math.round(z.y) },
-      fromId: camp.id, toId: target.id,
+      fromId: camp.id, toId: `hex ${hx.q},${hx.r}`,
     };
   });
   if (!drag) throw new Error('could not locate a drag source and target');

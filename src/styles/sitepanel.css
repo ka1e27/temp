@@ -1,0 +1,226 @@
+/* The site panel: the plate that opens on a selected site.
+ *
+ * Split out of screens.css at the 400-line cap, along the seam rather than at
+ * a line number — screens.css keeps the surfaces that are not the panel (the
+ * training picker, the unit hover card, the coach strip, the dialog shell, the
+ * main menu), and its bars already live in panelbars.css. Everything here is
+ * `.hud-selection` and its four groups.
+ *
+ * Built in src/screens/battle-panel.js; loaded after screens.css in
+ * index.html, which is what lets the height cap at the foot of this file win
+ * without an `!important`. */
+
+/* --- Selection / site panel ----------------------------------------------
+   Opens for EVERY site, farms included, and carries the Upgrade action.
+
+   IT SITS ON ITS SITE. JS writes --x/--y (screen px from the camera
+   projection, recomputed every frame) exactly the way the training picker
+   does, and --cx/--cy plus [data-caret] aim the caret back at the site so the
+   panel visibly belongs to the thing it describes. battle-anchor.js keeps it
+   inside the viewport and off both the site and its neighbours; there is no
+   fallback corner, because a panel that gave up and went to a corner is the
+   bug this replaced.
+
+   No transition on `transform`: it is the POSITION now, and easing it would
+   drag the panel along a frame behind the map on every pan. */
+
+.hud-selection {
+  position: absolute; left: 0; top: 0;
+  transform: translate3d(var(--x, 12px), var(--y, 12px), 0);
+  display: flex; flex-direction: column;
+  padding: var(--s-4); width: max-content; min-width: 12.5rem; max-width: 19rem;
+  border-left-width: var(--plate-edge); border-left-color: var(--c-accent);
+  box-shadow: var(--plate-sheen), var(--shadow-2);
+  opacity: 0; visibility: hidden;
+  transition: opacity var(--d-fast) var(--ease), visibility 0s linear var(--d-fast);
+}
+.hud-selection.is-open { opacity: 1; visibility: visible; transition-delay: 0s; }
+/* Its site has been panned off the screen. Hidden rather than clamped to an
+   edge: `visibility` (not just opacity) so it is not hit-testable either. */
+.hud-selection.is-adrift { opacity: 0; visibility: hidden; }
+
+/* Under a HOSTILE siege the whole plate reads danger, not just one line —
+   the leading edge, the background tint and the caret all turn, so the
+   state is legible at a glance across the room, not just on a close read of
+   the status text. */
+.hud-selection.is-siege {
+  border-left-color: var(--c-danger);
+  background: color-mix(in srgb, var(--c-danger) 16%, var(--plate-bg));
+  box-shadow: var(--plate-sheen), var(--shadow-2),
+    0 0 0 1px color-mix(in srgb, var(--c-danger) 50%, transparent);
+}
+.hud-selection.is-siege::after { background: color-mix(in srgb, var(--c-danger) 16%, var(--plate-bg)); }
+
+/* The caret: a rotated square wearing two of the plate's own edges, parked on
+   whichever side the panel ended up on. */
+.hud-selection::after {
+  content: ''; position: absolute; width: 9px; height: 9px;
+  background: var(--plate-bg); border: 0 solid var(--c-line);
+  transform: rotate(45deg); pointer-events: none;
+}
+.hud-selection[data-caret='left']::after {
+  left: -5px; top: calc(var(--cy, 20px) - 4px); border-left-width: 1px; border-bottom-width: 1px;
+}
+.hud-selection[data-caret='right']::after {
+  right: -5px; top: calc(var(--cy, 20px) - 4px); border-right-width: 1px; border-top-width: 1px;
+}
+.hud-selection[data-caret='top']::after {
+  top: -5px; left: calc(var(--cx, 20px) - 4px); border-left-width: 1px; border-top-width: 1px;
+}
+.hud-selection[data-caret='bottom']::after {
+  bottom: -5px; left: calc(var(--cx, 20px) - 4px); border-right-width: 1px; border-bottom-width: 1px;
+}
+/* --- Four groups, not one flat stack ---------------------------------------
+   "What this site IS" (head) · "what it's WORTH" (econ) · "why it's hard /
+   what's happening to it" (context) · "what you can do about it" (actions).
+   Each later group carries its own divider and top margin, so a glance can
+   land on the right third of the panel instead of parsing six same-weight
+   lines top to bottom. A group that would only hold empty lines removes its
+   own divider via `:has()` rather than leaving a bare rule floating over
+   nothing — the same "say nothing when there is nothing to say" spirit as
+   the individual `:empty` lines already had. */
+
+.hud-site-head { display: flex; flex-direction: column; gap: 3px; }
+
+/* The two middle groups share a wrapper so they can be scrolled together, and
+   on any screen with room the wrapper DISSOLVES: `display: contents` leaves
+   econ and context as direct flex items of the panel, so this rule changes no
+   desktop layout at all — the same trick the docked rails use. It earns its
+   keep at the phone rule further down. */
+.hud-site-mid { display: contents; }
+
+.hud-site-econ,
+.hud-site-context {
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: var(--s-2); padding-top: var(--s-2); border-top: var(--hairline);
+}
+/* A group with nothing to show — no text line, no bubble, no open bar —
+   carries no divider either. Bars/bubbles moved out of this file into
+   panelbars.css, but the emptiness check has to know about both now. */
+.hud-site-econ:not(:has(.hud-selection-sub:not(:empty), .bubbles:not(:empty), .bar.is-open)),
+.hud-site-context:not(:has(.hud-selection-sub:not(:empty), .bubbles:not(:empty), .bar.is-open)) {
+  display: none;
+}
+
+.hud-selection-title {
+  font: var(--w-bold) var(--t-md) / 1.25 var(--font); letter-spacing: 0.02em;
+}
+.hud-selection-sub { font: var(--w-normal) var(--t-xs) / 1.35 var(--font-num); color: var(--c-text-dim); }
+.hud-site-train { color: var(--c-text); }
+.hud-site-stat { color: var(--c-text); }
+/* A site actively under siege earns a real BANNER, not just bold red text —
+   it bleeds to the panel's own edges (negative margin cancels the panel's
+   padding) so it reads as a strip across the whole card, not one more line
+   in the stack. */
+.hud-site-stat.is-warn {
+  display: block; margin: var(--s-1) calc(var(--s-4) * -1) 0;
+  padding: var(--s-2) var(--s-4);
+  background: color-mix(in srgb, var(--c-danger) 26%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--c-danger) 50%, transparent);
+  color: #ffecec; font: var(--w-bold) var(--t-sm) / 1.35 var(--font); letter-spacing: 0.03em;
+}
+.hud-site-stat.is-warn::before { content: '⚠ '; }
+.hud-selection-sub:empty { display: none; }
+
+/* "What you can do about it": the rally stepper and the Upgrade button share
+   one group, walled off from the read-only lines above it by the same
+   divider language the econ/context groups use — but only once it actually
+   holds a visible control, so a foreign site (neither) shows no dangling
+   rule under its status line. */
+.hud-site-actions { display: flex; flex-direction: column; gap: var(--s-2); }
+.hud-site-actions:has(.hud-keep.is-open, .hud-recruit.is-open, .hud-upgrade) {
+  margin-top: var(--s-3); padding-top: var(--s-3); border-top: var(--hairline);
+}
+
+/* Per-site rally hold-back. Only shown on a site that HAS a rally target —
+   the number means nothing anywhere else. */
+.hud-keep { display: none; align-items: center; gap: var(--s-2); }
+.hud-keep.is-open { display: flex; }
+.keep-label {
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--c-text-dim);
+}
+.keep-value {
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
+  min-width: 9ch; text-align: center; color: var(--c-text);
+}
+.keep-slider { width: auto; min-width: 70px; }
+
+/* Commission a Marshal. Deliberately NOT the gold treatment the Upgrade button
+   gets: there is one warm accent on this panel and the site's own upgrade owns
+   it, so a second gold button would make the panel argue with itself. */
+.hud-recruit {
+  display: none;
+  min-height: var(--hit-sm); font-size: var(--t-sm); font-weight: var(--w-bold);
+}
+.hud-recruit.is-open { display: block; }
+.hud-recruit:disabled { opacity: 0.45; }
+
+/* Raise a building: one row, one button per buildable kind. Full width and
+   stacked, same block shape as Recruit above it — three of them side by side
+   at this panel's width would leave no room to name what each one costs. */
+.hud-build-row { display: none; flex-direction: column; gap: var(--s-2); }
+.hud-build-row.is-open { display: flex; }
+.hud-build { min-height: var(--hit-sm); font-size: var(--t-sm); font-weight: var(--w-bold); }
+.hud-build:disabled { opacity: 0.45; }
+.hud-build.is-armed {
+  background: color-mix(in srgb, var(--c-accent) 24%, var(--c-surface-2));
+  border-color: color-mix(in srgb, var(--c-accent) 55%, transparent);
+}
+
+/* The one button on this panel, so it gets the one warm accent: gold, because
+   it is gold this action spends. Ghost/ordinary while unaffordable — the
+   colour itself is the affordability tell, same channel the treasury already
+   uses for a healthy vs. draining rate. */
+.hud-upgrade { min-height: var(--hit-sm); font-size: var(--t-sm); font-weight: var(--w-bold); }
+.hud-upgrade:not(.is-disabled) {
+  background: color-mix(in srgb, var(--c-gold) 20%, var(--c-surface-2));
+  border-color: color-mix(in srgb, var(--c-gold) 50%, transparent);
+  color: #fff6e2;
+}
+.hud-upgrade:not(.is-disabled):hover {
+  background: color-mix(in srgb, var(--c-gold) 32%, var(--c-surface-2));
+}
+.hud-upgrade.is-disabled { opacity: 0.45; }
+
+/* Touch: compact desktop metrics grow to a real thumb target. Moved here with
+   the controls they size — the rule and the control belong in one file. */
+@media (pointer: coarse) {
+  .hud-upgrade, .hud-recruit, .hud-build { min-height: var(--hit); }
+}
+
+/* THE PANEL'S HEIGHT IS BOUNDED ON A SMALL SCREEN, and it is a cap rather than
+   a trim because the panel's height is CONTENT-dependent and unbounded: the
+   390x844 measurement that started this was taken on a camp with the shortest
+   action list in the game, and a besieged stronghold with a rally chain and
+   three build rows is taller again. Trimming two rows fixes one screenshot; a
+   cap fixes the class.
+
+   Measured with tools/mobile.mjs's own coverage metric at 390x844: the panel
+   ran 339px of an 844px screen (40%) and the board got 54% against a 55% floor.
+
+   Head and actions stay put — "what am I looking at" and "what can I do about
+   it" are the two things that must be on screen — and everything between them
+   scrolls. Both axes, because a phone in LANDSCAPE is 844x390 and no
+   width-based rule fires there at all, which is the trap the rails already
+   documented. */
+@media (max-width: 720px), (max-height: 560px) {
+  .hud-selection { max-height: min(52vh, 16rem); }
+  .hud-site-head, .hud-site-actions { flex: none; }
+  .hud-site-mid {
+    display: flex; flex-direction: column;
+    overflow-y: auto; overscroll-behavior: contain;
+    /* `min-height: 0` is what actually lets a flex child shrink below its
+       content and scroll; without it the wrapper wins the size fight and the
+       cap silently does nothing. */
+    min-height: 0;
+  }
+}
+
+/* ADVICE NEVER COVERS A CONTROL. The hint is `pointer-events: none`, so the
+   button underneath it still fires — which is exactly what makes this the kind
+   of bug a test cannot see and a screenshot can: at 390px the first-run coach
+   mark sat squarely over the site panel's own Upgrade button, fully clickable
+   and completely illegible. Both are children of #hud with no z-index, so
+   which one won was construction order. */
+.hud-selection { z-index: 2; }

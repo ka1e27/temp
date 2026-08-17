@@ -110,8 +110,29 @@ harness by the reviewer.
       a passive suggested-buy ring on the cheapest affordable Empire line (teaches
       cheapest-first by demonstration, adds no screen and no number to read), plus soften
       that line. **Cost S.**
-- [ ] **The Crown tier is a reskin of the Empire six, and the meta never ramps.** The
-      battle layer ramps hard (`AI_TIERS` concurrent 1→5, reaction 45→13 ticks, boards
+- [x] ~~**The Crown tier is a reskin of the Empire six, and the meta never ramps.**~~
+      **FIXED** — (a) `screens/shop.js` gives the Crown section its own rank-hued header,
+      top edge and an "Endgame" badge (`scenes.css`), shown whether the tier is locked or
+      open, plus a note that the gate survives abdication. `upgrades.data.js`'s group
+      `blurb` and all four `desc` strings now name what a rung IS (a fresh landing, a
+      payout priced off this empire's own income, a dial that never stops climbing)
+      instead of restating the Empire bucket each one maps onto. No number moved, and
+      `tests/crownshop.test.js`/`tests/upgrades.test.js` pass untouched. (b)
+      `meta/specialists.js` `specialistCallouts` derives up to three advisory lines
+      straight off `siteCounts.enemyMix`/`develop` (wall country → halberds and sappers)
+      and `siteCounts.neutral`'s share of the board (open ground → outriders), rendered
+      on the pre-battle brief (`prebattle.js`/`prebattle-brief.js`). Computed live against
+      the region table rather than authored per row: as it stands here, the wall pair
+      fires on 13 of 24 regions and outriders on 7 of 24, never below tier 3, and 11
+      regions fire nothing at all — a real split, not a callout that talks on every map.
+      Archers have no authored per-region signal (their value is where a squad is
+      STANDING mid-fight, not a fact a region's table states) and are deliberately never
+      one of the three. Gated on the unlock but not suppressed by it: a player who has
+      not bought the unit still gets the callout, worded as a nudge at the shop rather
+      than silence. `tests/specialists.test.js` pins the derivation against the real
+      table (never a hand-built fixture), both unlock directions, and that every number
+      quoted in the copy is read off `content/balance.js` rather than retyped.
+      Original evidence: The battle layer ramps hard (`AI_TIERS` concurrent 1→5, reaction 45→13 ticks, boards
       13×10→17×13, marshals from tier 4). The layer the player TOUCHES between battles is
       the same six lines bought the same way from region 1 to 24 — and the post-campaign
       reward tier maps one-to-one onto the same four buckets (`upgrades.data.js` 213–224
@@ -233,17 +254,39 @@ real browser or against an instrumented headless battle.
       no signal whether quiet means converging or stalled. **Fix:** a persistent
       mine/enemy readout beside the gold panel; show remaining time, not just elapsed.
       **Cost M** (data exists; it is new surface plus a design call).
-- [ ] **Two comp-bar segments are focusable at 15px tall.** `battle-bars.js:91` sets
+- [x] ~~**Two comp-bar segments are focusable at 15px tall.**~~ **FIXED** — the segments
+      leave the tab order permanently and the BAR names its own composition instead
+      (`role="img"` plus a live `aria-label`), so the breakdown is announced without any
+      interaction. Better than what it removed, because the old stops announced nothing:
+      the hover card they opened carries a permanent `aria-hidden`, so `aria-describedby`
+      resolved to nothing and a screen reader got five silent undersized stops. That is
+      fixed too — `battle-tip.js` toggles `aria-hidden` with `is-open`, which is what
+      `attach`'s own promise ("reachable from the keyboard rather than being a mouse-only
+      secret") always claimed. Original evidence: `battle-bars.js:91` sets
       `tabIndex = 0` on a segment that holds troops, so it is a keyboard-reachable
       target well under the 44px minimum — `tools/mobile.mjs` flags it now that the
       audit distinguishes controls from tooltip anchors. Either make them non-focusable
       (they duplicate the garrison plaque's information) or give the bar a real height.
       **Cost S**, and it is a genuine a11y item rather than a cosmetic one.
-- [ ] **The site panel eats the board on a phone.** Step 6 of the audit reads
+- [x] ~~**The site panel eats the board on a phone.**~~ **FIXED at 390x844: 54% → 62%,
+      and the whole audit reports no problems.** The panel's height is CAPPED with a
+      scrolling middle rather than trimmed — head and actions stay put, econ and context
+      scroll — because the panel's height is content-dependent and unbounded, so a trim
+      fixes one screenshot and a cap fixes the class. The coach-mark overlap was a
+      separate one-line z-order fix: advice must never cover a control. Original
+      evidence: Step 6 of the audit reads
       **54%** against its own 55% floor with a site panel open (76% with nothing
       selected), and the reviewer additionally screenshotted the first-run coach mark
       sitting on top of the panel's own Upgrade button. Both are the same squeeze.
       **Cost M** — a layout call, not a patch.
+- [ ] **...and in LANDSCAPE the same step reads 47%, and it is the DOCK, not the panel.**
+      Measured at 844x390 with the cap on and off: 47% with, 45% without — so the panel
+      fix helped by two points and the floor is still eight points away. Hiding the dock's
+      six groups takes the same frame to **60%**. On a 390px-tall screen `.is-docked`
+      applies and all six groups sit in a 100px band across the bottom, which is 26% of
+      the viewport on its own. So the lever is the docked layout at short heights (fewer
+      groups, a shorter strip, or a rail that works when the screen is wide and short),
+      not the panel. **Cost M**, and it wants a design call rather than a number.
 - [ ] **Concentrating force costs one drag per site, always.** `battle-input.js onDown`
       takes `view.dragFrom` from the single site under the pointer, never from
       `view.selection`; no `sendFromSelection` exists. The AI pools up to `AI.maxSources`

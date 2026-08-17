@@ -11,7 +11,9 @@
 // is unreadable on touch. This is one shared element, parked over the dock so
 // it never covers the board, and pointer-events:none so it can never intercept
 // a click meant for the chip underneath it.
-import { h, mount, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
+import {
+  h, mount, bindText, bindClass, bindStyle, bindAttr, createDisposer,
+} from '../ui/dom.js';
 import { UNITS_UI } from '../content/strings.js';
 import { placeTip, panelBounds } from './battle-anchor.js';
 
@@ -30,8 +32,18 @@ export function createUnitTip(o) {
     h('span.tip-head', {}, name, role), desc, note);
   mount(root, el);
 
+  // `aria-hidden` TRACKS `is-open` rather than being written once at
+  // construction, which is what it used to be — permanently `"true"`. An
+  // element hidden that way is not in the accessibility tree at all, so the
+  // `aria-describedby` this card sets on every control it is attached to
+  // resolved to nothing, and `attach`'s own promise that "the descriptions are
+  // reachable from the keyboard rather than being a mouse-only secret" was
+  // false for every screen reader. The card is `visibility: hidden` when
+  // closed, so hiding it from assistive tech while closed is still correct —
+  // it just has to stop being true while it is open.
   const set = {
     open: bindClass(el, 'is-open'),
+    hidden: bindAttr(el, 'aria-hidden'),
     above: bindClass(el, 'is-above'),
     name: bindText(name, ''),
     role: bindText(role, ''),
@@ -58,6 +70,7 @@ export function createUnitTip(o) {
     // Text first, THEN measure: the card is sized by its copy, and placing it
     // on last unit's box is how a tooltip ends up half off the screen.
     set.open(true);
+    set.hidden(null);
     const box = anchorEl.getBoundingClientRect();
     const at = placeTip({
       anchor: { x: box.left + box.width / 2, y: box.top },
@@ -74,6 +87,7 @@ export function createUnitTip(o) {
     if (anchorEl && anchorEl !== shownFor) return;
     shownFor = null;
     set.open(false);
+    set.hidden('true');
   }
 
   return {

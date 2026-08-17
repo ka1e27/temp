@@ -11,7 +11,8 @@
 // site.trainProgress — see battle-econ.js's header for why that discipline
 // exists and battle-panel.js for where these numbers actually come from.
 import { UNIT_IDS } from '../content/balance.js';
-import { h, bindText, bindClass, bindStyle } from '../ui/dom.js';
+import { UNITS_UI } from '../content/strings.js';
+import { h, bindText, bindClass, bindStyle, bindAttr } from '../ui/dom.js';
 import { plural } from '../ui/format.js';
 
 /**
@@ -55,6 +56,19 @@ export function createFillBar(cls) {
  * rebuilt — so a unit that just hit zero merely collapses to 0% width rather
  * than the bar re-attaching its hover card (see battle-tip.js) every time a
  * training cycle completes, which would otherwise leak a listener a tick.
+ * THE SEGMENTS ARE NEVER IN THE TAB ORDER, and that is a fix rather than an
+ * omission. They used to take `tabIndex = 0` whenever they held troops, which
+ * made five keyboard targets 15px tall — a third of the 44px minimum — that
+ * ACTIVATE NOTHING: focusing one only opened the hover card, and the card
+ * carries a permanent `aria-hidden` (battle-tip.js), so a screen reader
+ * announced precisely nothing for the trouble. Five silent undersized stops on
+ * the way to the panel's real buttons.
+ *
+ * What replaces it is better than what it removed: the bar names its OWN
+ * composition (`role="img"` plus a live `aria-label`), so the whole breakdown
+ * is announced in one go without any interaction at all. A readout should not
+ * have to be operated.
+ *
  * @param {?object} [tip] the shared unit hover card (battle-tip.js), so
  *   hovering a segment answers "how many of THIS unit" without a permanent
  *   number crowding every segment at once. Optional, same as `board` on the
@@ -65,7 +79,7 @@ export function createCompBar(tip) {
   const counts = {};
   const segEls = UNIT_IDS.map((u) => {
     const seg = h('span.bar-comp-seg', {
-      'data-interactive': true, tabindex: '-1',
+      'data-interactive': true, tabindex: '-1', 'aria-hidden': 'true',
       style: { background: `var(--c-${u})` },
     });
     tip?.attach(seg, u, () => plural(counts[u] || 0, 'troop', 'troops'));
@@ -74,23 +88,31 @@ export function createCompBar(tip) {
   const segW = segEls.map((s) => bindStyle(s, 'width'));
   const label = h('span.bar-label', { text: '' });
   const track = h('div.bar-comp-track', {}, ...segEls);
-  const el = h('div.bar.bar-comp', {}, track, label);
+  const el = h('div.bar.bar-comp', { role: 'img' }, track, label);
   const setLabel = bindText(label, '');
   const setOpen = bindClass(el, 'is-open');
+  const setName = bindAttr(el, 'aria-label');
   return {
     el,
     /** @param {object} garrison @param {number} held total(garrison), already
      *  computed by siteIntel() — not re-summed here. */
     update(garrison, held) {
+      // Built in the same pass that sizes the segments, so the sentence and
+      // the picture can never disagree, and skipping the absent units keeps it
+      // to what is actually there rather than five "0 militia"s.
+      let name = `Garrison ${held}`;
+      let first = true;
       for (let i = 0; i < UNIT_IDS.length; i++) {
         const u = UNIT_IDS[i];
         const c = garrison[u] || 0;
         counts[u] = c;
         segW[i](held > 0 ? `${(c / held) * 100}%` : '0%');
-        // Out of the tab order at zero width: nothing there to focus.
-        segEls[i].tabIndex = c > 0 ? 0 : -1;
+        if (c <= 0) continue;
+        name += `${first ? ': ' : ', '}${c} ${UNITS_UI[u]?.name || u}`;
+        first = false;
       }
       setLabel(String(held));
+      setName(name);
     },
     show(on) { setOpen(on); },
   };

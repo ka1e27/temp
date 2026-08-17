@@ -99,7 +99,7 @@ src/ui/        DOM helpers, formatting, coach marks, dev overlay
 Several files are split purely for the 400-line cap and re-exported from their original
 home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data.js`←
 `regions.rules.js`, `sim.js`←`rally.js`, `commands.js`←`boosters.js`,
-`battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`, `mainmenu.js`←
+`battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`/`battle-status.js`, `mainmenu.js`←
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
 `simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`/`simbuild.js`,
 `sim.js`←`arrivals.js`, `store.js`←`refund.js`, `ai.js`←`aicore.js`/`aihome.js`/
@@ -2274,6 +2274,41 @@ Two audit rules exist so the tool does not argue its own fixes back out: content
 `touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
 by signature rather than by class name.
 
+### The site panel is CAPPED, not trimmed — and landscape is a different problem
+
+The audit's step 6 (a site panel open at 390x844) read **54% against its own 55% floor**,
+and the panel was 339px of an 844px screen — 40%. It is now `max-height: min(52vh, 16rem)`
+with head and actions pinned and the two middle groups scrolling
+(`.hud-site-mid`, `display: contents` on any screen with room, so no desktop layout moved).
+**62% now, and the whole audit is clean.**
+
+**A cap rather than a trim, and the reason is the measurement's own weakness.** That 339px
+was a CAMP with the shortest action list in the game; a besieged stronghold with a rally
+chain is taller again, so the panel's height is content-dependent and unbounded. Trimming
+two rows fixes one screenshot. Every trim was measured before it was rejected — dropping
+the terrain-context row was worth 1 point, the upgrade preview 2, tighter padding 1 — and
+all three together (59%) still lost to the cap.
+
+**The wrapper is what makes the cap survivable.** Capping the panel without one scrolls the
+title and the Upgrade button off instead of the readouts, which is verbatim the failure the
+record drawer already documented: *"Only the middle scrolls; title and Close are always on
+screen."* `min-height: 0` on the scroller is the line that actually does the work — a flex
+child will not shrink below its content without it, and the cap silently does nothing.
+
+**AND LANDSCAPE IS NOT THE SAME BUG, which is the finding worth carrying.** At 844x390 the
+same step reads **47%** — measured with the cap on and off, 47 versus 45, so the panel fix
+bought two points and the floor is eight away. Hiding the dock's six groups on the same
+frame reads **60%**. On a 390px-tall screen `.is-docked` applies and all six groups sit in a
+100px band across the bottom, 26% of the viewport on its own. The lever there is the docked
+layout at short heights, not the panel.
+
+**A phone screenshot found something no test could, for the third time:** the first-run
+coach mark sat squarely over the panel's own Upgrade button. `.hint` is `pointer-events:
+none`, so the button underneath still fired and nothing anywhere was broken — it was simply
+illegible. Both are children of `#hud` with no z-index, so which one won was construction
+order. `.hud-selection` carries `z-index: 2` now, and the rule is worth stating plainly:
+**advice never covers a control.**
+
 ## Gotchas that have already cost time
 
 - **`grid` is an OFFSET rectangle, not an axial one.** `axialFromOffset(col,row) =
@@ -2300,6 +2335,23 @@ by signature rather than by class name.
   `state.rules` and fell back to the content default — so a player who set "leave nothing
   behind" got it on the three sites they landed with and 8 on every site they took, which
   is exactly backwards.
+- **`aria-hidden` written once at construction is `aria-hidden` forever, and it silently
+  cancels every `aria-describedby` pointing at it.** `battle-tip.js` — the unit hover card
+  every troop chip and comp segment attaches to — was built with `'aria-hidden': 'true'`
+  and never toggled, so the card was excluded from the accessibility tree even while open
+  and `attach`'s own promise that "the descriptions are reachable from the keyboard rather
+  than being a mouse-only secret" was false for every screen reader. It rendered
+  perfectly, which is why nobody looked. `ui/dom.js bindAttr` is the missing member of the
+  `bindText`/`bindClass`/`bindStyle` family and exists because of this; a null or false
+  value REMOVES the attribute rather than writing `"null"`.
+- **A READOUT SHOULD NOT HAVE TO BE OPERATED.** The comp bar's five segments took
+  `tabIndex = 0` whenever they held troops — five keyboard stops 15px tall, a third of the
+  44px minimum, that activate nothing and (per the entry above) announced nothing either.
+  The fix was not to give them a bigger target: the BAR names its own composition
+  (`role="img"` + a live `aria-label` built in the same pass that sizes the segments), so
+  the whole breakdown is announced with no interaction at all, and the segments leave the
+  tab order permanently. `tools/mobile.mjs` skips `tabIndex < 0`, so the audit stops
+  crying wolf and starts meaning something.
 - **A unit colour is declared TWICE** — `--c-<unit>` in `styles/tokens.css` and `FALLBACK`
   in `render/palette.js` — and the canvas silently falls back to the JS table when the
   variable is missing. The three specialists shipped with a JS hue and no CSS variable, so
@@ -2319,6 +2371,15 @@ by signature rather than by class name.
   same rule: the world map's shop step selected `.wm-actions button`, so the moment
   "Incursions" joined that row it would have been hit-testing the wrong control while
   still reporting the shop was fine. It is `.btn.wm-shop` now.
+- **A smoke FIXTURE picked out of a live battle is the same failure one layer down.**
+  `smoke-orders.mjs`'s drag step wanted a known non-player site or another friendly one
+  within the camp's reach, which is a claim about a board ten seconds in — and it came up
+  empty intermittently: measured, a camp whose entire reach was one UNSEEN neutral farm
+  and one friendly site. The step then threw rather than passing quietly, which is the
+  good half, but it blocked every later step in the run. It falls back to **bare ground**
+  now, which is not a consolation prize — marching to a tile is the interaction the coach
+  mark teaches, so the step asserts the shipped gesture either way. `siteScreen` only ever
+  reads `.hex`, so a bare hex projects through the same camera the sites do.
 - **A dialog that outgrows the window has to scroll, and `.dialog` did not.** The menu
   grew a fifth action plus a drawer that itemises a payout, and past that point the title
   and Continue were simply above the viewport with no way to reach them. `max-height:
