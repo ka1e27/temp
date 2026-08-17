@@ -175,7 +175,16 @@ real browser or against an instrumented headless battle.
       state and answers "something blocks the way there" for a building this faction has
       never seen. `bad-hex` (the one reason with no entry in a table of 26, leaking
       `Order refused (bad-hex).`) got its text at the same time.
-- [ ] **A won fight looks exactly like a lost one, and neither is announced.**
+- [x] ~~**A won fight looks exactly like a lost one, and neither is announced.**~~
+      **FIXED** — `battle-alert.js fightAlert` + `wireAlerts`, pinned by
+      `tests/alerts.test.js` (mostly negative controls, because the hard part is what it
+      REFUSES to say: 73–929 of these fire per battle and the strip has no queue). It
+      speaks for two outcomes only — my assault losing, and my site about to fall.
+      **It shipped broken once and that is worth knowing**: `getState()` is cleared on
+      teardown but an event can still drain into a live listener, `siteOf` did a bare
+      `state.sites.find`, and the throw escaped `bus.emit` and killed every later event
+      in the battle. Green suite; surfaced only as a smoke step three stages downstream.
+- [ ] ~~(original entry)~~
       `battle-hud.js:266-292` wires three bus listeners; `field-battle` has NO alert
       listener at all, and `siege-begun` only alerts when the ENEMY is attacking you. FX
       and sound fire identically regardless of `ev.win`. Reproduced both directions: a
