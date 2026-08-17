@@ -260,4 +260,78 @@ export const MUTATOR_BY_ID = Object.freeze(
 // tests/incursion.test.js, to save eight additions per rung, at most three times,
 // on a screen a player opens by hand. Not worth the risk of a re-rolled hand.
 
+/**
+ * ABDICATION'S SECOND HALF — what a REPLAYED campaign region carries.
+ *
+ * A raid already compounds forever (`RAID.harderPerClear`, regions.rules.js)
+ * and a rung already compounds forever (`INCURSION.perDepth` above). Abdication
+ * was the one endless loop that did not: a legacy grant is a flat percentage
+ * and the campaign it buys back into is the exact twenty-four rows
+ * regions.data.js always ships, so a second run plays the same fights, only
+ * easier. Measured with the harness's own `--legacy` flag (see
+ * meta/prestige.js `headStartFor`'s own comment): 27 points — a first payout —
+ * reads 97-100% across every tier a second run actually fights. The head start
+ * already answers "is this worth my time" (it is short); nothing answered "is
+ * this still a fight", because nothing about the ground or the enemy moved.
+ *
+ * THE SAME MACHINERY, generalised from "one arena, one depth" to "any region,
+ * this many resets" — meta/incursion.js `campaignReplayPlan`. A mutator here
+ * rides a field that already crosses the seam, exactly as an incursion's does,
+ * which is why this needed no new BattleConfig field and no engine change:
+ * `campaignReplayPlan` returns a bare `{mutators}` and hands it to the exact
+ * same `incursionMods`/`incursionRegionInputs` the ladder already built. It is
+ * NEVER passed to `incursionRules` — see meta/modifiers.js for why: that
+ * function stamps `rules.incursion`, the identity meta/rewards.js branches an
+ * entire payout path on, and a replayed region is a first conquest or a raid
+ * like any other, paid exactly as one. Handing it that field would make
+ * rewards.js pay a normal conquest as though it were a rung.
+ *
+ * DETERMINISTIC, the same way a rung is: seeded off the region's own id and
+ * the reset count alone, so a retry within one run draws the same hand and
+ * nothing new is stored — `meta.legacy.resets` already existed.
+ *
+ * WHICH REGIONS, AND HOW MANY. `headStartFor` (meta/prestige.js) means a
+ * SECOND run (resets 1) fights region 9 on (emberholt through widowsgate) and
+ * a THIRD-OR-LATER run (resets >= 2, the cap) fights only region 16 on
+ * (blackspire through widowsgate) — forever, the same nine rows, every run for
+ * the rest of the player's life. So the TAIL is what needs seasoning, not the
+ * middle: `frozenTier` (3) means a tier 1-3 region scores nothing toward the
+ * hand, so a second run's one-time pass through tier 2-3 stays the clean
+ * victory lap the head start was already built to give, while the nine rows
+ * fought every run after that get progressively stranger as resets pile up.
+ *
+ * `scoreThresholds` is the same shape as `INCURSION.mutatorsAt`: three
+ * thresholds, three mutators, the same "a fourth would be half the table"
+ * ceiling — a smaller table now the one exclusion below is drawn, so three
+ * is a bigger fraction of it than it is on the ladder, on purpose: a replayed
+ * region is fought once and left, or fought forever at the tier ceiling, and
+ * neither case wants a fourth complication competing with the first three.
+ *
+ * `excludedMutators`: 'sealed' RAISES THE CASTLE GATE, and the campaign's own
+ * plateau (content/regions.rules.js `GATE_CLAMP`, 0.60) is already the
+ * measured safety ceiling — the castle-gate section of CLAUDE.md found
+ * "thirty-seven of thirty-seven timeouts sat below the gate" the one time
+ * this plateau was allowed to sit any higher. Two ways to include it here and
+ * both are wrong: clamp it to 0.60 and it does nothing on precisely the tier
+ * 4-6 rows a replay actually visits (every one of them already ships AT that
+ * plateau — the exact inert shape `sealed` shipped in on the incursion ladder
+ * before the ladder's own ceiling existed, see the MUTATORS entry above), or
+ * let it exceed 0.60 unmeasured and risk reproducing the one failure mode this
+ * project already spent a whole pass fixing. Excluded rather than guessed at.
+ */
+export const CAMPAIGN_REPLAY = Object.freeze({
+  /** Depth-equivalent points a run of resets is worth. */
+  perReset: 2,
+  /** ...and what a tier above the frozen head start adds, per run, on top. */
+  perTierAboveFrozen: 1,
+  /** Tiers at or below this score nothing extra — see the note above: it is
+   *  the tier `headStartFor` swallows by the third run, so a region at or
+   *  under it is only ever fought once, on the second run, and stays a lap. */
+  frozenTier: 3,
+  /** Same shape as `INCURSION.mutatorsAt`: once the score crosses this many
+   *  thresholds, that many mutators join the fight. */
+  scoreThresholds: Object.freeze([3, 6, 10]),
+  /** Never drawn for a replayed campaign region. See the note above. */
+  excludedMutators: Object.freeze(['sealed']),
+});
 

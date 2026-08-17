@@ -7,13 +7,15 @@
 import { compact, rate, duration } from '../ui/format.js';
 import { UNIT_IDS, LOADOUT_TYPES_MAX } from '../content/balance.js';
 import { UNITS_UI, ENDGAME } from '../content/strings.js';
+import { RAID } from '../content/regions.data.js';
 import {
   expeditionSlots, carryComposition, distributeExpedition,
   compositionSlots, compositionTotal, overBudget, slotCost, typeCount,
 } from '../meta/modifiers.js';
 import { unlockedUnits } from '../meta/upgrades.js';
-import { regionById, effectiveEnemyMult, isConquered } from '../meta/world.js';
-import { planFor, MUTATOR_BY_ID } from '../meta/incursion.js';
+import { regionById, effectiveEnemyMult, isConquered, record } from '../meta/world.js';
+import { planFor, MUTATOR_BY_ID, campaignReplayPlan } from '../meta/incursion.js';
+import { legacyResets } from '../meta/legacy.js';
 import { previewReward } from '../meta/rewards.js';
 import { specialistCallouts } from '../meta/specialists.js';
 
@@ -103,6 +105,22 @@ export function regionBrief(meta, regionId, depth = null) {
   // to have — off by a factor that grows with every rung.
   const plan = depth ? planFor(depth) : null;
   const mult = plan ? plan.enemyMult : effectiveEnemyMult(meta, regionId);
+  // HARDERPERCLEAR, SURFACED. `mult` above already folds it into the one
+  // figure a fresh attack and a tenth raid show identically — see
+  // content/regions.rules.js `RAID.harderPerClear`. Broken out here so a
+  // player who has been raiding a region can see how much of that number they
+  // chose by clearing it again, rather than watching one figure creep with no
+  // label on the reason. Never shown on an incursion, which has its own dial
+  // and no relationship to this region's `clears`.
+  const clears = record(meta, regionId).clears;
+  const raidEscalation = !plan && raid && clears > 0
+    ? (1 + RAID.harderPerClear) ** clears : null;
+  // ABDICATION'S SECOND HALF — see meta/incursion.js `campaignReplayPlan`. A
+  // replayed run's own hand, resolved here for the same reason an incursion's
+  // is: it must be visible before the loadout is chosen, never discovered
+  // mid-battle. Null on a first run (`legacyResets` 0) and whenever this is an
+  // incursion instead, which carries its own hand under `incursion.mutators`.
+  const replay = plan ? null : campaignReplayPlan(region, legacyResets(meta));
   return {
     id: region.id, name: region.name, tier: region.tier, flavour: region.flavour,
     raid, reward, enemyMult: mult,
@@ -113,6 +131,9 @@ export function regionBrief(meta, regionId, depth = null) {
         id, name: MUTATOR_BY_ID[id].name, note: MUTATOR_BY_ID[id].note,
       })),
     } : null,
+    replayMutators: (replay?.mutators ?? []).map((id) => ({
+      id, name: MUTATOR_BY_ID[id].name, note: MUTATOR_BY_ID[id].note,
+    })),
     // A pure derivation off the same region row, so a balance pass moving
     // `develop` or `siteCounts.enemyMix` never needs a second table of hints
     // kept in step by hand. See meta/specialists.js for the two rules and why
@@ -120,6 +141,8 @@ export function regionBrief(meta, regionId, depth = null) {
     callouts: specialistCallouts(meta, region),
     rows: [
       ['Difficulty', `x${mult.toFixed(2)}`],
+      ...(raidEscalation ? [['Raid escalation', `x${raidEscalation.toFixed(2)} from `
+        + `${clears} clear${clears === 1 ? '' : 's'}`]] : []),
       ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
       ['Enemy sites', `${region.siteCounts.enemy}`],
       ['Typical length', `~${region.targetLengthMin} min`],

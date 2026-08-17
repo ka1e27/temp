@@ -50,8 +50,9 @@ import { regionsConquered, effectiveEnemyMult, record, isConquered } from './wor
 import { toConfigBoosters } from './boosters.js';
 import { withFreeMarshal, withEnemyMarshal } from './marshals.js';
 import {
-  planFor, incursionRegionInputs, incursionMods, incursionRules,
+  planFor, incursionRegionInputs, incursionMods, incursionRules, campaignReplayPlan,
 } from './incursion.js';
+import { legacyResets } from './legacy.js';
 
 export { hashBattleConfig };
 // The composition math lives in ./composition.js; re-exported so the seam has
@@ -252,6 +253,18 @@ export { withFreeMarshal, withEnemyMarshal };
  * depth, so the region is CHECKED rather than trusted: a hand-edited params
  * object cannot fight depth 40 on a tier-4 map.
  *
+ * ABDICATION'S SECOND HALF rides the same seam with no `options` flag at all:
+ * a region fought while `legacyResets(meta) > 0` asks `campaignReplayPlan` for
+ * a hand of its own (content/incursion.data.js `CAMPAIGN_REPLAY`), and if one
+ * comes back it is mutated through the exact same `incursionMods`/
+ * `incursionRegionInputs` an incursion uses. It is NEVER handed to
+ * `incursionRules` — that function stamps `rules.incursion`, the field
+ * rewards.js branches an entire payout path on, and a replayed region is a
+ * first conquest or a raid like any other and must be paid as one. `plan` (an
+ * incursion) and a replay hand are mutually exclusive by construction: the
+ * ladder already escalates forever on its own curve, and the two are never
+ * fought in the same battle.
+ *
  * @param {{seed?:number, attempt?:number, composition?:object, incursion?:number}} [options]
  * @returns {object} a BattleConfig that has passed assertBattleConfig
  */
@@ -265,6 +278,12 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
     throw new RangeError(`buildBattleConfig: incursion depth ${plan.depth} is fought on`
       + ` "${plan.regionId}", not "${regionId}"`);
   }
+  // `null` on a first run, on any region below its own score threshold, and
+  // whenever `plan` is already set — see the note above `campaignReplayPlan`.
+  const replay = plan ? null : campaignReplayPlan(region, legacyResets(meta));
+  // Whichever of the two this battle carries, if either — everywhere below
+  // that only cares about a `{mutators}` list, not about which kind it is.
+  const mutation = plan ?? replay;
 
   const rec = record(meta, regionId);
   const isRaid = isConquered(meta, regionId);
@@ -286,7 +305,7 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   const seed = deriveSeed(worldSeed,
     `${regionId}:${rec.clears}:${attempt}${plan ? `:i${plan.depth}` : ''}`);
   const mult = plan ? plan.enemyMult : effectiveEnemyMult(meta, regionId);
-  const genRegion = plan ? incursionRegionInputs(region, plan) : region;
+  const genRegion = mutation ? incursionRegionInputs(region, mutation) : region;
 
   const fx = upgradeEffects(meta);
   // The screen hands over a composition that already fits; re-fitting it is an
@@ -304,8 +323,8 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   // Hoisted above the map because the enemy's roster decides what stands on it:
   // `withEnemyMarshal` reads `unlockedUnits`, the same field the AI's training
   // reads, so the commander and the units he commands can never disagree.
-  const enemy = plan
-    ? incursionMods(enemyMods(genRegion, mult), plan, 'enemy')
+  const enemy = mutation
+    ? incursionMods(enemyMods(genRegion, mult), mutation, 'enemy')
     : enemyMods(region, mult);
   const gen = callMapGen(mapGen, { region: genRegion, seed, mult, isRaid });
   const sites = withEnemyMarshal(normalizeSites(gen.sites, mult), enemy.unlockedUnits,
@@ -332,8 +351,8 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
     },
     sites,
     adjacency: (gen.adjacency ?? []).filter(([a, b]) => a !== b && ids.has(a) && ids.has(b)),
-    player: plan
-      ? incursionMods(playerMods(meta, expedition), plan, 'player')
+    player: mutation
+      ? incursionMods(playerMods(meta, expedition), mutation, 'player')
       : playerMods(meta, expedition),
     enemy,
     boosters: toConfigBoosters(meta, selectedBoosters),

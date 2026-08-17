@@ -2120,6 +2120,76 @@ with no migration" — and it did: nothing about the persisted shape changed.
   channels the campaign's curve is measured against, so a generous legacy there would not
   make a second run faster, it would make every measured region a walkover.
 
+### A replayed campaign region carries a hand of its own
+
+**The three endgame loops did not compound the same way.** A raid escalates forever
+(`RAID.harderPerClear`) and a rung escalates forever (`INCURSION.perDepth`), but
+abdication's replay was flat: the head start makes it *shorter*, nothing made it
+*stranger*, and `--legacy=27` already measured every tier at 97–100% on a second run. The
+fix generalises `meta/incursion.js`'s own machinery — `content/incursion.data.js`
+`CAMPAIGN_REPLAY`, `meta/incursion.js` `campaignReplayPlan` — from "one arena, one depth"
+to "any region, this many resets", and it needed no new `BattleConfig` field for the same
+reason the ladder didn't: every mutator rides a field that already crosses the seam.
+`campaignReplayPlan` returns a bare `{mutators}` and hands it to the exact same
+`incursionMods`/`incursionRegionInputs` the ladder built; it is **never** passed to
+`incursionRules`, because that function stamps `rules.incursion`, the field
+`meta/rewards.js` branches an entire payout path on, and a replayed region is a first
+conquest or a raid like any other and must be paid as one.
+
+**Provably outside the measured set, the same way the Crown tier and the specialists'
+zero default weight are.** `tools/simplayer.js metaFor` never sets `legacy.resets` above 0
+unless a caller explicitly passes `--legacy=N`, and no test in the suite does. Proven
+rather than argued: a `git worktree add --detach` checkout of the pre-change code, given
+the *same* (currently mid-retune) `regions.data.js`, was run through `buildBattleConfig`
+for all 24 regions × 3 idle times × 3 seeds, plus 3 raids and 4 incursion battles — 223
+real configs — and diffed byte-for-byte against the changed code. Identical. `resets <= 0`
+returns `null` from `campaignReplayPlan` by construction, so `mutation` is `null` and every
+branch in `buildBattleConfig` takes the exact expression that shipped before this pass.
+
+**Which regions, and how many — scaled by resets AND by tier, on purpose.**
+`headStartFor` means a second run (`resets` 1) only ever fights region 9 on (emberholt
+through widowsgate) and a third-or-later run (`resets >= 2`, the cap) fights *only* region
+16 on (blackspire through widowsgate) — the same nine rows, forever. So the score a region
+earns is `resets x 2 + max(0, tier - 3) x 1`, crossed against thresholds `[3, 6, 10]` for
+1/2/3 mutators: a tier 1–3 region scores nothing extra and stays a clean victory lap
+through the *whole* frozen head start (measured: every tier 1–3 region reads `null` at
+`resets` 1, by construction), while the nine rows fought every run past the second get
+measurably more seasoned as resets pile up (emberholt tier 2 at `resets` 1 → nothing;
+thanescar tier 4 at `resets` 1 → one mutator; widowsgate tier 6 at `resets` 4–5 → the full
+three). Seeded off `(region id, resets)` alone — nothing new is stored, and a retry within
+one run draws the identical hand.
+
+**`sealed` (the gate mutator) is excluded, and both ways of keeping it were wrong.**
+Clamping it to the campaign's own `GATE_CLAMP` ceiling (0.60) makes it inert on precisely
+the tier 4–6 rows a replay actually visits — every one of them already ships *at* that
+plateau, the exact "the max was always the region's own" shape `sealed` shipped in on the
+incursion ladder before that ladder's own ceiling existed. Letting it exceed 0.60
+unmeasured risks reproducing "thirty-seven of thirty-seven timeouts sat below the gate",
+the failure the castle-gate section above already spent a whole pass fixing. Excluded
+rather than guessed at; the other seven mutators ship unchanged.
+
+**Visible before it is fought, in the same place an incursion's hand already is.**
+`screens/prebattle-brief.js regionBrief` resolves `campaignReplayPlan` straight off meta —
+no battle has to be built first — and `brief.replayMutators` renders on the loadout screen
+(`screens/prebattle.js`) as the identical `<ul class="pb-mutators">` markup the incursion
+list already uses. Mutually exclusive with it by construction (a replay hand is never
+computed when `depth` names an incursion).
+
+**`harderPerClear`, surfaced.** The folded `Difficulty`/`Enemy strength` figure a fresh
+attack and a tenth raid showed identically now has a sibling row, *"Raid escalation"*, that
+appears only on an already-conquered, non-incursion region and reads
+`x(1 + harderPerClear)^clears from N clear(s)` — the exact multiplier `effectiveEnemyMult`
+was already folding in silently.
+
+`tests/campaignreplay.test.js` (13 tests) pins all of it: the run-1 identity (both as a
+direct `campaignReplayPlan` negative control and as a byte-for-byte `BattleConfig`
+comparison), that a finished-and-many-times-abdicated player's incursion battles are
+untouched, the victory-lap property for tiers 1–3, monotonicity in both resets and tier,
+determinism and table-order of the draw, that `sealed` never appears and the castle gate
+never moves, that every one of the seven allowed mutators measurably changes the config it
+names, that a mutated replay is paid as an ordinary conquest or raid and never as a rung,
+and that the brief shows exactly the hand the battle carries.
+
 ## Relics: the currency that does not tick, and the troop lines it buys
 
 `meta.relics`, paid by `meta/rewards.js` and nothing else. Crowns accrue per second —

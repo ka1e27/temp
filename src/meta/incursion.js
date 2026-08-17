@@ -19,14 +19,14 @@
 // otherwise. That keeps "what a mutator does" in one file with the table, and
 // keeps a battle with no incursion on exactly the code path it was measured on.
 
-import { INCURSION, MUTATORS, MUTATOR_BY_ID } from '../content/incursion.data.js';
+import { INCURSION, MUTATORS, MUTATOR_BY_ID, CAMPAIGN_REPLAY } from '../content/incursion.data.js';
 import { REGIONS, REGION_BY_ID, DEVELOP_CLAMP, GATE_CLAMP } from '../content/regions.data.js';
 import { AI_TIERS } from '../content/balance.js';
 import { metaOf } from '../core/store.js';
 import { createRng, deriveSeed } from '../core/rng.js';
 import { isConquered } from './world.js';
 
-export { INCURSION, MUTATORS, MUTATOR_BY_ID };
+export { INCURSION, MUTATORS, MUTATOR_BY_ID, CAMPAIGN_REPLAY };
 
 /**
  * The player's place on the ladder, healed rather than trusted.
@@ -77,18 +77,19 @@ export function campaignComplete(metaState) {
 }
 
 /**
- * The mutators in play at `depth`, as ids.
+ * The weighted draw WITHOUT REPLACEMENT every hand in this file uses — a
+ * rung's and a replayed campaign region's alike. Shared so the two callers
+ * cannot drift apart on HOW a hand is drawn while differing on WHICH pool and
+ * WHICH count feed it.
  *
- * Weighted draw WITHOUT REPLACEMENT off a seed derived from the depth alone. The
- * count comes from `mutatorsAt`, so the opening rungs are the plain ladder and
- * the hand fills in as it deepens.
+ * @param {string} seedKey   unique per fight, e.g. `incursion:12`
+ * @param {number} count     how many to draw
+ * @param {{id:string,weight:number}[]} candidates  the pool to draw from
  */
-export function mutatorsFor(depth) {
-  const d = Math.max(1, Math.floor(depth));
-  const count = INCURSION.mutatorsAt.filter((at) => d >= at).length;
-  if (count <= 0) return [];
-  const rng = createRng(deriveSeed(0x1c5a1d, `incursion:${d}`));
-  const pool = MUTATORS.map((m) => ({ id: m.id, weight: m.weight }));
+function drawMutators(seedKey, count, candidates) {
+  if (count <= 0 || !candidates.length) return [];
+  const rng = createRng(deriveSeed(0x1c5a1d, seedKey));
+  const pool = candidates.map((m) => ({ id: m.id, weight: m.weight }));
   const out = [];
   for (let i = 0; i < count && pool.length; i++) {
     let roll = rng.next() * pool.reduce((a, m) => a + m.weight, 0);
@@ -100,6 +101,58 @@ export function mutatorsFor(depth) {
   // Sorted into TABLE order rather than draw order, so a plan reads the same way
   // every time it is rendered and a test can compare two plans for equality.
   return MUTATORS.filter((m) => out.includes(m.id)).map((m) => m.id);
+}
+
+/**
+ * The mutators in play at `depth`, as ids.
+ *
+ * Weighted draw WITHOUT REPLACEMENT off a seed derived from the depth alone. The
+ * count comes from `mutatorsAt`, so the opening rungs are the plain ladder and
+ * the hand fills in as it deepens.
+ */
+export function mutatorsFor(depth) {
+  const d = Math.max(1, Math.floor(depth));
+  const count = INCURSION.mutatorsAt.filter((at) => d >= at).length;
+  return drawMutators(`incursion:${d}`, count, MUTATORS);
+}
+
+/**
+ * How seasoned a replayed campaign region's hand is, as a single score — see
+ * content/incursion.data.js `CAMPAIGN_REPLAY` for what each number means and
+ * why. Arithmetic only, kept beside the ladder's own draw deliberately: this
+ * is the same mechanism, generalised from "one arena, one depth" to "any
+ * region, this many resets".
+ */
+function campaignMutatorScore(resets, tier) {
+  const t = Math.max(1, Math.floor(tier));
+  return resets * CAMPAIGN_REPLAY.perReset
+    + Math.max(0, t - CAMPAIGN_REPLAY.frozenTier) * CAMPAIGN_REPLAY.perTierAboveFrozen;
+}
+
+/**
+ * The hand a replayed campaign region carries, or `null` on a first run
+ * (`resets` 0) and on a region the score has nothing to say about yet.
+ *
+ * DETERMINISTIC like a rung: seeded off the region's own id and the reset
+ * count, so retrying the SAME region in the SAME run draws the SAME hand, and
+ * a fresh abdication reshuffles it. Nothing is stored beyond
+ * `meta.legacy.resets`, which already existed.
+ *
+ * Returns a bare `{mutators}` rather than a full plan, deliberately: the one
+ * consumer that reads a plan's OTHER fields (`incursionRules`, for `aiTier`
+ * and the ladder's own gate ceiling) must never be handed this shape — see
+ * meta/modifiers.js `buildBattleConfig` for why a replayed region is never
+ * passed to that function.
+ */
+export function campaignReplayPlan(region, resets) {
+  const r = Math.max(0, Math.floor(resets));
+  if (r <= 0) return null;
+  const score = campaignMutatorScore(r, region.tier);
+  const count = CAMPAIGN_REPLAY.scoreThresholds.filter((at) => score >= at).length;
+  if (count <= 0) return null;
+  const pool = MUTATORS.filter((m) => !CAMPAIGN_REPLAY.excludedMutators.includes(m.id));
+  const mutators = drawMutators(`campaign-replay:${region.id}:${r}`, count, pool);
+  return mutators.length ? { mutators } : null;
 }
 
 /**

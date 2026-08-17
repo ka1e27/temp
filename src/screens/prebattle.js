@@ -181,6 +181,15 @@ export function createPreBattleScene(ctx) {
           'data-mutator': m.id,
         }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
         : []),
+      // A REPLAYED RUN'S OWN HAND — meta/incursion.js `campaignReplayPlan`.
+      // Mutually exclusive with the incursion list above, and shown the same
+      // way for the same reason: know before you pick a loadout, not mid-battle.
+      ...(brief.replayMutators?.length
+        ? [h('ul.pb-mutators.pb-replay-mutators', {},
+          ...brief.replayMutators.map((m) => h('li.pb-mutator', {
+            'data-mutator': m.id,
+          }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
+        : []),
       // The specialists are opt-in and easy to forget; meta/specialists.js
       // reads this same region's own data and says when one answers the fight
       // better than the default spread. `data-unlocked` is what tells "bring

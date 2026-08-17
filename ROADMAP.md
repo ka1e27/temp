@@ -172,7 +172,7 @@ harness by the reviewer.
       on the pre-battle screen as a contextual specialist callout ("this region is
       wall-heavy: halberds halve `siteDefMult`"), turning an ignorable layer situational.
       Advisory text only, zero balance risk. **S/M.**
-- [ ] **The three endgame loops do not compound.** A raid is a timer with a lump at the
+- [x] ~~**The three endgame loops do not compound.** A raid is a timer with a lump at the
       end, and `harderPerClear: 0.15` compounds forever but is never surfaced as its own
       stat — it is folded silently into the same "Enemy strength" figure a fresh attack
       shows. Abdication's replay is 81–100% by run 2 BY DESIGN (`prestige.js` says so),
@@ -180,7 +180,25 @@ harness by the reviewer.
       agree it is the best value):** apply incursion-style mutators to REPLAYED campaign
       regions on run 2+. The wiring is a generalisation of `meta/incursion.js`, which
       already rides fields that cross the seam. **Cost M, and it needs a measurement pass**
-      — it touches the region table, so it cannot ship unmeasured.
+      — it touches the region table, so it cannot ship unmeasured.~~ **FIXED, AND THE
+      MEASUREMENT PASS TURNED OUT NOT TO BE NEEDED.** `meta/incursion.js
+      campaignReplayPlan` + `content/incursion.data.js CAMPAIGN_REPLAY` generalise the
+      ladder's draw to any region at `(region id, resets)`; applied through the exact same
+      `incursionMods`/`incursionRegionInputs` the ladder uses, never through
+      `incursionRules` (so `rules.incursion` never crosses and a mutated replay is still
+      paid as an ordinary conquest or raid). It touches no field `regions.data.js` owns and
+      no contract field, and it is gated on `legacyResets(meta) > 0`, which `metaFor` never
+      sets — proven, not asserted: a `git worktree` checkout of the pre-change code, given
+      the identical (mid-retune) `regions.data.js`, produced byte-for-byte identical
+      `BattleConfig`s across all 24 regions, three idle times, three seeds, three raids and
+      four incursion battles. `sealed` (the gate mutator) is excluded — the campaign's own
+      `GATE_CLAMP` plateau is already the measured safety ceiling, and every region a
+      replay actually revisits (tier 4–6) already ships AT it, so clamping the mutator
+      there would be inert and not clamping it would be unmeasured risk. Visible on the
+      pre-battle brief before the loadout is chosen, same markup as an incursion's list.
+      `harderPerClear` now has its own "Raid escalation" row alongside the folded
+      difficulty figure. `tests/campaignreplay.test.js`, 13 tests. Full writeup in
+      `CLAUDE.md` → "A replayed campaign region carries a hand of its own".
 - [x] ~~**Short-session lever: auto-resolve a RAID only.** Combat is deterministic
       (invariant 3) and the bot that plays every measured battle already exists headless.
       A raid is documented as a rerun with no new tactical content, so resolving one in
