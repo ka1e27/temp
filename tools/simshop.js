@@ -7,7 +7,7 @@
 // player the twenty-four measured win rates describe.
 import { UNIT_IDS } from '../src/content/balance.js';
 import { UPGRADES } from '../src/content/upgrades.data.js';
-import { shopListing, buy } from '../src/meta/upgrades.js';
+import { shopListing, buy, spendAll } from '../src/meta/upgrades.js';
 import { recalcIncome } from '../src/meta/idle.js';
 
 /**
@@ -41,22 +41,15 @@ export function spendCrowns(meta, crowns, fielded = null) {
   // printed on it. At zero relics — which is every run in the measured table —
   // the second loop finds nothing affordable and exits on its first pass, so
   // the crown path below is exactly the one the campaign was measured on.
-  spendPurse(meta, 'crowns', useless);
-  spendPurse(meta, 'relics', relicWaste(fielded));
+  //
+  // `spendAll` is the loop itself, moved to meta/upgrades.js so this file and
+  // the shop screen's "Spend all" button share one implementation of "what
+  // does the shop buy next" rather than two that can quietly disagree. `skip`
+  // is this harness's own reason to withhold a line the run will never field;
+  // the shop screen calls the same function with none.
+  spendAll(meta, 'crowns', null, useless);
+  spendAll(meta, 'relics', null, relicWaste(fielded));
   recalcIncome(meta, null);
-}
-
-/** Cheapest-affordable-first within one currency, until nothing is left. */
-function spendPurse(meta, currency, skip) {
-  for (let guard = 0; guard < 400; guard++) {
-    const affordable = shopListing(meta)
-      .flatMap((g) => g.items)
-      .filter((i) => (i.currency ?? 'crowns') === currency
-        && i.affordable && i.level < i.maxLevel && !skip.has(i.id))
-      .sort((a, b) => a.cost - b.cost);
-    if (!affordable.length) break;
-    buy(meta, affordable[0].id, null);
-  }
 }
 
 /**

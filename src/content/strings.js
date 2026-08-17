@@ -205,9 +205,6 @@ export const RECORD = Object.freeze({
 
 export const SHOP = Object.freeze({
   header: 'Spend crowns on things you will feel next battle.',
-  economyFirst: 'Economy-first starves the enemy and wins slowly.',
-  militaryFirst: 'Veterancy and raiders win by burning farms fast. Both clear tier 2.',
-  standingArmyNote: 'The most directly felt purchase in the game.',
   affordIn: 'Affordable in',
   /** Relics cannot be waited for, so the tooltip names the two places they come
    *  from instead of counting down to a moment that never arrives. */
@@ -215,6 +212,20 @@ export const SHOP = Object.freeze({
   chargeLabel: 'charges',
   boosterLocked: 'Unlock this booster before buying charges.',
   boosterFull: 'Stock full.',
+  // The bulk-buy controls (meta/upgrades.js `spendAll`/`buyN`) and the
+  // suggested-buy ring. "Spend all" states the rule rather than a slogan, for
+  // the same reason the header above does — it is the one thing a player
+  // presses without reading the six rows underneath it.
+  spendAll: 'Spend all',
+  spendAllHint: 'Buys every affordable crown line below, cheapest first, until'
+    + ' nothing is left.',
+  nothingToSpend: 'Nothing you can afford yet.',
+  buyTen: '×10',
+  buyTenHint: (name) => `Buy ${name} up to ten times, cheapest levels first.`,
+  // Appended to a buy button's own aria-label — not a separate announcement,
+  // so a screen-reader user hears "Buy Treasury for 45 crowns, cheapest
+  // option right now" rather than a second element to tab past.
+  suggestedSuffix: ', cheapest option right now',
 });
 
 export const IDLE = Object.freeze({

@@ -145,7 +145,14 @@ export const UPGRADES = Object.freeze([
     '+120 starting battle gold, +8% from every site and +10% from every farm.'),
   U('standingArmy', 'empire', 'Standing Army', ENDLESS, 80, 1.60,
     [flat('expedition', 5), add('march', 0.06)],
-    '+5 expedition slots and +6% march speed. The most directly felt purchase.'),
+    // Used to read "The most directly felt purchase" — true in isolation, but
+    // it reads as an instruction to buy this line first and keep buying it.
+    // Measured, that is one of the two worst allocations in the shop:
+    // Standing-Army-first wins 2% against cheapest-affordable-first's 33% at
+    // matched region/conquest/idle-budget/composition (n=48 each). The line
+    // still says what kind of value it is — army, not treasury — without
+    // ranking itself above its five siblings.
+    '+5 expedition slots and +6% march speed. A bigger army, not a bigger treasury.'),
   U('arms', 'empire', 'Arms', ENDLESS, 100, 1.62,
     [add('atk', 0.06), add('def', 0.06)],
     '+6% attack and +6% defence, on every unit you field.'),

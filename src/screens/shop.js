@@ -9,7 +9,7 @@
 import { h, clear, mount, bindText } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, SHOP } from '../content/strings.js';
-import { shopListing, buy, canBuy } from '../meta/upgrades.js';
+import { shopListing, buy, canBuy, spendAll, buyN, suggestedBuy } from '../meta/upgrades.js';
 import { inventory, buyCharge, canBuyCharge } from '../meta/boosters.js';
 import { incomePerSec, timeToAfford } from '../meta/idle.js';
 import { BOOSTER_LABEL } from './prebattle.js';
@@ -20,7 +20,14 @@ export function createShopScene(ctx) {
   let setCrowns = null;
   let setRelics = null;
   let setIncome = null;
+  let spendAllBtn = null;
   let watched = [];
+  // The suggested-buy ring has to survive the 250ms tick without a full
+  // `render()` (see the header comment on why that rebuild is forbidden), so
+  // it is tracked the same way `watched` tracks disabled state: a map from id
+  // to its live row element, plus whichever id currently wears the ring.
+  let rowById = new Map();
+  let lastSuggested = null;
 
   const meta = () => ctx.state.meta;
 
@@ -53,6 +60,17 @@ export function createShopScene(ctx) {
         on: { click: () => ctx.scenes.pop() },
       });
 
+      // Crowns only — see meta/upgrades.js `spendAll`. Relics are the
+      // player's deliberate choice of which troop to level (CLAUDE.md's
+      // relics section), and this button must not make that choice for them;
+      // crowns are the currency this whole fix is about (10-146 identical
+      // clicks, measured through this exact rule).
+      spendAllBtn = h('button.btn.ghost.shop-spend-all', {
+        type: 'button', text: SHOP.spendAll,
+        'aria-label': SHOP.spendAllHint,
+        on: { click: () => { spendAll(meta(), 'crowns', ctx.bus); render(); } },
+      });
+
       const header = h('div.shop-header.panel', {},
         h('h2#shop-title', { text: UI.shop }),
         // NOT a live region, for the reason worldmap.js records at its own
@@ -69,6 +87,7 @@ export function createShopScene(ctx) {
           h('span.label', { text: UI.treasury }), crowns,
           h('span.label', { text: UI.relics }), relics,
           h('span.label', { text: UI.income }), income),
+        spendAllBtn,
         close);
 
       listRoot = h('div.shop-list');
@@ -96,8 +115,10 @@ export function createShopScene(ctx) {
       // are overlays, and a screen that clears the marker outright would make
       // the world map look like no scene at all to anything reading it.
       document.body.dataset.scene = 'worldmap';
-      root = listRoot = setCrowns = setRelics = setIncome = null;
+      root = listRoot = setCrowns = setRelics = setIncome = spendAllBtn = null;
       watched = [];
+      rowById = new Map();
+      lastSuggested = null;
     },
   };
 
@@ -121,17 +142,39 @@ export function createShopScene(ctx) {
       else w.el.setAttribute('aria-disabled', 'true');
       w.el.title = ok ? '' : w.wait();
     }
+
+    // The suggested-buy ring tracks affordability, which moves on this same
+    // clock as every Buy button's own disabled state — idle income keeps
+    // ticking while the shop sits open (see the file header). Re-render()ing
+    // on this beat is the exact bug already fixed once above (focus thrown
+    // off whatever the keyboard is on), so this moves one attribute instead.
+    const suggested = suggestedBuy(m);
+    if (suggested !== lastSuggested) {
+      if (lastSuggested) rowById.get(lastSuggested)?.removeAttribute('data-suggested');
+      if (suggested) rowById.get(suggested)?.setAttribute('data-suggested', '1');
+      lastSuggested = suggested;
+    }
+  }
+
+  /** Is there anything at all left to spend crowns on? Feeds "Spend all"'s
+   *  own disabled state, the same way `canBuy` feeds one row's button. */
+  function canSpendCrowns() {
+    return shopListing(meta()).some((g) => g.items.some((i) => i.currency === 'crowns' && i.affordable));
   }
 
   /** Icon-only by design — the label is the price. Screen readers get the rest. */
-  function buyButton({ label, cost, check, wait, onBuy, currency = 'crowns' }) {
+  function buyButton({ label, cost, check, wait, onBuy, currency = 'crowns', suggested = false }) {
     const ok = check();
     const relic = currency === 'relics';
     const el = h(`button.btn.buy${relic ? '.buy-relic' : ''}`, {
       type: 'button',
       disabled: !ok,
       'aria-disabled': ok ? null : 'true',
-      'aria-label': `${UI.buy} ${label} for ${Math.round(cost)} ${relic ? 'relics' : 'crowns'}`,
+      // The ring is a visual-only cue, so a screen-reader user gets the same
+      // claim as a suffix on the button they were already going to read,
+      // rather than a second element to tab past.
+      'aria-label': `${UI.buy} ${label} for ${Math.round(cost)} ${relic ? 'relics' : 'crowns'}`
+        + (suggested ? SHOP.suggestedSuffix : ''),
       // Showing the wait turns "can't afford" into "come back in 90s",
       // which is the pull the idle layer runs on — and is a LIE for a relic
       // price, because no amount of waiting pays one. That row says where they
@@ -143,12 +186,57 @@ export function createShopScene(ctx) {
     return el;
   }
 
+  /** "x10": the same purchase, up to ten times, through `buyN` — never a
+   *  single deduction at ten times today's price (a level-9 line does not
+   *  cost nine times its level-0 price). Offered only on endless lines,
+   *  where "again" is ever a question worth a shortcut for. */
+  function bulkBuyButton(item) {
+    const check = () => canBuy(meta(), item.id).ok;
+    const ok = check();
+    const wait = () => waitText(item.cost, item.currency);
+    const el = h('button.btn.ghost.buy-ten', {
+      type: 'button',
+      disabled: !ok,
+      'aria-disabled': ok ? null : 'true',
+      'aria-label': SHOP.buyTenHint(item.name),
+      title: ok ? '' : wait(),
+      on: {
+        click: () => {
+          if (!check()) return;
+          buyN(meta(), item.id, 10, ctx.bus);
+          render();
+        },
+      },
+    }, SHOP.buyTen);
+    watched.push({ el, check, wait, last: ok });
+    return el;
+  }
+
   // --- structure -----------------------------------------------------------
 
   function render() {
     clear(listRoot);
     watched = [];
+    rowById = new Map();
     tick();
+
+    // "Spend all" lives in the header, outside `listRoot`, so its own DOM
+    // node survives every render call — but `watched` does not, and that is
+    // what its disabled state rides on, exactly like every row's own Buy
+    // button. Re-add it here, in the same place a row's would be added.
+    const spendOk = canSpendCrowns();
+    spendAllBtn.disabled = !spendOk;
+    spendAllBtn.title = spendOk ? '' : SHOP.nothingToSpend;
+    watched.push({
+      el: spendAllBtn, check: canSpendCrowns, wait: () => SHOP.nothingToSpend, last: spendOk,
+    });
+
+    // The cheapest-affordable Empire line, or none — recomputed on every
+    // render (i.e. every purchase) and kept live between renders by `tick()`.
+    // See meta/upgrades.js `suggestedBuy` for why this can never be a locked,
+    // maxed, or non-Empire row.
+    const suggested = suggestedBuy(meta());
+    lastSuggested = suggested;
 
     for (const group of shopListing(meta())) {
       if (!group.items.length) continue;
@@ -163,7 +251,11 @@ export function createShopScene(ctx) {
       h(`h3#${id}`, { text: group.name }),
       h('p.shop-group-note', { text: group.blurb ?? '' }));
 
-      for (const item of group.items) mount(section, upgradeRow(item));
+      for (const item of group.items) {
+        const row = upgradeRow(item, item.id === suggested);
+        rowById.set(item.id, row);
+        mount(section, row);
+      }
       mount(listRoot, section);
     }
 
@@ -179,7 +271,8 @@ export function createShopScene(ctx) {
     }
   }
 
-  function upgradeRow(item) {
+  /** @param {boolean} suggested this is `suggestedBuy`'s current pick */
+  function upgradeRow(item, suggested = false) {
     const maxed = item.reason === 'maxed';
     // An endless line has no denominator to show — "7 / Infinity" is noise, and
     // "7 / 64" would advertise a floating-point ceiling as though it were a
@@ -188,9 +281,20 @@ export function createShopScene(ctx) {
       : item.maxLevel > 1 ? `${item.level}/${item.maxLevel}`
         : (item.level ? 'owned' : '');
 
+    const buyEl = () => buyButton({
+      label: item.name,
+      cost: item.cost,
+      currency: item.currency,
+      check: () => canBuy(meta(), item.id).ok,
+      wait: () => waitText(item.cost, item.currency),
+      onBuy: () => buy(meta(), item.id, ctx.bus),
+      suggested,
+    });
+
     return h('div.shop-row', {
       'data-maxed': maxed ? '1' : null,
       'data-locked': item.locked ? '1' : null,
+      'data-suggested': suggested ? '1' : null,
     },
       h('div.shop-row-main', {},
         h('span.shop-name', { text: item.name }),
@@ -208,14 +312,13 @@ export function createShopScene(ctx) {
           })
           : maxed
             ? h('span.shop-maxed', { text: UI.maxed, 'aria-label': `${item.name} is fully upgraded` })
-            : buyButton({
-              label: item.name,
-              cost: item.cost,
-              currency: item.currency,
-              check: () => canBuy(meta(), item.id).ok,
-              wait: () => waitText(item.cost, item.currency),
-              onBuy: () => buy(meta(), item.id, ctx.bus),
-            })));
+            // An endless line also gets "x10" stacked ABOVE its price rather
+            // than beside it: the row's right column is already as wide as
+            // the price button, and a phone has no width to spare next to it
+            // (tools/mobile.mjs audits this screen; see shop-row-buys in CSS).
+            : item.endless
+              ? h('div.shop-row-buys', {}, bulkBuyButton(item), buyEl())
+              : buyEl()));
   }
 
   function boosterRow(b) {

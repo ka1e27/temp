@@ -308,6 +308,9 @@ test('shopListing reports affordability without mutating anything', () => {
   assert.equal(JSON.stringify(m), before);
 });
 
+// Bulk purchase ("Spend all", "x10") and the suggested-buy ring have their
+// own file now — tests/shopbulk.test.js — split out purely for the line cap.
+
 // --- boosters --------------------------------------------------------------
 
 test('March and Fortify need no unlock; Rally, Tithe and Bombard do', () => {

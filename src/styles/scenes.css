@@ -85,6 +85,17 @@
   color: var(--c-rank);
 }
 
+/* "Spend all": the harness's own cheapest-affordable-first loop
+   (meta/upgrades.js `spendAll`), reachable by a real player instead of the
+   10-146 identical clicks it used to take. Gold-tinted like the treasury it
+   drains; ghost-weight like Close beside it, because it is a convenience and
+   not the most important control in the header. */
+.shop-spend-all {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-gold) 40%, transparent);
+  color: var(--c-gold);
+}
+.shop-spend-all:hover { background: color-mix(in srgb, var(--c-gold) 14%, var(--c-surface-2)); }
+
 .shop-list { overflow-y: auto; padding: var(--s-4) var(--s-5) var(--s-6); }
 /* The list is taller than the plate: fade the cut edge so "there is more
    below" is visible rather than inferred from a half-sliced row. */
@@ -119,10 +130,37 @@
 .shop-row[data-maxed='1'] {
   --state: var(--c-player); box-shadow: inset 2px 0 0 var(--state); opacity: 0.72;
 }
+/* THE SUGGESTED BUY (meta/upgrades.js `suggestedBuy`): a passive ring on the
+   cheapest-affordable Empire line, recomputed on every purchase and kept live
+   between them by the 250ms tick. It teaches cheapest-first by pointing at
+   ONE row rather than by grading six competing numbers — see CLAUDE.md's
+   uphill-raid section for why that allocation (33% at n=48) is the only one
+   this project has ever measured winning, against 2% for Standing-Army-first
+   and 0% for Treasury-first. `hd-beacon` is base.css's "one thing allowed to
+   loop: this is your move"; a suggestion is exactly that claim, so it reuses
+   the world map's own animation for an attackable region instead of a second
+   one. Can never coincide with `data-maxed` or `data-locked`: `suggestedBuy`
+   only ever names an id `canBuy` already said yes to. */
+.shop-row[data-suggested='1'] { --state: var(--c-accent); box-shadow: inset 2px 0 0 var(--state); }
+.shop-row[data-suggested='1']::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  border-radius: var(--r-2);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent) 65%, transparent);
+  animation: hd-beacon var(--d-beacon) var(--ease) infinite;
+}
 .shop-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .shop-name { font-weight: var(--w-bold); }
 .shop-desc { font-size: var(--t-sm); color: var(--c-text-dim); }
 .shop-row-side { display: flex; align-items: center; gap: var(--s-3); }
+/* An endless line's "x10" stacks ABOVE its price rather than beside it —
+   children of a column stretch to the widest one by default, so this needs
+   no width rule of its own to line up under `.btn.buy`'s 6.5em. Side-by-side
+   was tried and rejected: the row's right column is already as wide as the
+   price button on a 390px phone, and a third element in `.shop-row-side`'s
+   row would have nowhere to go without wrapping (tools/mobile.mjs audits
+   this screen). */
+.shop-row-buys { display: flex; flex-direction: column; gap: var(--s-1); }
+.btn.buy-ten { font-family: var(--font-num); padding: 0 var(--s-2); }
 .shop-level {
   font-family: var(--font-num); font-size: var(--t-xs);
   letter-spacing: var(--track-label); color: var(--c-text-dim);
