@@ -222,5 +222,5 @@ export const siteOuter = (kind) => extentsOf(kind).outer;
 export {
   MAX_LEVEL, LEVEL_SCALE, levelRamp, storeyLadder, levelScale, storeyCount,
   storeyScale, storeyRise, traceStructure, siteRingR, siteRingDy,
-  siteFootYAt, siteHeadYAt,
+  siteFootYAt, siteHeadYAt, siteStackY, siteStackLen,
 } from './siteLevels.js';

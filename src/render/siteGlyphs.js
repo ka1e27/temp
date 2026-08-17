@@ -35,7 +35,8 @@ import {
 import { drawStoreyGild } from './siteGild.js';
 import { ownerDash, NO_DASH } from './ownerDash.js';
 
-export { SITE_R, siteRadius, traceSiteShape, siteTier } from './siteShapes.js';
+export { SITE_R, siteRadius, traceSiteShape, siteTier, siteStackY, siteStackLen }
+  from './siteShapes.js';
 export { ownerDash } from './ownerDash.js';
 // Cursor feedback lives in ./siteCursor.js now; re-exported so battleView and
 // the fog tests keep importing it from the same front door.

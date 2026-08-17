@@ -12,7 +12,10 @@
 // consumer lives in another file is a staleness bug waiting for someone to add
 // a second writer.
 import { UNIT_IDS } from '../content/balance.js';
-import { garrisonLabelY } from './siteGlyphs.js';
+import {
+  garrisonLabelY, siteRadius, builtLevel, siteStackY, siteStackLen,
+} from './siteGlyphs.js';
+import { staticHalfDepth } from './formation.js';
 import { drawSquadLabels } from './routes.js';
 import { drawStaleGarrisons } from './fog.js';
 import { perceivedSite } from '../battle/vision.js';
@@ -32,6 +35,35 @@ export function createLabelPass({ camera, palette: p, viewFaction, sitePos, hexS
   let fontZoom = -1;
   let fontStr = '';
   const _a = scratch;
+
+  /** The headcount of a stack besieging or assaulting a site, over its pieces.
+   *  Its own faction's colour, so an enemy siege on your farm and your assault
+   *  on theirs are told apart the same way every other stack is. */
+  function drawSiteStackLabels(ctx, state, px) {
+    const prev = ctx.textBaseline;
+    ctx.textBaseline = 'bottom';
+    for (const s of state.sites) {
+      const stack = s.siege || s.melee;
+      if (!stack) continue;
+      // A site nobody has looked at draws nothing at all, so it must not carry
+      // a number either — `drawFrame` skips ghosts before it draws the pieces.
+      if (perceivedSite(state, viewFaction, s).ghost) continue;
+      let n = 0;
+      for (let k = 0; k < UNIT_IDS.length; k++) n += stack.comp[UNIT_IDS[k]] || 0;
+      if (n <= 0) continue;
+      sitePos(s, _a);
+      const r = siteRadius(s.kind, hexSize);
+      // CLEAR OF THE PIECES, not on them. The block is CENTRED on its anchor,
+      // so the number has to clear half its depth — put at the anchor it lands
+      // among the troops, in the troops' own colour, which is invisible.
+      const len = siteStackLen(hexSize, px);
+      const top = _a.y + siteStackY(s.kind, builtLevel(s), r, px)
+        - staticHalfDepth(n, len) - px * 7;
+      ctx.fillStyle = p.owner[stack.owner] || p.text;
+      ctx.fillText(numStr(n), _a.x, top);
+    }
+    ctx.textBaseline = prev;
+  }
 
   /** ONE text pass, ONE `ctx.font` assignment, batched by colour; the font
    *  string is cached against zoom, and `squads` is the PERCEIVED list
@@ -61,6 +93,16 @@ export function createLabelPass({ camera, palette: p, viewFaction, sitePos, hexS
         ctx.fillText(numStr(n), _a.x, _a.y + garrisonLabelY(s.kind, hexSize, px));
       }
     }
+    // ...AND THE STACK STANDING ON IT. A column that reaches a site leaves
+    // `state.squads` — it lives in `site.melee.comp` for six seconds and then in
+    // `site.siege.comp` — so the squad labelling below stops naming it at the
+    // exact moment its size decides the battle. `formation.js` compresses the
+    // pieces logarithmically and caps at thirty, so a 71-troop siege and a
+    // 700-troop one are drawn identically; its own comment says that is safe
+    // BECAUSE "the count label carries the exact figure at every size", and
+    // that promise was broken here and nowhere else. "Is this enough to hold?"
+    // is the question a besieging stack exists to pose.
+    drawSiteStackLabels(ctx, state, px);
     drawStaleGarrisons(ctx, state, viewFaction, sitePos, hexSize, px, p, _a);
     ctx.textBaseline = 'middle';
     for (let o = 0; o < OWNERS2.length; o++) {

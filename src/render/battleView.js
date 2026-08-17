@@ -19,7 +19,7 @@ import {
 } from './hexRenderer.js';
 import {
   siteRadius, drawSiteBase, drawHpRing, drawSiegeRing, drawSiteState,
-  drawGarrisonPlaque, drawSelection, drawHover, builtLevel,
+  drawGarrisonPlaque, drawSelection, drawHover, builtLevel, siteStackY, siteStackLen,
 } from './siteGlyphs.js';
 import { siteHeadYAt } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
@@ -354,9 +354,8 @@ export function createBattleView(opts) {
    *  where the besiegers used to sit; at L1 it is 1.22r, so an un-upgraded site
    *  is unchanged. */
   function drawSiteStack(ctx, site, comp, owner, cx, cy, r, px) {
-    const head = siteHeadYAt(site.kind, builtLevel(site)) + 0.3;
-    drawStaticFormation(ctx, comp, cx, cy - r * head - px * 20,
-      Math.PI / 2, Math.max(hexSize * 0.1, px * 2.2), owner, px, p);
+    drawStaticFormation(ctx, comp, cx, cy + siteStackY(site.kind, builtLevel(site), r, px),
+      Math.PI / 2, siteStackLen(hexSize, px), owner, px, p);
   }
 
   return api;

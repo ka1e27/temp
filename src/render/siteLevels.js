@@ -217,3 +217,22 @@ export function siteHeadYAt(kind, level) {
   }
   return m * levelScale(level);
 }
+
+/**
+ * World-space y offset of a stack that is AT a site — besieging it, or fighting
+ * its garrison outside the walls. Negative: it sits ABOVE the site, clear of the
+ * garrison plaque below.
+ *
+ * ONE EXPRESSION, TWO CALLERS, for the same reason `garrisonLabelY` is one: the
+ * renderer draws the troop pieces here and the label pass writes the headcount
+ * there, and a number floating free of the pieces it counts is worse than no
+ * number at all. Hung off the built roofline rather than a fixed multiple of the
+ * radius, because a level-3 tower grows up into where besiegers used to stand.
+ */
+/** Piece length a site stack is drawn at. Beside `siteStackY` because the two
+ *  together ARE "how a stack at a site is laid out", and the label pass needs
+ *  both to place a number clear of the troops. */
+export const siteStackLen = (hexSize, px) => Math.max(hexSize * 0.1, px * 2.2);
+
+export const siteStackY = (kind, level, r, px) =>
+  -r * (siteHeadYAt(kind, level) + 0.3) - px * 20;

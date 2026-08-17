@@ -68,6 +68,19 @@ export const campFiles = (pieces) => Math.min(
 /** Rows in a camped block, derived from its width. Never more than
  *  ceil(MAX_PIECES / MAX_CAMP_FILES). PURE. */
 export const CAMP_RANKS = Math.ceil(MAX_PIECES / MAX_CAMP_FILES);
+
+/**
+ * Half the DEPTH of a static block, in world units — how far it reaches above
+ * and below the point it is drawn at, since `drawStaticFormation` centres it.
+ *
+ * Exported so the label pass can put a headcount clear of the pieces it counts.
+ * Re-deriving `(ranks - 1) * len * GAP_DEEP * 0.5` at the call site would be a
+ * second implementation of this block's geometry, and the two would drift the
+ * first time the layout was tuned — the number would then sit ON the troops,
+ * in the troops' own colour, which is where it started.
+ */
+export const staticHalfDepth = (troops, len) =>
+  (campRanks(pieceCount(troops)) - 1) * len * GAP_DEEP * 0.5;
 export const campRanks = (pieces) => Math.ceil(pieces / campFiles(pieces));
 
 /** Deterministic per-piece wobble in [-0.5, 0.5). Hashed from ids rather than
