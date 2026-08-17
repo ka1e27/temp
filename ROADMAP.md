@@ -145,7 +145,7 @@ reproduced with a runnable probe before being believed.
       (zero archer bodies in 4000 ticks each on gallowmoor and thanescar), so no dial
       moved. The test that was missing now drives a real site assault instead of calling
       the helper directly.
-- [ ] ~~ARCHERS (original entry, kept for the evidence):~~
+      Original evidence:
       `reachSupport`/`sidePower` are called ONLY from `openHexMelee`. `openSiteMelee`,
       `fightStack` and `computePreview` never call either, so the unit's whole selling
       point works only when two mobile squads collide on bare ground and never for
@@ -154,10 +154,10 @@ reproduced with a runnable probe before being believed.
       one hex away is **byte-identical**. `tests/melee.test.js` only calls `reachSupport`
       directly, so nothing catches it. **Fix:** thread it into `openSiteMelee` (both
       sides) and `fightStack`, AND into `computePreview`'s assault branch or the preview
-      stops being a guarantee. **Cost S/M.** *(Next up.)*
+      stops being a guarantee. **Cost S/M.**
 - [x] ~~**Fog ghosts your own live battle.**~~ **FIXED** — `vision.js siteFightSight`; the
       perceived view moved to `perceive.js` at the cap. Original evidence:
-- [ ] ~~Fog ghosting (original entry):~~ A squad absorbed into `site.melee` leaves
+      A squad absorbed into `site.melee` leaves
       `state.squads`, so it stops being a sight source — the site you are actively
       fighting at becomes a ghost on the very tick the melee opens
       (`melee=true, ghost=true` measured on consecutive ticks). `battleView.js:309` skips
@@ -184,7 +184,6 @@ real browser or against an instrumented headless battle.
       teardown but an event can still drain into a live listener, `siteOf` did a bare
       `state.sites.find`, and the throw escaped `bus.emit` and killed every later event
       in the battle. Green suite; surfaced only as a smoke step three stages downstream.
-- [ ] ~~(original entry)~~
       `battle-hud.js:266-292` wires three bus listeners; `field-battle` has NO alert
       listener at all, and `siege-begun` only alerts when the ENEMY is attacking you. FX
       and sound fire identically regardless of `ev.win`. Reproduced both directions: a
