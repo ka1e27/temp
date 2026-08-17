@@ -16,6 +16,7 @@ import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from 
 import { compact, clock, percent, rate } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
 import { siteOf } from './battle-preview.js';
+import { sitesOwned } from '../battle/siteinfo.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import {
   createSitePanel, createWithdraw, createAlert, createBuildRail, wireAlerts,
@@ -137,7 +138,23 @@ export function createBattleHud(o) {
   });
   el.flow = h('span.hud-flow.num', { text: '' });
   el.clock = h('span.hud-value.num', { text: '0:00' });
-  el.clockBox = h('div.hud-clock.panel', {}, h('span.label', { text: 'Elapsed' }), el.clock);
+  // ELAPSED AND THE CAP. It counted up with no end in sight, and the hard cap
+  // was stated exactly once, on the pre-battle brief — so a player who did not
+  // memorise it had no way to know whether a slow grind was still affordable
+  // until the last sixty seconds turned the panel red. A battle that TIMES OUT
+  // is a loss, so the runway is not trivia.
+  el.runway = h('span.hud-runway.num', { text: '' });
+  el.tallyBox = h('span.hud-tally', {}, h('span.label', { text: 'Sites' }), el.tally);
+  el.clockBox = h('div.hud-clock.panel', {},
+    el.tallyBox, h('span.label', { text: 'Elapsed' }), el.clock, el.runway);
+  // WHO IS AHEAD, in the one currency the win condition is made of. Nothing in
+  // the HUD carried it: `sitesOwned` exists and no screen imported it, so on a
+  // 20x15 board over 7-24 minutes the only way to answer "am I winning" was to
+  // pan the whole map and count. Sites rather than troops because territory is
+  // what pays, what gates the castle, and what the results screen scores.
+  // It rides the CLOCK's row, and is hidden in the docked (phone) layout — see
+  // hud.css for the three placements measured and why none of them fit there.
+  el.tally = h('span.hud-value.num', { text: '' });
   el.verdict = h('span.pv-verdict', { text: '' });
   el.pvTitle = h('span', { text: '' });
   el.pvLine = h('div.pv-line');
@@ -236,6 +253,8 @@ export function createBattleHud(o) {
   set.flow = bindText(el.flow, '');
   set.drain = bindClass(el.rate, 'is-drain');
   set.clock = bindText(el.clock, '');
+  set.tally = bindText(el.tally, '');
+  set.runway = bindText(el.runway, '');
   set.urgent = bindClass(el.clockBox, 'is-urgent');
   set.pvOpen = bindClass(el.preview, 'is-open');
   set.pvWin = bindClass(el.preview, 'is-win');
@@ -304,6 +323,8 @@ export function createBattleHud(o) {
     set.flow(flowLine(flow));
     const sec = state.tick / TICK_HZ;
     set.clock(clock(sec));
+    set.runway(` / ${clock(state.rules.hardCapTicks / TICK_HZ)}`);
+    set.tally(`${sitesOwned(state, 'player').length} v ${sitesOwned(state, 'enemy').length}`);
     set.urgent(state.rules.hardCapTicks - state.tick < TICK_HZ * 60);
 
     for (let i = 0; i < SEND_FRACTIONS.length; i++) segOn[i](view.fraction === SEND_FRACTIONS[i]);

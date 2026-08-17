@@ -133,3 +133,21 @@ html.is-docked { --dock-h: calc(var(--hit) + var(--s-6) + var(--s-5)); }
   content: " · capped";
   color: var(--c-text-dim); font-weight: var(--w-normal);
 }
+
+/* THE TERRITORY TALLY AND THE CLOCK'S RUNWAY ARE RAILED-ONLY, and that is a
+   measurement rather than a preference. Both answer questions the HUD could not
+   ("am I winning", "how much clock is left"), and both cost board share on a
+   phone, which tools/mobile.mjs already scores at 54% against its own 55% floor
+   with a site panel open. Three placements were measured at 390px: a plate of
+   its own took the board to 51%, an extra line in the gold plate to 53%, and
+   sharing the clock's row to 53% once the widened clock wrapped. Hidden when
+   docked, the phone sits exactly at its 54% baseline — no regression to a
+   layout that is already failing for its own reasons.
+
+   They come back to the phone when that squeeze is fixed; it is its own item. */
+.hud-clock .hud-tally, .hud-clock .hud-runway { display: none; }
+html.is-railed .hud-clock .hud-tally {
+  display: inline-flex; align-items: baseline; gap: var(--s-2);
+}
+html.is-railed .hud-clock .hud-runway { display: inline; }
+.hud-clock .hud-tally, .hud-clock .hud-runway { color: var(--c-text-dim); }
