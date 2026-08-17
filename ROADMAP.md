@@ -279,7 +279,15 @@ real browser or against an instrumented headless battle.
       selected), and the reviewer additionally screenshotted the first-run coach mark
       sitting on top of the panel's own Upgrade button. Both are the same squeeze.
       **Cost M** — a layout call, not a patch.
-- [ ] **...and in LANDSCAPE the same step reads 47%, and it is the DOCK, not the panel.**
+- [x] ~~**...and in LANDSCAPE the same step reads 47%, and it is the DOCK, not the
+      panel.**~~ **FIXED — 45–47% → 59%, and the whole landscape audit is clean.** At
+      short heights the dock's groups lie DOWN: the label moves beside its controls
+      instead of above them, which halves each group (95px → 54px) and costs no words.
+      Worth 7 points on its own; hiding the labels outright measured the same 54% and
+      would have paid the same price for strictly less — `% OF GARRISON` is what makes
+      25/50/75/100 mean anything and `.hud-speeds.is-capped`'s label carries a live
+      state. The treasury's third line (the income/training breakdown) folds away at the
+      same breakpoint for the last 3 points. Original evidence:
       Measured at 844x390 with the cap on and off: 47% with, 45% without — so the panel
       fix helped by two points and the floor is still eight points away. Hiding the dock's
       six groups takes the same frame to **60%**. On a 390px-tall screen `.is-docked`

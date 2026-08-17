@@ -102,6 +102,51 @@ html.is-docked { --dock-h: calc(var(--hit) + var(--s-6) + var(--s-5)); }
    their natural height rather than being capped against the dock. */
 .is-docked .hud-tl, .is-docked .hud-tr { max-height: none; }
 
+/* --- A SHORT SCREEN: the dock lies down ------------------------------------
+   A phone in LANDSCAPE is 844x390, so it is `.is-docked` (the rails need
+   561px of height) and not one width-based rule fires. Measured with
+   tools/mobile.mjs's own coverage metric, a site panel open at 844x390: the
+   board got 45-47% against a 55% floor, and SIX groups at 95px each in a
+   100px band across the bottom were 26% of the viewport on their own — more
+   than twice what the site panel cost. So the panel was never the lever here.
+
+   The group's LABEL moves beside its controls instead of above them. That is
+   the whole change and it is worth 7 points on its own (47% -> 54%), because
+   the dock scrolls horizontally: width is free and height is the only thing
+   that costs anything. Nothing is dropped — "% OF GARRISON" is what makes
+   25/50/75/100 mean something, and `.hud-speeds.is-capped`'s label carries a
+   live `· capped` state, so hiding labels (which measured the same 54%) would
+   have paid the same price for strictly less.
+
+   With the treasury's third line folded away too the frame reads 59%. Each
+   number here was taken twice, alternating against the baseline, because a
+   live battle moves under the measurement — the same run read 45% and 47% for
+   the same CSS. */
+@media (max-height: 560px) {
+  html.is-docked { --dock-h: calc(var(--hit) + var(--s-3) + var(--s-3)); }
+  .is-docked .hud-group {
+    flex-direction: row; align-items: center;
+    gap: var(--s-3); padding: var(--s-1) var(--s-3);
+  }
+  .is-docked .hud-group-label {
+    padding: 0 var(--s-3) 0 0; margin-bottom: 0;
+    border-bottom: none; border-right: var(--hairline);
+    /* `stretch` is what runs the divider the full height of the row rather
+       than only as tall as the words. */
+    align-self: stretch; display: flex; align-items: center;
+    /* ...and a flex container trims the whitespace at the edge of each item,
+       so `.hud-speeds.is-capped`'s ` · capped` suffix — an ::after, and
+       therefore its own flex item — came out welded to the speed as
+       "1x· CAPPED". A screenshot found it; nothing could have failed. */
+    gap: 0.35ch;
+  }
+  /* The breakdown behind the net rate — "+6.0/s income · -7.7/s training" —
+     is a consult-once readout, and the two lines above it (the treasury and
+     the net rate) are what you read mid-battle. 93px -> 64px, worth 3 points.
+     Same call as dropping the chip names one layer down. */
+  .hud-flow { display: none; }
+}
+
 /* Narrow-viewport cosmetics. Genuinely about WIDTH — the corners have to fit
    two abreast and the coach mark has to clear the clock — so these stay a media
    query rather than following the docked/railed decision. */

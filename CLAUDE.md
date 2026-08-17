@@ -2295,12 +2295,31 @@ record drawer already documented: *"Only the middle scrolls; title and Close are
 screen."* `min-height: 0` on the scroller is the line that actually does the work — a flex
 child will not shrink below its content without it, and the cap silently does nothing.
 
-**AND LANDSCAPE IS NOT THE SAME BUG, which is the finding worth carrying.** At 844x390 the
-same step reads **47%** — measured with the cap on and off, 47 versus 45, so the panel fix
-bought two points and the floor is eight away. Hiding the dock's six groups on the same
-frame reads **60%**. On a 390px-tall screen `.is-docked` applies and all six groups sit in a
-100px band across the bottom, 26% of the viewport on its own. The lever there is the docked
-layout at short heights, not the panel.
+**AND LANDSCAPE WAS NOT THE SAME BUG, which is the finding worth carrying.** At 844x390 the
+same step read **47%** — measured with the cap on and off, 47 versus 45, so the panel fix
+bought two points and the floor was eight away. Hiding the dock's six groups on the same
+frame read **60%**. On a 390px-tall screen `.is-docked` applies and all six groups sat in a
+100px band across the bottom, 26% of the viewport on its own — more than twice what the site
+panel cost. **The panel was never the lever there.**
+
+**So on a short screen the dock LIES DOWN**: `@media (max-height: 560px)` moves each
+group's label beside its controls instead of above them, halving the group (95px → 54px)
+and taking the frame to **54%**; folding away the treasury's third line (the
+income/training breakdown behind the net rate) takes it to **59%**, and step 5 — a battle
+with nothing selected — went 62% → 75%. Width is free in that layout and height is the only
+thing that costs anything, because the dock already scrolls horizontally.
+
+**Hiding the labels measured exactly the same 54% and was rejected for it**: same price,
+strictly less. `% OF GARRISON` is what makes 25/50/75/100 mean anything, and
+`.hud-speeds.is-capped`'s label carries a live `· capped` state rather than a caption.
+
+Two process notes. **Every number was taken twice, alternating against the baseline** — the
+same CSS read 45% and 47% in one session, because a live battle moves under the measurement
+and the panel's follower lands it somewhere different each run. Compare within a run or do
+not compare. And the label rule shipped with a defect **a screenshot caught and nothing
+could have failed on**: a flex container trims the whitespace at the edge of each item, and
+the `· capped` suffix is an `::after` and therefore its own flex item, so it came out welded
+to the speed as `1x· CAPPED`.
 
 **A phone screenshot found something no test could, for the third time:** the first-run
 coach mark sat squarely over the panel's own Upgrade button. `.hint` is `pointer-events:
@@ -2391,6 +2410,15 @@ order. `.hud-selection` carries `z-index: 2` now, and the rule is worth stating 
   incursion overlay and the abdication drawer with real pointer events like everything
   else. Skipping that would have left the two newest screens as the only ones nothing
   ever clicked — which is exactly how a release once shipped unclickable.
+- **`ROADMAP.md` IS A SHARED-TREE COLLISION POINT, and it is the one file every parallel
+  session writes to.** The protocol says tick the item in the same commit as the work,
+  which is right — but when several sessions work one tree, whoever commits first sweeps
+  up everyone's in-flight ticks under their own message. Observed: a Crown-tier tick
+  landed inside a commit about the phone layout. Nothing was lost and no history was
+  rewritten, so the cost is only that `git log` lies about which change carried which
+  tick. Same family as the `git add -A` scar recorded under the campaign re-tune, and the
+  same discipline answers it — **stage explicit paths, and re-read `ROADMAP.md`
+  immediately before editing it** rather than from a copy read minutes earlier.
 - **Tests that assert the wrong thing** are the recurring failure mode here, not tests
   that fail. Dead boosters and an unclickable UI both passed a green suite because the
   fixtures encoded the bug. Prefer asserting against real `buildBattleConfig` output
