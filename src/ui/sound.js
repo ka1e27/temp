@@ -42,6 +42,10 @@ const CUES = Object.freeze({
   win:      { kind: 'arp', wave: 'triangle', notes: [392, 494, 587, 784], dur: 0.12, gain: 0.16, gap: 0 },
   defeat:   { kind: 'arp', wave: 'triangle', notes: [392, 330, 262, 196], dur: 0.14, gain: 0.16, gap: 0 },
   ui:       { kind: 'tone', wave: 'sine', f0: 660, f1: 880, dur: 0.05, gain: 0.05, gap: 40 },
+  // A wall fires every tick, so this carries by far the longest gap in the
+  // table — see render/fx.js `towerFxDue` for the counts. Quiet and short: it
+  // is a texture telling you a column is under fire, not an event.
+  volley:   { kind: 'noise', f0: 2200, f1: 1400, dur: 0.05, gain: 0.05, q: 2.0, gap: 500 },
 });
 
 /** Which sim event maps to which cue, and when it is worth a sound at all. */
@@ -49,6 +53,9 @@ function cueFor(ev) {
   switch (ev.type) {
     case 'squad-sent': return ev.owner === 'player' ? 'send' : null;
     case 'field-battle': return 'clash';
+    // YOUR column only. The enemy walking past your own walls is not a
+    // thing to announce, and it is most of the volume.
+    case 'tower-fired': return ev.owner === 'player' ? 'volley' : null;
     case 'siege-begun': return 'siege';
     case 'units-trained': return ev.owner === 'player' ? 'train' : null;
     case 'site-captured':

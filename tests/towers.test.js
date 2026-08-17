@@ -299,3 +299,33 @@ test('a building never shoots the assault that is coming for it', () => {
   const survivors = past.squads.find((x) => x.id === by.id);
   assert.ok(total(survivors.comp) < 60, 'a column marching past a wall must pay for it');
 });
+
+test('tower fire is VISIBLE, and throttled to one spark per column', async () => {
+  // A WHOLE SHIPPED MECHANIC WITH NO PLAYER-FACING SIGNAL. `TOWER_FIRED` carried
+  // everything needed — squad, owner, site, kind, hex, losses — and grepping
+  // render/, ui/ and screens/ found no consumer at all, so a column walking past
+  // a wall just quietly shrank. The lesson it exists to teach (route around
+  // walls) cannot be learned from an invisible tax.
+  //
+  // It also cannot map one-to-one onto an effect: measured over single battles
+  // it fires 347 times on riverfen, 1012 on duskfell and 1408 on ravensmarch.
+  const { createFx, fxFromEvent } = await import('../src/render/fx.js');
+  const fx = createFx();
+  const p = { danger: '#f00', accent: '#fff', owner: { player: '#0f0', enemy: '#f00' } };
+
+  // The spark exists at all.
+  fxFromEvent(fx, { type: 'tower-fired', x: 10, y: 10, owner: 'player' }, p, 34);
+  assert.equal(fx.live(), 1, 'tower fire drew nothing — the mechanic is still invisible');
+
+  // ...and the throttle is per COLUMN, on wall-clock time.
+  fx.clear();
+  assert.equal(fx.towerFxDue(7, 1000), true, 'the first shot at a column must show');
+  assert.equal(fx.towerFxDue(7, 1100), false, 'ten a second is a strobe, not a tell');
+  assert.equal(fx.towerFxDue(8, 1100), true, 'a DIFFERENT column is its own signal');
+  assert.equal(fx.towerFxDue(7, 3000), true, 'still being shot at, and still worth saying');
+
+  // NEGATIVE CONTROL: clearing the layer forgets the cooldowns too, or a new
+  // battle would start with every column already muffled.
+  fx.clear();
+  assert.equal(fx.towerFxDue(7, 3050), true, 'a fresh battle inherited a stale cooldown');
+});

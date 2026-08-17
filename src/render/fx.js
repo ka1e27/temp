@@ -11,6 +11,9 @@
 const RING = 0, BURST = 1, FLOAT = 2, SHOCK = 3, WASH = 4;
 const TYPES = { ring: RING, burst: BURST, float: FLOAT, shock: SHOCK, wash: WASH };
 const TAU = Math.PI * 2;
+/** See `towerFxDue`: a wall fires every tick, so the spark is throttled per
+ *  column rather than per shot. */
+const TOWER_FX_GAP = 650;
 
 /**
  * @param {{max?:number}} [opts]
@@ -143,12 +146,35 @@ export function createFx(opts = {}) {
 
   function clear() {
     for (let i = 0; i < max; i++) pool[i].on = false;
+    shotAt.clear();
+  }
+
+  /**
+   * Per-squad cooldown for tower fire, in ms of wall clock.
+   *
+   * A WALL SHOOTS EVERY TICK, so this is the one event that cannot map 1:1 onto
+   * an effect: measured over single battles, `tower-fired` fires 347 times on
+   * riverfen, 1012 on duskfell and 1408 on ravensmarch. Ten a second at one
+   * spot is not a tell, it is a strobe, and it would exhaust a 128-slot pool on
+   * its own. One spark per column per `TOWER_FX_GAP` reads as "that lot are
+   * taking fire" — which is the whole lesson the mechanic is trying to teach,
+   * since a marching stack otherwise just quietly shrinks.
+   *
+   * Keyed by squad, not by site: what the player needs to notice is which of
+   * THEIR columns is being shot, not which building is doing it.
+   */
+  const shotAt = new Map();
+  function towerFxDue(squadId, nowMs) {
+    const prev = shotAt.get(squadId);
+    if (prev !== undefined && nowMs - prev < TOWER_FX_GAP) return false;
+    shotAt.set(squadId, nowMs);
+    return true;
   }
 
   /** Count of live effects — used by tests and the dev overlay. */
   const live = () => pool.reduce((n, e) => n + (e.on ? 1 : 0), 0);
 
-  return { spawn, update, draw, drawGround, drawText, clear, live, max };
+  return { spawn, update, draw, drawGround, drawText, clear, live, max, towerFxDue };
 }
 
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
@@ -193,6 +219,16 @@ export function fxFromEvent(fx, ev, p, hexSize = 34, locate = null) {
       break;
     case 'field-battle':
       fx.spawn('burst', ev.x, ev.y, { color: p.warn, life: 0.45, r0: hexSize * 0.3, r1: hexSize, n: 12 });
+      break;
+    case 'tower-fired':
+      // A SPARK ON THE COLUMN, not a number. `lost` is a FRACTION of a body per
+      // tick (towers.js carries the remainder on the squad), so a floating "-N"
+      // would read -0 nearly every time and a rounded one would lie about the
+      // total. The spark says "you are being shot here"; the shrinking stack
+      // says how much it cost.
+      fx.spawn('burst', ev.x, ev.y, {
+        color: p.danger, life: 0.3, r0: hexSize * 0.12, r1: hexSize * 0.42, n: 4,
+      });
       break;
     case 'siege-begun':
       fx.spawn('ring', ev.x, ev.y, { color: p.danger, life: 0.35, r0: hexSize * 0.5, r1: hexSize * 0.8 });

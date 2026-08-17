@@ -196,6 +196,7 @@ export function createBattleScene(ctx) {
       // The sim never touches the bus. It appends notifications to
       // state.events and we drain them here, AFTER the tick, so a listener can
       // never mutate state the simulation is mid-way through iterating.
+      const drainedAt = Date.now();
       for (const ev of drainEvents(battle)) {
         // FOG. An effect — and a sound — is a claim that something happened
         // THERE, so both answer to the same rule the board does. Measured on
@@ -216,9 +217,18 @@ export function createBattleScene(ctx) {
         const at = ev.siteId != null ? siteOf(battle, ev.siteId) : null;
         const placed = ev.siteId != null || ev.hex != null;
         if (!placed || fxVisible(battle, 'player', ev, at)) {
-          const placedEv = ev.hex ? { ...ev, ...(locateHex(ev.hex) ?? {}) } : ev;
-          fxFromEvent(fx, placedEv, board.palette, board.hexSize, locate);
-          sound?.onEvent(ev);
+          // A WALL FIRES EVERY TICK, so tower fire is the one event that must not
+          // map one-to-one onto an effect — 347 to 1408 of them in a single
+          // battle. `towerFxDue` lets one spark through per COLUMN per cooldown,
+          // which is the thing worth noticing ("that lot are being shot at")
+          // rather than the individual shot. The sound has its own per-cue gap.
+          const muffle = ev.type === 'tower-fired'
+            && !fx.towerFxDue(ev.squadId, drainedAt);
+          if (!muffle) {
+            const placedEv = ev.hex ? { ...ev, ...(locateHex(ev.hex) ?? {}) } : ev;
+            fxFromEvent(fx, placedEv, board.palette, board.hexSize, locate);
+            sound?.onEvent(ev);
+          }
         }
         ctx.bus.emit(`battle:${ev.type}`, ev);
       }

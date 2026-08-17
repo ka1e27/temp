@@ -186,9 +186,14 @@ export function towersPhase(state) {
     sq.comp = scaleComp(sq.comp, Math.max(0, (n - kill) / n));
     const lost = before - total(sq.comp);
     if (lost <= 0) continue;
+    // `{q, r}` rather than `[q, r]`: this is the same "here, on the board" claim
+    // the melee's own event makes, and render/fog.js `fxVisible` and
+    // screens/battle.js `locateHex` both read it as an object. It had no
+    // consumer at all until the shot got a spark and a sound, so nothing had
+    // ever noticed the two shapes disagreeing.
     pushEvent(state, EVENTS.TOWER_FIRED, {
       squadId: sq.id, owner: sq.owner, siteId: by ? by.id : null,
-      kind: by ? by.kind : null, hex: [at.q, at.r], lost,
+      kind: by ? by.kind : null, hex: { q: at.q, r: at.r }, lost,
     });
   }
 
