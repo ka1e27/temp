@@ -8,8 +8,10 @@ import { REGIONS, REGION_BY_ID, RAID } from '../src/content/regions.data.js';
 import { createState } from '../src/core/store.js';
 import { distance } from '../src/core/hex.js';
 import { buildBattleConfig } from '../src/meta/modifiers.js';
-import { refreshUnlocks, isAttackable, effectiveEnemyMult, markConquered, canRaid }
-  from '../src/meta/world.js';
+import {
+  refreshUnlocks, isAttackable, effectiveEnemyMult, markConquered, canRaid,
+  campaignGap, CAMPAIGN_GAP_WARN, REGION_IDS,
+} from '../src/meta/world.js';
 import { applyOutcome, previewReward } from '../src/meta/rewards.js';
 import { recalcIncome } from '../src/meta/idle.js';
 
@@ -295,4 +297,32 @@ test('boosters are consumed by what was FIRED, not by what was carried in', () =
 
   applyOutcome(s, cfg, outcomeFor(cfg, 'retreat', { boostersConsumed: [{ id: 'rally', count: 1 }] }));
   assert.equal(s.meta.boosters.rally, 2, 'only the charge actually fired is spent');
+});
+
+test('campaignGap: the map warns before a fight nobody at that stage can win', () => {
+  // ADJACENCY ALONE DECIDES WHAT IS ATTACKABLE, and Ashford reaches Kaldan,
+  // which is tier 2 — so two regions in, the map offered a tier-2 fight behind
+  // the same green Attack button as its tier-1 neighbours. Measured at n=16
+  // each: on schedule 69%, one early 56%, two early 0 of 16. The cliff is
+  // between one and two, which is why the threshold is two and not one.
+  const meta = createState({ seed: 1, now: 0 }).meta;
+  const at = (id) => campaignGap(meta, id);
+  assert.equal(at(REGION_IDS[0]), 0, 'the opener is on schedule for an empty empire');
+  assert.equal(at(REGION_IDS[4]), 4, 'four regions deeper is a gap of four');
+
+  markConquered(meta, REGION_IDS[0], { now: 0, durationMs: 0 });
+  markConquered(meta, REGION_IDS[1], { now: 0, durationMs: 0 });
+  // The measured case: two conquered, kaldan at index 4.
+  assert.equal(at('kaldan'), 2);
+  assert.ok(at('kaldan') >= CAMPAIGN_GAP_WARN, 'the 0-of-16 fight must be flagged');
+
+  markConquered(meta, REGION_IDS[2], { now: 0, durationMs: 0 });
+  assert.equal(at('kaldan'), 1);
+  assert.ok(at('kaldan') < CAMPAIGN_GAP_WARN,
+    'one region early measured 56% — flagging it would be crying wolf');
+
+  // NEGATIVE CONTROL: ground already taken is never "ahead", or every raid on a
+  // conquered region would carry a warning.
+  assert.ok(at(REGION_IDS[0]) < CAMPAIGN_GAP_WARN);
+  assert.equal(campaignGap(meta, 'no-such-region'), 0, 'an unknown id must not warn');
 });

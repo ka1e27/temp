@@ -135,6 +135,10 @@ export const WORLD = Object.freeze({
   frontOpened: 'A new front has opened:',
   expeditionHint: 'You land with an army sized by the regions you already hold.',
   firstRegion: 'Riverfen is the only region you can reach with an empire of zero.',
+  // Adjacency lets you reach a region long before your empire can take it —
+  // see meta/world.js `campaignGap`. Names the cost and leaves the choice.
+  aheadOfSchedule: 'This lies deeper than your empire has reached. Expect to be'
+    + ' badly outmatched — take the regions behind it first, or bring everything.',
 });
 
 /**

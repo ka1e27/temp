@@ -17,6 +17,7 @@ import { compact, rate, duration } from '../ui/format.js';
 import { UI, WORLD, ENDGAME } from '../content/strings.js';
 import {
   worldView, regionById, isAttackable, raidCooldownRemaining, modeOf,
+  campaignGap, CAMPAIGN_GAP_WARN,
 } from '../meta/world.js';
 import { incursionView } from '../meta/incursion.js';
 import { incomePerSec } from '../meta/idle.js';
@@ -297,6 +298,13 @@ export function createWorldMapScene(ctx) {
     }
 
     if (detailMode === 'attack') {
+      // AHEAD OF THE CAMPAIGN'S OWN PACING — see meta/world.js `campaignGap`.
+      // Told, not blocked: the region stays attackable, because a player who
+      // wants a hard fight should get one. What was missing was any way to know.
+      const gap = campaignGap(m, region.id);
+      if (gap >= CAMPAIGN_GAP_WARN) {
+        mount(detail, h('p.wm-hint.is-warn', { text: WORLD.aheadOfSchedule }));
+      }
       mount(detail,
         h('p.wm-hint', {
           text: `${WORLD.rewardPermanent} ${rate(reward.incomeAdded)}.`,

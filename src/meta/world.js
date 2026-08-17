@@ -43,6 +43,39 @@ export function regionsConquered(meta) {
   return conqueredIds(meta).length;
 }
 
+/**
+ * How far AHEAD of the campaign's own pacing this region sits, in regions.
+ *
+ * `REGION_IDS` is campaign order, so a region at index i is "on schedule" once
+ * i regions have been taken. Zero or negative means the empire has caught up.
+ *
+ * WHY THIS EXISTS. `touchesEmpire`/`isAttackable` gate on hex ADJACENCY alone —
+ * no tier gate, no conquest count — and Ashford's `adjacentTo` reaches Kaldan,
+ * which is tier 2. So two regions in, the map offers a tier-2 fight behind the
+ * same green Attack button as its tier-1 neighbours, and measured at n=16 each
+ * the difference is total: rushing it wins 0 of 16, arriving on schedule wins
+ * 69%. A new player exploring a hex map with locked tiles finds this in the
+ * first twenty minutes, and what they get is a wall with no stated cause.
+ *
+ * NOT A HARD GATE. Locking it would contradict the free-movement philosophy the
+ * rest of the design runs on, and a player who wants to try a hard region should
+ * be allowed to. What was missing was the telling, not the stopping.
+ */
+export function campaignGap(meta, regionId) {
+  const i = REGION_IDS.indexOf(regionId);
+  return i < 0 ? 0 : i - regionsConquered(meta);
+}
+
+/**
+ * The gap at which the map says something.
+ *
+ * TWO, AND IT IS MEASURED RATHER THAN CHOSEN. Into kaldan: on schedule (gap 0)
+ * wins 69%, one region early (gap 1) wins 56% — hard but plainly playable — and
+ * two early (gap 2) wins 0 of 16. The cliff is between one and two, so warning
+ * at one would cry wolf on a fight the player can actually take.
+ */
+export const CAMPAIGN_GAP_WARN = 2;
+
 /** Does this region touch the empire (or is it the seed region)? */
 export function touchesEmpire(meta, id) {
   const region = REGION_BY_ID[id];

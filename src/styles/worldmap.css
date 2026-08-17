@@ -257,6 +257,15 @@
   margin: 0 0 var(--s-3); padding-left: var(--s-3); border-left: 2px solid var(--c-line);
   color: var(--c-text-dim); font-size: var(--t-sm);
 }
+/* A region deeper than the empire has reached (meta/world.js `campaignGap`).
+   Warn-coloured and marked, because the whole point is that it must not read
+   like the neighbouring line of ordinary prose — the fight behind it measured
+   0 wins in 16. Still only a hint: the Attack button below is unchanged. */
+.wm-hint.is-warn {
+  border-left-color: var(--c-warn); color: var(--c-warn);
+}
+.wm-hint.is-warn::before { content: '⚠ '; }
+
 /* The commitment: pinned to the foot of the panel and taller than any other
    control on the screen, because it is the only one that starts a battle. */
 .wm-go { width: 100%; margin-top: auto; min-height: calc(var(--hit) + var(--s-2)); font-size: var(--t-lg); }
