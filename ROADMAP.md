@@ -181,12 +181,18 @@ harness by the reviewer.
       regions on run 2+. The wiring is a generalisation of `meta/incursion.js`, which
       already rides fields that cross the seam. **Cost M, and it needs a measurement pass**
       — it touches the region table, so it cannot ship unmeasured.
-- [ ] **Short-session lever: auto-resolve a RAID only.** Combat is deterministic
+- [x] ~~**Short-session lever: auto-resolve a RAID only.** Combat is deterministic
       (invariant 3) and the bot that plays every measured battle already exists headless.
       A raid is documented as a rerun with no new tactical content, so resolving one in
       the background is not cheapening the core promise — first conquests and incursions
       are explicitly excluded, because those are where the real-time battle IS the
-      content. **Cost M.**
+      content. **Cost M.**~~ **SHIPPED AND DRIVEN END TO END.** A previous pass built the
+      seam (`meta/autobattle.js` + `tools/autoresolve.js` + `worldmap-autobattle.js`) and
+      left it unproven; this pass drove a real raid through it in a real browser — win,
+      loss and cancel — and added `tests/autobattle.test.js` (gate both directions,
+      determinism, one payout path, honest loss, cancel mutates nothing). Full writeup
+      and the measured wall clock (single-digit seconds, chunked; up to a minute
+      unchunked on the heaviest tier-6 board) in `CLAUDE.md` → "Auto-resolving a raid".
       *Rejected on the reviewer's own recommendation and mine: login streaks / daily
       bonuses. A hook, not a decision, and against this project's stated principles.*
 

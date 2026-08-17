@@ -1973,6 +1973,111 @@ which is why the whole ladder needed one optional `rules` field and no engine ch
 *and* its price, so advancing it from an incursion would make every future raid on the
 arena harder because of a fight that was never a raid. `tests/incursion.test.js` pins it.
 
+## Auto-resolving a raid, and what it cost to prove
+
+A previous pass built the whole seam and stopped short of the one thing that mattered:
+nothing had ever driven a raid through it end to end. `meta/autobattle.js`
+(`canAutoResolve`/`startAutoResolve`, pure) + `tools/autoresolve.js` (the bridge, kept
+outside `src/` for the reason every meta↔battle bridge is) + `worldmap-autobattle.js`
+(`runAutoResolve`, frame-chunked) + `worldmap-detail.js` (`raidExtras`, the one place the
+button is offered). `tests/autobattle.test.js` is new; the four claims below are what it
+pins, in the order they matter.
+
+**IT IS NOT A SECOND SIMULATION, IT IS THE HARNESS BOT LOOSE ON THE REAL EMPIRE.**
+`tools/autoresolve.js` imports `playerTurn` from `tools/simplayer.js` **directly** — the
+exact function every win rate in `regions.data.js` is measured with — and drives it over
+a config built by the real `meta/modifiers.js buildBattleConfig`, off the player's real
+seed, real upgrades, real unlocked units. `grep -rn "tools/autoresolve" src/` finds one
+real import, in `meta/autobattle.js`, and nothing else under `src/` touches
+`tools/autoresolve.js` at all — that is the whole seam, and it is why an auto-resolved
+raid's win rate is the campaign's own number by construction rather than a second figure
+that could quietly drift from it. **This means loading the harness's policy into the
+shipped game was deliberate, not a shortcut, and the sentence above is how to find the
+seam again if anyone asks whether it still holds.**
+
+**RAIDS ONLY, enforced in the pure layer, twice over.** `canAutoResolve` refuses a truthy
+`opts.incursion` outright, and refuses anything `canRaid` would (which already excludes
+an unconquered region — a first conquest can never be a raid, so it can never reach this
+gate at all). Belt and suspenders: `startAutoResolve` has no `opts` parameter and
+`buildRaidConfig` never sets `options.incursion`, so even a caller that got the gate
+wrong could not make this seam build an incursion config — `config.rules.incursion` came
+back `null` on every resolve, asserted directly rather than trusted. **The incursion
+guard is currently unreached by any real caller** — no screen offers auto-resolve on a
+rung today — and that is worth saying plainly so a future reader does not assume
+something exercises it; it exists for the caller `buildBattleConfig`'s own header already
+warns about, the one that carries a rung's depth through the wrong door.
+
+**DETERMINISM, PINNED AS EQUALITY, NOT ASSUMED FROM INVARIANT 3.** Two independent
+fixtures built from the same meta state resolve to byte-identical configs and outcomes.
+More to the point: `startAutoResolve` resolving a raid and a hand-rolled loop calling
+`playerTurn`/`step` directly against the *same* `buildRaidConfig` output reach the
+identical `BattleOutcome` — proving "auto-resolve IS playing it out" as equality, not as
+the comment that claims it.
+
+**ONE PAYOUT PATH, checked both ways.** Neither `tools/autoresolve.js` nor
+`meta/autobattle.js` contains a call to `applyOutcome(` or a direct write to
+`meta.crowns`/`grantRelics`/`completeRaid`/`markConquered` — asserted against the actual
+source text, not the comment above it that says so. And behaviourally: resolving a raid
+to completion leaves `meta` untouched until the caller calls `applyOutcome` itself, at
+which point the payout matches what the results screen shows to the crown.
+
+**LOSING IS HONEST, and it is fast.** A riverfen raided twenty times already (`clears:
+20`) has had `effectiveEnemyMult` compound 15%/clear past what a fresh landing force can
+hold, and resolves to a clean `loss` in well under a second — `Defeat`, no Crowns row, no
+relics, `stats.losses` up by one, the region's cooldown untouched (same as a lost battle
+played by hand: trying again costs nothing). Driven for real in a browser: title
+`Defeat`, body *"Nothing was lost but time."*, sites held 1/11.
+
+**A GOTCHA THIS PASS TRIPPED ON ITSELF, worth recording so the next live-browser check
+does not repeat it: `meta.crowns` (and `stats.crownsEarned`) is not frozen by anything.**
+The idle ticker (`meta/idle.js accrue`, driven by the main loop's own wall clock) keeps
+crediting both on real elapsed time regardless of what any battle does — that is correct,
+ordinary idle-game behaviour, and it is *not* a second payout path, but a raw
+before/after crowns comparison across a live resolve will drift by a fraction of a crown
+per second even when the raid itself paid exactly zero. The byte-exact version of "a
+loss/a cancel pays nothing" has to be pinned in a clockless test (no real loop running);
+a live-browser check of the same claim needs a tolerance sized well under a real payout
+(±5 crowns against payouts in the hundreds to thousands, here) rather than exact equality.
+
+**CANCELLING MUTATES NOTHING, proven with a snapshot, not read off the comment that
+claims it.** `runAutoResolve` takes its `raf`/`clock` injected, so a test can pump it by
+hand: several batches run, `meta` is untouched throughout (only the resolver's own
+throwaway battle object advances), and cancelling before completion leaves `meta`
+byte-identical to a snapshot taken before the resolve ever started. Confirmed live too —
+cancel mid-flight lands back on the ordinary raid panel with `battles`/`wins`/`losses`/
+`relics`/the region record all exactly unchanged.
+
+**MUST NOT BLOCK THE PAGE — measured, not asserted from the frame-budget comment.** Pure
+compute, one blocking call, no chunking (the worst case the chunker exists to avoid):
+
+```
+region (regions conquered first)   ticks    ms      ms/tick   result
+riverfen (1)                       2539     369      0.145    win
+gallowmoor (8)                     7871    3313      0.421    win
+thanescar (16)                     6936    4927      0.710    win
+stormhalt (21)                    18240   61317      3.362    timeout
+```
+
+Late-game per-tick cost is **~23× tier 1's**, which is the whole argument for chunking
+rather than a single `advance(hardCapTicks)` call — a tier-6 raid run in one blocking call
+would freeze the tab for the better part of a minute. Chunked through the real screen
+(`FRAME_BUDGET_MS` 8, `MICRO_TICKS` 10, real `requestAnimationFrame`) and driven in an
+actual browser click-to-results: **riverfen resolved in 4.99s and 7.60s wall clock across
+two runs** (variance is the shared box, not the feature), simulating 9:12–9:33 of in-game
+time. Per-poll round-trip during the resolve averaged 21–35ms with a 215–224ms worst
+case — nowhere near a multi-second freeze — `requestAnimationFrame` itself ticked 83–104
+times while it ran, and the progress line showed 27–37 distinct strings over that wall
+clock. All three are the same claim from three angles: the page kept rendering, the
+resolve kept reporting fresh numbers, and neither ever stalled.
+
+**A REAL RAID, IN A REAL BROWSER, PAID EXACTLY WHAT THE RESULTS SCREEN SAYS.** Riverfen,
+conquered and off cooldown: `Riverfen raided` / *"A one-time lump. The region was already
+yours."*, Crowns `+1.1K`, and `meta.crowns` gained 1097–1100 across two runs (compact
+rounding accounts for the rest) — `relics` stayed at 0 (a raid pays none, by design),
+`stats.battles`/`stats.wins` each advanced by exactly one, and the world map's own "Raid
+available in 10:00" confirmed `completeRaid` restarted the cooldown. This is the first
+time any of that had been confirmed outside a unit test.
+
 ## Abdication: the prestige loop
 
 `content/legacy.data.js` + `meta/legacy.js`. `meta.legacy` had been sitting in
