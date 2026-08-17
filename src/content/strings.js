@@ -226,6 +226,15 @@ export const SHOP = Object.freeze({
   // so a screen-reader user hears "Buy Treasury for 45 crowns, cheapest
   // option right now" rather than a second element to tab past.
   suggestedSuffix: ', cheapest option right now',
+  // THE CROWN TIER'S OWN BADGE AND GATE NOTE — see screens/shop.js for the rest
+  // of the section treatment (a rank-hued header and top edge, not the accent
+  // every other group shares). The badge shows whether the section is locked or
+  // not, so it earns its place next to the group's own name at all times; the
+  // gate note is the one fact worth stating that a locked row's own "Locked"
+  // tag does not already carry — that finishing the campaign a SECOND time is
+  // not required to keep it open.
+  crownBadge: 'Endgame',
+  crownGateNote: 'Opens once you finish the campaign, and stays open after you abdicate.',
 });
 
 export const IDLE = Object.freeze({

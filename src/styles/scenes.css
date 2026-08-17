@@ -297,6 +297,30 @@
   min-width: 6.5em; text-align: right;
 }
 
+/* THE CROWN SECTION READS AS A DIFFERENT TIER, not a seventh Empire line —
+   `--c-rank` rather than the `--c-accent` every other group's heading shares,
+   because that hue already means "prestige, not the everyday grind" on this
+   screen (the site-rank gauge) and on this one (the relics readout). A top
+   edge and extra clearance separate it from the group above it the way a
+   results card's state edge separates a verdict from the row of stats under
+   it, so the section reads as a break in the list rather than one more row
+   of it — whether it is locked or open, which is the point of the badge. */
+.shop-group[data-crown='1'] {
+  margin-top: var(--s-7);
+  padding-top: var(--s-5);
+  border-top: var(--plate-edge) solid var(--c-rank);
+}
+.shop-group[data-crown='1'] h3 { color: var(--c-rank); }
+.shop-group[data-crown='1'] h3::after {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c-rank) 70%, transparent), transparent);
+}
+.shop-crown-badge {
+  margin-left: var(--s-2); padding: 1px var(--s-2); border-radius: var(--r-pill);
+  font-size: var(--t-xs); letter-spacing: var(--track-tag);
+  background: color-mix(in srgb, var(--c-rank) 22%, transparent); color: var(--c-rank);
+}
+.shop-crown-gate { color: var(--c-rank); }
+
 /* The incursion briefing reuses the shop overlay's plate wholesale — same
    dialog, same header, same list column — so only the rung's own parts are
    styled here. */
@@ -327,6 +351,25 @@
   font-size: var(--t-xs); color: var(--c-text-dim);
 }
 .pb-mutator strong { color: var(--c-text); }
+
+/* THE SPECIALIST CALLOUTS (meta/specialists.js `specialistCallouts`) — same
+   list shape as .pb-mutators just above, in the unit's OWN colour rather than
+   the warning hue, because these are an opportunity the region is offering,
+   not a complication it is imposing. */
+.pb-tips { margin: var(--s-3) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--s-1); }
+.pb-tip {
+  --state: var(--c-accent);
+  padding: var(--s-1) var(--s-2); border-radius: var(--r-2);
+  background: var(--plate-bg-2); box-shadow: inset 2px 0 0 var(--state);
+  font-size: var(--t-xs); color: var(--c-text-dim);
+}
+.pb-tip strong { color: var(--c-text); }
+.pb-tip[data-unit='halberds'] { --state: var(--c-halberds); }
+.pb-tip[data-unit='sappers'] { --state: var(--c-sappers); }
+.pb-tip[data-unit='outriders'] { --state: var(--c-outriders); }
+/* Not yet unlocked: the copy already says "Unlock in the shop" (state belongs
+   in the text a screen reader gets too), this is only the visual echo of it. */
+.pb-tip[data-unlocked='0'] { opacity: 0.78; }
 
 /* Abdication is destructive, so its drawer wears the same danger edge the
    new-campaign confirmation does — and its payout table wears the gold. */

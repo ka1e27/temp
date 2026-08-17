@@ -57,7 +57,8 @@ export const UPGRADE_GROUPS = Object.freeze([
   { id: 'boosters', name: 'Boosters', blurb: 'Unlock a booster once; buy its charges per use.' },
   {
     id: 'crown', name: 'The Crown', requires: 'endgame',
-    blurb: 'What an empire that has already won builds. Opens when the campaign is finished.',
+    blurb: 'What a finished empire spends on the incursion ladder — priced for a '
+      + 'rung’s payout, not a battle’s.',
   },
 ]);
 
@@ -217,18 +218,36 @@ export const UPGRADES = Object.freeze([
   // four retired upgrades this project refunded were sold and did NOTHING
   // (`ramImpactHp` crossed the seam and no battle file read it), so a new line
   // asserting a new field would be the same mistake with a bigger price tag.
+  //
+  // THE FOUR DESCRIPTIONS BELOW ARE ABOUT THE LADDER, NOT THE CAMPAIGN, and
+  // that is the fix for the thing this section otherwise is: Exchequer maps
+  // onto Treasury, Grand Army onto Standing Army, War College onto Arms plus
+  // Drill, Citadels onto Siegeworks plus Drill — four buckets doing exactly
+  // what four Empire lines already do, described in the same words, which
+  // reads as "the same six buttons at bigger numbers" the moment a player
+  // notices. The numbers cannot change (`STACKING_ORDER` is four buckets and
+  // a fifth was already rejected), so what each line is FOR has to carry the
+  // difference: every rung the ladder ever pays is priced off THIS empire's
+  // income (`meta/rewards.js incursionLump`), a rung is always a fresh
+  // landing rather than ground you already hold, and the ladder's own dial
+  // never stops climbing — three true, specific claims no Empire line can
+  // make about itself.
   G('exchequer', 'Exchequer', 200000, 1.55,
     [add('income', 0.25), flat('offlineCapMs', H2)],
-    '+25% crowns per second, and +2h of offline income (to the same 24h ceiling).'),
+    '+25% crowns per second, and +2h of offline income. Priced into every '
+    + 'rung’s own payout.'),
   G('grandArmy', 'Grand Army', 250000, 1.55,
     [flat('expedition', 18), add('march', 0.06)],
-    '+18 expedition slots and +6% march speed. The landing force, not the ground.'),
+    '+18 expedition slots and +6% march speed. Every rung is a fresh landing, '
+    + 'not held ground.'),
   G('warCollege', 'War College', 300000, 1.58,
     [add('atk', 0.05), add('def', 0.05), add('trainSpeed', 0.06)],
-    '+5% attack, +5% defence and +6% training. Quality, where Arms buys quantity.'),
+    '+5% attack, +5% defence and +6% training. Keeps pace as a rung’s own '
+    + 'dial climbs.'),
   G('citadels', 'Citadels', 350000, 1.60,
     [add('siegeDmg', 0.20), add('structureRegen', 0.25), flat('garrisonCap', 25)],
-    '+20% siege damage, +25% repair on walls you hold, +25 garrison everywhere.'),
+    '+20% siege damage, +25% repair on walls you hold, +25 garrison. Outlasts '
+    + 'a rung’s dial.'),
 
   // --- Troops: one endless line each, bought with RELICS ---------------------
   //

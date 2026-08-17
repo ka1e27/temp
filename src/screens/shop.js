@@ -241,15 +241,30 @@ export function createShopScene(ctx) {
     for (const group of shopListing(meta())) {
       if (!group.items.length) continue;
       const id = `shop-grp-${group.id}`;
+      const crown = group.id === 'crown';
       // A gated group is SHOWN, not hidden, and marked shut. What finishing the
       // campaign buys is worth knowing about before you have finished it; what is
       // not worth doing is offering a button that cannot be pressed, so the rows
       // inside render without one (see upgradeRow).
+      //
+      // THE CROWN GROUP CARRIES A SECOND MARKER, `data-crown`, so its section
+      // reads as a different TIER rather than a seventh line on the same six —
+      // see scenes.css for the rank-hued header and top edge this drives. It is
+      // set whether the tier is open or shut: the badge is what tells a player
+      // scrolling past a locked section that something else is down here, which
+      // is the whole point of showing a locked group at all instead of hiding it.
       const section = h('section.shop-group', {
         'aria-labelledby': id, 'data-locked': group.open === false ? '1' : null,
+        'data-crown': crown ? '1' : null,
       },
-      h(`h3#${id}`, { text: group.name }),
-      h('p.shop-group-note', { text: group.blurb ?? '' }));
+      h(`h3#${id}`, {}, group.name, crown ? h('span.shop-crown-badge', { text: SHOP.crownBadge }) : null),
+      h('p.shop-group-note', { text: group.blurb ?? '' }),
+      // The one fact a per-row "Locked" tag does not already carry: this gate
+      // does not shut again once it has opened once (meta/legacy.js
+      // `endgameOpen`), so a player who abdicates keeps the tier they earned.
+      ...(crown && group.open === false ? [h('p.shop-group-note.shop-crown-gate', {
+        text: SHOP.crownGateNote,
+      })] : []));
 
       for (const item of group.items) {
         const row = upgradeRow(item, item.id === suggested);

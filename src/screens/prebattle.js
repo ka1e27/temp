@@ -180,6 +180,15 @@ export function createPreBattleScene(ctx) {
         ? [h('ul.pb-mutators', {}, ...brief.incursion.mutators.map((m) => h('li.pb-mutator', {
           'data-mutator': m.id,
         }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
+        : []),
+      // The specialists are opt-in and easy to forget; meta/specialists.js
+      // reads this same region's own data and says when one answers the fight
+      // better than the default spread. `data-unlocked` is what tells "bring
+      // it" from "consider buying it" apart without repeating the unit's name.
+      ...(brief.callouts?.length
+        ? [h('ul.pb-tips', {}, ...brief.callouts.map((c) => h('li.pb-tip', {
+          'data-unit': c.unit, 'data-unlocked': c.unlocked ? '1' : '0',
+        }, h('strong', { text: UNIT_LABEL[c.unit] }), h('span', { text: ` ${c.note}` }))))]
         : []));
   }
 

@@ -15,6 +15,7 @@ import { unlockedUnits } from '../meta/upgrades.js';
 import { regionById, effectiveEnemyMult, isConquered } from '../meta/world.js';
 import { planFor, MUTATOR_BY_ID } from '../meta/incursion.js';
 import { previewReward } from '../meta/rewards.js';
+import { specialistCallouts } from '../meta/specialists.js';
 
 export { compositionSlots, compositionTotal, overBudget, slotCost, typeCount };
 
@@ -112,6 +113,11 @@ export function regionBrief(meta, regionId, depth = null) {
         id, name: MUTATOR_BY_ID[id].name, note: MUTATOR_BY_ID[id].note,
       })),
     } : null,
+    // A pure derivation off the same region row, so a balance pass moving
+    // `develop` or `siteCounts.enemyMix` never needs a second table of hints
+    // kept in step by hand. See meta/specialists.js for the two rules and why
+    // archers are never among them.
+    callouts: specialistCallouts(meta, region),
     rows: [
       ['Difficulty', `x${mult.toFixed(2)}`],
       ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
