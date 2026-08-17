@@ -86,7 +86,10 @@ harness by the reviewer.
       gate — that contradicts the free-movement philosophy. Compare the region's index in
       `REGION_IDS` against `regionsConquered(meta)` (both already computed) and render an
       inline warning in `worldmap.js renderDetail` past a slack. **Cost S.**
-- [ ] **No bulk buy: an idle payout costs 40–150 identical clicks to spend.** Measured
+- [x] ~~**No bulk buy: an idle payout costs 40–150 identical clicks to spend.**~~ **FIXED**
+      — `meta/upgrades.js spendAll`, the one cheapest-affordable-first loop shared with
+      `tools/simshop.js` rather than reimplemented, behind a header "Spend all" and a
+      per-line "×10" (`buyN`). Original evidence: Measured
       clicks-to-fully-spend through the real `shopListing`/`buy`: 1k crowns → 10 clicks,
       100k → 66, 1M → 96, 50M → 146. Each re-renders the whole 25–34 row list
       (`screens/shop.js:140`). The return banner itself is good and honest; the PAYOFF is
@@ -94,7 +97,11 @@ harness by the reviewer.
       **Fix:** `tools/simshop.js spendPurse` already implements spend-everything-
       cheapest-first — port it to the shop screen as a "Spend all" (and/or ×10).
       **Cost S.**
-- [ ] **The shop hides a 33-point decision and its own copy sells the losing move.**
+- [x] ~~**The shop hides a 33-point decision and its own copy sells the losing move.**~~
+      **FIXED** — `meta/upgrades.js suggestedBuy`: a passive ring on the cheapest-affordable
+      Empire line, recomputed on every purchase and kept live between them by the shop's own
+      250ms tick (no second render, so it cannot steal keyboard focus). The Standing Army
+      line in `upgrades.data.js` no longer reads as an instruction. Original evidence:
       Holding region, conquest count, idle budget and army composition constant and
       varying ONLY allocation, n=48 each: cheapest-first **33%**, "power rush"
       (Standing Army first) **2%**, "income rush" (Treasury first) **0%**. Both intuitive
