@@ -323,7 +323,18 @@ real browser or against an instrumented headless battle.
       the viewport on its own. So the lever is the docked layout at short heights (fewer
       groups, a shorter strip, or a rail that works when the screen is wide and short),
       not the panel. **Cost M**, and it wants a design call rather than a number.
-- [ ] **Concentrating force costs one drag per site, always.** `battle-input.js onDown`
+- [x] ~~**Concentrating force costs one drag per site, always.**~~ **FIXED** — a drag
+      that STARTS on a site already in the selection commits every source in it; one
+      that starts anywhere else is exactly one send, unchanged. The interesting half is
+      the preview, and it claims LESS on purpose: a multi-source drag's columns are at
+      different distances, so they arrive as separate waves and a later one reinforces
+      a fight already under way — summing the comps and calling `resolveField` once
+      would be a plausible, confident, wrong number. `computeMultiPreview` reports what
+      is honestly knowable at commit time (columns, bodies, the arrival spread) and
+      nothing else, which is how the gesture keeps invariant 3 rather than softening
+      it. `tests/multisend.test.js` pins the withholding as deliberate, plus the
+      control that a single-source preview still promises everything it always did.
+      Original evidence: `battle-input.js onDown`
       takes `view.dragFrom` from the single site under the pointer, never from
       `view.selection`; no `sendFromSelection` exists. The AI pools up to `AI.maxSources`
       (3) sites into one assault automatically and the free-movement balance argument

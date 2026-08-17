@@ -315,6 +315,37 @@ exactly as `projectGarrison` already projects the defender's training; both are
 deterministic, both known at commit time. `tests/towers.test.js` runs the projection and
 the simulation over the same march and demands the same survivors, body for body.
 
+### Concentrating force, and a preview that keeps its promise by saying less
+
+The AI has pooled up to `AI.maxSources` sites into one assault since free movement
+shipped, and the whole balance argument for free movement rests on concentration — the
+player had no equivalent, and the cost scaled with exactly the late maps where it
+matters. **SEND was the last member of a family to learn this**: `setRally` and
+`retreatSelection` had walked `view.selection` for releases.
+
+The rule is one line: **a drag that STARTS on a site already in the selection commits
+every source in it**; a drag that starts anywhere else is exactly one send. That is
+what keeps it from being a surprise — pull from one of three selected and you meant all
+three, pull from a fourth and you meant that one. No source cap, because `AI.maxSources`
+bounds the AI's *search* rather than stating a rule of the game.
+
+**THE PREVIEW CLAIMS LESS, AND THAT IS THE FEATURE.** Invariant 3 says the pre-commit
+preview is a guarantee because it calls the same functions the sim runs. A multi-source
+send cannot honour that with a combined outcome: `travelTicks` differs per source, so
+the columns arrive as SEPARATE WAVES, and since the melee layer a later wave reinforces
+a fight already under way rather than joining one simultaneous one. Summing the comps
+and calling `resolveField` once would produce a plausible, confident, WRONG number —
+precisely the class of defect this project keeps finding. `computeMultiPreview` reports
+columns, total bodies and the arrival SPREAD (first and last ETA, off the same
+`travelSecondsFor` the single-source preview already wraps) and claims no `win`, no
+`verdict`, no survivor count. **The way to keep "the preview never lies" is to withhold
+a number you cannot keep, not to soften one.**
+
+Worth knowing before reading a missing verdict as a regression: a SINGLE-source preview
+withholds its outcome too when the target is unscouted (`kind: 'unscouted'`). Same
+silence, different reason — fog rather than arithmetic. `tests/multisend.test.js` pins
+both, and its negative control is that an ordinary one-source drag is untouched.
+
 ### Troops on a tile behave like troops in a building
 
 **`MOVE_SQUAD` was in the engine, documented in four places as the way a camped army

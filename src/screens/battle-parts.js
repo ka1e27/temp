@@ -16,7 +16,7 @@ import { percent } from '../ui/format.js';
 import { UNIT_IDS } from '../content/balance.js';
 import { UNITS_UI } from '../content/strings.js';
 import { TRAINABLE_UNITS } from '../battle/training.js';
-import { siteOf, computePreview } from './battle-preview.js';
+import { siteOf, computePreview, computeMultiPreview } from './battle-preview.js';
 import {
   TRAIN_FAN_R, TRAIN_FAN_DEG, TRAIN_CHIP_PX, clampBox, panelBounds,
 } from './battle-anchor.js';
@@ -77,16 +77,39 @@ export function updatePreview(state, view, set, el, travelSeconds) {
   // Free movement: legal is just "ours, distinct" — pathBetween in cmdSend is the real check.
   const legal = from && toId && !view.armedBooster
     && from.owner === 'player' && from.id !== toId;
-  const pv = legal
-    ? computePreview(state, fromId, toId, {
-      fraction: view.fraction,
-      filter: UNIT_IDS.filter((u) => view.filter[u] !== false),
-      travelSeconds,
-    })
-    : null;
+  const opts = {
+    fraction: view.fraction,
+    filter: UNIT_IDS.filter((u) => view.filter[u] !== false),
+    travelSeconds,
+  };
+  // CONCENTRATING FORCE PREVIEWS ITSELF, and deliberately claims LESS. A
+  // multi-source drag cannot honour invariant 3 with a combined outcome — the
+  // columns are at different distances, so they arrive as separate waves and a
+  // later one reinforces a fight already under way. `computeMultiPreview` says
+  // what is honestly knowable at commit time (how many columns, how many
+  // bodies, the arrival spread) and nothing more; see its own header for why
+  // withholding the number IS keeping the promise.
+  const pv = !legal ? null
+    : (view.dragSources && view.dragSources.length > 1
+      ? computeMultiPreview(state, view.dragSources, toId, opts)
+      : computePreview(state, fromId, toId, opts));
 
   set.pvOpen(!!pv);
   if (!pv) return;
+  if (pv.kind === 'multi') {
+    // No verdict, no caveats, no win/loss tint: there is no outcome to tint.
+    set.pvWin(false);
+    set.pvLoss(false);
+    set.pvReinforce(false);
+    set.pvTitle(`${pv.sendN} troops → ${pv.to}`);
+    set.verdict('');
+    set.pvLine(pv.line);
+    set.pvNote('');
+    set.pvBlocked(false);
+    renderComp(el.pvComp, pv.send, pv.sendN);
+    renderCaveats(el.pvCaveats, {});
+    return;
+  }
   // win is undefined for reinforce/unscouted, so compare booleans, not `!`.
   set.pvWin(pv.win === true);
   set.pvLoss(pv.win === false);
