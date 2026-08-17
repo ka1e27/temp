@@ -21,6 +21,7 @@ import { REGIONS } from '../src/content/regions.data.js';
 import { makeHelpers } from './smoke-helpers.mjs';
 import { runBoot, runCanvas, runHud, runSimSpeed } from './smoke-battle.mjs';
 import { runDrag, runRally, runBuild } from './smoke-orders.mjs';
+import { runCampedDrag } from './smoke-camped.mjs';
 import { runEffects, runSanity } from './smoke-checks.mjs';
 import { runMeta } from './smoke-meta.mjs';
 
@@ -73,6 +74,12 @@ try {
 
   // ---- 5c. building mid-battle: arm, click a hex, a site appears ---------
   await runBuild(page, h, step);
+
+  // ---- 5d. an army in a FIELD drags like one in a building ---------------
+  // The gesture no unit test can check: `MOVE_SQUAD` was in the engine for a
+  // long time with nothing in the game able to issue one, and the whole suite
+  // stayed green. What was missing was a hit-test.
+  await runCampedDrag(page, step, note);
 
   // ---- 6. effects actually render ----------------------------------------
   await runEffects(page, step, note);

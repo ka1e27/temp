@@ -115,7 +115,27 @@ export function createBattleInput(o) {
     // nothing else: no drag order, no box select. The release resolves it.
     if (view.armedBooster || view.armedBuild) return;
 
-    if (hit && hit.owner === 'player') {
+    // TROOPS ON A TILE DRAG LIKE TROOPS IN A BUILDING — the gesture that was
+    // missing, for a `MOVE_SQUAD` verb the engine had all along.
+    //
+    // PRECISION BEATS FORGIVENESS, which is the whole precedence rule. `siteAt`
+    // carries 1.25 hexes of slop ON PURPOSE so a fingertip near a building still
+    // lands on it; `squadAt` is deliberately tight, because a stray click near a
+    // column must be able to mean "deselect". So a press that hits an army has
+    // genuinely hit it, while one that hits a building may only have been
+    // forgiven — a camped force wins over a site the pointer merely landed NEAR,
+    // and loses to one it is actually on (`siteAt` with the slop off). Without
+    // it, troops parked within a hex or so of your own farm could not be dragged
+    // at all: the farm would swallow the press and issue a SEND. Reasoned, not
+    // observed — the smoke failure that prompted the look turned out to be a
+    // flaky fixture, and the board had no site near the army at all.
+    const camped = campedAt(ord, getState(), w.x, w.y);
+    const onBuilding = camped ? board.siteAt(getState(), w.x, w.y, 1) : null;
+    if (camped && !onBuilding) {
+      view.dragFromSquad = camped.id;
+      view.dragTo = null;
+      canvas.classList.add('is-dragging');
+    } else if (hit && hit.owner === 'player') {
       view.dragFrom = hit.id;
       view.dragTo = null;
       // CONCENTRATING FORCE: a drag off an already-selected site commits the
@@ -123,24 +143,7 @@ export function createBattleInput(o) {
       view.dragSources = dragSourcesFor(ord, view, hit.id);
       canvas.classList.add('is-dragging');
     } else if (!hit) {
-      // TROOPS ON A TILE DRAG LIKE TROOPS IN A BUILDING. Nothing under the
-      // pointer used to mean one thing — start a box select — so a force that
-      // had stopped on open ground could be selected and could retreat, and
-      // could not be ordered anywhere at all. `MOVE_SQUAD` has been in the
-      // engine since squads learned to camp, with four comments calling it the
-      // way a camped army is re-tasked, and the only caller in the tree was a
-      // test. This is the gesture that was missing.
-      //
-      // A camped force is checked BEFORE the box, because a press that lands
-      // on an army plainly means that army; empty ground still boxes.
-      const camped = campedAt(ord, getState(), w.x, w.y);
-      if (camped) {
-        view.dragFromSquad = camped.id;
-        view.dragTo = null;
-        canvas.classList.add('is-dragging');
-      } else {
-        view.box = { x0: w.x, y0: w.y, x1: w.x, y1: w.y };
-      }
+      view.box = { x0: w.x, y0: w.y, x1: w.x, y1: w.y };
     }
   }
 
