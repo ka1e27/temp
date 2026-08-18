@@ -288,7 +288,7 @@ export function createOrders(o) {
   // simulation.
   const {
     selectOnly, selectFront, boxSelect, setRally, retreatSelection, sendFromSelection,
-  } = createSelection({ view, bus, site, push, cmd, issueSend, issueRally });
+  } = createSelection({ view, bus, board, getState, site, push, cmd, issueSend, issueRally });
 
   // Armed boosters (arm one of five, resolve the next click to a target) are
   // the same one-shot shape as armed construction below, so both moved out

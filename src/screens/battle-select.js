@@ -14,8 +14,21 @@
 // A factory over injected dependencies rather than its own imports, because
 // every one of them — `site`, `push`, `issueSend`, `issueRally` — must be the
 // same function battle-orders.js uses, not a second copy that agrees today.
+//
+// `board` AND `getState` ARE DEPENDENCIES, and leaving them out of this list is
+// what made `boxSelect` and the rally CLICK throw `ReferenceError` for a whole
+// release. The split that created this file moved two functions that closed
+// over battle-orders.js's own `board`, `getState` and `_a`; destructuring only
+// the four obvious deps left the other three as free variables, which is not a
+// syntax error in a module and not a test failure either unless something
+// actually calls the path. Nothing did: `tools/smoke.mjs` drives the rally DRAG
+// (a different function) and never box-selects at all.
 export function createSelection(deps) {
-  const { view, bus, site, push, cmd, issueSend, issueRally } = deps;
+  const { view, bus, board, getState, site, push, cmd, issueSend, issueRally } = deps;
+  // The scratch point `boxSelect` projects into. Its own, not the one in
+  // battle-orders.js: two files sharing one mutable scratch across a module
+  // boundary is a data race waiting for the first interleaved call.
+  const _a = { x: 0, y: 0 };
 
   function selectOnly(id) {
     view.selection.length = 0;

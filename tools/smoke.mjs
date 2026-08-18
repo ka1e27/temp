@@ -22,6 +22,7 @@ import { makeHelpers } from './smoke-helpers.mjs';
 import { runBoot, runCanvas, runHud, runSimSpeed } from './smoke-battle.mjs';
 import { runDrag, runRally, runBuild } from './smoke-orders.mjs';
 import { runCampedDrag } from './smoke-camped.mjs';
+import { runSelect } from './smoke-select.mjs';
 import { runEffects, runSanity } from './smoke-checks.mjs';
 import { runMeta } from './smoke-meta.mjs';
 
@@ -63,6 +64,18 @@ try {
 
   // ---- 5. a real drag order over the canvas -------------------------------
   await runDrag(page, step, OUT);
+
+  // ---- 5a. box select, and the rally CLICK -------------------------------
+  // Both live in screens/battle-select.js and both were dead for a release
+  // after a split left three of their dependencies as free variables. Nothing
+  // in this suite drove either one, which is why it stayed green.
+  //
+  // FIRST, deliberately: this step needs two player sites to draw a box round,
+  // and by the end of the order phase the landing force has usually spent or
+  // lost some of its beachhead — placed last it reported "fewer than two
+  // player sites to box" and asserted nothing, which is the same worthless
+  // -but-green shape as a selector that stops matching.
+  await runSelect(page, step, note);
 
   // ---- 5b. a real RIGHT drag sets a rally ---------------------------------
   await runRally(page, h, step, note);
