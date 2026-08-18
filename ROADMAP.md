@@ -622,15 +622,31 @@ historical.*
       One seed, one region — but this is a RATIO, not a win rate, so it is far more
       informative at n=1 than a win rate would be, and it should be re-taken on
       ravensmarch and widowsgate before it is generalised past "the Marshal'd rows".
-- [ ] **SO THE BOTTLENECK IS PRODUCTION NEAR THE FRONT, NOT THE ASSAULT DECISION.** That
-      is where the tier 3-6 work goes next, and the measurement above is what narrows it.
-      Three candidates, in the order they are worth trying: the Marshal's `trainBuff` on
-      a throne that is never attacked (the castle garrison ran 96-241 while the biggest
-      thing beside it never passed 30); the bot's own economy, which spreads production
-      over many small captured sites instead of concentrating it where the war is; and
-      `develop`, which this session already cut once for the same reason. **Do not reach
-      for `enemyMult`** — it moved gallowmoor and thanescar the wrong way twice, which is
-      the same tell all three instances of the harness-cannot-play class produced.
+- [ ] **THE BOTTLENECK IS CHURN AND CONVERSION — 78% OF THE BOT'S ARMY IS IN THE AIR AND
+      IT IS SITTING ON SIX FIGURES OF GOLD.** The same probe killed "production near the
+      front" too. Same battle, every five minutes:
+
+      ```
+      min   sites   garrisoned   MARCHING   near throne   castle   gold unspent
+        5      19          63        299      1 site/13      125         12,610
+       10      34          93        452      5 sites/32      24         52,680
+       15      54         239        853     18 sites/170    124        118,303
+      ```
+
+      At fifteen minutes it commands **1,092 bodies** and 239 of them are standing
+      anywhere. It is not short of troops and not short of ground (54 sites) — it is
+      short of troops that have ARRIVED. Every think sends a share of every garrison
+      somewhere, so the army shuttles instead of accumulating; the 170 bodies actually
+      near the throne make 1.37x against a 124-body castle, under the 1.5 margin, while
+      eight hundred of their fellows are walking. And 118,303 unspent gold is the
+      `PRIORITY` signature this project already recorded once at 17,000.
+      **Two things to instrument, in order:** what share of sends re-task troops already
+      heading somewhere useful (`advanceDistance`'s gradient re-pointing every 2s is the
+      obvious suspect), and what that treasury has to spend on — if most captured sites
+      are farms (`train: 0`), the bot has optimised itself into an economy with nothing
+      to buy. **Do not reach for `enemyMult`**: it moved gallowmoor and thanescar the
+      wrong way twice, the same tell all three instances of the harness-cannot-play class
+      produced.
 - [ ] **THE LOADOUT IS A TRAP AND IT LOCKS FOR THE WHOLE BATTLE.** Known; what the review
       adds is the second clause, read out of `battleRoster`/`cmdTrain`: the five types
       chosen at the briefing are the only five you can ever TRAIN, including out of a

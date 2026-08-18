@@ -1242,11 +1242,39 @@ never exists.** At its single best moment the bot holds seven sites within reach
 throne with forty-one bodies between them, against a castle that trains against zero
 attrition because nothing ever attacks it.
 
-**So the bottleneck is PRODUCTION NEAR THE FRONT, not the assault decision**, and the
-three candidates are the Marshal's `trainBuff` on an unattacked throne, the bot's habit of
-spreading production over many small captured sites, and `develop`. It is a ratio rather
-than a win rate, so n=1 is far more informative here than it would be for a percentage —
-but re-take it on ravensmarch and widowsgate before generalising past the Marshal'd rows.
+**AND IT IS NOT PRODUCTION EITHER — 78% OF THE BOT'S ARMY IS PERMANENTLY IN THE AIR.**
+That was the next hypothesis and the same probe killed it. Same battle, sampled every
+five minutes:
+
+```
+min   sites   garrisoned   MARCHING   near throne   castle   biggest stack   gold unspent
+  5      19          63        299      1 site/13      125              13         12,610
+ 10      34          93        452      5 sites/32      24              22         52,680
+ 15      54         239        853     18 sites/170    124             129        118,303
+```
+
+At fifteen minutes the bot commands **1,092 bodies** and only 239 of them are standing
+anywhere. It is not short of troops and it is not short of ground — it holds 54 sites —
+it is short of troops that have **arrived**. Every think sends a share of every garrison
+somewhere, so the army shuttles instead of accumulating, and the 170 bodies that are
+actually near the throne make 1.37x against a 124-body castle: still under
+`ATTACK_MARGIN` 1.5, while eight hundred of their fellows are walking.
+
+**And it is sitting on 118,303 unspent gold at minute fifteen** — the same signature this
+file already records once for `PRIORITY` (*"thirteen farms and two training sites with
+17,000 unspent gold against a 15 gold/s training bill"*), an order of magnitude worse. A
+bot that cannot convert a six-figure treasury into bodies is not being out-produced.
+
+**So the tier 3-6 question is CHURN AND CONVERSION, not massing and not production.**
+Two things to instrument next, in this order: what fraction of sends are re-tasking
+troops that were already heading somewhere useful (the `advanceDistance` gradient
+re-pointing every 2s is the obvious suspect), and what that treasury has to spend on —
+if most captured sites are farms (`train: 0`), the bot has optimised itself into an
+economy with nothing to buy, which is a shape this file has seen before.
+
+It is a ratio and a census rather than a win rate, so n=1 is far more informative here
+than it would be for a percentage — but re-take it on ravensmarch and widowsgate before
+generalising past the Marshal'd rows.
 
 **What the whole exercise cost and bought:** one measurement, which is exactly what the
 ROADMAP entry proposing it priced it at. It disproved its own hypothesis and replaced it
