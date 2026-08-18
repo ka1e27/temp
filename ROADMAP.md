@@ -66,12 +66,15 @@ commit. Do not re-derive the list.
       DIAGNOSED lever — a Marshal'd castle that is never attacked for a whole battle
       out-trains any one rear site's ability to mass a legal first strike, traced with a
       direct probe rather than inferred — and a `develop` cut applied against it, but only
-      a partial n=24 screen: gallowmoor 38%, sunder 25%, thanescar 29%, blackspire 29%,
-      stormhalt 8% (all improved from their pre-session reading, all still below their
-      tier's floor); gravenreach 42% and nightharrow 29% already clear tier 5's band.
-      **Eleven of fifteen tier 3-6 rows have no reading at all yet** (vaelstrand,
-      duskfell, karrowmere, ironcrown, obsidian, ravensmarch, cinderwatch, widowsgate,
-      plus re-confirming the five above at n>=96) — this environment ran 4-20 real
+      a partial n=24 screen: gallowmoor 38%, sunder 25%, vaelstrand 17%, thanescar 29%,
+      blackspire 29%, stormhalt 8%, cinderwatch 13% (all improved from their pre-session
+      reading, all still below their tier's floor); gravenreach 42%, nightharrow 29% and ironcrown
+      38% already clear their own band — three of tier 4's four rows have a read and
+      it SPLITS (thanescar/blackspire below floor, ironcrown at), which argues for
+      finishing the sweep before reaching for another tier-wide dial move.
+      **Five of fifteen tier 3-6 rows have no reading at all yet** (duskfell,
+      karrowmere, obsidian, ravensmarch, widowsgate,
+      plus re-confirming the ten above at n>=96) — this environment ran 4-20 real
       minutes PER REGION at n=24 once the longer caps were in, so a full sweep did not
       fit this session. `tests/scout.test.js`/`tactics`/`loadoutdominance`/`campaignplay`
       were NOT re-run (each needs >=180s alone and the table is still unsettled).
@@ -496,9 +499,11 @@ whole battle out-trains what any one rear site can mass for the required first-s
 margin, confirmed with a direct probe (thanescar's castle garrison ranges 96-241 over
 twenty minutes; the biggest adjacent player site never tops 30). `develop` was cut for
 tiers 4-6 against that finding. Partial n=24 re-screen: gallowmoor 38%, sunder 25%,
-thanescar 29%, blackspire 29%, stormhalt 8% (improved, still below floor); gravenreach
-42% and nightharrow 29% already clear tier 5's band. Eleven of fifteen tier 3-6 rows
-have no reading at all — this environment took 4-20 real minutes PER REGION at n=24
+vaelstrand 17%, thanescar 29%, blackspire 29%, stormhalt 8%, cinderwatch 13%
+(improved, still below floor); gravenreach 42%, nightharrow 29% and ironcrown 38%
+already clear their own band. Five of fifteen tier 3-6 rows (duskfell, karrowmere,
+obsidian, ravensmarch, widowsgate) have no reading at all — this environment took 4-20 real
+minutes PER REGION at n=24
 once the caps were raised, so a full sweep did not fit. **Do not re-spend `enemyMult`
 on the Marshal rows**: a further cut moved gallowmoor and thanescar the WRONG way at
 n=24 (twice), which at that n is consistent with noise once the `develop` cut already

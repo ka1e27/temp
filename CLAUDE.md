@@ -2866,7 +2866,7 @@ gate the deploy.
 
   **⏳ SUBSTANTIAL PROGRESS THIS SESSION, NOT CLOSED — tier 1–2 are done and
   confirmed, tier 3–6 have a diagnosed lever and a partial re-measurement, and
-  eleven of twenty-four rows still have no read at all. Do not read this as a
+  five of twenty-four rows still have no read at all. Do not read this as a
   finished pass; read it as where the next session should resume.**
 
   **First, a correction to the line above.** Re-measured fresh at n=48 against
@@ -2975,18 +2975,22 @@ gate the deploy.
   after the develop cut and the smaller `enemyMult` cut:
 
   ```
-  gallowmoor 38  sunder 25  [vaelstrand / duskfell / karrowmere: not yet run]
-  thanescar 29  blackspire 29  [ironcrown / obsidian / ravensmarch: not yet run]
+  gallowmoor 38  sunder 25  vaelstrand 17  [duskfell / karrowmere: not yet run]
+  thanescar 29  blackspire 29  ironcrown 38 ok  [obsidian / ravensmarch: not yet run]
   gravenreach 42 ok  nightharrow 29 ok  [ravensmarch: not yet run]
-  stormhalt 8  [cinderwatch / widowsgate: not yet run]
+  stormhalt 8  cinderwatch 13  [widowsgate: not yet run]
   ```
 
   Every row above IMPROVED from its pre-session reading (thanescar 2%→29%,
-  stormhalt 0%→8%, gallowmoor 17-23%→38%), and gravenreach/nightharrow already
-  clear their tier-5 band. Gallowmoor, sunder, thanescar, blackspire and
-  stormhalt are still below their tier's floor. **Eleven of twenty-four rows
-  (sunder's tier-mates, three of tier 4, ravensmarch, and two of tier 6) have
-  no reading at all yet** — this environment ran roughly 4–20 minutes of real
+  stormhalt 0%→8%, gallowmoor 17-23%→38%), and gravenreach/nightharrow/ironcrown
+  already clear their own band. Gallowmoor, sunder, vaelstrand, thanescar,
+  blackspire, stormhalt and cinderwatch are still below their tier's floor — three of tier
+  4's four rows now have a read, and it splits (thanescar/blackspire below,
+  ironcrown at), which argues against a uniform "tier 4 is broken" story and
+  for finishing the sweep
+  before reaching for another campaign-wide dial move. **Five of twenty-four rows
+  (duskfell, karrowmere, obsidian, ravensmarch, widowsgate) have no
+  reading at all yet** — this environment ran roughly 4–20 minutes of real
   wall-clock PER REGION at n=24 once the bigger caps were in (a single-core
   isolated timing at the start of this session ran ~8s/battle; under this
   session's actual CPU contention and the new caps it was far slower), so a

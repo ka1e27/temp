@@ -304,7 +304,7 @@
 // to make it matter), traced back to a Marshal'd throne that is never
 // attacked for a whole battle out-training any single rear site's ability to
 // mass a legal first strike. Tier 1-2 are fully re-measured at n=48 and all
-// nine rows read `ok`. Tiers 3-6 are a partial n=24 screen only — eleven of
+// nine rows read `ok`. Tiers 3-6 are a partial n=24 screen only — six of
 // fifteen rows have no reading at all yet. Do not treat any dial on those
 // fifteen rows as settled; CLAUDE.md says exactly which of them have even a
 // probe-level number and which do not.
