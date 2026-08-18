@@ -58,9 +58,49 @@ commit. Do not re-derive the list.
 > bullet. Re-take all four *after* the re-tune lands; they are its acceptance test, not
 > separate work.
 
-> **⚠⚠ READ THIS BEFORE MOVING ANOTHER DIAL. THE HARNESS BOT CANNOT CONCENTRATE
-> FORCE, AND THAT IS ALMOST CERTAINLY WHAT THE ELEVEN BELOW-FLOOR ROWS ARE
-> MEASURING.** The re-tune below diagnosed the stall correctly — a Marshal'd castle
+> **✅ RESOLVED, AND THE ANSWER IS NO — the block below was the top-ranked thing
+> to do before moving another dial, it was BUILT (`tools/simpool.js`, `--pool`),
+> and the hypothesis did not reproduce.** n=48, and the implementation is proven
+> to reach the battle (the real-battle test groups commands by target and
+> arrival tick and demands a wave drawing from two or more distinct sites, so a
+> silent discard could not have produced this):
+>
+> ```
+> gallowmoor   pooled 25%   unpooled 33%
+> thanescar    pooled 27%   unpooled 23%
+> ```
+>
+> Opposite signs, both inside the noise band. **So massing is not what the eleven
+> below-floor rows are measuring, and the dial question is back on the table.**
+>
+> The per-seed evidence is worth more than the aggregate, because it is a
+> different finding rather than a null: `simpool.js`'s target scan is ID-ordered
+> over any reachable site and is **not weighted toward the throne**, so a pooled
+> strike COMPETES with the bot's own "push the rear army forward" consolidation
+> instead of reinforcing it. On thanescar seed 1000 it turned a clean 18-minute
+> win into a 30-minute timeout, with all nine of its synchronized strikes
+> landing on secondary sites and none ever aimed at the castle. Meanwhile pooled
+> gallowmoor times out `ahead=31` against unpooled's `22` — more countryside,
+> no closer to winning.
+>
+> **Both readings point the same way: the THRONE is the bottleneck, not the
+> approach to it.** That is where the next look belongs — and the cheap version
+> of it is to weight `simpool.js`'s scan toward the castle and re-measure, which
+> is the one change that would justify flipping `--pool` on.
+>
+> It ships OFF, inverting the `--noX` house pattern deliberately: a wash with a
+> known defect must not silently become the baseline every future number is
+> measured against, least of all mid-retune. Proven inert where it is off —
+> gallowmoor n=8 reads identically with the change present and with a clean
+> worktree at the parent commit.
+>
+> *The original diagnosis is kept below, struck through in spirit rather than
+> deleted, because the REASONING was sound and only the conclusion was wrong —
+> and because a deleted item gets proposed again in three weeks.*
+>
+> **⚠⚠ ORIGINAL ENTRY — THE HYPOTHESIS, NOW DISPROVED. THE HARNESS BOT CANNOT
+> CONCENTRATE FORCE, AND THAT IS ALMOST CERTAINLY WHAT THE ELEVEN BELOW-FLOOR
+> ROWS ARE MEASURING.** The re-tune below diagnosed the stall correctly — a Marshal'd castle
 > is never attacked, so it trains against zero attrition, and no rear site can mass a
 > legal first strike — and then read it as a difficulty lever. It is an INSTRUMENT
 > fault. Checked in the source, not inferred:
@@ -92,6 +132,11 @@ commit. Do not re-derive the list.
 > row moves, every number in the table below was measured against a bot that could not
 > play the shipped game, and the re-tune restarts from there. If it does not move, the
 > difficulty reading stands and this note costs one measurement.
+>
+> *(It did not move. It cost one measurement, which is exactly what this paragraph
+> priced it at — and it bought a sharper question in exchange. The switch shipped as
+> `--pool` rather than `--nopool`; see the resolution above for why the default went the
+> other way.)*
 
 - [ ] **The campaign re-tune against the melee layer.** Full brief in the section below
       (`Do this first`). **IN PROGRESS, substantial but not closed** — see CLAUDE.md
@@ -540,20 +585,25 @@ historical.*
       since the player still loses; only "fast" is false). Then decide whether a
       no-orders battle should concede. Cheapest honest fix is the results copy, not the
       simulation.
-- [ ] **THE HARNESS-CANNOT-MASS HYPOTHESIS DID NOT REPRODUCE.** The warning at the top of
-      this file ranked "teach the bot to pool sources" as the thing to do before moving
-      another dial. Built (`tools/simpool.js`, `--nopool`) and measured at n=48:
-      `gallowmoor 25% pooled / 33% unpooled`, `thanescar 27% / 23%` — **opposite signs,
-      both inside the noise band at that n.** So massing is not the lever, and the eleven
-      below-floor rows are not explained by the instrument. One detail is worth more than
-      the win rates: pooled gallowmoor times out `ahead=31` against unpooled's `22` — the
-      bot takes MORE countryside and still never closes, which points at the throne as
-      the bottleneck rather than the approach.
-      **Before this is written into CLAUDE.md as a null result, the implementation has to
-      be proven to reach the battle** — a pooling change that silently does not is the
-      same failure shape as `--weights` discarded by `fitComposition` and
-      `bestAssaultTarget` walking away from a 90-second siege, and it would produce
-      exactly this table. An unproven null is worth less than no measurement.
+- [x] ~~**THE HARNESS-CANNOT-MASS HYPOTHESIS DID NOT REPRODUCE.**~~ **CLOSED — built,
+      measured, shipped OFF.** Full write-up at the top of this file. The short version:
+      `gallowmoor 25% pooled / 33% unpooled`, `thanescar 27% / 23%` at n=48, opposite
+      signs and inside the noise band; the implementation IS proven to reach the battle
+      (the real-battle test groups commands by target and arrival tick and demands a wave
+      from two or more distinct sites); and it ships behind `--pool` rather than on,
+      because a wash with a known defect must not become the baseline mid-retune.
+      **What it bought is a sharper question, not a null:** `simpool.js`'s target scan is
+      not throne-weighted, so it competes with consolidation — on thanescar seed 1000 it
+      converted a clean win into a timeout without ever aiming at the castle. Both that
+      and pooled gallowmoor's `ahead=31` say the same thing.
+- [ ] **THE THRONE IS THE BOTTLENECK — WEIGHT THE POOLED SCAN AT IT AND RE-MEASURE.** The
+      one change that would justify turning `--pool` on, and the one follow-up the
+      measurement above actually earned. `simpool.js` masses correctly and then spends
+      the mass on whatever is nearest in id order; the whole reason it was built is the
+      target no single rear garrison can ever legally clear alone. Weight the scan toward
+      the castle (or simply toward `frontDistance`'s sink, which `advanceDistance`
+      already computes for the same reason), re-take gallowmoor and thanescar, and flip
+      the default in the same pass that re-tunes against it.
 - [ ] **THE LOADOUT IS A TRAP AND IT LOCKS FOR THE WHOLE BATTLE.** Known; what the review
       adds is the second clause, read out of `battleRoster`/`cmdTrain`: the five types
       chosen at the briefing are the only five you can ever TRAIN, including out of a
@@ -596,10 +646,15 @@ historical.*
       CHARGES. The screen built to be "the decision point the campaign was missing" is a
       confirm-and-continue for a real stretch of a first session. Not broken; worth
       knowing before anyone measures onboarding against it.
-- [ ] **THE "SPEND ALL" BUTTON SPENDS RELICS ON TROOPS YOU DO NOT FIELD.** It spreads
-      evenly across every unlocked unit regardless of the army, so a mono-militia player
-      pressing the obvious button wastes most of the run's relics. Reasoned from source,
-      not simulated — cheap to verify.
+- [x] ~~**THE "SPEND ALL" BUTTON SPENDS RELICS ON TROOPS YOU DO NOT FIELD.**~~ **FALSE —
+      checked, not built.** The review flagged this as reasoned-from-source rather than
+      simulated, and reading the source settles it the other way: `screens/shop.js:71`
+      calls `spendAll(meta(), 'crowns', ctx.bus)` and the comment two lines above says
+      why — *"Relics are the player's deliberate choice of which troop to level, and this
+      button must not make that choice for them."* The button has never touched relics.
+      Kept struck through rather than deleted, per this file's own rule: a deleted item
+      gets proposed again. **Worth more than the finding: a "reasoned from source" item
+      needs the source read before it is worked, and this one took two minutes.**
 - [ ] **THE INCURSION LADDER'S OPENING RUNG MAY HAVE DRIFTED.** Depth 1 is documented as a
       ~94-98% victory lap and read 33% (n=3), 50% (n=8), 25% with `--nopool` (n=4) this
       pass. Every sample is far below trust threshold and the campaign dial has been
