@@ -11,8 +11,11 @@
 // so the actual bridge — build a config, step the sim, hand back the facts —
 // lives here, exactly where `tools/simplayer.js` already has to put it for
 // the CLI. `src/meta/autobattle.js` is the ONLY file under src/ that imports
-// this one; that is the whole seam, and `grep -r "tools/autoresolve" src/`
-// finds it in one line.
+// this one; that is the whole seam, and `grep -rn "tools/autoresolve" src/`
+// finds exactly one IMPORT (four lines, the other three being prose in that
+// same file). The count is written out because an "exactly N" claim nobody can
+// reproduce from the command beside it is worse than no claim — this one said
+// "one line" and reading it literally makes the seam look broken.
 import { startBattle, step } from '../src/battle/sim.js';
 import { toOutcome } from '../src/battle/outcome.js';
 import { generateBattleMap } from '../src/battle/mapgen.js';

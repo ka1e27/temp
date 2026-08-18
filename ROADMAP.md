@@ -446,6 +446,181 @@ relevant to the dominant-loadout problem below. Worth a measured look.
 
 ---
 
+## The senior-review pass — findings, and what is left of them
+
+*Four reviewers ran end to end against the real game — a first-hour playthrough with
+real pointer events, a "does this pose a decision" audit driving the real engine, a
+comment/code drift audit, and a harness-concentration measurement — plus a hands-on
+pass of my own. **Ten items were fixed in the same pass and are struck through with
+the evidence kept.** What remains is below them, ranked.*
+
+*Read the fixed ones too. Six of the ten are the same defect class this file keeps
+recording — **built, wired, tested, and permanently inert** — and two of those six
+were shipped BY the reviews' own session, which is the point: the class is not
+historical.*
+
+### Fixed in this pass
+
+- [x] ~~**The `SITES` tally drew its label and nothing else.**~~ `el.tallyBox` was built
+      from `el.tally` ten lines before `el.tally` was declared, and `h()` skips an
+      undefined child rather than throwing — so the box mounted its label alone, the
+      value span was never in the document, and `bindText` wrote every update into a
+      detached node. Shipped blank by the pass that added it; found by probing the live
+      HUD, not by any test. Now reads `Sites 3 v 5`.
+- [x] ~~**The troop rail offered nine chips to a two-troop expedition.**~~ `battleRoster`
+      narrows the sim's roster to what the landing force carries, and the rail was built
+      from `UNIT_IDS` — so seven chips filtered a troop the army cannot contain and
+      cannot train (`cmdTrain` answers `unit-locked` on the same field). The KEYBOARD
+      half was worse: pressing `U` in a battle with no halberds flipped an invisible flag
+      and left it flipped, armed to exclude the troop silently if one were ever captured
+      in. Fixed at the list; `battle-keys.js filterUnits` is the one answer both ask.
+- [x] ~~**...and so did the training fan, one layer over.**~~ Eight chips, six locked for
+      the whole battle, in the first second of the first thing a new player selects — one
+      of them behind the coach bubble teaching the drag. A chip that can never unlock in
+      THIS battle is furniture, not a preview.
+- [x] ~~**Nothing ever told the player the treasury had filled.**~~ `applyOfflineProgress`
+      has returned `cappedOut` since it was written and nothing ever read it, while
+      `strings.js IDLE` carried five copy strings with NO reader at all — the world map
+      hardcoded its own beside them. So a player who idled past the cap lost every crown
+      after it in silence, and the Treasury line, the upgrade that raises exactly that
+      cap, was never named at the one moment it sells itself. The unread copy had also
+      gone stale unnoticed: it advertised a "Granary" that stopped existing when
+      twenty-six upgrades collapsed into six. `tests/offlinenotice.test.js` pins the
+      class — every key in `IDLE` must reach a screen — as well as the instance.
+- [x] ~~**The tutorial taught a rule the opening region does not have.**~~ `BEATS.takeCastle`
+      fired on castle reach everywhere and described the gate holding the throne;
+      Riverfen ships `castleGateFrac: 0`, and the panel readout that would have
+      contradicted it only renders when the gate is real. Split into a pair on one
+      signal, so a first-timer still hears that the throne ends the region.
+- [x] ~~**The first refusal a new player meets explained nothing.**~~ At tick 0 a fresh
+      save has seen no site but its own three, so following the tutorial's one
+      instruction and dragging at the nearest building — the only visually distinct thing
+      on a dark board — is refused. It said "Something blocks the way there."; it says
+      "Something unscouted is standing there. March beside it." now, which discloses
+      nothing the refusal had not already disclosed and names the rule.
+- [x] ~~**`tools/` code ships to the browser and the purity gate did not cover it.**~~
+      `src/meta/autobattle.js` imports `tools/autoresolve.js` on purpose, and that drags
+      `simplayer`, `simtactics`, `simbuild` and `simshop` into the bundle — five files
+      free to reach `Date.now` or `Math.random` with nothing stopping them, in the one
+      feature whose test pins byte-identical determinism. `checkpure` walks the import
+      closure out of the pure directories now. Proved both ways: a planted `Date.now` in
+      `simtactics.js` fails the gate, and the eight browser-driving scripts that
+      legitimately use banned globals still pass.
+- [x] ~~**A safety comment written this session was false.**~~ `battleViewSig.js` justified
+      folding squad positions into the repaint signature partly on `markBgDirty` being
+      throttled to 8/s; `battleView.js` calls `markDirty(true)`, and `force` exists to
+      skip that gate. The behaviour is fine (60.1 fps, 56 columns, widowsgate) — the
+      stated REASON was wrong, which is how a future change ships an unthrottled repaint
+      storm on a comment's authority.
+- [x] ~~**Nine dead exports, four claiming a caller that does not exist.**~~ `drawTrainRing`
+      and `drawGarrisonBar` each said "the name battleView currently imports" (it imports
+      the originals); `strokeHex` said "used for hover and selection highlights"
+      (`siteCursor.js` does that); `hasMutator` said "exposed for screens and tests"
+      (neither). Also `canReach`, `toCube`, `shopEntry`, `resetPalette`, and a
+      `tools/autoresolve.js` header claiming a grep result that does not reproduce. On
+      this codebase the comment is usually the specification, so a stale one is worse
+      than none.
+- [x] ~~**`meleeOver` was dead beside a reimplementation of itself.**~~ Kept and wired
+      rather than deleted — `meleephase.js` wrote the same two comparisons out again, and
+      that is how an invariant ends up owned by nobody. Proven inert (gallowmoor n=8,
+      clean worktree, identical with and without).
+
+### Open — ranked
+
+- [ ] **PASSIVE PLAY DOES NOT FAIL FAST, AND CLAUDE.md SAYS IT DOES.** Measured on a
+      fresh save with no input at all: the region plateaus at 2 sites around **t≈237s**
+      and then sits there for the rest of the ~18-minute cap, camp never broken,
+      accumulating **142,000 unspent battle gold**, ending on *"Time expired · Decided on
+      territory when the hard cap ran out"*. CLAUDE.md's claim — *"a Riverfen battle with
+      no input is down to two sites inside two minutes"* — is wrong on the timing and
+      wrong on the shape: it is not a fast loss, it is a twenty-minute stall that ends on
+      copy reading as a clock problem rather than "you never attacked".
+      **Correct the record first** (that claim is load-bearing for the argument that the
+      idle half cannot be used to skip the real-time half — an argument that survives,
+      since the player still loses; only "fast" is false). Then decide whether a
+      no-orders battle should concede. Cheapest honest fix is the results copy, not the
+      simulation.
+- [ ] **THE HARNESS-CANNOT-MASS HYPOTHESIS DID NOT REPRODUCE.** The warning at the top of
+      this file ranked "teach the bot to pool sources" as the thing to do before moving
+      another dial. Built (`tools/simpool.js`, `--nopool`) and measured at n=48:
+      `gallowmoor 25% pooled / 33% unpooled`, `thanescar 27% / 23%` — **opposite signs,
+      both inside the noise band at that n.** So massing is not the lever, and the eleven
+      below-floor rows are not explained by the instrument. One detail is worth more than
+      the win rates: pooled gallowmoor times out `ahead=31` against unpooled's `22` — the
+      bot takes MORE countryside and still never closes, which points at the throne as
+      the bottleneck rather than the approach.
+      **Before this is written into CLAUDE.md as a null result, the implementation has to
+      be proven to reach the battle** — a pooling change that silently does not is the
+      same failure shape as `--weights` discarded by `fitComposition` and
+      `bestAssaultTarget` walking away from a 90-second siege, and it would produce
+      exactly this table. An unproven null is worth less than no measurement.
+- [ ] **THE LOADOUT IS A TRAP AND IT LOCKS FOR THE WHOLE BATTLE.** Known; what the review
+      adds is the second clause, read out of `battleRoster`/`cmdTrain`: the five types
+      chosen at the briefing are the only five you can ever TRAIN, including out of a
+      captured enemy yard. So the dominant answer is not merely available, it is
+      irreversible from the moment the battle starts, and a player who guesses wrong
+      cannot correct it with anything they capture. Everything already in
+      "The one problem worth ranking above everything else" still applies; this is why it
+      deserves to stay there.
+- [ ] **THE SHOP'S MOST INTUITIVE FIRST BUY IS A MEASURED TRAP AND THE GAME NEVER SAYS SO.**
+      `upgrades.data.js`'s own comment on `standingArmy`: *"Standing-Army-first wins 2%
+      against cheapest-affordable-first's 33% at matched region/conquest/idle-budget/
+      composition (n=48 each)."* Independently reproduced this pass on a different region
+      (kaldan, n=48): cheapest-first **79%**, standingArmy-rush **2%**, treasury-rush
+      **0%** — and the mechanism isolated, which is new: a monoline rush leaves **15-36%
+      of the identical crown lump unspent**, because one exponential price curve outruns
+      a fixed budget faster than six curves sharing it do, and Treasury's income and
+      offline-cap terms are worth exactly ZERO to the battle they are scored against.
+      "Bigger army" is the single most intuitive first purchase in a strategy game and is
+      one of the two worst in the shop. The only counter-signal is an unlabeled pulsing
+      border whose explanatory text (`", cheapest option right now"`) is **aria-only and
+      never rendered for a sighted player**. Cheapest fix by far: render that string.
+- [ ] **RESULTS NEVER SAY WHY.** Win and loss screens show the same four to seven stat
+      rows — duration, sites held, units lost, enemy losses — and nothing causal. No
+      "your siege stalled", no "the castle gate needed more territory", no "you were
+      out-fought at the wall". Every one of those facts is already in the battle state at
+      the moment it ends. This is the single biggest gap between "the game is deep" and
+      "the player can tell that it is".
+- [ ] **THE OBJECTIVE NAMES A BUILDING THAT IS NOT ON THE BOARD AND GIVES NO BEARING.**
+      Verified on the campaign opener: `Take the Castle.` with `castleSeenByPlayer: null`
+      and the throne five hexes away on an 11x9 board — no marker, no compass, nothing.
+      On widowsgate (21x16) it is far worse. The site-existence gate is right as a FOG
+      rule, but the win condition is not intelligence, it is the brief. Two candidate
+      fixes, and the first is one line: seed the enemy castle into `state.seen` at battle
+      start (garrison and level stay hidden; **provably balance-neutral, because
+      `beliefFor` already hands the AI and the harness a ghost for every site**), or draw
+      an edge-of-board bearing marker, which discloses strictly less than a ghost.
+- [ ] **THE LOADOUT SCREEN'S ADVERTISED DECISION IS NOT LIVE FOR THE FIRST FEW REGIONS.**
+      Its own copy, read off the DOM at region 2: `2 / 5 TROOP TYPES · every troop you
+      have unlocked is already in this army`, with all five boosters LOCKED or NO
+      CHARGES. The screen built to be "the decision point the campaign was missing" is a
+      confirm-and-continue for a real stretch of a first session. Not broken; worth
+      knowing before anyone measures onboarding against it.
+- [ ] **THE "SPEND ALL" BUTTON SPENDS RELICS ON TROOPS YOU DO NOT FIELD.** It spreads
+      evenly across every unlocked unit regardless of the army, so a mono-militia player
+      pressing the obvious button wastes most of the run's relics. Reasoned from source,
+      not simulated — cheap to verify.
+- [ ] **THE INCURSION LADDER'S OPENING RUNG MAY HAVE DRIFTED.** Depth 1 is documented as a
+      ~94-98% victory lap and read 33% (n=3), 50% (n=8), 25% with `--nopool` (n=4) this
+      pass. Every sample is far below trust threshold and the campaign dial has been
+      moving underneath the arena all session, so this is a FLAG, not a finding — but
+      `incursion.data.js`'s own comments already warn its numbers are unremeasured, and a
+      first rung that is not a victory lap breaks the one loop that cannot be skipped.
+      Re-take at n>=48 from a clean worktree.
+- [ ] **`hexMelees` DISCOVERS "ONE SIDE IS EMPTY" A TICK LATE.** Reproduced against real
+      code: 6-vs-1 militia on one hex, the loser leaves `state.squads` at tick 32 (the
+      clock is 60), and the winner's `sq.melee` does not clear until tick 33 — because
+      the rule is found next tick via an empty-array check rather than evaluated. Harmless
+      today, and the same invariant is now owned by `meleeOver` on the site path. Left as
+      an observation because closing it changes sim behaviour for no measured benefit.
+- [ ] **`site.garrison` IS STILL UNVALIDATED AT THE SEAM.** Re-confirmed by probe:
+      `assertBattleConfig` accepts `{militia: 'lots'}` and negative counts on a site,
+      which is the exact hole `checkComposition` was written to close for `expedition`.
+      Same file, same fix, and `resume.js` runs that assertion deliberately as the shield
+      over a hand-editable `localStorage` key.
+
+---
+
 ## Where the game actually stands
 
 **The engine is finished and the measurement culture is the real asset.** Deterministic

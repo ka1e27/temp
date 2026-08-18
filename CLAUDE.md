@@ -2139,6 +2139,28 @@ rounding accounts for the rest) — `relics` stayed at 0 (a raid pays none, by d
 available in 10:00" confirmed `completeRaid` restarted the cooldown. This is the first
 time any of that had been confirmed outside a unit test.
 
+## The away banner says when the treasury filled
+
+`applyOfflineProgress` has returned `cappedOut` since it was written and nothing ever
+read it, so a player who idled past `offlineCapMs` (base 8h, +2h a Treasury level, hard
+max 24h) lost every crown after the cap in silence — and the Treasury line, which is the
+upgrade that raises exactly that cap, was never named at the one moment it sells itself.
+
+`meta/idle.js offlineNotice` is the decision and `content/strings.js IDLE` is the copy;
+the screen renders one from the other. Three properties are load-bearing:
+
+- **`capped` is gated on `shown`.** A one-second reload of a capped-out save is
+  `cappedOut: true` with nothing to announce, and a caller reading `capped` alone must
+  not be able to render a warning with no banner around it.
+- **Both floors bind independently** (`OFFLINE.noticeMinMs` 60s, `noticeMinCrowns` 1). A
+  rich empire earns a crown in well under a second and a poor one earns nothing in an
+  hour, so either alone lets a page reload announce "+0 crowns … (0.3s)".
+- **The decision is in `meta/`, not in the screen** — the shape `recruitOffer` and
+  `buildOffer` already use on the battle side, so it is testable with no DOM.
+
+Driven in a real browser both ways: two hours against an eight-hour cap shows the crowns
+alone; eight hours against the same cap adds an amber line on its own row.
+
 ## Abdication: the prestige loop
 
 `content/legacy.data.js` + `meta/legacy.js`. `meta.legacy` had been sitting in
@@ -2644,6 +2666,52 @@ order. `.hud-selection` carries `z-index: 2` now, and the rule is worth stating 
 **advice never covers a control.**
 
 ## Gotchas that have already cost time
+
+- **`h()` SKIPS AN UNDEFINED CHILD RATHER THAN THROWING, so a node built before the
+  variable holding it is a readout that draws nothing.** `battle-hud.js` created
+  `el.tallyBox` from `el.tally` ten lines before `el.tally` existed: the box mounted its
+  label alone, the value span was never in the document, and `bindText` wrote every
+  update into a detached node. The `SITES 3 v 5` tally shipped permanently blank, in the
+  same pass that added it, and no test could see it — the writer exists, the binding
+  works, the string is correct, and it lands nowhere. **Only a probe of the live DOM
+  finds this class.** Declaration order in a `createXxx` builder is load-bearing.
+- **A LIST THE PLAYER IS SHOWN MUST BE THE LIST THE SIM WILL HONOUR, and there are three
+  of them.** `meta/composition.js battleRoster` narrows `unlockedUnits` to the five types
+  the expedition carries, and `cmdTrain` gates on that field — but the filter rail, the
+  filter HOTKEYS and the training fan were each built from `UNIT_IDS`. So a two-troop
+  campaign opener drew nine chips and eight fan chips, of which seven and six were
+  controls for a troop the army cannot contain and cannot train. The keyboard was the
+  worst of the three because it left no trace: `U` with no halberds flipped
+  `view.filter.halberds` false and left it flipped. `battle-keys.js filterUnits` and
+  `battle-parts.js trainFanUnits` are the two answers now, and every loop over them must
+  use *their* length — `UNIT_IDS.length` over a narrowed array indexes off the end.
+- **THE PURITY GATE FOLLOWS THE IMPORT GRAPH, NOT THE DIRECTORY LIST.** Auto-resolve puts
+  `tools/` code into the browser deliberately (`src/meta/autobattle.js` imports
+  `tools/autoresolve.js`, which drags in `simplayer`/`simtactics`/`simbuild`/`simshop`),
+  and `checkpure`'s `PURE` list has never covered `tools/`. `tools/checkpure.js` walks the
+  closure out of the pure directories now, so anything a pure file can reach is held to
+  the same rule and a new import is covered the moment it is written. It is deliberately
+  NOT "also scan `tools/`": `serve.js` and `cdp.js` must use the clock and the network.
+- **`bgCache.markDirty(true)` SKIPS THE 8/s THROTTLE, and `battleView.js` always passes
+  `true`.** `force` exists because a signature change is real content that owes the
+  current frame where a pan gesture does not. Any argument of the form "this is safe
+  because `markBgDirty` is throttled" is false for signature-driven repaints — the bound
+  is how often the signature can actually MOVE. (`squadSightSig` is safe because a column
+  crosses a hex every 0.7–2.5s, measured at 60.1 fps with 56 columns on widowsgate.)
+- **UNREAD COPY GOES STALE SILENTLY, and `content/strings.js` had a whole block of it.**
+  `IDLE`'s five strings had no reader for the life of the feature while `worldmap.js`
+  hardcoded its own beside them — so `IDLE.awayCapped` went on advertising a "Granary"
+  upgrade that stopped existing when twenty-six upgrades collapsed into six endless lines,
+  and the live banner never grew the one line that block already had written for it.
+  `tests/offlinenotice.test.js` asserts every key in `IDLE` reaches a screen; the same
+  guard is worth copying to any strings block that grows a second surface.
+- **A COACH LINE IS A CLAIM ABOUT THE REGION IT FIRES IN.** `BEATS.takeCastle` described
+  the castle gate on castle reach everywhere, and Riverfen — the opener, the one battle a
+  first-timer is guaranteed to play — ships `castleGateFrac: 0`. Nothing on screen could
+  contradict it, because `gateLine`'s `SEALED · holds X% of Y% needed` only renders when
+  the gate is real. It is a pair now, split on one signal. `tests/coachcastle.test.js`
+  asserts region 1's gate is 0 off the real config, so growing one is a failing test
+  rather than a second wrong line.
 
 - **`grid` is an OFFSET rectangle, not an axial one.** `axialFromOffset(col,row) =
   {q: col - floor(row/2), r: row}`, so a 9×9 grid holds **no negative `r` at all** and
@@ -3559,9 +3627,21 @@ gate the deploy.
   this one is recorded rather than solved. Either give it a parameter or write down why
   it should not have one.
 - **A short session has nothing to do in it.** A battle is 7–15 undistracted minutes and
-  passive play loses on purpose — verified, a Riverfen battle with no input is down to
-  two sites inside two minutes — which is correct, and is what stops the idle half being
-  used to skip the real-time half. But a raid is a whole battle and an incursion rung is
+  passive play loses on purpose, which is what stops the idle half being used to skip the
+  real-time half.
+
+  **⚠ THIS BULLET USED TO SAY "down to two sites inside two minutes" AND THAT IS WRONG
+  ON BOTH COUNTS.** Re-measured on a fresh save with no input at all: the region reaches
+  two sites at **t≈237s**, not 120, and then *plateaus there for the rest of the ~18
+  minute cap* — the camp is never broken, 142,000 battle gold piles up unspent, and it
+  ends on `Time expired · Decided on territory when the hard cap ran out`. So passive
+  play does lose, and the argument above survives intact; what is false is "fast". It is
+  a twenty-minute stall that ends on copy reading as a clock problem rather than as "you
+  never attacked", which is worse for a confused new player than a quick defeat would be.
+  Recorded here rather than fixed, because the cheapest honest answer is the results copy
+  and not the simulation.
+
+  But a raid is a whole battle and an incursion rung is
   a whole battle, so there is nothing a player can do in ninety seconds except collect
   income and buy an upgrade. Half of this was built and merely unadvertised and is now
   fixed (the battle autosaves and resumes for twelve hours; Withdraw now says so). The
