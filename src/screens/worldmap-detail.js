@@ -12,9 +12,10 @@
 // writes — the current mode and the per-tick updater — belong to worldmap.js.
 // Handing them in keeps this file unable to own state it should not.
 import { UI, WORLD } from '../content/strings.js';
-import { compact, rate, duration } from '../ui/format.js';
+import { compact, rate, duration, percent } from '../ui/format.js';
 import { modeOf, raidCooldownRemaining, campaignGap, CAMPAIGN_GAP_WARN } from '../meta/world.js';
 import { previewReward } from '../meta/rewards.js';
+import { GATE_CLAMP } from '../content/regions.data.js';
 
 /**
  * @param {{dom:{h,clear,mount,bindText}, meta:()=>object, now:()=>number,
@@ -37,6 +38,7 @@ export function createDetailRenderer(deps) {
     const detailMode = modeOf(m, region.id, at);
     setMode(detailMode);
     const reward = previewReward(m, region.id);
+    const gateFrac = GATE_CLAMP(region.castleGateFrac ?? 0);
 
     const rows = [
       ['Tier', `${region.tier}`],
@@ -44,6 +46,18 @@ export function createDetailRenderer(deps) {
       ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
       ['Enemy sites', `${region.siteCounts.enemy}`],
       ['Typical length', `~${region.targetLengthMin} min`],
+      // THE NUMBER THAT DECIDES SEVERAL OF THESE BATTLES, AND IT WAS NEVER SHOWN.
+      // `castleGateFrac` is the share of the countryside the throne holds out
+      // for, and until now it appeared nowhere before the fight and, in the
+      // fight, only inside the castle's own panel and only once the throne was
+      // already under siege (`castleSealed` requires an active siege). So a
+      // player correctly taking the countryside for twenty minutes had no way to
+      // know whether they were two points short of the gate or forty-seven.
+      // Measured: every one of thirty-seven timeouts in the castle-gate pass sat
+      // below the gate. It leaks nothing — it is a static rule of the region,
+      // like its size — and it is omitted rather than shown as 0%% where there is
+      // no gate, because "0%%" reads as a requirement rather than as its absence.
+      ...(gateFrac > 0 ? [['Throne holds until', `you hold ${percent(gateFrac)} of the map`]] : []),
       ['Income if taken', rate(region.rewardPerSec)],
     ];
 

@@ -223,8 +223,16 @@ their files; they do not exist.
       9-minute one already exists. Nothing measures or surfaces "territory has not moved
       in N minutes". In the widowsgate trace a player had a 25-minute window to make that
       call entirely unaided.
-- [ ] **THE PRE-FIGHT READOUT CANNOT DISTINGUISH REGIONS WITH DOUBLE THE WIN RATE, AND
-      NEVER SHOWS THE GATE.** `duskfell 4.45`, `karrowmere 4.48`, `vaelstrand 4.38` all
+- [~] **THE PRE-FIGHT READOUT CANNOT DISTINGUISH REGIONS WITH DOUBLE THE WIN RATE, AND
+      NEVER SHOWS THE GATE.** ~~The gate half is FIXED~~ — `Throne holds until: you hold
+      N% of the map` on both the world map and the loadout brief, omitted entirely where
+      there is no gate (five regions ship one of 0, and "0%" reads as a requirement
+      rather than as its absence). It shows the CLAMPED campaign figure, and on an
+      incursion it asks `incursionRules` so a `sealed` rung advertises its own raised
+      gate (72% against the arena's 60%) rather than the arena's.
+      **STILL OPEN: the in-battle half**, which is the harder one — a live "you hold X%
+      of the Y% needed" needs the total site count as a denominator, and fog hides how
+      many sites exist. And the identical-display problem is untouched: `duskfell 4.45`, `karrowmere 4.48`, `vaelstrand 4.38` all
       render as "x4.4"/"x4.5" on an identical layout; the project's own in-flight n=24
       screen reads karrowmere 38% against vaelstrand and duskfell at 17%. `castleGateFrac`
       is never shown before the fight — and in-battle it appears ONLY inside the castle's

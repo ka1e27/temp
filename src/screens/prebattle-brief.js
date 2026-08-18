@@ -4,17 +4,17 @@
 // Split out of prebattle.js when the slot budget landed — the screen was at 398
 // lines against a 400 cap, and these are the parts worth testing directly.
 
-import { compact, rate, duration } from '../ui/format.js';
+import { compact, rate, duration, percent } from '../ui/format.js';
 import { UNIT_IDS, LOADOUT_TYPES_MAX } from '../content/balance.js';
 import { UNITS_UI, ENDGAME } from '../content/strings.js';
-import { RAID } from '../content/regions.data.js';
+import { RAID, GATE_CLAMP } from '../content/regions.data.js';
 import {
   expeditionSlots, carryComposition, distributeExpedition,
   compositionSlots, compositionTotal, overBudget, slotCost, typeCount,
 } from '../meta/modifiers.js';
 import { unlockedUnits } from '../meta/upgrades.js';
 import { regionById, effectiveEnemyMult, isConquered, record } from '../meta/world.js';
-import { planFor, MUTATOR_BY_ID, campaignReplayPlan } from '../meta/incursion.js';
+import { planFor, MUTATOR_BY_ID, campaignReplayPlan, incursionRules } from '../meta/incursion.js';
 import { legacyResets } from '../meta/legacy.js';
 import { previewReward } from '../meta/rewards.js';
 import { specialistCallouts } from '../meta/specialists.js';
@@ -121,6 +121,15 @@ export function regionBrief(meta, regionId, depth = null) {
   // mid-battle. Null on a first run (`legacyResets` 0) and whenever this is an
   // incursion instead, which carries its own hand under `incursion.mutators`.
   const replay = plan ? null : campaignReplayPlan(region, legacyResets(meta));
+  // THE GATE THE BATTLE WILL ACTUALLY RUN UNDER, not the region's own — an
+  // incursion's `sealed` mutator raises it, and quoting the campaign figure at
+  // a rung fought under a different one is the same defect as quoting
+  // `effectiveEnemyMult` at a rung, which the comment above already fixes.
+  // `incursionRules` is asked rather than re-derived, so there is one owner of
+  // the ceiling arithmetic.
+  const gateFrac = plan
+    ? (incursionRules({ castleGateFrac: region.castleGateFrac ?? 0 }, plan).castleGateFrac ?? 0)
+    : GATE_CLAMP(region.castleGateFrac ?? 0);
   return {
     id: region.id, name: region.name, tier: region.tier, flavour: region.flavour,
     raid, reward, enemyMult: mult,
@@ -147,6 +156,19 @@ export function regionBrief(meta, regionId, depth = null) {
       ['Enemy sites', `${region.siteCounts.enemy}`],
       ['Typical length', `~${region.targetLengthMin} min`],
       ['Hard cap', duration(region.hardCapMs / 1000)],
+      // THE NUMBER THAT DECIDES SEVERAL OF THESE BATTLES, AND IT WAS NEVER SHOWN.
+      // `castleGateFrac` is the share of the countryside the throne holds out
+      // for, and until now it appeared nowhere before the fight and, in the
+      // fight, only inside the castle's own panel and only once the throne was
+      // already under siege (`castleSealed` requires an active siege). So a
+      // player correctly taking the countryside for twenty minutes had no way to
+      // know whether they were two points short of the gate or forty-seven.
+      // Measured: every one of thirty-seven timeouts in the castle-gate pass sat
+      // below the gate. It leaks nothing — it is a static rule of the region,
+      // like its size — and it is omitted rather than shown as 0%% where there is
+      // no gate, because "0%%" reads as a requirement rather than as its absence.
+      ...(gateFrac > 0 ? [['Throne holds until', `you hold ${percent(gateFrac)} of the map`]] : []),
+
       [plan ? 'Clearing pays' : raid ? 'Raid pays' : 'Conquest pays', plan || raid
         ? `${compact(reward.crowns)} crowns, once`
         : `${compact(reward.crowns)} crowns and ${rate(reward.incomeAdded)} forever`],
