@@ -10,7 +10,7 @@
 // the copy tells a beaten player to change their expedition, so the button had
 // better take them somewhere they can.
 import { h, mount } from '../ui/dom.js';
-import { compact, rate, duration, integer } from '../ui/format.js';
+import { compact, rate, duration, integer, percent } from '../ui/format.js';
 import { UI, RESULTS, COACH } from '../content/strings.js';
 import { applyOutcome } from '../meta/rewards.js';
 import { regionById, isAttackable, canRaid, raidCooldownRemaining } from '../meta/world.js';
@@ -60,6 +60,55 @@ export function resultCopy(outcome, applied, region) {
   return { title: RESULTS.loss, body: RESULTS.lossBody };
 }
 
+/**
+ * WHY the battle ended the way it did — one sentence, or null on a win.
+ *
+ * The screen showed four to seven stat rows and nothing causal: no "your siege
+ * stalled", no "the gate needed more territory", no "you were out-fought at the
+ * wall". Every fact needed for the three statements below is already in the
+ * outcome the screen is holding, so this needed no contract field and no new
+ * observation — which is also the constraint that keeps it honest.
+ *
+ * IT ONLY SAYS WHAT IT CAN PROVE. Each branch is a certainty, not a diagnosis:
+ *
+ *  - A `loss` is one of exactly two things (battle/sim.js): the camp changed
+ *    hands, or the player held nothing and had nothing in flight. `sitesHeld`
+ *    tells them apart.
+ *  - A `timeout` either finished below the castle gate or it did not, and that
+ *    is decidable, because on any outcome the player did not WIN they do not
+ *    hold the castle — so `sitesHeld` is exactly their non-castle count and
+ *    `sitesTotal - 1` is exactly the non-castle total. That ratio IS
+ *    `battle/siteinfo.js siteControlFraction`, the same number `castleSealed`
+ *    compares against, rather than an approximation of it.
+ *
+ * There is deliberately no "you were out-fought" branch: casualties do not say
+ * who was winning, and a sentence that guesses is worse than no sentence. A
+ * retreat gets none either — the player knows why they left.
+ *
+ * @param {object} outcome BattleOutcome
+ * @param {object|null} config the BattleConfig it was fought under; the gate
+ *   is read from here rather than from the region table, so an incursion
+ *   mutator that moved it is reflected.
+ * @returns {string|null}
+ */
+export function resultReason(outcome, config) {
+  const r = outcome?.result;
+  if (r === 'win' || r === 'retreat') return null;
+  const held = outcome.stats?.sitesHeld ?? 0;
+  const total = outcome.stats?.sitesTotal ?? 0;
+  if (r === 'loss') return held > 0 ? RESULTS.whyCampFell : RESULTS.whySweptAway;
+  if (r !== 'timeout') return null;
+
+  const need = config?.rules?.castleGateFrac ?? 0;
+  // No gate on this region, or a board with nothing but a castle on it: there
+  // is no territory claim to make, so make none.
+  if (need <= 0 || total <= 1) return RESULTS.whyClockOnly;
+  const frac = held / (total - 1);
+  return frac < need
+    ? RESULTS.whyGateHeld(percent(frac), percent(need))
+    : RESULTS.whyClockOnly;
+}
+
 /** The stat block. `won` decides whether the money lines appear at all. */
 export function statRows(outcome, applied, before, after) {
   const rows = [
@@ -101,6 +150,7 @@ export function createResultsScene(ctx) {
       const after = applied.incomePerSec;
       const region = regionById(outcome.regionId);
       const copy = resultCopy(outcome, applied, region);
+      const reason = resultReason(outcome, config);
 
       document.body.dataset.scene = 'results';
       root = h('div.screen.results', {},
@@ -110,6 +160,10 @@ export function createResultsScene(ctx) {
         },
         h('h1#results-title.results-title', { text: copy.title }),
         h('p.results-sub', { text: copy.body }),
+        // The causal line sits under the outcome copy and above the numbers,
+        // because it is the sentence that makes the numbers mean something.
+        // `h()` skips a null child, so a win renders exactly as it did.
+        reason ? h('p.results-why', { text: reason }) : null,
 
         h('dl.results-stats', {},
           ...statRows(outcome, applied, before, after).flatMap(([k, v]) => [

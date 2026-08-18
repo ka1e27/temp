@@ -337,4 +337,17 @@ export const RESULTS = Object.freeze({
   retreatBody: 'You withdrew. The region is unchanged.',
   incomeNow: 'Income now',
   bestTime: 'Best time',
+  // WHY, not just WHAT. Every one of these is derivable from the outcome the
+  // screen already has, and none of them is a guess — see `resultReason` in
+  // screens/results.js for the arithmetic and for why it cannot over-claim.
+  // The screen showed four to seven stat rows and nothing causal, so a player
+  // who lost learned the number of troops they lost and nothing about the
+  // decision that lost them.
+  whyGateHeld: (held, need) => `The gate held: the throne needs ${need} of the`
+    + ` countryside and you finished on ${held}.`,
+  whyClockOnly: 'The countryside was yours and the gate was open — the throne'
+    + ' simply outlasted the clock.',
+  whyCampFell: 'Your camp fell. Hold it: losing it ends the region however well'
+    + ' the rest is going.',
+  whySweptAway: 'Nothing of yours was left on the board.',
 });

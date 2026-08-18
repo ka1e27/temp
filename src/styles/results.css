@@ -1,0 +1,91 @@
+/* The results card — the screen between a battle and the world map.
+   Its own file because scenes.css hit the 400-line cap when the card grew its
+   causal line (`resultReason`), and the rule here is to split rather than
+   accommodate. Same seam worldmap.css was cut on, and the same caveat applies:
+   `.screen`, `.panel`, `.btn` and the hex-weave texture stay where they were,
+   so nothing in this file may redeclare a shared primitive — scenes.css once
+   defined its own `.panel` and silently beat base.css, and the frosted plate
+   never rendered. Contexts here only re-point `--state`.
+
+   BOTH index.html AND demo.html have to link it. tests/shell.test.js asserts
+   the two lists match, because demo.html once dropped a stylesheet and every
+   card in it rendered with the wrong plate. */
+
+.results {
+  display: grid; place-items: center;
+  background: radial-gradient(900px 600px at 50% 30%, #151b28 0%, var(--c-bg) 72%);
+}
+.results-card {
+  --state: var(--c-neutral);
+  width: min(560px, 92vw); padding: var(--s-6); text-align: center; overflow: hidden;
+  border-top-width: var(--plate-edge); border-top-color: var(--state);
+  animation: hd-rise var(--d-slow) var(--ease-out) both;
+}
+.results-card[data-result='win'] { --state: var(--c-player); }
+.results-card[data-result='loss'],
+.results-card[data-result='timeout'] { --state: var(--c-enemy); }
+/* The verdict as a word, in the result's hue, above the headline. */
+.results-card::before {
+  content: 'OUTCOME'; display: block; margin-bottom: var(--s-3); color: var(--state);
+  font: var(--w-bold) var(--t-xs) / 1 var(--font-num); letter-spacing: var(--track-tag);
+}
+.results-card[data-result='win']::before { content: 'VICTORY'; }
+.results-card[data-result='loss']::before { content: 'DEFEAT'; }
+.results-card[data-result='timeout']::before { content: 'TIME UP'; }
+.results-card[data-result='retreat']::before { content: 'WITHDRAWN'; }
+.results-card[data-result='retreat'] { --state: var(--c-warn); }
+.results-card::after {
+  content: ''; position: absolute; inset: 0 0 auto; height: 140px; pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--state) 14%, transparent), transparent);
+}
+
+.results-title {
+  position: relative; margin: 0 0 var(--s-2); text-wrap: balance;
+  font: var(--w-bold) var(--t-2xl) / 1.1 var(--font); letter-spacing: -0.02em;
+}
+.results-sub { position: relative; margin: 0 0 var(--s-6); color: var(--c-text-dim); font-size: var(--t-sm); }
+/* WHY the battle ended that way (screens/results.js `resultReason`) — between
+   the outcome copy and the numbers, because it is the sentence that makes the
+   numbers mean something.
+   BRIGHTER THAN `.results-sub`, AND NOT TINTED BY RESULT. It is the same kind
+   of statement whether the camp fell or the clock ran out, so colouring it red
+   would turn a plain fact into a scolding; making it brighter than the line
+   above says only that it is the more useful of the two. No rule down the side
+   either: the card centres its text, and a left rule against centred wrapping
+   reads as a quotation somebody forgot to indent. Present only on a loss or a
+   timeout, so the winning screen is byte-identical. */
+.results-why {
+  position: relative; margin: calc(var(--s-6) * -1) auto var(--s-6);
+  max-width: 42ch; color: var(--c-text); font-size: var(--t-sm); line-height: 1.5;
+}
+/* A definition list read as a table: each cell stretches to the row and centres
+   its own text, so a 10px label and a 32px number share one rule rather than
+   arriving as two mismatched dashes. (worldmap.css states the same shape for
+   .wm-stats; they are separate screens and neither should move the other.) */
+.results-stats {
+  display: grid; grid-template-columns: 1fr auto; gap: 0;
+  margin: 0 0 var(--s-5); text-align: left;
+}
+.results-stats dt, .results-stats dd {
+  display: flex; align-items: center; align-self: stretch; padding: var(--s-2) 0;
+  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.results-stats dt {
+  color: var(--c-text-dim); font-size: var(--t-xs); padding-right: var(--s-4);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+}
+.results-stats dd {
+  margin: 0; justify-content: flex-end;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+}
+/* The payoff line — crowns, or the income the win just bought — closes the
+   list and is the only number on the card at display weight. */
+.results-stats dd:last-of-type,
+.results-stats dd[data-stat='payoff'] { font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-gold); }
+.results-card[data-result='win'] .results-stats dd:last-of-type { color: var(--c-player); }
+.results-actions {
+  position: relative; display: flex; align-items: center;
+  gap: var(--s-3); justify-content: center;
+}
+.results-actions .btn { flex: 1; }
+.results-hint { margin: 0; flex: 1; text-align: left; font-size: var(--t-sm); }

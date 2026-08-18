@@ -1,8 +1,11 @@
-/* Shop and results — the campaign screens either side of a battle, plus the
-   `.screen` shell and the texture both of them share with the world map.
-   The world map itself moved to worldmap.css when it stopped being a diagram
-   that fits on screen and became a map you pan; this file was at its line cap
-   and the rule here is to split rather than accommodate.
+/* The shop, plus the `.screen` shell and the texture every campaign screen
+   shares with the world map.
+   Two screens have moved out of here at the cap, both by the same rule (split
+   rather than accommodate): the world map to worldmap.css when it stopped
+   being a diagram that fits on screen and became a map you pan, and the
+   results card to results.css when it grew its causal line. The shell and the
+   weave stay here, and `.results::before` with them, because that texture is
+   shared rather than the results screen's own.
    Shared primitives (.panel, .btn, focus, keyframes, the locked/available/owned
    grammar) live in base.css and are NOT redeclared here: this file used to
    define its own opaque .panel and .btn, which silently beat base.css and meant
@@ -197,73 +200,6 @@
   background: linear-gradient(90deg, transparent,
     color-mix(in srgb, var(--c-player) 24%, transparent), transparent);
 }
-
-/* ---------- results ---------- */
-
-.results {
-  display: grid; place-items: center;
-  background: radial-gradient(900px 600px at 50% 30%, #151b28 0%, var(--c-bg) 72%);
-}
-.results-card {
-  --state: var(--c-neutral);
-  width: min(560px, 92vw); padding: var(--s-6); text-align: center; overflow: hidden;
-  border-top-width: var(--plate-edge); border-top-color: var(--state);
-  animation: hd-rise var(--d-slow) var(--ease-out) both;
-}
-.results-card[data-result='win'] { --state: var(--c-player); }
-.results-card[data-result='loss'],
-.results-card[data-result='timeout'] { --state: var(--c-enemy); }
-/* The verdict as a word, in the result's hue, above the headline. */
-.results-card::before {
-  content: 'OUTCOME'; display: block; margin-bottom: var(--s-3); color: var(--state);
-  font: var(--w-bold) var(--t-xs) / 1 var(--font-num); letter-spacing: var(--track-tag);
-}
-.results-card[data-result='win']::before { content: 'VICTORY'; }
-.results-card[data-result='loss']::before { content: 'DEFEAT'; }
-.results-card[data-result='timeout']::before { content: 'TIME UP'; }
-.results-card[data-result='retreat']::before { content: 'WITHDRAWN'; }
-.results-card[data-result='retreat'] { --state: var(--c-warn); }
-.results-card::after {
-  content: ''; position: absolute; inset: 0 0 auto; height: 140px; pointer-events: none;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--state) 14%, transparent), transparent);
-}
-
-.results-title {
-  position: relative; margin: 0 0 var(--s-2); text-wrap: balance;
-  font: var(--w-bold) var(--t-2xl) / 1.1 var(--font); letter-spacing: -0.02em;
-}
-.results-sub { position: relative; margin: 0 0 var(--s-6); color: var(--c-text-dim); font-size: var(--t-sm); }
-/* A definition list read as a table: each cell stretches to the row and centres
-   its own text, so a 10px label and a 32px number share one rule rather than
-   arriving as two mismatched dashes. (worldmap.css states the same shape for
-   .wm-stats; they are separate screens and neither should move the other.) */
-.results-stats {
-  display: grid; grid-template-columns: 1fr auto; gap: 0;
-  margin: 0 0 var(--s-5); text-align: left;
-}
-.results-stats dt, .results-stats dd {
-  display: flex; align-items: center; align-self: stretch; padding: var(--s-2) 0;
-  border-top: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.results-stats dt {
-  color: var(--c-text-dim); font-size: var(--t-xs); padding-right: var(--s-4);
-  letter-spacing: var(--track-label); text-transform: uppercase;
-}
-.results-stats dd {
-  margin: 0; justify-content: flex-end;
-  font-family: var(--font-num); font-variant-numeric: tabular-nums;
-}
-/* The payoff line — crowns, or the income the win just bought — closes the
-   list and is the only number on the card at display weight. */
-.results-stats dd:last-of-type,
-.results-stats dd[data-stat='payoff'] { font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-gold); }
-.results-card[data-result='win'] .results-stats dd:last-of-type { color: var(--c-player); }
-.results-actions {
-  position: relative; display: flex; align-items: center;
-  gap: var(--s-3); justify-content: center;
-}
-.results-actions .btn { flex: 1; }
-.results-hint { margin: 0; flex: 1; text-align: left; font-size: var(--t-sm); }
 
 /* ---------- fluid from 1024px up ---------- */
 
