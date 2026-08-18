@@ -226,6 +226,20 @@ export const SHOP = Object.freeze({
   // so a screen-reader user hears "Buy Treasury for 45 crowns, cheapest
   // option right now" rather than a second element to tab past.
   suggestedSuffix: ', cheapest option right now',
+  // ...AND THE SAME CLAIM IN TEXT, because the ring was the only cue a SIGHTED
+  // player got and it carries no words at all. `suggestedSuffix` above rides a
+  // button's aria-label, so a screen-reader user has always been told which row
+  // is the cheapest and everyone else saw a pulsing border and had to guess what
+  // it meant. Meanwhile "bigger army" is the single most intuitive first buy in
+  // a strategy game and is measured at 2% against cheapest-first's 33% (n=48,
+  // and independently reproduced at 79% vs 2% vs 0% on kaldan) — so the one
+  // purchase the UI most needs to argue against was argued against in a channel
+  // most players cannot hear.
+  //
+  // It teaches the RULE rather than pointing, because pointing does not survive
+  // the row moving: a player who learns "cheapest first" needs the beacon once,
+  // and a player who only learns "buy the glowing one" needs it forever.
+  suggestedTag: 'Buy this next — cheapest first beats saving up',
   // THE CROWN TIER'S OWN BADGE AND GATE NOTE — see screens/shop.js for the rest
   // of the section treatment (a rank-hued header and top edge, not the accent
   // every other group shares). The badge shows whether the section is locked or

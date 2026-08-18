@@ -148,6 +148,14 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent) 65%, transparent);
   animation: hd-beacon var(--d-beacon) var(--ease) infinite;
 }
+/* The ring's words. Hidden on every row and revealed on the suggested one, so
+   the 250ms tick can keep toggling one attribute instead of re-rendering (which
+   throws keyboard focus — see screens/shop.js). Accent-hued to tie it to the
+   ring it explains, and it wraps rather than truncating: it is a sentence. */
+.shop-suggest { display: none; }
+.shop-row[data-suggested='1'] .shop-suggest {
+  display: block; font-size: var(--t-sm); color: var(--c-accent); margin-top: 2px;
+}
 .shop-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .shop-name { font-weight: var(--w-bold); }
 .shop-desc { font-size: var(--t-sm); color: var(--c-text-dim); }

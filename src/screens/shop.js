@@ -313,7 +313,14 @@ export function createShopScene(ctx) {
     },
       h('div.shop-row-main', {},
         h('span.shop-name', { text: item.name }),
-        h('span.shop-desc', { text: item.desc })),
+        h('span.shop-desc', { text: item.desc }),
+        // ALWAYS BUILT, SHOWN BY CSS. The suggestion moves on the 250ms
+        // affordability tick, which deliberately toggles one attribute rather
+        // than re-render()ing — re-rendering throws focus off whatever the
+        // keyboard is on, a bug already fixed once in this file. So the line
+        // that explains the ring cannot be a node that comes and goes; it is a
+        // node that is always there and `[data-suggested]` reveals.
+        h('span.shop-suggest', { text: SHOP.suggestedTag })),
       h('div.shop-row-side', {},
         h('span.shop-level.num', { text: owned }),
         item.locked
