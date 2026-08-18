@@ -1199,7 +1199,64 @@ blackspire, which is exactly what it already shipped — the lever looked free a
 fully spent. Cost a measurement to learn; `develop` (2.20 → 2.45, the whole gap to
 blackspire) is what carried the correction instead.
 
+## The harness bot CAN concentrate force now, and it changes nothing — the force is not there
+
+**Read this instead of the section below it, which is the hypothesis this one tested.**
+`tools/simpool.js` teaches the bot to pool several sources into one synchronized strike,
+the way `aicore.js adjacentSources` already does for the enemy. It works — the
+real-battle test groups commands by target and arrival tick and demands a wave drawn
+from two or more distinct sites — and it moves nothing:
+
+```
+n=48        pooled    --pool off
+gallowmoor    25%        33%
+thanescar     27%        23%
+```
+
+Opposite signs, both inside the noise band. **It ships OFF (`--pool` opts in), inverting
+the `--noX` house pattern deliberately**: `upgradeTurn`, `constructTurn`, `scoutTurn` and
+the throne budget each shipped on because each was measured as an improvement in the pass
+that added it, and this one is a wash. Every number in this file was taken without it, so
+turning it on would make the whole table incomparable to fix nothing. Proven inert where
+it is off — gallowmoor n=8 is identical with the change present and with a clean worktree
+at the parent commit.
+
+**AND THEN THE MECHANISM WAS MEASURED, WHICH IS WORTH MORE THAN THE WIN RATES.**
+Instrumented on thanescar seed 1000 — the seed the original diagnosis was traced on —
+over a full 30-minute battle, 912 thinks:
+
+```
+castle within reach of a player site          823 of 912 thinks  (90%)
+...of TWO OR MORE player sites                385 of 912 thinks  (42%)
+most sites ever in reach of it at once        19
+thinks where the castle is a LEGAL pooled target, by source cap:
+    cap 3      0
+    cap 6      0
+    cap 12     0
+    cap 99     0        <- every site in reach, committed at 100%
+best force ratio EVER achieved                1.02x   (41 bodies v 40)
+```
+
+Not reach, not scan order, not `POOL_MAX_SOURCES`, not the send fraction. **The force
+never exists.** At its single best moment the bot holds seven sites within reach of the
+throne with forty-one bodies between them, against a castle that trains against zero
+attrition because nothing ever attacks it.
+
+**So the bottleneck is PRODUCTION NEAR THE FRONT, not the assault decision**, and the
+three candidates are the Marshal's `trainBuff` on an unattacked throne, the bot's habit of
+spreading production over many small captured sites, and `develop`. It is a ratio rather
+than a win rate, so n=1 is far more informative here than it would be for a percentage —
+but re-take it on ravensmarch and widowsgate before generalising past the Marshal'd rows.
+
+**What the whole exercise cost and bought:** one measurement, which is exactly what the
+ROADMAP entry proposing it priced it at. It disproved its own hypothesis and replaced it
+with a narrower one. That is the shape a speculative diagnosis should have.
+
 ## The harness bot cannot concentrate force, and it is the only actor that cannot
+
+**⚠ SUPERSEDED — this is the hypothesis, and the section above is the measurement that
+disproved it. The reasoning below is sound and the conclusion is wrong; it is kept
+because the reasoning is what generalises.**
 
 **Read this before trusting any tier 4–6 number.** `tools/simplayer.js:138` loops
 `for (const src of mine)` and hands each source to `simtactics.js bestAssaultTarget(view,

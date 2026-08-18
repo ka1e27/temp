@@ -596,14 +596,41 @@ historical.*
       not throne-weighted, so it competes with consolidation — on thanescar seed 1000 it
       converted a clean win into a timeout without ever aiming at the castle. Both that
       and pooled gallowmoor's `ahead=31` say the same thing.
-- [ ] **THE THRONE IS THE BOTTLENECK — WEIGHT THE POOLED SCAN AT IT AND RE-MEASURE.** The
-      one change that would justify turning `--pool` on, and the one follow-up the
-      measurement above actually earned. `simpool.js` masses correctly and then spends
-      the mass on whatever is nearest in id order; the whole reason it was built is the
-      target no single rear garrison can ever legally clear alone. Weight the scan toward
-      the castle (or simply toward `frontDistance`'s sink, which `advanceDistance`
-      already computes for the same reason), re-take gallowmoor and thanescar, and flip
-      the default in the same pass that re-tunes against it.
+- [x] ~~**THE THRONE IS THE BOTTLENECK — WEIGHT THE POOLED SCAN AT IT AND RE-MEASURE.**~~
+      **MEASURED, AND THE ANSWER KILLS THE WHOLE LINE OF ATTACK.** Instrumented on
+      thanescar seed 1000 — the exact seed the original diagnosis was traced on — over a
+      full 30-minute battle, 912 thinks:
+
+      ```
+      castle within reach of a player site          823 of 912 thinks  (90%)
+      ...of TWO OR MORE player sites                385 of 912 thinks  (42%)
+      most sites ever in reach of it at once        19
+      thinks where the castle is a LEGAL pooled target, by source cap:
+          cap 3      0
+          cap 6      0
+          cap 12     0
+          cap 99     0        <- every site in reach, committed at 100%
+      best force ratio EVER achieved                1.02x   (41 bodies v 40)
+      ```
+
+      So it is not reach (90% of the battle), not scan order (`castle` sorts first
+      anyway), not `POOL_MAX_SOURCES` (unlimited changes nothing), and not the 50%
+      fraction (committing everything peaks at 1.02x against `ATTACK_MARGIN` 1.5).
+      **The force never exists.** At its single best moment the bot holds seven sites in
+      reach of the throne with forty-one bodies between them, against a castle that
+      trains against zero attrition.
+      One seed, one region — but this is a RATIO, not a win rate, so it is far more
+      informative at n=1 than a win rate would be, and it should be re-taken on
+      ravensmarch and widowsgate before it is generalised past "the Marshal'd rows".
+- [ ] **SO THE BOTTLENECK IS PRODUCTION NEAR THE FRONT, NOT THE ASSAULT DECISION.** That
+      is where the tier 3-6 work goes next, and the measurement above is what narrows it.
+      Three candidates, in the order they are worth trying: the Marshal's `trainBuff` on
+      a throne that is never attacked (the castle garrison ran 96-241 while the biggest
+      thing beside it never passed 30); the bot's own economy, which spreads production
+      over many small captured sites instead of concentrating it where the war is; and
+      `develop`, which this session already cut once for the same reason. **Do not reach
+      for `enemyMult`** — it moved gallowmoor and thanescar the wrong way twice, which is
+      the same tell all three instances of the harness-cannot-play class produced.
 - [ ] **THE LOADOUT IS A TRAP AND IT LOCKS FOR THE WHOLE BATTLE.** Known; what the review
       adds is the second clause, read out of `battleRoster`/`cmdTrain`: the five types
       chosen at the briefing are the only five you can ever TRAIN, including out of a
