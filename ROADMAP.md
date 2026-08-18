@@ -67,6 +67,43 @@ its own box exists here.
       what the game told them. `boosterBlocker` is now one predicate shared by the HUD
       and `cmdBooster`, the `buildBlocker` pattern.
 
+- [ ] **THE GAME NOW PROMISES A 16-20 MINUTE BATTLE FOR FIFTEEN OF TWENTY-FOUR REGIONS,
+      AND THE DESIGN DOCS STILL SAY 7-15.** Read straight off `regions.data.js` with the
+      hard cap derived the way `HARD_CAP_MIN_BY_TIER`/`HARD_CAP_RATIO` derive it:
+
+      ```
+      tier 1   7.5 - 10 min   (cap 14-19)
+      tier 2   6.5 - 9        (cap 14-17)
+      tier 3   19 - 20        (cap 36-38)   <- and this is the LONGEST tier
+      tier 4   16             (cap 30)
+      tier 5   16 - 18        (cap 30-34)
+      tier 6   16 - 18        (cap 30-34)
+      ```
+
+      Three separate problems, and only the first is the retune's:
+      1. **The lengths are mid-binary-search** — the in-flight retune raised them off a
+         stale pre-melee promise precisely so `hardCapMs` would stop pinning battles to a
+         clock they cannot resolve inside. So the VALUES are provisional. Say so before
+         quoting them.
+      2. **The SHAPE is wrong whatever the values settle to.** Tier 3 promises longer than
+         tiers 4, 5 and 6. A player who has just spent twenty minutes on gallowmoor is
+         told the tier-6 opener is a sixteen-minute fight. Nothing in the game explains
+         that, because it is not explicable — it is an artifact.
+      3. **Nothing asserts anything about this column.** `tests/campaign.test.js` pins
+         `enemyMult` non-decreasing, total sites non-decreasing, the opening ratio, the
+         gate ceiling — and says nothing at all about advertised length, which is why it
+         could drift from 6-9 to 16-20 without a single test noticing.
+
+      **This is a FUN problem before it is a balance one.** Both `CLAUDE.md` and this
+      file state the premise as "a battle is 7-15 undistracted minutes", and this file's
+      own "Sessions you can actually fit into a day" section is built on it. A
+      twenty-minute advertised fight with a thirty-eight-minute cap is a different
+      product from the one those sections describe. **Somebody has to decide which one
+      this is** — and then the guard is cheap: a ceiling and a shape test beside the
+      other campaign invariants.
+      *Do not fix the numbers here* — that is the retune's job and it is mid-search.
+      What is safe to land now is the guard and the corrected premise.
+
 <!-- FINDINGS GO HERE, ranked, as they are transcribed. -->
 
 ### Blocking — the deploy is red until this is done
