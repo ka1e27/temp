@@ -58,6 +58,41 @@ commit. Do not re-derive the list.
 > bullet. Re-take all four *after* the re-tune lands; they are its acceptance test, not
 > separate work.
 
+> **⚠⚠ READ THIS BEFORE MOVING ANOTHER DIAL. THE HARNESS BOT CANNOT CONCENTRATE
+> FORCE, AND THAT IS ALMOST CERTAINLY WHAT THE ELEVEN BELOW-FLOOR ROWS ARE
+> MEASURING.** The re-tune below diagnosed the stall correctly — a Marshal'd castle
+> is never attacked, so it trains against zero attrition, and no rear site can mass a
+> legal first strike — and then read it as a difficulty lever. It is an INSTRUMENT
+> fault. Checked in the source, not inferred:
+>
+> - `tools/simplayer.js:138` is `for (const src of mine)`, and each source is handed
+>   to `simtactics.js bestAssaultTarget(view, src, send)` **alone**. Every assault the
+>   bot makes comes from ONE garrison, judged against `ATTACK_MARGIN` 1.5.
+> - The enemy AI pools up to `AI.maxSources` (3) sites into one assault
+>   (`aicore.js adjacentSources`).
+> - The PLAYER now pools the whole selection (multi-site send, shipped this session).
+>
+> So the measuring instrument is the only actor on the board that cannot mass — against
+> the one target that punishes not massing. Measured by the re-tune's own probe:
+> thanescar's castle runs 96–241 troops while the biggest player site beside it never
+> exceeds 11–30. No single garrison can ever clear 1.5×, so **no siege is ever opened**,
+> which is exactly the "87% territory, castle at full HP, never besieged" signature.
+>
+> **This is the THIRD instance of a class CLAUDE.md already records twice** — the 90s
+> siege budget that made mono-militia read 94% → 25% ("the harness declining to play…
+> and it broke TOWARD the result somebody wanted"), and the `PRIORITY`/`advanceDistance`
+> collapse worth 0% → 75% on gallowmoor. Both had the same tell the re-tune reports
+> here: **no AI knob moves the region at all**, and further `enemyMult` cuts moved
+> gallowmoor and thanescar the WRONG way twice.
+>
+> **So the next step is a harness change, not a dial.** Let an assault draw from several
+> adjacent sources the way the AI's does, behind its own switch (`--nopool`) so the delta
+> stays re-measurable — the house pattern `--noupgrades`/`--noconstruct`/`--noscout`
+> already follow — then re-take one stuck row before touching `enemyMult` again. If the
+> row moves, every number in the table below was measured against a bot that could not
+> play the shipped game, and the re-tune restarts from there. If it does not move, the
+> difficulty reading stands and this note costs one measurement.
+
 - [ ] **The campaign re-tune against the melee layer.** Full brief in the section below
       (`Do this first`). **IN PROGRESS, substantial but not closed** — see CLAUDE.md
       ("Still open" -> the campaign re-tune, third pass) for the full, current write-up.

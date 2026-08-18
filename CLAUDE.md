@@ -1199,6 +1199,36 @@ blackspire, which is exactly what it already shipped — the lever looked free a
 fully spent. Cost a measurement to learn; `develop` (2.20 → 2.45, the whole gap to
 blackspire) is what carried the correction instead.
 
+## The harness bot cannot concentrate force, and it is the only actor that cannot
+
+**Read this before trusting any tier 4–6 number.** `tools/simplayer.js:138` loops
+`for (const src of mine)` and hands each source to `simtactics.js bestAssaultTarget(view,
+src, send)` **on its own**. Every assault the bot makes therefore comes from ONE garrison,
+judged against `ATTACK_MARGIN` 1.5. Meanwhile the enemy AI pools up to `AI.maxSources` (3)
+sites per assault (`aicore.js adjacentSources`), and the PLAYER now pools the whole
+selection (see "Concentrating force" above). **The measuring instrument is the only actor
+on the board that cannot mass** — against a Marshal'd castle, which is the one target that
+punishes not massing, because it is never attacked and so trains against zero attrition.
+
+Measured with a direct probe on the real `buildBattleConfig`/`startBattle` pipeline:
+thanescar's castle garrison runs **96–241** over twenty minutes while the biggest site the
+player holds beside it never exceeds **11–30**. No single garrison can ever clear 1.5×, so
+no siege is ever opened — which is exactly the signature reported at 87% territory with the
+castle at full HP, unbesieged, under a seventy-minute cap.
+
+**THIS IS THE THIRD INSTANCE OF A CLASS RECORDED TWICE ALREADY** — the 90-second siege
+budget that made mono-militia read 94% → 25%, and the `PRIORITY`/`advanceDistance` collapse
+worth 0% → 75% on gallowmoor. All three share one tell: **no AI knob moves the region at
+all**. The re-tune reports exactly that — further `enemyMult` cuts moved gallowmoor and
+thanescar the WRONG direction, twice.
+
+So the next move on tiers 3–6 is a HARNESS change, not a dial: let an assault draw from
+several adjacent sources the way the AI's does, behind `--nopool` so the delta stays
+re-measurable (the house pattern `--noupgrades`/`--noconstruct`/`--noscout` already
+follow), then re-take one stuck row. **A mechanic the harness cannot play is a mechanic
+nobody has measured** — the lesson `upgradeTurn`, `constructTurn` and `scoutTurn` each
+taught once, arriving now for concentration.
+
 ## The harness bot upgrades sites, and the campaign is tuned against that
 
 **This was an open work item for a long time and it is now closed. Read it before
