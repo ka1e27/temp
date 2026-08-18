@@ -25,7 +25,7 @@ import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
 import { createSpeedControl } from './battle-speed.js';
 import {
-  buildTrainPicker, updatePreview, placeFan, placeRails,
+  buildTrainPicker, updatePreview, placeFan, placeRails, buildReadouts,
 } from './battle-parts.js';
 // `updateTrain` indexes the chips against the SAME list they were built from,
 // so this stays here even though the fan itself moved.
@@ -128,41 +128,7 @@ export function createBattleHud(o) {
   // the panel that follows one. See battle-actions.js `createBuildRail`.
   const buildRail = createBuildRail(getState, input, view);
 
-  el.gold = h('span.hud-value.num', { text: '0' });
-  // NET, not income: the number the player decides on is what the treasury does
-  // per second once the strongholds have taken their cut, so switching a
-  // stronghold to rams has to move THIS figure. The breakdown underneath shows
-  // both halves, because a net alone hides which half moved.
-  el.rate = h('span.hud-rate.num', {
-    text: '+0.0/s', title: 'Net gold per second — income minus training',
-  });
-  el.flow = h('span.hud-flow.num', { text: '' });
-  el.clock = h('span.hud-value.num', { text: '0:00' });
-  // ELAPSED AND THE CAP. It counted up with no end in sight, and the hard cap
-  // was stated exactly once, on the pre-battle brief — so a player who did not
-  // memorise it had no way to know whether a slow grind was still affordable
-  // until the last sixty seconds turned the panel red. A battle that TIMES OUT
-  // is a loss, so the runway is not trivia.
-  el.runway = h('span.hud-runway.num', { text: '' });
-  el.tallyBox = h('span.hud-tally', {}, h('span.label', { text: 'Sites' }), el.tally);
-  el.clockBox = h('div.hud-clock.panel', {},
-    el.tallyBox, h('span.label', { text: 'Elapsed' }), el.clock, el.runway);
-  // WHO IS AHEAD, in the one currency the win condition is made of. Nothing in
-  // the HUD carried it: `sitesOwned` exists and no screen imported it, so on a
-  // 20x15 board over 7-24 minutes the only way to answer "am I winning" was to
-  // pan the whole map and count. Sites rather than troops because territory is
-  // what pays, what gates the castle, and what the results screen scores.
-  // It rides the CLOCK's row, and is hidden in the docked (phone) layout — see
-  // hud.css for the three placements measured and why none of them fit there.
-  el.tally = h('span.hud-value.num', { text: '' });
-  el.verdict = h('span.pv-verdict', { text: '' });
-  el.pvTitle = h('span', { text: '' });
-  el.pvLine = h('div.pv-line');
-  el.pvNote = h('div.pv-note');
-  el.pvComp = h('div.pv-comp');
-  el.pvCaveats = h('div.pv-caveats');
-  el.preview = h('div.hud-preview.panel', {},
-    h('div.pv-head', {}, el.pvTitle, el.verdict), el.pvComp, el.pvLine, el.pvNote, el.pvCaveats);
+  buildReadouts(el);
   el.train = h('div.hud-train');
   el.alert = alert.el;
   el.selection = site.el;

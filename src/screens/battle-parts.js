@@ -232,3 +232,61 @@ export function placeRails(el) {
     docRoot?.classList.remove('is-railed', 'is-docked');
   };
 }
+
+/**
+ * The two readout panels and the preview card: the treasury group, the clock
+ * group, and the six nodes updatePreview paints. Split out of battle-hud.js at
+ * the 400-line cap, along the seam that costs nothing — this block is pure
+ * construction with no reference to createBattleHud's own closure, which is the
+ * same reason updatePreview itself lives here.
+ *
+ * It fills the caller's `el` bag in place rather than returning a new object,
+ * because every one of these nodes is read back by name from half a dozen
+ * places (`el.clockBox` by placeRails, `el.pvComp` by updatePreview, `el.gold`
+ * by the writer cache) and a second container would just be a name to keep in
+ * step.
+ */
+export function buildReadouts(el) {
+  el.gold = h('span.hud-value.num', { text: '0' });
+  // NET, not income: the number the player decides on is what the treasury does
+  // per second once the strongholds have taken their cut, so switching a
+  // stronghold to rams has to move THIS figure. The breakdown underneath shows
+  // both halves, because a net alone hides which half moved.
+  el.rate = h('span.hud-rate.num', {
+    text: '+0.0/s', title: 'Net gold per second — income minus training',
+  });
+  el.flow = h('span.hud-flow.num', { text: '' });
+  el.clock = h('span.hud-value.num', { text: '0:00' });
+  // ELAPSED AND THE CAP. It counted up with no end in sight, and the hard cap
+  // was stated exactly once, on the pre-battle brief — so a player who did not
+  // memorise it had no way to know whether a slow grind was still affordable
+  // until the last sixty seconds turned the panel red. A battle that TIMES OUT
+  // is a loss, so the runway is not trivia.
+  el.runway = h('span.hud-runway.num', { text: '' });
+  // WHO IS AHEAD, in the one currency the win condition is made of. Nothing in
+  // the HUD carried it: `sitesOwned` exists and no screen imported it, so on a
+  // 20x15 board over 7-24 minutes the only way to answer "am I winning" was to
+  // pan the whole map and count. Sites rather than troops because territory is
+  // what pays, what gates the castle, and what the results screen scores.
+  // It rides the CLOCK's row, and is hidden in the docked (phone) layout — see
+  // hud.css for the three placements measured and why none of them fit there.
+  el.tally = h('span.hud-value.num', { text: '' });
+  // DECLARED BEFORE THE BOX THAT MOUNTS IT, and that is not style. It used to
+  // be created ten lines BELOW this, so `el.tally` was `undefined` here — and
+  // `h()` skips an undefined child rather than throwing, so the box mounted the
+  // label alone and the value span was never in the document at all. The
+  // binding below then wrote every update into a detached node: the readout was
+  // built, wired, tested and permanently blank. The same "sold and did nothing"
+  // shape this file's own history is full of, shipped by the pass that added it.
+  el.tallyBox = h('span.hud-tally', {}, h('span.label', { text: 'Sites' }), el.tally);
+  el.clockBox = h('div.hud-clock.panel', {},
+    el.tallyBox, h('span.label', { text: 'Elapsed' }), el.clock, el.runway);
+  el.verdict = h('span.pv-verdict', { text: '' });
+  el.pvTitle = h('span', { text: '' });
+  el.pvLine = h('div.pv-line');
+  el.pvNote = h('div.pv-note');
+  el.pvComp = h('div.pv-comp');
+  el.pvCaveats = h('div.pv-caveats');
+  el.preview = h('div.hud-preview.panel', {},
+    h('div.pv-head', {}, el.pvTitle, el.verdict), el.pvComp, el.pvLine, el.pvNote, el.pvCaveats);
+}
