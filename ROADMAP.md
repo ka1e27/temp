@@ -169,7 +169,94 @@ its own box exists here.
       concurrency slot on free lunches), or make the board distinguish a threat from
       traffic. The first is a balance change and needs the re-tune; the second does not.
 
-<!-- FINDINGS GO HERE, ranked, as they are transcribed. -->
+**⚠ FOUR OF THE SIX SPECIALISTS DIED TO A SESSION LIMIT BEFORE WRITING ANYTHING.**
+`crit-difficulty.md` and `crit-idle.md` landed and are transcribed below. **Game feel,
+hours 2-10, board readability, and input/accessibility were never reported** — those four
+lenses are still unexamined and are the first thing to re-run. Do not go looking for
+their files; they do not exist.
+
+### From the difficulty-and-failure critic
+
+- [ ] **THE "WHY" LINE CLAIMS THE COUNTRYSIDE WAS YOURS WHEN IT WAS NOT — and it is a
+      bug in the branch whose own comment says it must make no claim.** `resultReason`'s
+      `need <= 0` arm returns `RESULTS.whyClockOnly`, whose text is *"The countryside was
+      yours and the gate was open — the throne simply outlasted the clock."* That is a
+      positive territorial claim, and the comment two lines above it says the opposite is
+      intended (*"there is no territory claim to make, so make none"*). Five regions ship
+      `castleGateFrac: 0` — all of tier 1 plus kaldan — so on those, ANY timeout prints
+      it regardless of the ground held. Reproduced twice: riverfen held **3/11 (27%)**
+      and kaldan **2/18 (12%)**, both told the countryside was theirs. The `whyGateHeld`
+      branch is fine and the mechanism is fine; the fallback needs its own string.
+- [ ] **"NOTHING WAS LOST BUT TIME" IS FALSE IF YOU FIRED A BOOSTER.** `applyOutcome`
+      calls `consumeBoosters` unconditionally, before the win/loss branch, and
+      `boosters.js consume()` has no loss refund. A charge costs 1-3 RELICS, the scarce
+      currency you cannot grind. So a player who spends relics trying to save a battle
+      they lose is told nothing was lost — two lines above the stat row that correctly
+      reports the charges spent. **Invisible to every measurement this project has, by
+      construction: the harness always launches with `boosters: []`.**
+- [ ] **A TIMED-OUT BATTLE IS OFTEN INFORMATIONALLY DEAD FOR MOST OF ITS RUN, AND THE
+      PLAYER PAYS THE WHOLE CLOCK.** `endPhase` only assigns `timeout` at
+      `hardCapTicks`, so every timeout runs the full advertised cap. Traced tick by tick:
+      **widowsgate locks at 7 v 48 by minute 9 and does not move a single site for the
+      remaining 25 minutes** (74% of a 34.2-minute battle); gallowmoor locks at 44 v 26
+      by minute 26 and sits for 12 more — and that one had already cleared its gate, the
+      throne siege simply never finished. Duskfell is the counter-example and shows the
+      mechanism is not always bad: genuinely contested to the wire, decided in the last
+      5% of the clock. **This is a property of hard-cap-as-verdict, not of today's dial**,
+      so the re-tune does not fix it.
+- [ ] **NOTHING SIGNALS A STALEMATE, SO THE FREE ESCAPE HATCH NEEDS THE PLAYER TO
+      SELF-DIAGNOSE.** Withdraw is always visible and genuinely free (`stats.losses` is
+      not incremented for a retreat), so the tool to cut a 34-minute frozen loss to a
+      9-minute one already exists. Nothing measures or surfaces "territory has not moved
+      in N minutes". In the widowsgate trace a player had a 25-minute window to make that
+      call entirely unaided.
+- [ ] **THE PRE-FIGHT READOUT CANNOT DISTINGUISH REGIONS WITH DOUBLE THE WIN RATE, AND
+      NEVER SHOWS THE GATE.** `duskfell 4.45`, `karrowmere 4.48`, `vaelstrand 4.38` all
+      render as "x4.4"/"x4.5" on an identical layout; the project's own in-flight n=24
+      screen reads karrowmere 38% against vaelstrand and duskfell at 17%. `castleGateFrac`
+      is never shown before the fight — and in-battle it appears ONLY inside the castle's
+      own panel and ONLY once the throne is already under siege, because `castleSealed`
+      requires an active siege. So a player correctly securing the countryside for 25
+      minutes has no ambient way to know whether they are 2 points short of the gate or
+      47. (The dial figures are mid-retune; the identical-display fact is not.)
+- [ ] **THE TWO LOSS BRANCHES EXPLAIN THE MECHANISM, NEVER THE CAUSE.** "Your camp fell"
+      and "Nothing of yours was left on the board" are both true and both better than the
+      old bare stat rows, but neither says whether the camp was overrun or simply left
+      empty — and the sim records nothing `resultReason` could read to tell them apart.
+      **7 of 13 sampled battles ended this way**, so it is the most common loss text in
+      the game.
+- [ ] **The why-line has no visual priority over the flavour line above it.** Same size,
+      same weight, same colour — the single most actionable sentence on the screen reads
+      as a continuation of the subtitle.
+
+### From the idle-half critic
+
+*Its headline verdict is worth keeping: the idle ECONOMY is genuinely well-built —
+honest caps, provably seamless online/offline math, prestige legible before you commit —
+but **the only infinite, ever-escalating system in the game (the incursion ladder) is
+the one an idle player can never touch**, because auto-resolve is restricted to raids.
+The idle half is a well-made finite game; "endless" lives entirely in the RTS half.*
+
+- [ ] **A PLAYER WHO NEVER OPENS THE SHOP IS CAPPED AT EIGHT OFFLINE HOURS FOREVER.**
+      The offline cap is gated entirely on Treasury levels. At full conquest that is
+      roughly **55 million crowns silently discarded on one missed day**, for a play
+      style this genre's audience plainly contains (engage with the RTS, ignore the
+      meta-shop). The away banner now explains it after the fact — which is most of the
+      fix and shipped this session — but nothing warns before the cap binds, and nothing
+      on the world map says "your cap is still at the floor".
+- [ ] **THE IDLE ECONOMY IS INVISIBLE FOR THE ENTIRE LENGTH OF A BATTLE.** Code search:
+      **zero** UI surface under `src/screens/battle*` reads crowns or income. For a game
+      whose one-line pitch is idle income married to real-time conquest, the two halves
+      never appear on screen together — for 8-20 minutes at a stretch, which is most of a
+      session's wall clock.
+- [ ] **Four of twenty-four shop waypoints miss the project's own ~180s
+      time-to-next-purchase pacing target** (up to 316s), clustered at the tier 3→6
+      transition. Never felt in practice because the next battle absorbs it — flagged
+      only because it is a target the codebase states explicitly and measurably misses.
+- [ ] **No auto-spend toggle**, though "Spend all" and per-line "x10" already remove most
+      of the tedium. Low cost; listed for completeness.
+
+<!-- MORE FINDINGS GO HERE as the four unreported lenses are re-run. -->
 
 ### Blocking — the deploy is red until this is done
 
