@@ -278,13 +278,36 @@ function cmdWithdraw(state, cmd, by) {
 }
 
 
-function cmdBooster(state, cmd, by) {
-  if (by !== 'player') return 'boosters-are-the-players';
-  const b = state.boosters[cmd.id];
+/**
+ * Why this booster cannot be used AT ALL right now, or null — the half of
+ * `cmdBooster`'s checks that does not depend on a target, so a UI can ask
+ * before it arms one.
+ *
+ * IT IS EXPORTED BECAUSE THE HUD USED TO ARM A BOOSTER IT HAD NO CHARGES FOR,
+ * and then instruct the player to aim it. A fresh save carries none of the
+ * five, so the very first battle offered a rail of five live controls, and
+ * pressing one answered `AIMING RALLY - click a site`; the refusal only
+ * arrived on the SECOND click, after the player had done what they were told.
+ * `screens/battle-boosters.js` asks this first now.
+ *
+ * Same shape and same reason as `buildBlocker`: a preview that disagrees with
+ * the command is the class of bug this project keeps finding, so there is one
+ * predicate and `cmdBooster` below is its other caller rather than a copy.
+ */
+export function boosterBlocker(state, id) {
+  const b = state?.boosters?.[id];
   if (!b) return 'booster-unavailable';
   if (b.charges <= 0) return 'no-charges';
+  if (!BOOST[id]) return 'unknown-booster';
+  return null;
+}
+
+function cmdBooster(state, cmd, by) {
+  if (by !== 'player') return 'boosters-are-the-players';
+  const blocked = boosterBlocker(state, cmd.id);
+  if (blocked) return blocked;
+  const b = state.boosters[cmd.id];
   const fn = BOOST[cmd.id];
-  if (!fn) return 'unknown-booster';
   const siteRef = cmd.site ?? cmd.target;
   const site = siteRef != null ? siteById(state, siteRef) : null;
   if (siteRef != null && !site) return 'unknown-site';

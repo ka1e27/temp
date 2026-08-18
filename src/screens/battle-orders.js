@@ -294,7 +294,7 @@ export function createOrders(o) {
   // the same one-shot shape as armed construction below, so both moved out
   // to their own file at the 400-line cap — see ./battle-boosters.js.
   const { armBooster, cancelBooster, fireBooster } = createArmedBoosters({
-    view, canvas, bus, push, cmd,
+    view, canvas, bus, getState, push, cmd,
   });
 
   // Armed construction (arm a kind, resolve the next click to a hex, push
