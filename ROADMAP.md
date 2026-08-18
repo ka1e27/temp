@@ -105,6 +105,31 @@ its own box exists here.
       *Do not fix the numbers here* — that is the retune's job and it is mid-search.
       What is safe to land now is the guard and the corrected premise.
 
+- [ ] **AT TICK 0 THERE ARE ZERO KNOWN ENEMY OR NEUTRAL SITES, SO THE ENTIRE
+      "SELECT THAT BUILDING AND ATTACK IT" VOCABULARY HAS NOTHING TO OPERATE ON.**
+      Measured off the real `buildBattleConfig`/`startBattle` pipeline, riverfen, seeds
+      1/7/42/99 — every one reads `sites 11 · mine 3 · seen 3 · known non-player sites 0`.
+      Not "few". Zero, on every seed.
+
+      Driven in the browser it is worse than the number sounds. A policy that plays the
+      way an RTS player thinks — pick my biggest garrison, pick the nearest building I
+      can see, drag between them — issued **zero orders in 340 seconds of in-game time**
+      while the enemy grew 5 sites to 8, because its target set never became non-empty.
+      The only legal opening move in the game is a march onto BARE GROUND.
+
+      This is the deliberate fog rule working as designed, and `COACH.drag` was already
+      rewritten to teach the ground rather than a building for exactly this reason — so
+      this is **not** a bug and the fix is not "show the buildings". What it is, is the
+      single largest departure from genre convention in the product, it is TOTAL rather
+      than partial, and it compounds with the open item below about the objective naming
+      a castle that is not on the board. Together they mean the first thirty seconds ask
+      the player to unlearn the genre with one line of text as the only guidance.
+      **Worth a deliberate decision rather than an inherited one.** Cheapest honest
+      options, none of which reopens the fog rule: a second coach beat that fires if no
+      order has been given by ~20s; the beachhead's own sight radius raised by one so the
+      opening lights a neighbour or two; or the bearing marker proposed for the castle,
+      which would at least give the first drag a direction.
+
 <!-- FINDINGS GO HERE, ranked, as they are transcribed. -->
 
 ### Blocking — the deploy is red until this is done
