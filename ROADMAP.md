@@ -640,13 +640,29 @@ historical.*
       near the throne make 1.37x against a 124-body castle, under the 1.5 margin, while
       eight hundred of their fellows are walking. And 118,303 unspent gold is the
       `PRIORITY` signature this project already recorded once at 17,000.
-      **Two things to instrument, in order:** what share of sends re-task troops already
-      heading somewhere useful (`advanceDistance`'s gradient re-pointing every 2s is the
-      obvious suspect), and what that treasury has to spend on — if most captured sites
-      are farms (`train: 0`), the bot has optimised itself into an economy with nothing
-      to buy. **Do not reach for `enemyMult`**: it moved gallowmoor and thanescar the
-      wrong way twice, the same tell all three instances of the harness-cannot-play class
-      produced.
+      **THE CONVERSION HALF IS NOW MEASURED TOO, and it is the `PRIORITY` failure
+      again.** Same battle, what the bot actually holds:
+
+      ```
+      min   sites   farms   yards   walls   sites that TRAIN   train bill   gold unspent
+        5      19      13       3       1                  4      5.1/s         12,610
+       10      34      28       3       1                  4      5.1/s         52,680
+       15      54      41       8       3                  9     11.7/s        118,303
+      ```
+
+      Seventy-six percent farms, nine places in the world to turn gold into a body, and
+      **2.8 hours of training banked** in a battle with fifteen minutes left on its cap.
+      That is verbatim the shape recorded for `PRIORITY` at 17,000 gold, an order of
+      magnitude larger — so flipping `PRIORITY` fixed the symptom on small maps and not
+      the behaviour on big ones. **This makes the already-open "the bot builds farms
+      while it is losing" item the top harness fix rather than a curiosity**:
+      `constructTurn` raises a farm past its third yard while the treasury runs to six
+      figures.
+      **Still unmeasured — the churn half:** what share of sends re-task troops already
+      heading somewhere useful, `advanceDistance`'s gradient re-pointing every 2s being
+      the obvious suspect. **Do not reach for `enemyMult`**: it moved gallowmoor and
+      thanescar the wrong way twice, the same tell all three instances of the
+      harness-cannot-play class produced.
 - [ ] **THE LOADOUT IS A TRAP AND IT LOCKS FOR THE WHOLE BATTLE.** Known; what the review
       adds is the second clause, read out of `battleRoster`/`cmdTrain`: the five types
       chosen at the briefing are the only five you can ever TRAIN, including out of a

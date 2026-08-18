@@ -1265,12 +1265,31 @@ file already records once for `PRIORITY` (*"thirteen farms and two training site
 17,000 unspent gold against a 15 gold/s training bill"*), an order of magnitude worse. A
 bot that cannot convert a six-figure treasury into bodies is not being out-produced.
 
-**So the tier 3-6 question is CHURN AND CONVERSION, not massing and not production.**
-Two things to instrument next, in this order: what fraction of sends are re-tasking
-troops that were already heading somewhere useful (the `advanceDistance` gradient
-re-pointing every 2s is the obvious suspect), and what that treasury has to spend on —
-if most captured sites are farms (`train: 0`), the bot has optimised itself into an
-economy with nothing to buy, which is a shape this file has seen before.
+**AND THE CONVERSION HALF IS MEASURED, AND IT IS THE `PRIORITY` FAILURE AGAIN.** Same
+battle, same samples — what the bot actually holds:
+
+```
+min   sites   farms   yards   walls   sites that TRAIN   train bill   gold unspent
+  5      19      13       3       1                  4      5.1/s         12,610
+ 10      34      28       3       1                  4      5.1/s         52,680
+ 15      54      41       8       3                  9     11.7/s        118,303
+```
+
+**Seventy-six percent farms, nine places in the world to turn gold into a body, and
+118,303 gold in hand against an 11.7/s training bill — 2.8 HOURS of training banked,
+in a battle with fifteen minutes left on its cap.** This is verbatim the shape this file
+already records for `PRIORITY` (*"thirteen farms and two training sites with 17,000
+unspent gold"*) at an order of magnitude more money, so flipping `PRIORITY` fixed the
+symptom on the small maps and not the behaviour on the big ones. `constructTurn`'s own
+kind rule — *a yard while it holds fewer than three, a farm after that* — is the other
+half: the bot BUILDS farms past its third yard while sitting on six figures.
+
+**So the tier 3-6 question is CHURN AND CONVERSION, not massing and not production**, and
+the conversion half already has two named, already-open, one-file fixes with
+`--noconstruct` and `PRIORITY` in place to keep the delta measurable. The churn half is
+the one still unmeasured: what share of sends re-task troops that were already heading
+somewhere useful, with `advanceDistance`'s gradient re-pointing every two seconds as the
+obvious suspect.
 
 It is a ratio and a census rather than a win rate, so n=1 is far more informative here
 than it would be for a percentage — but re-take it on ravensmarch and widowsgate before
