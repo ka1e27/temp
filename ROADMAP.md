@@ -523,8 +523,10 @@ gravenreach 42%, nightharrow 29% already clear their own band. Three shapes wort
 a closer look: tier 4 splits exactly down the middle on an otherwise-uniform cut;
 ravensmarch is tier 5's one bad row by a wide margin (matching what an inherited
 n=8 quickscreen already hinted); and widowsgate at 4% is now the single WORST row
-in the table, worse than stormhalt, on the smallest proportional `enemyMult` cut
-this pass gave any tier 4-6 row. **Do not re-spend `enemyMult`
+in the table, worse than stormhalt, and NOT explained by `enemyMult` (its cut,
+5.10->4.90, was one of the biggest of the three tier-6 rows, not the smallest —
+the likelier suspects are its board, the biggest in the game, and its site
+count, the highest fort count of the three). **Do not re-spend `enemyMult`
 on the Marshal rows**: a further cut moved gallowmoor and thanescar the WRONG way at
 n=24 (twice), which at that n is consistent with noise once the `develop` cut already
 did the real work — and is itself consistent with the diagnosis (a consolidation race,

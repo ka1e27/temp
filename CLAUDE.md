@@ -2996,11 +2996,12 @@ gate the deploy.
   (gallowmoor/sunder/vaelstrand/duskfell/karrowmere), half of tier 4
   (thanescar/blackspire), ravensmarch, and all of tier 6
   (stormhalt/cinderwatch/widowsgate) — **widowsgate at 4% is now the single
-  worst row in the whole re-measured table**, worse than stormhalt, which is
-  notable given widowsgate's own `enemyMult` (4.90) carries the least
-  proportional cut of any row in tiers 4-6 (it started at 5.10, the smallest
-  delta this pass applied) and it has the largest board and the biggest
-  Marshal count (two) in the game.
+  worst row in the whole re-measured table**, worse than stormhalt, and NOT
+  explained by `enemyMult`: its cut (5.10→4.90) is one of the LARGER cuts
+  among the three tier-6 rows, not the smallest (see the tier-6 detail
+  below), and all three rows carry the same two Marshals. The likelier
+  suspects are its board (21×16, the biggest in the game) and its site
+  count (`enemyMix` forts=3 against its tier-mates' 2).
 
   **Two shapes worth carrying into the next pass, both visible only once the
   sweep filled in:**
@@ -3018,11 +3019,17 @@ gate the deploy.
     "tier 5" generally — is where the next enemyMult-adjacent look should go,
     if one is tried at all; see the "do not re-spend enemyMult" note above.
   - **Widowsgate (4%) is now the single worst row in the table**, worse than
-    stormhalt's 8%, on the SMALLEST proportional `enemyMult` cut of tiers 4-6
-    (5.10→4.90, the least this pass moved any row) and the biggest board plus
-    two Marshals in the game. If tier 6 gets another look, start there rather
-    than at stormhalt, which this pass already knew was hard for real
-    reasons (CLAUDE.md's own 60-minute-cap diagnostic, outright losses inside
+    stormhalt's 8% — NOT explained by the `enemyMult` cut, which was applied at
+    almost the same proportion across all three tier-6 rows (stormhalt
+    4.95→4.78, cinderwatch 5.05→4.85, widowsgate 5.10→4.90 — stormhalt's is
+    actually the smallest of the three, both in absolute and proportional
+    terms, which rules that column out as the explanation). What IS different
+    about widowsgate is the biggest board and the most site count in the game
+    (21×16, `siteCounts.enemyMix` forts=3 against tier 6's other two rows'
+    2), plus two Marshals same as its tier-mates. If tier 6 gets another look,
+    start there rather than at stormhalt, which this pass already knew was
+    hard for real reasons (CLAUDE.md's own 60-minute-cap diagnostic, outright
+    losses inside
     eight minutes on two of three seeds).
 
   **Do not treat any of this as final** — it is n=24, and this file's own
