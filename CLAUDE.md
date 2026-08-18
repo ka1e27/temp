@@ -2803,6 +2803,54 @@ illegible. Both are children of `#hud` with no z-index, so which one won was con
 order. `.hud-selection` carries `z-index: 2` now, and the rule is worth stating plainly:
 **advice never covers a control.**
 
+## What the results screen may claim, and the empire line beside the objective
+
+**Three things the game said that were not true**, all found by playing it rather than
+by a failing test:
+
+- **A booster you have none of used to ARM and instruct you to aim it.** A fresh save
+  carries no charges — relics buy them, and relics are paid only for a region you have
+  BEATEN — so the first battle puts five live controls down the right rail, all reading a
+  dash. Pressing one answered `AIMING RALLY — click a site`, and the refusal came on the
+  SECOND click. `boosterBlocker` is exported from `commands.js` and `cmdBooster` is its
+  other CALLER rather than a copy — the `buildBlocker` pattern.
+- **`resultReason`'s no-gate branch claimed the countryside was yours.** It returned
+  `whyClockOnly` ("The countryside was yours and the gate was open") in the branch whose
+  own comment says to make no territorial claim. Five regions ship `castleGateFrac: 0` —
+  all of tier 1 plus kaldan — so every timeout on them printed it however little was
+  held; reproduced at 3 of 11 sites and 2 of 18. **The test that should have caught it
+  had encoded the defect**, asserting the branch equalled a named constant when the
+  constant was the wrong one. Assert the PROPERTY when the property is the point.
+- **"Nothing was lost but time" is false if a charge was fired.** `applyOutcome` consumes
+  boosters unconditionally with no refund, and a charge costs relics. The copy branches on
+  `applied.boostersConsumed` — what was deducted from the player's stock, not what the
+  battle fired — so the headline and the "Charges spent" row agree by construction.
+  **Invisible to every balance number by construction: the harness launches with
+  `boosters: []`.**
+
+**A STALLED BOARD NOW SAYS SO.** `endPhase` only assigns `timeout` at `hardCapTicks`, so
+every timeout runs the full cap — measured, widowsgate locks at 7 sites v 48 by minute 9
+and does not move for the remaining 25 minutes, 74% of the battle. Withdraw is free and
+always on screen and nothing ever said it was time to use it. `battle-alert.js
+stalemateCheck` is a pure fold over the site tally with injectable thresholds: three
+minutes still raises `STALLED — no ground has changed hands in N minutes`, repeating no
+oftener than every two. **It warns and does not act** — duskfell, measured, was contested
+to the wire, so a still tally is not proof of a lost battle.
+
+**THE CASTLE GATE IS VISIBLE BEFORE THE FIGHT.** `castleGateFrac` appeared nowhere before
+committing to a region and, in battle, only inside the castle's own panel once the throne
+was already under siege (`castleSealed` needs an active siege to answer). The world map
+and loadout brief now carry `Throne holds until: you hold N% of the map`, omitted where
+there is none — "0%" reads as a requirement rather than its absence. On an incursion it
+asks `incursionRules`, so a `sealed` rung advertises 72% rather than the arena's 60%.
+
+**AND THE EMPIRE IS ON SCREEN DURING THE BATTLE.** A code search over
+`src/screens/battle*` found zero readers of crowns or income, so the game's one-line pitch
+was unobservable for the 8-20 minutes a battle lasts. `EMPIRE · 12K crowns · +15.0/s`
+rides under the objective — not beside the treasury, because only one of the two pots is
+spendable there — and is hidden until there is something to show, so it first appears in
+battle two rather than as a row of zeros in the busiest minute of onboarding.
+
 ## Gotchas that have already cost time
 
 - **A SPLIT THAT MOVES A CLOSURE TURNS ITS CAPTURED VARIABLES INTO FREE ONES, AND A FREE
