@@ -53,10 +53,18 @@
    above says only that it is the more useful of the two. No rule down the side
    either: the card centres its text, and a left rule against centred wrapping
    reads as a quotation somebody forgot to indent. Present only on a loss or a
-   timeout, so the winning screen is byte-identical. */
+   timeout, so the winning screen is byte-identical.
+
+   AND IT OUTRANKS THE FLAVOUR LINE ON TWO CHANNELS, not one. Colour alone was
+   not enough separation at 12px: a review screenshotting the real card read the
+   pair as "two lines of plain, identically-styled grey body text", and the
+   why-line is the single most actionable sentence on the screen while the line
+   above it is flavour. So it is a step LARGER as well as brighter. Still not
+   tinted by result, and still not bold — the point is that the eye lands here
+   first, not that the game is shouting. */
 .results-why {
   position: relative; margin: calc(var(--s-6) * -1) auto var(--s-6);
-  max-width: 42ch; color: var(--c-text); font-size: var(--t-sm); line-height: 1.5;
+  max-width: 42ch; color: var(--c-text); font-size: var(--t-md); line-height: 1.5;
 }
 /* A definition list read as a table: each cell stretches to the row and centres
    its own text, so a 10px label and a 32px number share one rule rather than

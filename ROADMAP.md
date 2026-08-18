@@ -246,9 +246,12 @@ their files; they do not exist.
       empty — and the sim records nothing `resultReason` could read to tell them apart.
       **7 of 13 sampled battles ended this way**, so it is the most common loss text in
       the game.
-- [ ] **The why-line has no visual priority over the flavour line above it.** Same size,
-      same weight, same colour — the single most actionable sentence on the screen reads
-      as a continuation of the subtitle.
+- [x] ~~**The why-line has no visual priority over the flavour line above it.**~~
+      **FIXED** — it outranks the flavour line on two channels now rather than one:
+      14px against 12px, and `--c-text` against `--c-text-dim`. Colour alone was not
+      enough separation at 12px, which is what the review's own screenshot showed. Still
+      not tinted by result and still not bold: the point is that the eye lands there
+      first, not that the game is shouting.
 
 ### From the idle-half critic
 
