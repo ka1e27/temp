@@ -48,9 +48,6 @@ export function inGrid(grid, h) {
   return row >= 0 && row < grid.rows && col >= 0 && col < grid.cols;
 }
 
-/** Axial -> cube. Cube's third axis is implied: s = -q - r. */
-export const toCube = ({ q, r }) => ({ x: q, y: -q - r, z: r });
-
 /** Hex distance: half the Manhattan distance in cube space. */
 export function distance(a, b) {
   return (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2;

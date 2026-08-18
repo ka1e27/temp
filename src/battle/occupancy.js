@@ -96,10 +96,5 @@ export function passableFor(state, faction, goal = null) {
   };
 }
 
-/** Is there a clear march from `from` to `to` for `faction`? Convenience for
- *  the places that want the question without the path. */
-export const canReach = (state, from, to, faction, pathFn) =>
-  pathFn(state, from, to, faction) !== null;
-
 /** @see asHex — re-exported so a caller needs one import for the hex layer. */
 export { asHex };

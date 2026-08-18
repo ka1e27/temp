@@ -266,12 +266,3 @@ export function drawGridLines(ctx, o) {
   ctx.lineWidth = o.lineWidth ?? 1;
   ctx.stroke();
 }
-
-/** Outline a single hex, used for hover and selection highlights. */
-export function strokeHex(ctx, q, r, size, color, width) {
-  ctx.beginPath();
-  traceHex(ctx, hexCx(q, r, size), hexCy(q, r, size), size * 0.94);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.stroke();
-}

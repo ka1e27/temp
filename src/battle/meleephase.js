@@ -19,7 +19,7 @@
 // PURE.
 import { UNIT_IDS, UNITS } from '../content/balance.js';
 import { emptyComp, addComp, scaleComp, total, power } from './combat.js';
-import { beginMelee, meleeStep, meleeTicks, meleeTicksLeft } from './melee.js';
+import { beginMelee, meleeStep, meleeTicks, meleeTicksLeft, meleeOver } from './melee.js';
 import { squadHexOf } from './movement.js';
 import { groundOf, siteDefMultOf, garrisonMultOf } from './terrain.js';
 import { pushEvent, EVENTS } from './events.js';
@@ -332,7 +332,10 @@ function siteMelees(state) {
     m.comp = step.att;
     site.garrison = step.def;
     m.defWrote = step.def;   // the yardstick the check above reads next tick
-    if (!step.done && total(step.att) > 0 && total(step.def) > 0) continue;
+    // `meleeOver`, not the same two comparisons written out again. It was a
+    // dead export sitting next to this line with the rule in its docstring,
+    // which is how an invariant ends up owned by nobody.
+    if (!step.done && !meleeOver(step)) continue;
 
     recordCasualties(state, m.owner, site.owner, m.comp0, step.att);
     recordCasualties(state, site.owner, m.owner, m.garrison0, step.def);

@@ -192,9 +192,6 @@ export const incursionPlan = (metaState) => planFor(nextDepth(metaState));
 
 const specs = (plan) => (plan?.mutators ?? []).map((id) => MUTATOR_BY_ID[id]).filter(Boolean);
 
-/** Does this plan carry a given mutator? Exposed for screens and tests. */
-export const hasMutator = (plan, id) => (plan?.mutators ?? []).includes(id);
-
 /**
  * The GENERATION inputs. `develop` is the only region column a mutator touches,
  * and it goes through DEVELOP_CLAMP like every authored value does — a region

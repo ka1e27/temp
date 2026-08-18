@@ -360,12 +360,10 @@ function floodRamp(hue, a) {
 
 let cached = null;
 
-/** Memoized boot-time palette. Call resetPalette() if a theme ever changes. */
+/** Memoized boot-time palette. There is one theme and it is read once at
+ *  boot; a `resetPalette` existed for a theme switcher that was never built,
+ *  had no caller, and is gone. Reintroduce it with the switcher, not before. */
 export function palette(el) {
   if (!cached) cached = readPalette(el);
   return cached;
-}
-
-export function resetPalette() {
-  cached = null;
 }

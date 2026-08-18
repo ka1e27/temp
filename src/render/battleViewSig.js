@@ -57,10 +57,22 @@ const _at = { q: 0, r: 0 };
  * FOLDING POSITION IN IS AFFORDABLE BECAUSE A COLUMN CROSSES A HEX, NOT A
  * TICK. The march table (CLAUDE.md, "Speed is a much weaker stat") puts a leg
  * at 0.7-2.5 seconds per hex, so this changes a couple of times a second per
- * marching column rather than ten times a second — and `markBgDirty` is
- * already throttled to 8/s, which caps the worst case on the busiest board.
- * Hashing `state.tick` instead would repaint every tick, which is exactly the
- * regression bgcache.js measured once at 60fps -> 31.
+ * marching column rather than ten times a second. Hashing `state.tick` instead
+ * would repaint every tick, which is exactly the regression bgcache.js
+ * measured once at 60fps -> 31.
+ *
+ * THE HEX-CROSSING RATE IS THE WHOLE ARGUMENT, AND IT IS NOT BACKED BY THE
+ * 8/s GATE — this comment used to claim it was, and that was simply wrong.
+ * `battleView.js` calls `bgCache.markDirty(TRUE)`, and `force` exists to skip
+ * that gate: a signature change is real content (an owner flipped, a building
+ * went up) and owes the CURRENT frame, where a pan gesture does not. So the
+ * only thing bounding a repaint storm here is how often the hash can actually
+ * move, which is why the paragraph above is the load-bearing one rather than
+ * a nicety. Do not "restore" the gate by dropping `force`: it would make every
+ * capture lag by up to a gate interval to fix a problem that measurement says
+ * does not exist. Measured on widowsgate (336 hexes, the biggest board) with
+ * 56 columns marching: 60.1 fps, and columns desynchronise, so the aggregate
+ * lands near 3 repaints a second rather than 56 times a leg.
  *
  * A CAMPED FORCE COSTS NOTHING AND KEEPS ITS RING, which is the other half of
  * the rule and falls straight out of this: its hex does not change, so it

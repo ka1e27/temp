@@ -21,7 +21,6 @@ import { META_EVENTS, emit } from './events.js';
 export const BOOSTER_IDS = Object.freeze(Object.keys(BOOSTER_SHOP));
 
 export const specOf = (id) => BOOSTERS[id] ?? null;
-export const shopEntry = (id) => BOOSTER_SHOP[id] ?? null;
 
 export function isUnlocked(meta, id) {
   const entry = BOOSTER_SHOP[id];

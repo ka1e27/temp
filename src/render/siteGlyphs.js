@@ -206,8 +206,10 @@ function drawScaffold(ctx, site, cx, cy, r, p, px) {
  * footprint: the garrison core, the tether down to its plaque, and the
  * training crossbar riding that tether.
  *
- * Exported as `drawTrainRing` too, because that is what battleView calls it
- * today; the ring became a bar when the bodies stopped being circles.
+ * The ring became a BAR when the bodies stopped being circles. It kept a
+ * `drawTrainRing` alias for a while afterwards, whose docstring claimed
+ * battleView imported it — battleView has imported `drawSiteState` throughout,
+ * so the alias was dead and its own comment was the only thing saying otherwise.
  */
 export function drawSiteState(ctx, site, cx, cy, r, p, px) {
   const n = troopCount(site.garrison);
@@ -228,8 +230,6 @@ export function drawSiteState(ctx, site, cx, cy, r, p, px) {
   drawTether(ctx, site, cx, cy, r, p, px);
   drawTrainBar(ctx, site, cx, cy, r, p, px);
 }
-/** @see drawSiteState — the name battleView currently imports. */
-export const drawTrainRing = drawSiteState;
 
 /**
  * The line that pins a garrison plaque to its site.
@@ -368,8 +368,6 @@ export function drawGarrisonPlaque(ctx, comp, cap, cx, cy, r, p, px, hexSize) {
   drawCompRibbon(ctx, comp, x0 + px * 4, top + h - px * 3.2, w - px * 8, px * 2, p, px);
   return top + h;
 }
-/** @see drawGarrisonPlaque — the name battleView currently imports. */
-export const drawGarrisonBar = drawGarrisonPlaque;
 
 /** Five-segment composition strip: secondary information, drawn like it. */
 function drawCompRibbon(ctx, comp, x0, y, w, h, p, px) {
