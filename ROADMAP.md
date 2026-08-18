@@ -177,7 +177,7 @@ their files; they do not exist.
 
 ### From the difficulty-and-failure critic
 
-- [ ] **THE "WHY" LINE CLAIMS THE COUNTRYSIDE WAS YOURS WHEN IT WAS NOT — and it is a
+- [x] ~~**THE "WHY" LINE CLAIMS THE COUNTRYSIDE WAS YOURS WHEN IT WAS NOT — and it is a
       bug in the branch whose own comment says it must make no claim.** `resultReason`'s
       `need <= 0` arm returns `RESULTS.whyClockOnly`, whose text is *"The countryside was
       yours and the gate was open — the throne simply outlasted the clock."* That is a
@@ -186,14 +186,21 @@ their files; they do not exist.
       `castleGateFrac: 0` — all of tier 1 plus kaldan — so on those, ANY timeout prints
       it regardless of the ground held. Reproduced twice: riverfen held **3/11 (27%)**
       and kaldan **2/18 (12%)**, both told the countryside was theirs. The `whyGateHeld`
-      branch is fine and the mechanism is fine; the fallback needs its own string.
-- [ ] **"NOTHING WAS LOST BUT TIME" IS FALSE IF YOU FIRED A BOOSTER.** `applyOutcome`
+      branch is fine and the mechanism is fine; the fallback needs its own string.**~~
+      **FIXED** — `RESULTS.whyNoGate`. The test that should have caught it had encoded
+      the defect (it asserted the branch equalled a named constant, and the constant was
+      the wrong one); it asserts the PROPERTY now, with the cleared-gate line as the
+      negative control.
+- [x] ~~**"NOTHING WAS LOST BUT TIME" IS FALSE IF YOU FIRED A BOOSTER.**~~ **FIXED.** `applyOutcome`
       calls `consumeBoosters` unconditionally, before the win/loss branch, and
       `boosters.js consume()` has no loss refund. A charge costs 1-3 RELICS, the scarce
       currency you cannot grind. So a player who spends relics trying to save a battle
       they lose is told nothing was lost — two lines above the stat row that correctly
       reports the charges spent. **Invisible to every measurement this project has, by
-      construction: the harness always launches with `boosters: []`.**
+      construction: the harness always launches with `boosters: []`.** The copy branches
+      on `applied.boostersConsumed` — what was actually deducted from the player's stock
+      rather than what the battle fired — so the headline and the "Charges spent" row now
+      agree by construction.
 - [ ] **A TIMED-OUT BATTLE IS OFTEN INFORMATIONALLY DEAD FOR MOST OF ITS RUN, AND THE
       PLAYER PAYS THE WHOLE CLOCK.** `endPhase` only assigns `timeout` at
       `hardCapTicks`, so every timeout runs the full advertised cap. Traced tick by tick:
