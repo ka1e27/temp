@@ -300,8 +300,17 @@ export const COACH = Object.freeze({
   // "Take the castle to win the region" and never mentioned the gate, so the
   // assault it told the player to make bounced off a SEALED castle they had
   // never heard of.
+  // TWO LINES, BECAUSE THE ONE LINE WAS FALSE WHERE IT WAS MOST HEARD. It fired
+  // on castle reach in every region and described the gate — and Riverfen, the
+  // campaign opener and the one battle a first-timer is guaranteed to play,
+  // ships `castleGateFrac: 0`. So the beat written to be trustworthy taught a
+  // rule that is inert in the region teaching it, and the panel readout that
+  // would have contradicted it (`gateLine` -> "SEALED - holds X% of Y% needed")
+  // only renders when the gate is real, so nothing on screen could correct it.
   takeCastle: 'The castle wins the region — but its gate holds until you own most'
     + ' of the map. Take the countryside first, then the throne.',
+  takeCastleOpen: 'The castle wins the region, and this one has no gate on it.'
+    + ' Break the throne and the map is yours.',
 });
 
 export const RESULTS = Object.freeze({

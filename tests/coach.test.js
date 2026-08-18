@@ -22,46 +22,7 @@ import { startBattle } from '../src/battle/sim.js';
 import { COACH } from '../src/content/strings.js';
 import { createMeta } from '../src/core/store.js';
 
-// --- a battle-shaped stub, only the fields the machine reads ---------------
-
-function battle(over = {}) {
-  return {
-    regionId: COACH_REGION,
-    status: 'running',
-    factions: { player: { goldCg: 0 }, enemy: { goldCg: 0 } },
-    squads: [],
-    // `hex` and `seen` are here because the castle beat is FOG-GATED now
-    // (ui/coach.js castleTouchesPlayer): a hint is speech about the board, so it
-    // is bound by the same rule the board is. The default stub is a player who
-    // has already looked at the throne, because every test in this file is about
-    // the beat TABLE rather than about fog; the gate itself is pinned against a
-    // REAL battle in tests/fogleaks.test.js, beside the other surfaces that used
-    // to narrate what the board hides.
-    sites: [
-      { id: 'camp', kind: 'camp', owner: 'player', hex: [0, 0], adj: ['nf01'] },
-      { id: 'nf01', kind: 'farm', owner: 'neutral', hex: [1, 0], adj: ['camp', 'castle'] },
-      { id: 'castle', kind: 'castle', owner: 'enemy', hex: [2, 0], adj: ['nf01'] },
-    ],
-    vision: { player: {}, enemy: {} },
-    seen: { player: { castle: 'enemy' }, enemy: {} },
-    ...over,
-  };
-}
-
-const gold = (n) => ({ factions: { player: { goldCg: Math.round(n * 100) } } });
-
-/** Drive the machine and collect the beats it emitted, in order. `pump` runs
- *  before every step so the caller can advance the world; a step that returns
- *  nothing is normal and never ends the run. */
-function drain(machine, world, pump, limit = 40) {
-  const out = [];
-  for (let i = 0; i < limit; i++) {
-    pump?.(i);
-    const beat = machine.step(world.battle, world.meta);
-    if (beat) out.push(beat.id);
-  }
-  return out;
-}
+import { battle, gold, drain } from './fixtures/coachWorld.js';
 
 // --- the shape of the beat table -------------------------------------------
 
@@ -129,7 +90,10 @@ test('a beat never fires twice even if its condition keeps re-arriving', () => {
   // no stalled siege, no lost site and no ram money.
   const notReached = ['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'];
   assert.deepEqual(m.pending.filter((id) => !notReached.includes(id)),
-    ['captured', 'gold100', 'takeCastle']);
+    // `takeCastleOpen` stays pending forever here and that is correct: this
+    // fixture is a GATED region, and exactly one of the castle pair can ever
+    // fire in a battle. `pending` is "not yet fired", not "still reachable".
+    ['captured', 'gold100', 'takeCastle', 'takeCastleOpen']);
 });
 
 test('ordering: a later beat waits for its prerequisite, not for a timer', () => {
@@ -169,7 +133,9 @@ test('a prerequisite that never arrives blocks only its own dependants', () => {
   for (let i = 0; i < 5; i++) assert.equal(m.step(b, null), null);
   assert.deepEqual(
     m.pending.filter((id) => !['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'].includes(id)),
-    ['fieldWon', 'captured', 'gold100', 'takeCastle'],
+    // Both castle beats are pending: `pending` means "has not fired", and
+    // exactly one of the pair is reachable in any one battle.
+    ['fieldWon', 'captured', 'gold100', 'takeCastle', 'takeCastleOpen'],
   );
 });
 
@@ -375,8 +341,15 @@ test('a REAL region-1 battle: gold starts at 300, so gold100 must not jump the q
   assert.equal(m.signals(live, meta).gold > 100, true);
   assert.deepEqual(
     m.pending.filter((id) => !['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'].includes(id)),
-    ['fieldWon', 'captured', 'gold100', 'takeCastle'],
+    ['fieldWon', 'captured', 'gold100', 'takeCastle', 'takeCastleOpen'],
   );
+  // AND THIS IS WHY THE PAIR EXISTS. Read off the real region-1 config, not
+  // asserted from the table: the campaign opener has NO castle gate, so the
+  // beat that describes one is the unreachable half here and the plain line is
+  // the one a first-timer will actually be shown.
+  assert.equal(live.rules.castleGateFrac, 0,
+    'if region 1 ever grows a gate, the coach pair below flips and this is the tell');
+  assert.equal(m.signals(live, meta).castleGated, false);
 });
 
 test('the coach reads a real battle through the same fields the sim writes', () => {

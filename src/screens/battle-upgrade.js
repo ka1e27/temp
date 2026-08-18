@@ -21,7 +21,19 @@ export const REJECTIONS = Object.freeze({
   'occupied-hex': 'A base is standing there. March beside it, or attack it.',
   // The same refusal, for ground the player has never looked at — see
   // rejectionText below for why naming the building would be a fog leak.
-  'occupied-hex-unseen': 'Something blocks the way there.',
+  //
+  // IT NAMES THE FOG, WHICH LEAKS NOTHING AND IS THE WHOLE VALUE OF THE LINE.
+  // "Something blocks the way there" was fog-safe and taught nothing, and this
+  // is the refusal a brand-new player is most likely to meet FIRST: at tick 0 a
+  // fresh save has seen no site but its own three, so following the tutorial's
+  // one instruction and dragging at the nearest building — the only visually
+  // distinct thing on a dark board — lands here. Measured on a fresh save: the
+  // drag is refused, no squad spawns, and the old copy explained none of it.
+  // Saying "unscouted" discloses nothing the refusal has not already disclosed
+  // (this reason only fires when a base IS on that hex), and it withholds the
+  // two facts fog actually hides — whose it is and what kind. The recovery
+  // clause mirrors the seen twin's, so the pair reads as one rule.
+  'occupied-hex-unseen': 'Something unscouted is standing there. March beside it.',
   // Terrain, unlike a building, is ALWAYS visible — so naming it leaks nothing,
   // and this needs no fog-safe twin. It was the one reason in this table with no
   // entry at all, so a drag onto a mountain answered the raw `Order refused

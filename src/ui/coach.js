@@ -48,6 +48,7 @@ export function emptyLatch() {
     captured: false,
     gold: 0,
     castleAdjacent: false,
+    castleGated: false,
     // The three signals the four newly-wired beats need. Latched like the rest:
     // a thing that happened once still counts, because the line teaching it is
     // worth showing even a little after the moment.
@@ -102,6 +103,11 @@ export function observeState(latch, battle) {
     latch.sentSquad = true;
   }
   if (!latch.castleAdjacent && castleTouchesPlayer(battle)) latch.castleAdjacent = true;
+  // Does this region's throne HAVE a gate? Read rather than assumed, because
+  // `castleGateFrac` is 0 on the campaign opener and the beat that describes
+  // the gate used to fire there anyway. Not latched: a rule of the region, so
+  // it is true or false for the whole battle and reading it fresh cannot flap.
+  latch.castleGated = (battle.rules?.castleGateFrac ?? 0) > 0;
   // A siege the player is running that cannot finish. The sim already knows —
   // it is the same `Infinity` the preview shows as INSUFFICIENT — so this reads
   // the state rather than adding an event for it.
@@ -138,6 +144,7 @@ export function readSignals({ battle = null, meta = null, latch = emptyLatch() }
     captured: !!latch.captured,
     gold: latch.gold ?? 0,
     castleAdjacent: !!latch.castleAdjacent,
+    castleGated: !!latch.castleGated,
     // THESE THREE WERE LATCHED AND NEVER PUBLISHED, so the three beats whose
     // `when` reads them could not fire at any point in any battle: the training
     // tip, the stalled-siege tip and the retreat tip — which are, again, the

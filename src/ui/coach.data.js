@@ -58,12 +58,23 @@ export const BEATS = Object.freeze([
     after: 'captured',
     when: (s) => s.gold > 100,
   },
+  // MUTUALLY EXCLUSIVE, on the one signal that says whether the rule is real
+  // here. A first-timer approaching the throne still needs to hear that it ends
+  // the region; what they must not be told is that a gate holds it when the
+  // region ships `castleGateFrac: 0`, which the campaign opener does.
   {
     id: 'takeCastle',
     text: COACH.takeCastle,
     hold: HOLD.normal,
     after: 'captured',
-    when: (s) => s.castleAdjacent,
+    when: (s) => s.castleAdjacent && s.castleGated,
+  },
+  {
+    id: 'takeCastleOpen',
+    text: COACH.takeCastleOpen,
+    hold: HOLD.normal,
+    after: 'captured',
+    when: (s) => s.castleAdjacent && !s.castleGated,
   },
   // THE FOUR BEATS THAT WERE WRITTEN AND NEVER SHOWN. `COACH.strongholdTaken`,
   // `buildRams`, `siegeStalled` and `retreat` have existed in strings.js for
