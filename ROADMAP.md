@@ -57,6 +57,16 @@ its own box exists here.
 - [ ] **Transcribe the six specialist reports into ranked items below.** (Blocked on the
       agents finishing; partial transcription as each lands is expected and correct.)
 
+**From my own pass** (hands-on, before the specialists landed):
+
+- [x] ~~**An empty booster armed itself and told the player to aim it.**~~ **FIXED.**
+      A fresh save brings no charges (relics buy them, and relics are paid only for a
+      region you have BEATEN), so battle one shows five live controls all reading a dash.
+      Measured live: pressing one ARMED it, the alert read `AIMING RALLY — click a site ·
+      Esc cancels`, and the refusal came on the SECOND click — after the player had done
+      what the game told them. `boosterBlocker` is now one predicate shared by the HUD
+      and `cmdBooster`, the `buildBlocker` pattern.
+
 <!-- FINDINGS GO HERE, ranked, as they are transcribed. -->
 
 ### Blocking — the deploy is red until this is done
