@@ -1199,6 +1199,40 @@ blackspire, which is exactly what it already shipped — the lever looked free a
 fully spent. Cost a measurement to learn; `develop` (2.20 → 2.45, the whole gap to
 blackspire) is what carried the correction instead.
 
+## Both sides shuttle tiny columns, and the board is weather
+
+**Measured over real battles** (`startRun`/`playerTurn`/`step`, seed 1000, the shipped
+bot playing):
+
+```
+            minutes   enemy columns   per minute   median size   field battles
+riverfen      13.6              78          5.7             2              73
+gallowmoor    20.0           2,114        105.7             2           1,150
+```
+
+From region 1 to region 10 the enemy's column count rises **27x while the median column
+stays at two troops**. It is not making bigger decisions as difficulty rises; it is
+making vastly more, equally tiny ones. **1,150 field battles in a twenty-minute battle
+is about one per second**, and `MELEE.seconds` is 6, so roughly six fights are open at
+any instant, permanently.
+
+**This is the configuration rather than a defect.** Tier 3 runs `reactionTicks 26,
+concurrent 2` against `AI.maxSources 3` and `AI.freeLunchHexes 3`, so 462 thinks x up to
+9 squads is a ceiling of **4,154** columns — the measured 2,114 is the AI running at
+about half its own permitted throughput, continuously. Most of it is the free-lunch
+phase, which spends no concurrency slot on purpose.
+
+**And it is not one-sided:** the section below records the harness bot with 1,092 bodies
+of which 239 are standing, 78% permanently in transit. So this is a systemic property of
+free movement plus cheap sends plus an unslotted free-lunch phase, and it is a plausible
+upstream cause of the tier 3-6 tuning trouble — a permanent grinder is hard to tune
+because nothing that happens in it is decisive.
+
+**What is already fine is the WORDS.** The alert strip names real threats correctly and
+promptly (`ATTACKED — farm will fall` at 37.6s, `UNDER SIEGE — farm` at 43.7s, measured
+on a fresh riverfen). What no surface distinguishes is on the BOARD: an incoming
+two-troop free-lunch grab and an incoming assault are drawn identically.
+
 ## The harness bot CAN concentrate force now, and it changes nothing — the force is not there
 
 **Read this instead of the section below it, which is the hypothesis this one tested.**

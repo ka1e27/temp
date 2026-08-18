@@ -130,6 +130,45 @@ its own box exists here.
       opening lights a neighbour or two; or the bearing marker proposed for the castle,
       which would at least give the first drag a direction.
 
+- [ ] **THE ENEMY LAUNCHES A HUNDRED COLUMNS A MINUTE AND THE MEDIAN ONE IS TWO TROOPS.
+      THE BOARD IS WEATHER, NOT AN OPPONENT.** Instrumented over real battles
+      (`startRun`/`playerTurn`/`step`, seed 1000, the shipped bot as the player):
+
+      ```
+                  minutes   enemy columns   per minute   median size   field battles
+      riverfen      13.6              78          5.7             2              73
+      gallowmoor    20.0           2,114        105.7             2           1,150
+      ```
+
+      From region 1 to region 10 the enemy's column count rises **27x** while the median
+      column stays at **two troops**. It is not making bigger decisions as the game gets
+      harder; it is making vastly more, equally tiny ones.
+
+      **1,150 field battles in one twenty-minute battle is roughly one per second**, and
+      a melee runs for `MELEE.seconds` (6), so something like six fights are open at any
+      instant, permanently. Nothing at that rate can read as an event: every combat
+      flash, every casualty number, every capture is firing continuously.
+
+      **It is the configuration, not a bug.** Tier 3 is `reactionTicks 26, concurrent 2`
+      with `AI.maxSources 3` and `AI.freeLunchHexes 3`, so 462 thinks x up to 9 squads is
+      a ceiling of 4,154 columns — the measured 2,114 is the AI running at about half its
+      own permitted throughput, continuously. Most of it is the free-lunch phase, which
+      by design spends no concurrency slot.
+
+      **And BOTH sides do it.** CLAUDE.md already records the harness bot with 78% of its
+      army permanently in transit and 1,092 bodies of which 239 are standing. So this is
+      a systemic property of the design — free movement plus cheap sends plus a
+      free-lunch phase — rather than one actor's defect, and it is very likely upstream
+      of the tier 3-6 tuning trouble: a permanent grinder is hard to tune because nothing
+      in it is decisive.
+      **The alert strip already rescues the WORDS** (`ATTACKED — farm will fall`,
+      `UNDER SIEGE — farm` both fire correctly and name the real threat), so what is
+      missing is on the BOARD: an incoming two-troop free-lunch grab and an incoming
+      assault look identical. Two directions, and they are not exclusive — make the
+      enemy commit fewer, larger columns (a floor on column size, or spending a
+      concurrency slot on free lunches), or make the board distinguish a threat from
+      traffic. The first is a balance change and needs the re-tune; the second does not.
+
 <!-- FINDINGS GO HERE, ranked, as they are transcribed. -->
 
 ### Blocking — the deploy is red until this is done
