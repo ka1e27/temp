@@ -65,25 +65,39 @@ commit. Do not re-derive the list.
       dial change (ironwood, emberholt, greywater). Tiers 3-6 (fifteen regions) have a
       DIAGNOSED lever — a Marshal'd castle that is never attacked for a whole battle
       out-trains any one rear site's ability to mass a legal first strike, traced with a
-      direct probe rather than inferred — and a `develop` cut applied against it, but only
-      a partial n=24 screen: gallowmoor 38%, sunder 25%, vaelstrand 17%, thanescar 29%,
-      blackspire 29%, stormhalt 8%, cinderwatch 13% (all improved from their pre-session
-      reading, all still below their tier's floor); gravenreach 42%, nightharrow 29% and ironcrown
-      38% already clear their own band — three of tier 4's four rows have a read and
-      it SPLITS (thanescar/blackspire below floor, ironcrown at), which argues for
-      finishing the sweep before reaching for another tier-wide dial move.
-      **Five of fifteen tier 3-6 rows have no reading at all yet** (duskfell,
-      karrowmere, obsidian, ravensmarch, widowsgate,
-      plus re-confirming the ten above at n>=96) — this environment ran 4-20 real
-      minutes PER REGION at n=24 once the longer caps were in, so a full sweep did not
-      fit this session. `tests/scout.test.js`/`tactics`/`loadoutdominance`/`campaignplay`
+      direct probe rather than inferred — and a `develop` cut applied against it. The n=24
+      screen is now COMPLETE for all fifteen rows (`widowsgate` landed just as this was
+      being written — the biggest board in the game, and this environment spent over
+      ninety CPU-minutes on it before it produced a number):
+      ```
+      tier 3   gallowmoor 38  sunder 25  vaelstrand 17  duskfell 17  karrowmere 38
+      tier 4   thanescar 29  blackspire 29  ironcrown 38 ok  obsidian 42 ok
+      tier 5   ravensmarch 17  gravenreach 42 ok  nightharrow 29 ok
+      tier 6   stormhalt 8  cinderwatch 13  widowsgate 4
+      ```
+      Every row improved from its pre-session reading. Four already clear their own band
+      (ironcrown, obsidian, gravenreach, nightharrow) on the SAME cut applied to every row
+      in their tier, so the lever is real. Eleven are still below floor: all five of tier 3,
+      half of tier 4 (thanescar/blackspire), ravensmarch, and all of tier 6.
+      **Three shapes only visible once the sweep filled in:** tier 4 SPLITS exactly down the
+      middle on an otherwise-uniform cut (thanescar/blackspire below, ironcrown/obsidian
+      comfortably above) — worth understanding before another blanket tier-4 move;
+      ravensmarch is tier 5's one bad row by a wide margin (17% against 42%/29%), matching
+      what an inherited n=8 quickscreen already hinted; and **widowsgate (4%) is now the
+      single worst row in the table**, worse than stormhalt (8%), on the SMALLEST
+      proportional `enemyMult` cut this pass applied to any tier-4-6 row — worth the next
+      look ahead of stormhalt, which this pass already had a real-difficulty diagnosis for.
+      Treat every number here as n=24
+      (±10pt noise) — `tests/scout.test.js`/`tactics`/`loadoutdominance`/`campaignplay`
       were NOT re-run (each needs >=180s alone and the table is still unsettled).
       Do not re-spend `enemyMult` on the Marshal-affected rows — it moved gallowmoor and
       thanescar the WRONG direction at n=24 twice, consistent with noise once the
       `develop` cut was already in, which itself is consistent with the diagnosis
       (a consolidation race, not a power ratio). `siteCounts.neutral` is a confirmed,
-      cheap, bounded lever in BOTH directions (this session, both signs measured) and is
-      underused on the untested rows.
+      cheap, bounded lever in BOTH directions (this session, both signs measured).
+      Next session: (1) re-take all fifteen rows at n>=96 before moving the dial again;
+      (2) understand the tier-4 split and the ravensmarch/widowsgate outlier gaps;
+      (3) re-run the five acceptance files one at a time from a clean worktree.
       For provenance, the OLDER n=48 table (immediately below, pre-this-session) was:
       riverfen 90 ok, kaldan 73 ok, gallowmoor 17 TOO SLOW, thanescar 6, ravensmarch 2 —
       riverfen's 90 already matches this session's fresh re-take (unchanged dial), so that
@@ -489,22 +503,28 @@ melee clock, so a trickle of columns held a fight open forever — is fixed, and
 **The open question is fight COUNT.** Interception creates fights that did not exist
 before; nobody has measured how many, and that is the first thing to instrument.
 
-**⏳ UPDATE, a session against this brief: tier 1-2 done, tier 3-6 partial — full
-write-up in CLAUDE.md ("Still open" -> the campaign re-tune, third pass).** Short
-version: all nine tier 1-2 rows are re-measured at n=48 and read `ok` (riverfen's
-96%-TOO-EASY figure above turned out to already be stale — a fresh n=48 take on
-unmodified riverfen reads 90% ok, matching CLAUDE.md's OTHER table). Tiers 3-6 got a
-diagnosed fix rather than a guessed one: a Marshal'd castle that is never attacked for a
-whole battle out-trains what any one rear site can mass for the required first-strike
-margin, confirmed with a direct probe (thanescar's castle garrison ranges 96-241 over
-twenty minutes; the biggest adjacent player site never tops 30). `develop` was cut for
-tiers 4-6 against that finding. Partial n=24 re-screen: gallowmoor 38%, sunder 25%,
-vaelstrand 17%, thanescar 29%, blackspire 29%, stormhalt 8%, cinderwatch 13%
-(improved, still below floor); gravenreach 42%, nightharrow 29% and ironcrown 38%
-already clear their own band. Five of fifteen tier 3-6 rows (duskfell, karrowmere,
-obsidian, ravensmarch, widowsgate) have no reading at all — this environment took 4-20 real
-minutes PER REGION at n=24
-once the caps were raised, so a full sweep did not fit. **Do not re-spend `enemyMult`
+**⏳ UPDATE, a session against this brief: tier 1-2 done, tier 3-6 fully
+screened at n=24 — full write-up in CLAUDE.md ("Still open" -> the campaign
+re-tune, third pass).** Short version: all nine tier 1-2 rows are re-measured at
+n=48 and read `ok` (riverfen's 96%-TOO-EASY figure above turned out to already be
+stale — a fresh n=48 take on unmodified riverfen reads 90% ok, matching CLAUDE.md's
+OTHER table). Tiers 3-6 got a diagnosed fix rather than a guessed one: a Marshal'd
+castle that is never attacked for a whole battle out-trains what any one rear site
+can mass for the required first-strike margin, confirmed with a direct probe
+(thanescar's castle garrison ranges 96-241 over twenty minutes; the biggest
+adjacent player site never tops 30). `develop` was cut for tiers 4-6 against that
+finding. n=24 re-screen, now complete for all fifteen rows (`widowsgate` landed
+just as this was being written — the biggest board in the game, >90 CPU-minutes
+before it produced a number):
+gallowmoor 38%, sunder 25%, vaelstrand 17%, duskfell 17%, karrowmere 38%,
+thanescar 29%, blackspire 29%, ravensmarch 17%, stormhalt 8%, cinderwatch 13%,
+widowsgate 4% (all improved, all still below floor); ironcrown 38%, obsidian 42%,
+gravenreach 42%, nightharrow 29% already clear their own band. Three shapes worth
+a closer look: tier 4 splits exactly down the middle on an otherwise-uniform cut;
+ravensmarch is tier 5's one bad row by a wide margin (matching what an inherited
+n=8 quickscreen already hinted); and widowsgate at 4% is now the single WORST row
+in the table, worse than stormhalt, on the smallest proportional `enemyMult` cut
+this pass gave any tier 4-6 row. **Do not re-spend `enemyMult`
 on the Marshal rows**: a further cut moved gallowmoor and thanescar the WRONG way at
 n=24 (twice), which at that n is consistent with noise once the `develop` cut already
 did the real work — and is itself consistent with the diagnosis (a consolidation race,

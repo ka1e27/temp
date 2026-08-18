@@ -2865,9 +2865,11 @@ gate the deploy.
   kaldan 77% ok, gallowmoor 23% TOO SLOW, thanescar 2%, ravensmarch 4%.
 
   **⏳ SUBSTANTIAL PROGRESS THIS SESSION, NOT CLOSED — tier 1–2 are done and
-  confirmed, tier 3–6 have a diagnosed lever and a partial re-measurement, and
-  five of twenty-four rows still have no read at all. Do not read this as a
-  finished pass; read it as where the next session should resume.**
+  confirmed, tier 3–6 have a diagnosed lever and a COMPLETE n=24 screen (all
+  fifteen rows), and eleven of those fifteen are still below their tier's
+  floor. Do not read this as a finished pass — n=24 is a screen, not the n≥96
+  this file's own house rule requires, and read it as where the next session
+  should resume.**
 
   **First, a correction to the line above.** Re-measured fresh at n=48 against
   today's HEAD (no dial changed yet), riverfen read **90%, ok** — not 96% —
@@ -2971,43 +2973,77 @@ gate the deploy.
     stormhalt specifically is not expected to pay off. Caps were raised to
     something real (16–20m) rather than left stale, not pushed to extremes.
 
-  **PARTIAL re-measurement at n=24 (noisy — treat as a screen, not a result)**,
-  after the develop cut and the smaller `enemyMult` cut:
+  **COMPLETE re-measurement at n=24 (noisy — treat as a screen, not a
+  result)**, after the develop cut and the smaller `enemyMult` cut — all
+  fifteen tier 3-6 rows, `widowsgate` included (it finished just as this was
+  being written; the biggest board in the game, and this environment spent
+  over ninety CPU-minutes on it before it landed a number):
 
   ```
-  gallowmoor 38  sunder 25  vaelstrand 17  [duskfell / karrowmere: not yet run]
-  thanescar 29  blackspire 29  ironcrown 38 ok  [obsidian / ravensmarch: not yet run]
-  gravenreach 42 ok  nightharrow 29 ok  [ravensmarch: not yet run]
-  stormhalt 8  cinderwatch 13  [widowsgate: not yet run]
+  tier 3   gallowmoor 38  sunder 25  vaelstrand 17  duskfell 17  karrowmere 38
+  tier 4   thanescar 29  blackspire 29  ironcrown 38 ok  obsidian 42 ok
+  tier 5   ravensmarch 17  gravenreach 42 ok  nightharrow 29 ok
+  tier 6   stormhalt 8  cinderwatch 13  widowsgate 4
   ```
 
-  Every row above IMPROVED from its pre-session reading (thanescar 2%→29%,
-  stormhalt 0%→8%, gallowmoor 17-23%→38%), and gravenreach/nightharrow/ironcrown
-  already clear their own band. Gallowmoor, sunder, vaelstrand, thanescar,
-  blackspire, stormhalt and cinderwatch are still below their tier's floor — three of tier
-  4's four rows now have a read, and it splits (thanescar/blackspire below,
-  ironcrown at), which argues against a uniform "tier 4 is broken" story and
-  for finishing the sweep
-  before reaching for another campaign-wide dial move. **Five of twenty-four rows
-  (duskfell, karrowmere, obsidian, ravensmarch, widowsgate) have no
-  reading at all yet** — this environment ran roughly 4–20 minutes of real
-  wall-clock PER REGION at n=24 once the bigger caps were in (a single-core
-  isolated timing at the start of this session ran ~8s/battle; under this
-  session's actual CPU contention and the new caps it was far slower), so a
-  full n≥96 sweep of the remaining fifteen rows was not achievable in the time
-  available. The four acceptance test files (`scout`, `tactics`,
-  `loadoutdominance`, `campaignplay`) were NOT re-run this session for the same
-  reason — each needs ≥180s alone and several run real battles on these same
-  tiers, so re-taking them against a table this unsettled would only measure
-  today's midpoint, not tomorrow's.
+  Every row IMPROVED from its pre-session reading (thanescar 2%→29%, stormhalt
+  0%→8%, gallowmoor 17-23%→38%, widowsgate presumably from the 0/48 the
+  brief's own `campaignplay` floor recorded). Four rows already clear their
+  own band — ironcrown, obsidian, gravenreach, nightharrow — and all four are
+  `ok` entirely on the SAME `develop` cut and modest `enemyMult` cut applied to
+  every row in their tiers, so the lever is real and not a fluke of one map.
+  Eleven rows are still below their tier's floor: all five of tier 3
+  (gallowmoor/sunder/vaelstrand/duskfell/karrowmere), half of tier 4
+  (thanescar/blackspire), ravensmarch, and all of tier 6
+  (stormhalt/cinderwatch/widowsgate) — **widowsgate at 4% is now the single
+  worst row in the whole re-measured table**, worse than stormhalt, which is
+  notable given widowsgate's own `enemyMult` (4.90) carries the least
+  proportional cut of any row in tiers 4-6 (it started at 5.10, the smallest
+  delta this pass applied) and it has the largest board and the biggest
+  Marshal count (two) in the game.
 
-  **What a future session should do, in order:** (1) finish the n≥96 sweep of
-  the eleven untested rows at the CURRENT dial before changing anything else —
-  several of them may already be fine, since gravenreach/nightharrow already
-  are; (2) for rows that are still below floor after that, do not reach for
+  **Two shapes worth carrying into the next pass, both visible only once the
+  sweep filled in:**
+
+  - **Tier 4 SPLITS exactly down the middle** on an otherwise-uniform cut —
+    thanescar/blackspire (15 neutral) read 29% and ironcrown/obsidian (19/20
+    neutral) read 38%/42%, which is backwards from "more neutral is harder" on
+    its own unless something else about those two rows is also carrying them.
+    Worth a fresh look rather than another blanket tier-4 dial move.
+  - **Ravensmarch is tier 5's one bad row, by a wide margin** (17% against
+    gravenreach 42% / nightharrow 29%) — matching what the inherited n=8
+    quickscreen already hinted (ravensmarch alone read 0/8 at BOTH a 53-minute
+    and a 26.6-minute cap, where gravenreach/nightharrow landed occasional
+    wins). Whatever is different about ravensmarch specifically — not
+    "tier 5" generally — is where the next enemyMult-adjacent look should go,
+    if one is tried at all; see the "do not re-spend enemyMult" note above.
+  - **Widowsgate (4%) is now the single worst row in the table**, worse than
+    stormhalt's 8%, on the SMALLEST proportional `enemyMult` cut of tiers 4-6
+    (5.10→4.90, the least this pass moved any row) and the biggest board plus
+    two Marshals in the game. If tier 6 gets another look, start there rather
+    than at stormhalt, which this pass already knew was hard for real
+    reasons (CLAUDE.md's own 60-minute-cap diagnostic, outright losses inside
+    eight minutes on two of three seeds).
+
+  **Do not treat any of this as final** — it is n=24, and this file's own
+  standing rule is that n=24 has roughly a ±10-point standard error, so
+  "still below floor" is a much safer read than the exact number. The four
+  acceptance test files (`scout`, `tactics`, `loadoutdominance`,
+  `campaignplay`) were NOT re-run this session — each needs ≥180s alone and
+  several run real battles on these same tiers, so re-taking them against a
+  table this unsettled would only measure today's midpoint, not tomorrow's.
+
+  **What a future session should do, in order:** (1) re-take all fifteen
+  tier 3-6 rows at n≥96 before changing the dial further — four of them may
+  already be fine and the noise band at n=24 is wide enough that a couple of
+  the "below floor" reads could join them, though widowsgate and stormhalt
+  read too far below floor for that alone to be the explanation; (2) look at
+  WHY tier 4 splits and whether ravensmarch's and widowsgate's gaps have a
+  cause narrower than "their tier" before reaching for another campaign-wide
+  move; (3) for rows still below floor after that, do not reach for
   `enemyMult` first — reach for `siteCounts.neutral` (a real, if bounded,
   lever both directions, confirmed this session) or accept the Marshal
-  residual and say so; (3) re-run all five acceptance files one at a time,
+  residual and say so; (4) re-run all five acceptance files one at a time,
   from a clean worktree if `regions.data.js` is dirty.
 
   **⚠ FOUR TEST FILES ARE RED, NOT ONE, AND THEY ARE ONE ROOT CAUSE.** Measured
