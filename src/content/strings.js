@@ -332,7 +332,17 @@ export const RESULTS = Object.freeze({
   loss: 'Defeat',
   timeout: 'Time expired',
   retreat: 'Withdrawn',
+  // "NOTHING WAS LOST BUT TIME" IS ONLY TRUE IF YOU FIRED NOTHING.
+  // `meta/rewards.js applyOutcome` calls `consumeBoosters` unconditionally,
+  // before the win/loss branch, and `boosters.js consume()` has no refund path —
+  // so a charge fired into a battle you go on to lose is gone. A charge costs
+  // 1-3 RELICS, the currency you cannot grind (a raid pays none). So the
+  // headline sentence overclaimed directly above the stat row that correctly
+  // reported the charges spent. It could never show up in a balance number
+  // either: the harness always launches with `boosters: []`.
   lossBody: 'Nothing was lost but time. Change your expedition and try again.',
+  lossBodySpent: 'The charges you fired are spent — that is all this cost'
+    + ' besides time. Change your expedition and try again.',
   timeoutBody: 'Decided on territory when the hard cap ran out.',
   retreatBody: 'You withdrew. The region is unchanged.',
   incomeNow: 'Income now',
@@ -345,8 +355,18 @@ export const RESULTS = Object.freeze({
   // decision that lost them.
   whyGateHeld: (held, need) => `The gate held: the throne needs ${need} of the`
     + ` countryside and you finished on ${held}.`,
+  // TWO SENTENCES, BECAUSE ONE OF THEM WAS A CLAIM THE GAME COULD NOT MAKE.
+  // `whyClockOnly` was reused for BOTH "you cleared the gate and ran out of
+  // time" and "this region has no gate to clear" — and its text asserts the
+  // countryside was yours. Five regions ship `castleGateFrac: 0` (all of tier 1
+  // plus kaldan), so on those every timeout printed it however little ground was
+  // held: reproduced at 3 of 11 sites and at 2 of 18. `resultReason`'s own
+  // comment on that branch says "there is no territory claim to make, so make
+  // none", and the string made one.
   whyClockOnly: 'The countryside was yours and the gate was open — the throne'
     + ' simply outlasted the clock.',
+  whyNoGate: 'The clock ran out. This region puts no territory gate on its'
+    + ' throne — the castle was there to be taken the whole time.',
   whyCampFell: 'Your camp fell. Hold it: losing it ends the region however well'
     + ' the rest is going.',
   whySweptAway: 'Nothing of yours was left on the board.',

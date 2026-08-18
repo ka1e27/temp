@@ -57,7 +57,17 @@ export function resultCopy(outcome, applied, region) {
   if (outcome.result === 'timeout') {
     return { title: RESULTS.timeout, body: RESULTS.timeoutBody };
   }
-  return { title: RESULTS.loss, body: RESULTS.lossBody };
+  // A LOSS COSTS TIME *AND* ANY CHARGE YOU FIRED, so the copy has to know which
+  // battle this was. `applyOutcome` consumes boosters unconditionally and there
+  // is no refund on a defeat, and a charge is bought with relics — the currency
+  // a raid never pays. Saying "nothing was lost but time" two lines above the
+  // "Charges spent" row that contradicts it is the kind of small dishonesty
+  // that makes a player stop trusting the rest of the screen.
+  const firedSomething = (applied?.boostersConsumed ?? []).some((b) => (b.count ?? 0) > 0);
+  return {
+    title: RESULTS.loss,
+    body: firedSomething ? RESULTS.lossBodySpent : RESULTS.lossBody,
+  };
 }
 
 /**
@@ -101,8 +111,14 @@ export function resultReason(outcome, config) {
 
   const need = config?.rules?.castleGateFrac ?? 0;
   // No gate on this region, or a board with nothing but a castle on it: there
-  // is no territory claim to make, so make none.
-  if (need <= 0 || total <= 1) return RESULTS.whyClockOnly;
+  // is no territory claim to make, so make none — and `whyNoGate` is what
+  // making none sounds like. This branch used to return `whyClockOnly`, whose
+  // text is "the countryside was yours and the gate was open", which is a
+  // positive territorial claim and was therefore exactly the thing the comment
+  // above forbids. Five regions ship `castleGateFrac: 0` — all of tier 1 plus
+  // kaldan — so every timeout on them printed it regardless of the ground held;
+  // reproduced at 3 of 11 sites and at 2 of 18.
+  if (need <= 0 || total <= 1) return RESULTS.whyNoGate;
   const frac = held / (total - 1);
   return frac < need
     ? RESULTS.whyGateHeld(percent(frac), percent(need))

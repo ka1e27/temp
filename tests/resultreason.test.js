@@ -71,14 +71,47 @@ test('a region with no gate never claims one held', () => {
   // outright. Saying "the gate held" there would be the same defect the coach
   // pair was just split to fix.
   assert.equal(resultReason(outcome({ stats: { sitesHeld: 1, sitesTotal: 11 } }), cfg(0)),
-    RESULTS.whyClockOnly);
+    RESULTS.whyNoGate);
   assert.equal(resultReason(outcome({ stats: { sitesHeld: 1, sitesTotal: 11 } }), null),
-    RESULTS.whyClockOnly);
+    RESULTS.whyNoGate);
+});
+
+test('...AND IT MAKES NO TERRITORIAL CLAIM EITHER, which is the bug this caught', () => {
+  // THIS TEST USED TO ENCODE THE DEFECT. The no-gate branch returned
+  // `whyClockOnly` — "The countryside was yours and the gate was open" — which
+  // is a positive claim about ground held, in the branch whose own comment says
+  // to make none. Five regions ship no gate (all of tier 1 plus kaldan), so
+  // every timeout on them printed it however little the player held: reproduced
+  // at 3 of 11 sites and at 2 of 18.
+  //
+  // Asserting the branch equals a named constant could never catch that, because
+  // the constant was the wrong one. So this asserts the PROPERTY: whatever the
+  // no-gate line says, it must not tell a player who held 12% of the map that
+  // the countryside was theirs.
+  for (const held of [0, 1, 3, 9]) {
+    const said = resultReason(outcome({ stats: { sitesHeld: held, sitesTotal: 11 } }), cfg(0));
+    assert.doesNotMatch(said, /countryside was yours/i,
+      `held ${held}/11 and was told the countryside was theirs`);
+    // Naming the ABSENCE of a gate is fine and is the point of the line — what
+    // it may not do is report one as satisfied, which is the claim the old
+    // string smuggled in.
+    assert.doesNotMatch(said, /gate (held|was open)/i,
+      'a region with no gate must not report one as held or open');
+  }
 });
 
 test('a board of one site makes no territory claim rather than dividing by zero', () => {
   assert.equal(resultReason(outcome({ stats: { sitesHeld: 0, sitesTotal: 1 } }), cfg(0.6)),
-    RESULTS.whyClockOnly);
+    RESULTS.whyNoGate);
+});
+
+test('the CLEARED-gate line still says the countryside was yours, because it was', () => {
+  // The negative control for the test above: `whyClockOnly` is correct where it
+  // was always correct — a real gate, genuinely satisfied, and the clock beat
+  // the throne. Losing that claim would be over-correcting.
+  const said = resultReason(outcome({ stats: { sitesHeld: 9, sitesTotal: 11 } }), cfg(0.6));
+  assert.equal(said, RESULTS.whyClockOnly);
+  assert.match(said, /countryside was yours/i);
 });
 
 test('the gate is read off the BATTLE, so an incursion mutator is reflected', () => {
@@ -128,4 +161,52 @@ test('sitesHeld / (sitesTotal - 1) IS siteControlFraction when the castle is not
     resultReason({ result: 'timeout', stats: { sitesHeld: held, sitesTotal: total } },
       { rules: state.rules }),
     RESULTS.whyClockOnly);
+});
+
+// ---------------------------------------------------------------------------
+// A loss costs time AND whatever you fired
+// ---------------------------------------------------------------------------
+
+import { resultCopy } from '../src/screens/results.js';
+
+test('"nothing was lost but time" only when nothing WAS spent', () => {
+  // `applyOutcome` calls `consumeBoosters` unconditionally, before the win/loss
+  // branch, and `boosters.js consume()` has no refund path — so a charge fired
+  // into a battle you go on to lose is gone, and a charge costs 1-3 RELICS, the
+  // currency a raid never pays. The headline sentence overclaimed directly above
+  // the "Charges spent" row that contradicted it.
+  const lost = { result: 'loss', stats: { sitesHeld: 2, sitesTotal: 11 } };
+
+  const clean = resultCopy(lost, { boostersConsumed: [] }, { name: 'Riverfen' });
+  assert.match(clean.body, /Nothing was lost but time/);
+
+  const spent = resultCopy(lost, { boostersConsumed: [{ id: 'rally', count: 1 }] },
+    { name: 'Riverfen' });
+  assert.doesNotMatch(spent.body, /Nothing was lost but time/,
+    'a fired charge is a real cost and the copy may not deny it');
+  assert.match(spent.body, /charges you fired are spent/i);
+});
+
+test('a zero-count entry is not a spend', () => {
+  // `boostersConsumed` is built by filtering on `used > 0`, so this should not
+  // arise — but a copy branch that flips on the ARRAY rather than on the counts
+  // would be wrong the moment that filter changed.
+  const lost = { result: 'loss', stats: { sitesHeld: 2, sitesTotal: 11 } };
+  const c = resultCopy(lost, { boostersConsumed: [{ id: 'rally', count: 0 }] }, null);
+  assert.match(c.body, /Nothing was lost but time/);
+});
+
+test('a missing applied summary does not crash the loss screen', () => {
+  const lost = { result: 'loss', stats: { sitesHeld: 0, sitesTotal: 11 } };
+  for (const applied of [null, undefined, {}]) {
+    assert.match(resultCopy(lost, applied, null).body, /Nothing was lost but time/);
+  }
+});
+
+test('a WIN with charges spent is untouched — this is the loss copy only', () => {
+  const won = { result: 'win', stats: { sitesHeld: 11, sitesTotal: 11 } };
+  const c = resultCopy(won, { boostersConsumed: [{ id: 'rally', count: 2 }] },
+    { name: 'Riverfen' });
+  assert.match(c.title, /Riverfen is yours/);
+  assert.doesNotMatch(c.body, /charges you fired/i);
 });
