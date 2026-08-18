@@ -107,3 +107,40 @@ test('a battle carrying every troop binds every letter, exactly as before', () =
   for (const u of UNIT_IDS) press(FILTER_KEYS[u]);
   for (const u of UNIT_IDS) assert.equal(view.filter[u], true, `${u} did not toggle`);
 });
+
+// ---------------------------------------------------------------------------
+// ...and so does the training fan, one layer over
+// ---------------------------------------------------------------------------
+
+import { trainFanUnits } from '../src/screens/battle-parts.js';
+import { TRAINABLE_UNITS } from '../src/battle/training.js';
+
+test('the fan offers what is trainable AND carried, never the rest', () => {
+  // `cmdTrain` gates on the same roster, so the six extra chips were locked
+  // for the whole battle. A chip that can never unlock is not a preview.
+  assert.deepEqual(trainFanUnits(['militia', 'spearmen']), ['militia', 'spearmen']);
+});
+
+test('the marshal is still never in it, however he got into the roster', () => {
+  // TRAINABLE_UNITS is derived from `maxPerSite`: a unit you may only have one
+  // of is COMMISSIONED, not trained. Carrying one must not put him on the fan.
+  const out = trainFanUnits(['militia', 'marshal']);
+  assert.deepEqual(out, ['militia']);
+  assert.equal(out.includes('marshal'), false);
+});
+
+test('an all-nine expedition builds exactly the fan it always did', () => {
+  assert.deepEqual(trainFanUnits([...UNIT_IDS]), TRAINABLE_UNITS);
+});
+
+test('an empty or absent roster falls back to the whole trainable list', () => {
+  for (const bad of [null, undefined, [], 'militia']) {
+    assert.deepEqual(trainFanUnits(bad), TRAINABLE_UNITS);
+  }
+});
+
+test('a roster of nothing trainable falls back rather than emptying the fan', () => {
+  // The marshal alone is the case: trainable-and-carried is empty, and a fan
+  // with no chips in it is a site you can never set to build anything.
+  assert.deepEqual(trainFanUnits(['marshal']), TRAINABLE_UNITS);
+});

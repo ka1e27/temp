@@ -26,10 +26,10 @@ import { createHudInsets } from './battle-insets.js';
 import { createSpeedControl } from './battle-speed.js';
 import {
   buildTrainPicker, updatePreview, placeFan, placeRails, buildReadouts,
+  trainFanUnits,
 } from './battle-parts.js';
 // `updateTrain` indexes the chips against the SAME list they were built from,
 // so this stays here even though the fan itself moved.
-import { TRAINABLE_UNITS } from '../battle/training.js';
 
 export {
   computePreview, previewLine, projectGarrison, travelSecondsFor,
@@ -253,7 +253,8 @@ export function createBattleHud(o) {
   const boostArmed = boosters.map((b) => bindClass(b, 'is-armed'));
   const boostShake = boosters.map((b) => bindClass(b, 'is-rejected'));
   const boostLabel = boosters.map((b, i) => bindText(b.children[2], boosterIds[i]));
-  const trainChips = buildTrainPicker(el.train, input, view, tip);
+  const fanUnits = trainFanUnits(railUnits);
+  const trainChips = buildTrainPicker(el.train, input, view, tip, railUnits);
 
   // The simulation never touches the bus; screens/battle.js re-emits every sim
   // event as `battle:<type>`. A rejected order used to end here, unheard.
@@ -358,8 +359,8 @@ export function createBattleHud(o) {
     // while the chips came from UNIT_IDS too, so it read as correct and would
     // have silently mislabelled every chip the moment the two diverged.
     for (let i = 0; i < trainChips.length; i++) {
-      trainChips[i].on(s.trainType === TRAINABLE_UNITS[i]);
-      trainChips[i].locked(!unlocked.includes(TRAINABLE_UNITS[i]));
+      trainChips[i].on(s.trainType === fanUnits[i]);
+      trainChips[i].locked(!unlocked.includes(fanUnits[i]));
     }
   }
 

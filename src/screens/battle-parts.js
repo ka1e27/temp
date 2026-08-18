@@ -24,6 +24,17 @@ import {
 const _p = { x: 0, y: 0 };
 const INSUFFICIENT = 'INSUFFICIENT — walls repair faster than you break them';
 
+/** What the training fan offers: trainable, and carried by this expedition.
+ *  Exported so `updateTrain` indexes against exactly the list the chips were
+ *  built from — the two drifting apart is how every chip in the fan would
+ *  silently mislabel itself. Empty roster falls back to the whole trainable
+ *  list, the same safe direction `battle-keys.js filterUnits` takes. */
+export function trainFanUnits(roster) {
+  if (!Array.isArray(roster) || roster.length === 0) return TRAINABLE_UNITS;
+  const out = TRAINABLE_UNITS.filter((u) => roster.includes(u));
+  return out.length ? out : TRAINABLE_UNITS;
+}
+
 /** One 44px chip per trainable unit, fanned in an arc around the selected site:
  *  the highest frequency decision in the game, sitting at the point of attention
  *  instead of in a sidebar. A 44px circle cannot hold "Spearmen", so the glyph
@@ -32,14 +43,25 @@ const INSUFFICIENT = 'INSUFFICIENT — walls repair faster than you break them';
  *  TRAINABLE_UNITS, not UNIT_IDS: the marshal is commissioned with RECRUIT and
  *  is not a thing a stronghold can be set to build. Offering him here cost a
  *  wall's whole output for forty seconds to duplicate a body every landing
- *  already grants, and then quietly kept building them. */
-export function buildTrainPicker(host, input, view, tip) {
+ *  already grants, and then quietly kept building them.
+ *
+ *  ...AND NARROWED AGAIN, TO THIS EXPEDITION'S ROSTER. `cmdTrain` gates on
+ *  `mods.player.unlockedUnits`, which `meta/composition.js battleRoster` has
+ *  narrowed to the five types the expedition actually carries — so the fan drew
+ *  eight chips, six of them permanently locked, in the first second of the
+ *  first thing a new player ever selects. The lock is kept rather than trusted
+ *  away (the two lists cannot diverge today and the fan must not assume that),
+ *  but a chip that can never unlock during THIS battle is not a preview of
+ *  anything, it is furniture — and one of them sat behind the coach bubble
+ *  teaching the gesture. The fan's radius grows with its own length, so
+ *  narrowing it also tightens it around the site it belongs to. */
+export function buildTrainPicker(host, input, view, tip, roster) {
   // Radius chosen so the chips across a 170-degree fan do not touch, and the fan
   // GROWS with the roster — this was fixed at a five-chip radius and the three
   // specialists landed on top of each other. TRAIN_FAN_R in battle-anchor.js
   // mirrors the same formula, so the site panel keeps clear of the fan.
   const a0 = -175;
-  const units = TRAINABLE_UNITS;
+  const units = trainFanUnits(roster);
   return units.map((u, i) => {
     const a = (a0 + (TRAIN_FAN_DEG / Math.max(1, units.length - 1)) * i) * (Math.PI / 180);
     const chip = h('button.train-chip', {
