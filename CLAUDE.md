@@ -2771,6 +2771,27 @@ order. `.hud-selection` carries `z-index: 2` now, and the rule is worth stating 
 
 ## Gotchas that have already cost time
 
+- **A SPLIT THAT MOVES A CLOSURE TURNS ITS CAPTURED VARIABLES INTO FREE ONES, AND A FREE
+  VARIABLE IS NOT A SYNTAX ERROR.** `createSelection` destructured four of its seven
+  dependencies; the two functions the split moved had also closed over `board`,
+  `getState` and a scratch point, and those became globals-that-do-not-exist. The module
+  loads, `npm run check` is happy, and every path that does NOT call them stays green —
+  so box-select and the rally CLICK were dead for a release. **When splitting a factory,
+  diff the moved code's free identifiers against the destructured list**, and remember
+  that the scratch point wants to be COPIED rather than shared: two files mutating one
+  `_a` across a module boundary is a data race waiting for the first interleaved call.
+- **AND A GESTURE WITH NO SMOKE STEP CAN BE DELETED BY A REFACTOR WITHOUT ANYTHING GOING
+  RED.** That is the reason the above survived: `tools/smoke.mjs` drove the rally DRAG,
+  which is a different function, and had never box-selected at all. `smoke-select.mjs`
+  covers both now, and it needed three things that are worth copying to any new step —
+  it runs FIRST among the order steps (placed last, the beachhead has shrunk and it
+  reports "fewer than two player sites to box" and asserts nothing, which is
+  worthless-but-green); it reads `__game.__view` like every other step, because
+  `__game.screens.battle` is the SCENE and a board read off it is `undefined`, giving the
+  same silent skip; and it **leaves the input state clean**, because it is the only step
+  that selects several sites and a drag starting on a selected site commits the whole
+  selection — three sites left selected made the camped-drag step four steps later issue
+  a SEND instead of a MOVE_SQUAD, intermittently.
 - **`h()` SKIPS AN UNDEFINED CHILD RATHER THAN THROWING, so a node built before the
   variable holding it is a readout that draws nothing.** `battle-hud.js` created
   `el.tallyBox` from `el.tally` ten lines before `el.tally` existed: the box mounted its
