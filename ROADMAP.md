@@ -211,8 +211,14 @@ their files; they do not exist.
       mechanism is not always bad: genuinely contested to the wire, decided in the last
       5% of the clock. **This is a property of hard-cap-as-verdict, not of today's dial**,
       so the re-tune does not fix it.
-- [ ] **NOTHING SIGNALS A STALEMATE, SO THE FREE ESCAPE HATCH NEEDS THE PLAYER TO
-      SELF-DIAGNOSE.** Withdraw is always visible and genuinely free (`stats.losses` is
+- [x] ~~**NOTHING SIGNALS A STALEMATE, SO THE FREE ESCAPE HATCH NEEDS THE PLAYER TO
+      SELF-DIAGNOSE.**~~ **FIXED** — `battle-alert.js stalemateCheck`, a pure fold over
+      the site tally with the thresholds injectable. Three minutes of a board that has
+      not moved raises `STALLED — no ground has changed hands in N minutes. Withdraw
+      costs nothing but the time already spent.`, repeating no oftener than every two.
+      It WARNS and does not act, because a still tally is not proof of a lost battle —
+      duskfell, measured, was contested to the wire. Live: fired at 249s and again at
+      370s on a frozen board. Withdraw is always visible and genuinely free (`stats.losses` is
       not incremented for a retreat), so the tool to cut a 34-minute frozen loss to a
       9-minute one already exists. Nothing measures or surfaces "territory has not moved
       in N minutes". In the widowsgate trace a player had a 25-minute window to make that

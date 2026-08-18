@@ -10,7 +10,7 @@
 // unchanged value costs one comparison and no DOM work, and nothing in this
 // file allocates per refresh.
 import { UNIT_IDS, SITES, SEND_FRACTIONS, BOOSTERS } from '../content/balance.js';
-import { UNITS_UI } from '../content/strings.js';
+import { UNITS_UI, RESULTS } from '../content/strings.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
 import { compact, clock, percent, rate } from '../ui/format.js';
@@ -20,6 +20,7 @@ import { sitesOwned } from '../battle/siteinfo.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import {
   createSitePanel, createWithdraw, createAlert, createBuildRail, wireAlerts,
+  stalemateCheck,
 } from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
@@ -51,6 +52,11 @@ export function createBattleHud(o) {
   const el = {};
   const set = {};
   let last = -1e9;
+  // Stalemate detection: `_stallNow` is the per-frame query and `stallMemo` the
+  // running answer. Both are presentation state — they never replay and never
+  // cross the contract — and both are reused rather than rebuilt each frame.
+  const _stallNow = { tally: '', tick: 0, hz: TICK_HZ };
+  const stallMemo = { tally: null, since: 0, warnedAt: 0 };
   let shakeUntil = 0;
   let shaken = -1;
 
@@ -300,7 +306,21 @@ export function createBattleHud(o) {
     const sec = state.tick / TICK_HZ;
     set.clock(clock(sec));
     set.runway(` / ${clock(state.rules.hardCapTicks / TICK_HZ)}`);
-    set.tally(`${sitesOwned(state, 'player').length} v ${sitesOwned(state, 'enemy').length}`);
+    const tally = `${sitesOwned(state, 'player').length} v ${sitesOwned(state, 'enemy').length}`;
+    set.tally(tally);
+    // ...AND WHETHER IT HAS STOPPED MOVING. A timeout runs the FULL hard cap —
+    // `endPhase` only assigns one at `hardCapTicks` — so a board that froze at
+    // minute 9 still costs the player every remaining minute. Withdraw is free
+    // and always on screen; nothing ever told them they were in a position to
+    // use it. The rule is `battle-alert.js stalemateCheck`, pure and tested;
+    // `stallMemo` is presentation scratch, mutated in place so this allocates
+    // nothing per frame.
+    _stallNow.tally = tally;
+    _stallNow.tick = state.tick;
+    if (stalemateCheck(_stallNow, stallMemo)) {
+      const mins = Math.round((state.tick - stallMemo.since) / TICK_HZ / 60);
+      alert.show(RESULTS.stalled(mins), now(), 'danger');
+    }
     set.urgent(state.rules.hardCapTicks - state.tick < TICK_HZ * 60);
 
     for (let i = 0; i < SEND_FRACTIONS.length; i++) segOn[i](view.fraction === SEND_FRACTIONS[i]);

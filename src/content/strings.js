@@ -345,6 +345,12 @@ export const RESULTS = Object.freeze({
     + ' besides time. Change your expedition and try again.',
   timeoutBody: 'Decided on territory when the hard cap ran out.',
   retreatBody: 'You withdrew. The region is unchanged.',
+  // THE BOARD HAS STOPPED MOVING. Raised by `battle-alert.js stalemateCheck` —
+  // see there for the measurements. It names Withdraw because Withdraw is free
+  // and always on screen, and the whole problem is that nothing ever told the
+  // player they were in a position worth using it from.
+  stalled: (mins) => `STALLED — no ground has changed hands in ${mins} minutes.`
+    + ' Withdraw costs nothing but the time already spent.',
   incomeNow: 'Income now',
   bestTime: 'Best time',
   // WHY, not just WHAT. Every one of these is derivable from the outcome the
