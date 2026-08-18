@@ -82,9 +82,10 @@ export const REGIONS = Object.freeze([
   // --- Tier 2 (5) -- the first real wall. Kaldan proves the upgrade layer
   // matters. `develop` is quantised (highmarch/greywater/thornmoor land on the
   // realised-mean-fort-level boundary, not the raw column) and neutral is a
-  // difficulty knob that moves the WRONG way (more neutral reads EASIER, since
-  // it is a race the enemy's running economy already wins more of). Full
-  // reasoning: ./regions.provenance.js, "TIER 2".
+  // difficulty knob that moves the WRONG way FOR A NAIVE READING (more
+  // neutral reads HARDER, since it is a race the enemy's running economy
+  // already wins more of — greywater 6->7 measured 75%->63% in the melee-
+  // layer pass). Full reasoning: ./regions.provenance.js, "TIER 2".
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
     3.19, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 8.5,

@@ -289,3 +289,22 @@
 // re-tune, third pass) carries whatever was actually measured after that move
 // landed; the percentages above predate it and should not be read as the
 // current number for any of the three.
+//
+// ============================================================================
+// FOURTH PASS (in progress) — tiers 3-6 dial moved again, only partly measured.
+// ============================================================================
+//
+// Everything in the tier-3 through tier-6 sections above is PRE-MELEE-LAYER
+// provenance and should be read as history, not as today's answer. CLAUDE.md
+// ("Still open" -> the campaign re-tune, third pass) carries the current
+// numbers and the reasoning for this pass specifically: `develop` cut for
+// tiers 4-6 to minimise how far past the level-3 castle threshold those rows
+// sit (the castle itself cannot drop to level 2 without violating
+// non-decreasing against karrowmere, which is already there with no Marshal
+// to make it matter), traced back to a Marshal'd throne that is never
+// attacked for a whole battle out-training any single rear site's ability to
+// mass a legal first strike. Tier 1-2 are fully re-measured at n=48 and all
+// nine rows read `ok`. Tiers 3-6 are a partial n=24 screen only — eleven of
+// fifteen rows have no reading at all yet. Do not treat any dial on those
+// fifteen rows as settled; CLAUDE.md says exactly which of them have even a
+// probe-level number and which do not.

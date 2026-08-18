@@ -2864,6 +2864,148 @@ gate the deploy.
   full at "A fight takes time" above. The short version, n=48: riverfen 96% TOO EASY,
   kaldan 77% ok, gallowmoor 23% TOO SLOW, thanescar 2%, ravensmarch 4%.
 
+  **⏳ SUBSTANTIAL PROGRESS THIS SESSION, NOT CLOSED — tier 1–2 are done and
+  confirmed, tier 3–6 have a diagnosed lever and a partial re-measurement, and
+  eleven of twenty-four rows still have no read at all. Do not read this as a
+  finished pass; read it as where the next session should resume.**
+
+  **First, a correction to the line above.** Re-measured fresh at n=48 against
+  today's HEAD (no dial changed yet), riverfen read **90%, ok** — not 96% —
+  matching CLAUDE.md's OTHER n=48 table ("RE-TAKEN ON THE FIXED ENGINE") rather
+  than the later "after the clock fix" one quoted here. Something between those
+  two measurements shifted this row back down into band on its own; nothing in
+  this session touched riverfen before taking that reading. Recorded so the
+  next re-take does not waste time chasing a discrepancy that was already
+  resolved once, silently, by an earlier fix.
+
+  **TIER 1–2, CONFIRMED AT n=48, all nine rows read `ok`:**
+
+  ```
+  riverfen 90  ashford 85  ironwood 90  saltmere 79  kaldan 73
+  highmarch 75  greywater 75  thornmoor 67  emberholt 69
+  ```
+
+  Three needed a change. **Ironwood** read 98% (ceiling 92) on its OWN unchanged
+  dial and turned out nearly immune to `enemyMult` in the 3.04–3.2 range (98% at
+  both ends) — a `choke` shape on the smallest board plateaus hard near the top;
+  a much bigger jump (3.60, tested off-table) broke 90%, but that blows past
+  kaldan's own dial and would cascade into tier 2 for no reason. Fixed with the
+  OTHER tier-2 lever instead: `siteCounts.neutral` 4→5 (more neutral reads
+  HARDER — this file's own words two paragraphs below have it backwards, see
+  the correction there) alongside a monotonic-ceiling bump to 3.19 reads 90%.
+  **Saltmere** had to follow to 3.19 to stay non-decreasing, and reads 79% —
+  inside the floor but tight; wants an n=96/240 confirm before it is trusted at
+  that edge. **Emberholt** (the tier-2 finale) read 54% (floor 66), unrelated to
+  anything upstream: `enemyMult` 3.74→3.60 reads 69%. **Greywater** read 63%
+  (floor 66, only ~1 SEM short, so this may have been noise) — eased with
+  neutral 7→6 anyway since the fix cost nothing, reads 75%.
+
+  **A CORRECTION TO THE TIER-2 HEADER'S OWN CLAIM**, found while chasing
+  ironwood: "neutral is a difficulty knob that moves the WRONG way (more
+  neutral reads EASIER)" is backwards. `regions.provenance.js`'s own TIER-2
+  section has it right ("greywater at 7 neutral reads 66%, at 9 it reads 54%"
+  — MORE neutral is HARDER), and this session's own measurements agree in both
+  directions: raising ironwood's neutral 4→5 made it HARDER (98%→90%), and
+  cutting greywater's 7→6 made it EASIER (63%→75%). The row comment at tier 2
+  needs its own wording fixed to match its cross-reference; flagging here
+  rather than editing blind, since the phrase is repeated in more than one
+  place and this session did not have time to hunt every copy.
+
+  **TIER 3–6 (fifteen rows): NOT a result. Read every dial here as a
+  binary-search midpoint**, same caveat the inherited state carried into this
+  session. What changed and why, so the search resumes from here:
+
+  - `targetLengthMin` raised off its stale pre-melee promise (was 6–9m, now
+    16–20m across the board) so `hardCapMs` stops pinning these battles to a
+    clock that a slower, contested-tile campaign cannot resolve inside.
+  - `develop` cut for tiers 4–6 (was 2.45–3.30, now 2.10–2.32) after DIAGNOSING
+    — not just reproducing — the inherited "dominant position, castle never
+    sieged" finding. Verified it reproduces exactly: thanescar, gate 0.05 AND
+    0.6, cap forced to 70 minutes, seed 16838 — 87% territorial control,
+    `castleUnderSiege: false`, HP 941/941 (full), identical result at both
+    gates. **The mechanism**, traced with a direct probe against the real
+    `buildBattleConfig`/`startBattle` pipeline (a hand-cloned region spec
+    silently falls back to defaults and gives a WRONG pool/level answer —
+    learned that the hard way mid-session; always pass `enemyMix`/`enemySites`/
+    `playerSites`/`neutralSites` explicitly when cloning a region for a probe):
+    a Marshal (`banner` +25% def, `trainBuff` +40% training, tier 4+) sits on a
+    castle that is **never attacked for the whole battle** in these seeds, so
+    it trains against zero attrition. Measured: thanescar's castle garrison
+    ranges 96–241 over twenty minutes; the single biggest site the player
+    holds NEXT TO that castle never exceeds 11–30 over the same span — nowhere
+    close to the 1.5× first-strike margin `bestAssaultTarget` requires to even
+    OPEN a siege on an unbesieged target. Contrast gallowmoor (tier 3, no
+    Marshal): castle garrison stays 8–48 all battle, so raising its cap alone
+    worked (6%→33%→50% as the previous session's own scratchpad found). This
+    is NOT the already-fixed `--nothrone`/`siegeBudget` defect — budget was
+    ample in every one of these seeds; the siege was never attempted, gate
+    satisfied or not. `tools/simplayer.js`'s own `advanceDistance` comment says
+    consolidation is meant to out-pace exactly this ("nothing caps the sink...
+    the throne is the one target that needs more bodies than a farm can
+    build"), so this reads as a race the melee layer tipped against the
+    player for a Marshal'd, unattacked throne specifically — not a hard wall
+    (gravenreach/nightharrow, same Marshal count, still land occasional wins),
+    but a real, weak-to-`enemyMult` difficulty source distinct from clock or
+    power. **`develop` cannot buy a level-2 castle for tier 4+**: karrowmere
+    (tier 3's last row, no Marshal, already `develop` 2.08) rounds its OWN
+    castle to level 3 today, and `develop` is non-decreasing — so tier 4+
+    cannot go below that floor. What the cut still buys is fewer of the
+    OTHER forts (strongholds/training grounds) riding past the castle's own
+    level; isolated on thanescar alone (enemyMult unchanged), this took it
+    from ~0% to 17% at n=24.
+  - A further, modest `enemyMult` cut (~-0.15 to -0.20, keeping headroom over
+    karrowmere's 4.48) was tried on top and read AMBIGUOUSLY: thanescar 29%→
+    21%, gallowmoor 38%→25% — both moved the WRONG direction for a cut that is
+    supposed to make things easier, which at n=24 (SEM ≈10 points) is
+    consistent with pure noise rather than a real effect. Reverted back to the
+    smaller cut (which measured better, for whatever that is worth at this n)
+    rather than chase a lever that does not respond in a stable direction.
+    **Do not keep spending `enemyMult` on the Marshal-affected rows** — the
+    diagnosis above says the bottleneck is a consolidation race, not a power
+    ratio, and the data here is consistent with that: `enemyMult` moved
+    nothing predictably once the develop cut was already in.
+  - Giant caps were deliberately NOT chased for the worst-affected rows: the
+    inherited scratchpad already showed a 53-minute cap does nothing for
+    ravensmarch that a 26.6-minute one didn't (0/8 either way), so spending
+    sim wall-clock pushing `targetLengthMin` further on thanescar/ravensmarch/
+    stormhalt specifically is not expected to pay off. Caps were raised to
+    something real (16–20m) rather than left stale, not pushed to extremes.
+
+  **PARTIAL re-measurement at n=24 (noisy — treat as a screen, not a result)**,
+  after the develop cut and the smaller `enemyMult` cut:
+
+  ```
+  gallowmoor 38  sunder 25  [vaelstrand / duskfell / karrowmere: not yet run]
+  thanescar 29  blackspire 29  [ironcrown / obsidian / ravensmarch: not yet run]
+  gravenreach 42 ok  nightharrow 29 ok  [ravensmarch: not yet run]
+  stormhalt 8  [cinderwatch / widowsgate: not yet run]
+  ```
+
+  Every row above IMPROVED from its pre-session reading (thanescar 2%→29%,
+  stormhalt 0%→8%, gallowmoor 17-23%→38%), and gravenreach/nightharrow already
+  clear their tier-5 band. Gallowmoor, sunder, thanescar, blackspire and
+  stormhalt are still below their tier's floor. **Eleven of twenty-four rows
+  (sunder's tier-mates, three of tier 4, ravensmarch, and two of tier 6) have
+  no reading at all yet** — this environment ran roughly 4–20 minutes of real
+  wall-clock PER REGION at n=24 once the bigger caps were in (a single-core
+  isolated timing at the start of this session ran ~8s/battle; under this
+  session's actual CPU contention and the new caps it was far slower), so a
+  full n≥96 sweep of the remaining fifteen rows was not achievable in the time
+  available. The four acceptance test files (`scout`, `tactics`,
+  `loadoutdominance`, `campaignplay`) were NOT re-run this session for the same
+  reason — each needs ≥180s alone and several run real battles on these same
+  tiers, so re-taking them against a table this unsettled would only measure
+  today's midpoint, not tomorrow's.
+
+  **What a future session should do, in order:** (1) finish the n≥96 sweep of
+  the eleven untested rows at the CURRENT dial before changing anything else —
+  several of them may already be fine, since gravenreach/nightharrow already
+  are; (2) for rows that are still below floor after that, do not reach for
+  `enemyMult` first — reach for `siteCounts.neutral` (a real, if bounded,
+  lever both directions, confirmed this session) or accept the Marshal
+  residual and say so; (3) re-run all five acceptance files one at a time,
+  from a clean worktree if `regions.data.js` is dirty.
+
   **⚠ FOUR TEST FILES ARE RED, NOT ONE, AND THEY ARE ONE ROOT CAUSE.** Measured
   against a pristine checkout, each long harness file run alone: `harness` 11/0 ok,
   but `scout` ("never completed a single watchtower across twelve tier-5/6
