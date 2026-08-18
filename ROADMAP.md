@@ -54,9 +54,26 @@ before it is believed.
 **Status of the intake:** see the checklist immediately below. Nothing is worked until
 its own box exists here.
 
-- [ ] **Transcribe the six specialist reports into ranked items below.** (Blocked on the
-      agents finishing; partial transcription as each lands is expected and correct.)
-      Findings from my own hands-on pass are already below and are NOT waiting on them.
+- [x] ~~**Transcribe the six specialist reports into ranked items below.**~~ Done for the
+      two that survived. **FOUR OF THE SIX DIED TO A SESSION LIMIT BEFORE WRITING
+      ANYTHING** — see the warning below.
+- [ ] **RE-RUN THE FOUR CRITICS THAT NEVER REPORTED: game feel, hours 2-10, board
+      readability, input and accessibility.** Those four lenses are still completely
+      unexamined. Each brief was: drive the REAL game through `tools/cdp.js` at
+      `localhost:8080/?dev=1`, reproduce every finding with a probe or a screenshot,
+      distinguish measured from reasoned, rank by cost to a real player, include a "what
+      already works" section, stay READ-ONLY on the repo, and write to
+      `scratchpad/crit-<lens>.md`. **Transcribe each into this list the moment it lands** —
+      the scratchpad does not survive a session, which is exactly how these four were lost.
+
+**WHAT THIS PASS SHIPPED, so a resume does not redo it:** the empty-booster false
+affordance; the results screen's two false claims (the no-gate territorial claim and
+"nothing was lost but time"); the stalemate signal; the castle gate shown before the
+fight; the why-line's visual priority; the empire readout during a battle; and the
+battle-length guard (`tests/battlelength.test.js`, which fails on purpose — it is the
+re-tune's acceptance test). Findings LOGGED but deliberately not acted on: the enemy's
+column throughput, the opening's zero visible targets, and the advertised-length drift,
+all three of which are balance or design decisions rather than defects.
 
 **From my own pass** (hands-on, before the specialists landed):
 
