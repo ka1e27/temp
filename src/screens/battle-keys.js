@@ -4,7 +4,9 @@
 // battle-hud.js (id -> key, for the button legends) and battle-input.js
 // (key -> id, for the handler) — two tables that had to be edited in lockstep
 // and nothing checking that they agreed. They are derived from each other here.
-// PURE DATA: no DOM, no state.
+// PURE DATA and one derivation over battle state (`filterUnits`, at the foot):
+// no DOM, no globals.
+import { UNIT_IDS } from '../content/balance.js';
 
 /** Booster ids in dock order, with the key that arms or fires each one. */
 export const BOOSTER_KEYS = Object.freeze({
@@ -115,3 +117,29 @@ export const maxSpeedIndex = (unlocked) => (unlocked
 /** Is this speed index selectable for the given unlock state? */
 export const speedAllowed = (index, unlocked) =>
   index >= 0 && index < SPEEDS.length && (unlocked || SPEEDS[index] <= FREE_SPEED_MAX);
+
+/**
+ * The troop chips this battle should actually offer.
+ *
+ * The rail was built from `UNIT_IDS` — all nine — while `LOADOUT_TYPES_MAX` is
+ * five and `meta/composition.js battleRoster` narrows the sim's roster to what
+ * the expedition actually carries. So a campaign opener with militia and
+ * spearmen in it drew nine enabled chips, seven of which filter a troop that
+ * cannot be in your army and cannot be trained into it (`cmdTrain` gates on the
+ * same field, answering `unit-locked`). Toggling one did nothing, and looked
+ * exactly like toggling one that did.
+ *
+ * It lives beside FILTER_KEYS rather than in the HUD because the KEYBOARD has
+ * to ask the same question — a hotkey for a chip that is not on the rail flips
+ * an invisible flag — and that is the "ONE source of truth" argument this
+ * file's own header makes about the two key tables.
+ *
+ * `UNIT_IDS` order, not the roster's: the letters and the colours are learned
+ * positionally, and the roster's own order comes out of the shop.
+ * @param {object} state battle state @returns {string[]}
+ */
+export function filterUnits(state) {
+  const roster = state?.mods?.player?.unlockedUnits;
+  if (!Array.isArray(roster) || roster.length === 0) return UNIT_IDS;
+  return UNIT_IDS.filter((u) => roster.includes(u));
+}

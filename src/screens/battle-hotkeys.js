@@ -6,13 +6,15 @@
 // nothing here mutates simulation state, every intent goes through `ord` and
 // ends up as a command object on state.commands[].
 import { SEND_FRACTIONS } from '../content/balance.js';
-import { BOOSTER_BY_KEY, FILTER_BY_KEY, SPEED_KEYS } from './battle-keys.js';
+import { BOOSTER_BY_KEY, FILTER_BY_KEY, SPEED_KEYS, filterUnits } from './battle-keys.js';
 
 /**
- * @param {{view:object, ord:object, bus?:object, clearDrag:()=>void,
- *          cancelGestures:()=>void}} o
+ * @param {{view:object, ord:object, bus?:object, getState:()=>object,
+ *          clearDrag:()=>void, cancelGestures:()=>void}} o
  *   `cancelGestures` lets Esc abandon an in-flight drag that this module
- *   deliberately knows nothing else about.
+ *   deliberately knows nothing else about. `getState` is here for exactly one
+ *   question — which troop chips this battle offers — so the keyboard and the
+ *   rail cannot disagree about it.
  * @returns {{onKey:(ev:KeyboardEvent)=>void, onKeyUp:(ev:KeyboardEvent)=>void}}
  */
 /** A focusable control that owns its own keys — Space activates it, and a
@@ -21,7 +23,7 @@ const isControl = (el) => !!el && el !== document.body
   && /^(BUTTON|INPUT|SELECT|TEXTAREA|A)$/.test(el.tagName ?? '');
 
 export function createHotkeys(o) {
-  const { view, ord, bus, clearDrag, cancelGestures } = o;
+  const { view, ord, bus, getState, clearDrag, cancelGestures } = o;
 
   function onKey(ev) {
     if (ev.target !== document.body && ev.target?.tagName === 'INPUT') return;
@@ -58,6 +60,14 @@ export function createHotkeys(o) {
     }
     if (FILTER_BY_KEY[k]) {
       const u = FILTER_BY_KEY[k];
+      // ONLY A TROOP THIS BATTLE HAS A CHIP FOR. All nine letters were bound
+      // regardless, so pressing `U` in a battle carrying no halberds flipped a
+      // flag with nothing on screen to show for it — and left it flipped for
+      // the rest of the battle, ready to silently exclude the troop the moment
+      // one was captured into the army. Swallowed rather than fallen through,
+      // because it is still the filter key that was pressed: the answer is
+      // "not in this battle", not "that key means something else here".
+      if (getState && !filterUnits(getState()).includes(u)) return;
       view.filter[u] = !view.filter[u];
       bus?.emit('ui:filter', view.filter);
       return;

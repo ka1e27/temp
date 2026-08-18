@@ -343,7 +343,7 @@ export function createBattleInput(o) {
   }
 
   const { onKey, onKeyUp } = createHotkeys({
-    view, ord, bus, clearDrag, cancelGestures: () => { rally = null; press = null; },
+    view, ord, bus, getState, clearDrag, cancelGestures: () => { rally = null; press = null; },
   });
 
   off.listen(canvas, 'pointerdown', onDown);

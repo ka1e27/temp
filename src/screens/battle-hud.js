@@ -14,7 +14,7 @@ import { UNITS_UI } from '../content/strings.js';
 import { TICK_HZ } from '../core/loop.js';
 import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
 import { compact, clock, percent, rate } from '../ui/format.js';
-import { BOOSTER_KEYS, FILTER_KEYS, needsTarget } from './battle-keys.js';
+import { BOOSTER_KEYS, FILTER_KEYS, filterUnits, needsTarget } from './battle-keys.js';
 import { siteOf } from './battle-preview.js';
 import { sitesOwned } from '../battle/siteinfo.js';
 import { goldFlow, flowLine } from './battle-econ.js';
@@ -90,7 +90,16 @@ export function createBattleHud(o) {
   // to anyone who had not already learned the roster, and the hover card is
   // where that roster is now taught — see battle-tip.js.
   const tip = createUnitTip({ root });
-  const chips = UNIT_IDS.map((u) =>
+  // ONLY THE TROOPS THIS EXPEDITION BROUGHT. It was `UNIT_IDS` — all nine —
+  // against a five-type loadout cap, so the campaign opener drew seven chips
+  // that filtered a troop the army cannot contain and cannot train (`cmdTrain`
+  // answers `unit-locked` on the same field). They toggled, they lit up, and
+  // they changed nothing. Fixed at the LIST rather than by disabling them,
+  // because a permanently dead control is worse on the rail than absent: on a
+  // phone the rail is a scrolling column, and seven of its nine entries were
+  // there to be scrolled past.
+  const railUnits = filterUnits(getState());
+  const chips = railUnits.map((u) =>
     h('button.chip', {
       'data-interactive': true, type: 'button', vars: { '--chip': `var(--c-${u})` },
       'aria-label': `${UNITS_UI[u].name} — ${UNITS_UI[u].role}. `
@@ -99,7 +108,7 @@ export function createBattleHud(o) {
     }, h('span.chip-name', { text: UNITS_UI[u].name }),
     h('span.chip-key', { text: FILTER_KEYS[u] })));
   for (let i = 0; i < chips.length; i++) {
-    tip.attach(chips[i], UNIT_IDS[i], `Key ${FILTER_KEYS[UNIT_IDS[i]]} · include in every order`);
+    tip.attach(chips[i], railUnits[i], `Key ${FILTER_KEYS[railUnits[i]]} · include in every order`);
   }
   const boosters = boosterIds.map((id) =>
     h('button.booster', {
@@ -296,9 +305,11 @@ export function createBattleHud(o) {
     for (let i = 0; i < SEND_FRACTIONS.length; i++) segOn[i](view.fraction === SEND_FRACTIONS[i]);
     dragOn[0](!view.rallyMode);
     dragOn[1](!!view.rallyMode);
-    for (let i = 0; i < UNIT_IDS.length; i++) {
-      chipOn[i](view.filter[UNIT_IDS[i]] !== false);
-      chipOff[i](view.filter[UNIT_IDS[i]] === false);
+    // `railUnits.length`, not `UNIT_IDS.length`: the rail is the expedition's
+    // roster, so the two differ on every battle that is not carrying all nine.
+    for (let i = 0; i < railUnits.length; i++) {
+      chipOn[i](view.filter[railUnits[i]] !== false);
+      chipOff[i](view.filter[railUnits[i]] === false);
     }
     for (let i = 0; i < boosterIds.length; i++) {
       const b = state.boosters?.[boosterIds[i]];
