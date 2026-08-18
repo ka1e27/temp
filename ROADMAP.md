@@ -278,7 +278,8 @@ but **the only infinite, ever-escalating system in the game (the incursion ladde
 the one an idle player can never touch**, because auto-resolve is restricted to raids.
 The idle half is a well-made finite game; "endless" lives entirely in the RTS half.*
 
-- [ ] **A PLAYER WHO NEVER OPENS THE SHOP IS CAPPED AT EIGHT OFFLINE HOURS FOREVER.**
+- [x] ~~**A PLAYER WHO NEVER OPENS THE SHOP IS CAPPED AT EIGHT OFFLINE HOURS FOREVER.**~~
+      **FIXED.**
       The offline cap is gated entirely on Treasury levels. At full conquest that is
       roughly **55 million crowns silently discarded on one missed day**, for a play
       style this genre's audience plainly contains (engage with the RTS, ignore the

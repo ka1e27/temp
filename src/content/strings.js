@@ -15,6 +15,14 @@ export const UI = Object.freeze({
   crownsPerSec: '/s',
   income: 'Income',
   treasury: 'Treasury',
+  // HOW LONG THE EMPIRE KEEPS EARNING WITHOUT YOU. It rides the world-map
+  // header beside the treasury it fills, because that header is the last thing
+  // a player reads before closing the tab. The away banner already explains the
+  // cap AFTER it has bitten (see `IDLE.awayCapped`); nothing said what it was
+  // BEFORE, so a player who never opened the shop sat at the eight-hour floor
+  // forever — measured at roughly 55 million crowns discarded on one missed day
+  // at full conquest.
+  offlineCap: 'Away cap',
   relics: 'Relics',
   worldMap: 'World Map',
   shop: 'Upgrades',

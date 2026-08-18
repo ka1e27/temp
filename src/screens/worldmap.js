@@ -12,7 +12,7 @@
 // This is also the campaign's HUB: it owns the boot decision (menu, or straight
 // into region 1 on a clean save) for as long as main.js still replaces into it,
 // and it is the only route to the loadout, the shop and the menu.
-import { h, clear, mount, bindText } from '../ui/dom.js';
+import { h, clear, mount, bindText, bindClass } from '../ui/dom.js';
 import { compact, rate, duration } from '../ui/format.js';
 import { UI, WORLD, ENDGAME, IDLE } from '../content/strings.js';
 import {
@@ -21,6 +21,8 @@ import {
 } from '../meta/world.js';
 import { incursionView } from '../meta/incursion.js';
 import { incomePerSec, offlineNotice } from '../meta/idle.js';
+import { offlineCapMs } from '../meta/upgrades.js';
+import { OFFLINE } from '../content/upgrades.data.js';
 import { previewReward } from '../meta/rewards.js';
 import { createAutoResolveUI } from './worldmap-autobattle.js';
 import { createDetailRenderer } from './worldmap-detail.js';
@@ -85,9 +87,15 @@ export function createWorldMapScene(ctx) {
       const crowns = h('span.num.crowns');
       const relics = h('span.num.relics');
       const income = h('span.num.income');
+      // The fourth figure, and the only one that is a LIMIT rather than a
+      // balance — see UI.offlineCap. `is-floor` when the player has bought
+      // nothing that raises it, which is the state the finding is about.
+      const away = h('span.num.away');
       const setCrowns = bindText(crowns);
       const setRelics = bindText(relics);
       const setIncome = bindText(income);
+      const setAway = bindText(away);
+      const setAwayFloor = bindClass(away, 'is-floor');
       // Hoisted rather than built inline: while a raid auto-resolves in the
       // background these three are the only things that could carry the
       // player off this screen while the results of that resolve still need
@@ -126,7 +134,8 @@ export function createWorldMapScene(ctx) {
         h('div.wm-treasury', { 'aria-live': 'off' },
           h('span.label', { text: UI.treasury }), crowns,
           h('span.label', { text: UI.relics }), relics,
-          h('span.label', { text: UI.income }), income),
+          h('span.label', { text: UI.income }), income,
+          h('span.label', { text: UI.offlineCap }), away),
         // The endless ladder, and only once there is one. Built here rather
         // than in the detail panel because a rung has no hex of its own: it is
         // fought on ground the player already holds. Absent until the campaign
@@ -221,9 +230,10 @@ export function createWorldMapScene(ctx) {
       });
 
       buildBoard(board, detail);
-      refresh(setCrowns, setRelics, setIncome);
+      refresh(setCrowns, setRelics, setIncome, setAway, setAwayFloor);
 
-      const timer = setInterval(() => refresh(setCrowns, setRelics, setIncome), 250);
+      const timer = setInterval(
+        () => refresh(setCrowns, setRelics, setIncome, setAway, setAwayFloor), 250);
       const off = ctx.bus.on('meta:region-unlocked', () => buildBoard(board, detail));
 
       return [
@@ -359,13 +369,19 @@ export function createWorldMapScene(ctx) {
     boardEl?.classList.toggle('is-locked', locked);
   }
 
-  function refresh(setCrowns, setRelics, setIncome) {
+  function refresh(setCrowns, setRelics, setIncome, setAway, setAwayFloor) {
     setCrowns(compact(meta().crowns));
     // Uncompacted, like the shop's. A relic count is small enough to read
     // exactly, and "1.2k" beside a treasury reading "1.2k" would be two
     // different quantities wearing the same word.
     setRelics(String(Math.floor(meta().relics ?? 0)));
     setIncome(rate(incomePerSec(meta())));
+    // Whole hours: the cap moves in two-hour steps and nobody plans an absence
+    // to the minute. `is-floor` marks the untouched base — the one state worth
+    // drawing attention to, because it is the one a player can fix.
+    const capMs = offlineCapMs(meta());
+    setAway(`${Math.round(capMs / 3600000)}h`);
+    setAwayFloor(capMs <= OFFLINE.baseCapMs);
     if (!selected || !detailEl) return;
     const region = regionById(selected);
     if (!region) return;
