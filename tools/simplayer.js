@@ -29,11 +29,11 @@ import {
 } from './simtactics.js';
 export { PRIORITY };
 import { beliefFor } from '../src/battle/belief.js';
-
-// Keep a real home guard, but not so large that the opening push never fires —
-// the expedition exists to be spent, and the first minute is when enemy sites
-// are still thinly held.
-const HOME_FLOOR = 5;
+// Massing several sites into one strike — see simpool.js for the whole
+// argument. `HOME_FLOOR` lives there now rather than here, so both files read
+// the same number without an import cycle (this file already has to import
+// FROM simpool.js for `pooledAssaultTurn`).
+import { HOME_FLOOR, pooledAssaultTurn } from './simpool.js';
 
 /**
  * HOW FAR EACH OWNED SITE IS FROM THE FIGHTING, in hexes to the nearest site
@@ -135,6 +135,13 @@ export function playerTurn(state, opts = {}) {
   // default run and therefore every tuned number in regions.data.js.
   for (const src of mine) riderTurn(view, src, front);
 
+  // Sources and targets already spoken for THIS think — populated as the loop
+  // below commits, and handed to the pooling pass after it so a garrison
+  // cannot be double-spent and a target already taken cannot draw a second,
+  // redundant wave from sources this loop did not use.
+  const usedSources = new Set();
+  const takenTargets = new Set();
+
   for (const src of mine) {
     const garrison = total(src.garrison);
     const floor = src.kind === 'camp' ? HOME_FLOOR : 3;
@@ -160,7 +167,24 @@ export function playerTurn(state, opts = {}) {
     // simtactics.js `bestAssaultTarget` now; both hatches are documented
     // there, alongside `opts.reinforce` / `opts.microsend`.
     const best = bestAssaultTarget(view, src, send, opts);
-    if (best) state.commands.push({ t: 'SEND', from: src.id, to: best.id, fraction, filter });
+    if (best) {
+      state.commands.push({ t: 'SEND', from: src.id, to: best.id, fraction, filter });
+      usedSources.add(src.id);
+      takenTargets.add(best.id);
+    }
+  }
+
+  // MASS FORCE THE WAY THE ENEMY AI DOES — see simpool.js for the whole
+  // argument (`battle/aicore.js adjacentSources`'s reasoning, copied rather
+  // than its code). Additive: every target the loop above could take alone,
+  // it just did, from the same source, at the same fraction, as always. This
+  // only ever looks at what that loop left behind — the gap CLAUDE.md's "the
+  // harness bot cannot concentrate force" traces to a Marshal'd castle no
+  // single rear garrison can ever legally clear alone. `--nopool` reverts to
+  // the loop above being the whole of the bot's assault decision, so the
+  // delta stays re-measurable rather than remembered.
+  for (const cmd of pooledAssaultTurn(view, mine, inFlight, usedSources, takenTargets, opts)) {
+    state.commands.push(cmd);
   }
 
   // Push the rear army forward.

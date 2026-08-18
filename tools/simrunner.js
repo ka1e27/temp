@@ -11,6 +11,7 @@
 //   node tools/simrunner.js --all --noreinforce   # ...one that never relieves a stalled siege
 //   node tools/simrunner.js --all --nomicrosend   # ...one held to the blanket 5-body floor
 //   node tools/simrunner.js --all --nothrone      # ...one that will not commit to the last gate
+//   node tools/simrunner.js --all --pool          # ...one that CAN mass several sites at once
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -149,10 +150,15 @@ for (const id of regionIds) {
   // `--relics=40` measures a player who has been paid for the ground they took
   // and spent it on troop lines — the one lever the harness cannot earn on its
   // own, and therefore the one the measured table says nothing about.
+  // `--pool` OPTS IN to tools/simpool.js, and the opt-in direction is
+  // deliberate — see that file's header. Massing measured as a wash with a
+  // defect (its target scan is not throne-weighted, so it competes with
+  // consolidation), and every number in this project was taken without it, so
+  // the default stays where the table is.
   const opts = {
     upgrades: !args.noupgrades, construct: !args.noconstruct, scout: !args.noscout,
     reinforce: !args.noreinforce, microsend: !args.nomicrosend,
-    throne: !args.nothrone,
+    throne: !args.nothrone, pool: !!args.pool,
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
     sightedAi: SIGHTED.ai, sightedBot: SIGHTED.bot,
