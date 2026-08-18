@@ -56,6 +56,7 @@ its own box exists here.
 
 - [ ] **Transcribe the six specialist reports into ranked items below.** (Blocked on the
       agents finishing; partial transcription as each lands is expected and correct.)
+      Findings from my own hands-on pass are already below and are NOT waiting on them.
 
 **From my own pass** (hands-on, before the specialists landed):
 
@@ -108,6 +109,14 @@ its own box exists here.
 
 ### Blocking — the deploy is red until this is done
 
+> **⚠ IT IS FIVE TEST FILES NOW.** `tests/battlelength.test.js` joined the four below
+> during the fun pass, and it is the same standing: an acceptance test for the re-tune,
+> not separate work. Three of its four tests pass; the one that fails says the longest
+> advertised battle in the campaign is in TIER 3 (gallowmoor/sunder/vaelstrand at 20
+> minutes) rather than in the final tier (16-18). A later region promising a shorter
+> fight than an earlier one is not something a player can be told. Full write-up in the
+> fun-pass list above.
+>
 > **⚠ IT IS FOUR TEST FILES, NOT ONE, AND THEY ARE ONE ROOT CAUSE.** Everything below
 > says `campaignplay` is the single red row. Measured against a pristine checkout of
 > `da4ca6b`, running each long harness file alone (they need ≥180s each and the runner
