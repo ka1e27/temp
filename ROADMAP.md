@@ -28,6 +28,37 @@ commit. Do not re-derive the list.
 4. `npm run verify` before every commit. `node tools/smoke.mjs` and `node tools/mobile.mjs`
    before any commit that touches a screen (both need `npm start` running).
 
+### ⇒ THE FUN-AND-PLAYABILITY PASS — live, and this is the resume point
+
+**STATE. If you are picking this up cold, start here, not at the Blocking section.**
+A six-specialist critique of the shipped game is in flight or landed: game feel,
+difficulty and failure, hours 2-10, board readability, the idle half, and input and
+accessibility. Each writes a report to the scratchpad
+(`crit-feel.md`, `crit-difficulty.md`, `crit-retention.md`, `crit-readability.md`,
+`crit-idle.md`, `crit-input.md`) and each finding is reproduced against the real game
+before it is believed.
+
+**The protocol for this pass, on top of the four rules above:**
+
+5. **Findings land in THIS list before any of them is worked.** A finding that is only
+   in a scratchpad report is lost the moment the session ends — the scratchpad is not
+   the repository and does not survive. Transcribe first, fix second.
+6. **Every item carries its own evidence**, so it can be executed without re-reading the
+   report it came from: what was measured, on what, and what the number was.
+7. **A finding that turns out to be false is struck through with the check that killed
+   it**, not deleted — the last pass had one ("Spend All wastes relics") that was wrong
+   on a two-minute source read, and recording that is worth more than deleting it.
+8. **Rank by cost to a real player, not by ease of fix.** Cheap-and-cosmetic goes last
+   even when it is tempting to clear it first.
+
+**Status of the intake:** see the checklist immediately below. Nothing is worked until
+its own box exists here.
+
+- [ ] **Transcribe the six specialist reports into ranked items below.** (Blocked on the
+      agents finishing; partial transcription as each lands is expected and correct.)
+
+<!-- FINDINGS GO HERE, ranked, as they are transcribed. -->
+
 ### Blocking — the deploy is red until this is done
 
 > **⚠ IT IS FOUR TEST FILES, NOT ONE, AND THEY ARE ONE ROOT CAUSE.** Everything below
