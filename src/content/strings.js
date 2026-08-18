@@ -237,12 +237,28 @@ export const SHOP = Object.freeze({
   crownGateNote: 'Opens once you finish the campaign, and stays open after you abdicate.',
 });
 
+/**
+ * The offline payout banner — the payoff for the whole idle half of the game.
+ *
+ * THIS BLOCK HAD NO READER FOR ITS ENTIRE LIFE, and the banner in
+ * `screens/worldmap.js` hardcoded its own copy beside it. Two costs, and the
+ * second is the one that mattered: the copy here went stale unnoticed (it named
+ * a "Granary" upgrade that stopped existing when twenty-six upgrades collapsed
+ * into six endless lines), and the LIVE banner never grew the one line this
+ * block already had written for it — that the treasury filled up.
+ *
+ * `applyOfflineProgress` has returned `cappedOut` all along and nothing has
+ * ever read it. So a player who idles past the cap loses every crown after it,
+ * silently, and is never told that the Treasury line is what raises it — which
+ * is the one moment in the game where that upgrade sells itself.
+ */
 export const IDLE = Object.freeze({
-  awayTitle: 'While you were away',
-  awayBody: (crowns, duration) => `You earned ${crowns} crowns over ${duration}.`,
-  awayCapped: (cap) => `Your treasury filled up after ${cap}. Granary raises that cap.`,
-  awayNothing: 'Conquer a region to start earning while you are away.',
-  capLabel: 'Offline cap',
+  awayCrowns: (crowns) => `+${crowns} crowns`,
+  awayBody: (span) => ` earned while you were away (${span}).`,
+  awayCapped: (cap) => `Your treasury filled after ${cap} — anything past that was lost.`
+    + ' The Treasury line raises the cap.',
+  awayDismiss: 'Dismiss',
+  awayDismissLabel: 'Dismiss the offline income notice',
 });
 
 export const SAVE = Object.freeze({

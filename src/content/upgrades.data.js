@@ -66,6 +66,9 @@ export const UPGRADE_GROUPS = Object.freeze([
 export const OFFLINE = Object.freeze({
   baseCapMs: 8 * 60 * 60 * 1000,
   hardMaxCapMs: 24 * 60 * 60 * 1000,
+  // Floor under the away notice — see meta/idle.js `offlineNotice`. Both bind.
+  noticeMinMs: 60_000,
+  noticeMinCrowns: 1,
 });
 
 const H2 = 2 * 60 * 60 * 1000;

@@ -14,13 +14,13 @@
 // and it is the only route to the loadout, the shop and the menu.
 import { h, clear, mount, bindText } from '../ui/dom.js';
 import { compact, rate, duration } from '../ui/format.js';
-import { UI, WORLD, ENDGAME } from '../content/strings.js';
+import { UI, WORLD, ENDGAME, IDLE } from '../content/strings.js';
 import {
   worldView, regionById, isAttackable, raidCooldownRemaining, modeOf,
   campaignGap, CAMPAIGN_GAP_WARN,
 } from '../meta/world.js';
 import { incursionView } from '../meta/incursion.js';
-import { incomePerSec } from '../meta/idle.js';
+import { incomePerSec, offlineNotice } from '../meta/idle.js';
 import { previewReward } from '../meta/rewards.js';
 import { createAutoResolveUI } from './worldmap-autobattle.js';
 import { createDetailRenderer } from './worldmap-detail.js';
@@ -155,15 +155,32 @@ export function createWorldMapScene(ctx) {
       // returned, so this banner had never once appeared. The real field is
       // `creditedMs`; the threshold keeps a page reload from announcing "+0
       // crowns earned while you were away (0.3s)".
-      if (params?.offline?.creditedMs >= 60_000 && params?.offline?.crowns >= 1) {
+      //
+      // AND IT SAYS WHEN THE TREASURY FILLED, which is the half that was
+      // missing. `applyOfflineProgress` has returned `cappedOut` since it was
+      // written and nothing has ever read it, while `content/strings.js IDLE`
+      // has carried a line for exactly this case with no reader at all — so a
+      // player who idled past the cap lost every crown after it, silently, and
+      // was never told which upgrade raises it. That is the one moment in the
+      // game where the Treasury line sells itself, and it was the one moment
+      // the game said nothing. The copy lives in IDLE now rather than inline
+      // here, because the block that was hardcoded beside it is exactly how the
+      // unread one went stale (it named a "Granary" upgrade that stopped
+      // existing when twenty-six upgrades collapsed into six endless lines).
+      const notice = offlineNotice(params?.offline);
+      if (notice.shown) {
         banner = h('div.wm-offline.panel', { role: 'status' },
-          h('strong', { text: `+${compact(params.offline.crowns)} crowns` }),
-          h('span', {
-            text: ` earned while you were away (${duration(params.offline.creditedMs / 1000)})`,
-          }),
+          h('strong', { text: IDLE.awayCrowns(compact(notice.crowns)) }),
+          h('span', { text: IDLE.awayBody(duration(notice.creditedMs / 1000)) }),
+          // Only when it actually capped: a player who was away for an hour
+          // against an eight-hour cap must not be nagged about a limit that
+          // cost them nothing.
+          notice.capped
+            ? h('span.wm-offline-cap', { text: IDLE.awayCapped(duration(notice.capMs / 1000)) })
+            : null,
           h('button.btn.ghost', {
-            text: 'Dismiss', type: 'button',
-            'aria-label': 'Dismiss the offline income notice',
+            text: IDLE.awayDismiss, type: 'button',
+            'aria-label': IDLE.awayDismissLabel,
             on: { click: () => banner?.remove() },
           }));
         mount(root, banner);

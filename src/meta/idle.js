@@ -12,6 +12,7 @@
 // PURE: `now` is injected everywhere. No Date.now, no storage, no DOM.
 
 import { REGION_BY_ID } from '../content/regions.data.js';
+import { OFFLINE } from '../content/upgrades.data.js';
 import { metaOf } from '../core/store.js';
 import { upgradeEffects, addBonus, offlineCapMs } from './upgrades.js';
 import { conqueredIds } from './world.js';
@@ -190,4 +191,34 @@ export function timeToAfford(x, cost) {
   if (missing <= 0) return 0;
   const rate = incomePerSec(meta);
   return rate > 0 ? missing / rate : Infinity;
+}
+
+/**
+ * Should the "while you were away" banner appear, and does it have to mention
+ * the cap? A decision, not copy — the strings live in `content/strings.js
+ * IDLE` and the formatting in `ui/format.js`, neither of which `meta` may
+ * import.
+ *
+ * IT EXISTS BECAUSE THE SECOND HALF WAS MISSING FOR THE WHOLE LIFE OF THE
+ * FEATURE. `applyOfflineProgress` has returned `cappedOut` since it was
+ * written and nothing ever read it, so a player who idled past the cap lost
+ * every crown after it in silence — and the Treasury line, which is the
+ * upgrade that fixes exactly that, was never mentioned at the one moment it
+ * sells itself. Putting the rule here rather than inside the screen is what
+ * makes it testable without a DOM, the same shape `recruitOffer`/`buildOffer`
+ * already use on the battle side.
+ *
+ * @param {object|null} offline an `applyOfflineProgress` summary
+ * @returns {{shown: boolean, capped: boolean, crowns: number,
+ *            creditedMs: number, capMs: number}}
+ */
+export function offlineNotice(offline) {
+  const crowns = Number.isFinite(offline?.crowns) ? offline.crowns : 0;
+  const creditedMs = Number.isFinite(offline?.creditedMs) ? offline.creditedMs : 0;
+  const capMs = Number.isFinite(offline?.capMs) ? offline.capMs : 0;
+  const shown = creditedMs >= OFFLINE.noticeMinMs && crowns >= OFFLINE.noticeMinCrowns;
+  // `capped` is gated on `shown` deliberately: a banner that is not on screen
+  // has no cap line to carry, and a caller reading `capped` alone must not be
+  // able to render one without it.
+  return { shown, capped: shown && offline?.cappedOut === true, crowns, creditedMs, capMs };
 }

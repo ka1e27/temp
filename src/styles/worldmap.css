@@ -279,6 +279,20 @@
 .wm-offline span { color: var(--c-text-dim); font-size: var(--t-sm); }
 .wm-offline .btn { margin-left: auto; }
 
+/* THE CAP LINE GETS ITS OWN ROW, via `order` rather than by moving it in the
+   DOM. It is a full sentence beside two fragments, so a third item in a nowrap
+   row squashes all three at 390px — but it must still come BEFORE the dismiss
+   button in the document, or a screen reader offers you the dismissal before
+   the thing being dismissed. Ordering the BUTTON up and the sentence down puts
+   it on its own line while leaving reading order alone.
+   It is also the only part of this banner that is bad news, so it carries the
+   warning hue rather than the dim one its siblings share. */
+.wm-offline { flex-wrap: wrap; }
+.wm-offline .btn { order: 1; }
+.wm-offline span.wm-offline-cap {
+  order: 2; flex-basis: 100%; color: var(--c-warn);
+}
+
 /* ---------- fluid from 1024px up ---------- */
 
 @media (max-width: 1180px) {
