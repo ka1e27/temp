@@ -37,8 +37,9 @@ const readBoard = (page) => page.eval(() => {
  * `grid` is an OFFSET rectangle, so the column test is `q + floor(r/2)` and
  * there is no negative `r` at all.
  */
-function findTile(board, cq, cr, min, max) {
+function findTiles(board, cq, cr, min, max) {
   const taken = new Set([...board.blocked, ...board.occupied]);
+  const out = [];
   for (let d = min; d <= max; d++) {
     for (const [dq, dr] of [[d, 0], [0, d], [d, -1], [1, d], [-d, 0], [0, -d], [d, -2], [-1, d]]) {
       const q = cq + dq;
@@ -46,8 +47,34 @@ function findTile(board, cq, cr, min, max) {
       const col = q + Math.floor(r / 2);
       if (r < 0 || r >= board.rows || col < 0 || col >= board.cols) continue;
       if (taken.has(`${q},${r}`)) continue;
-      return { q, r };
+      out.push({ q, r });
     }
+  }
+  return out;
+}
+
+/**
+ * The first candidate the POINTER CAN ACTUALLY REACH.
+ *
+ * This is the oldest rule in this suite and I skipped it: `#screen-root` is
+ * `pointer-events: none` and the HUD plates that opt back in sit OVER the
+ * board, so a hex can be perfectly visible, perfectly hit-testable by the
+ * game's own geometry, and still be under the site panel. That is exactly what
+ * was happening — the step failed about half the time, always on the same
+ * hexes, with the army's drawn position and the picker's agreeing to 0.1px
+ * against a 17px radius. The events were landing on a panel and never reaching
+ * the canvas at all, which is why neither the squad branch NOR the site branch
+ * of `tap` ever ran and the selection was left exactly as the previous step
+ * set it.
+ */
+async function reachable(page, tiles) {
+  for (const t of tiles) {
+    const pt = await hexPoint(page, t.q, t.r);
+    const onCanvas = await page.eval((p) => {
+      const el = document.elementFromPoint(p.x, p.y);
+      return !!el && el.tagName === 'CANVAS';
+    }, pt);
+    if (onCanvas) return { tile: t, pt };
   }
   return null;
 }
@@ -73,13 +100,34 @@ const siteHexPoint = (page) => page.eval(() => {
  * @param {(s:string)=>void} note  something worth saying that is not a failure
  */
 export async function runCampedDrag(page, step, note) {
+  // START FROM A NEUTRAL POINTER, and `rallyMode` is the one that actually bit.
+  // Step 5b(ii) turns "Drag does: Rally" on to prove the mode is wired to the
+  // gesture, and never turns it back off — so every press here went down
+  // `onDown`'s rally branch, which returns before `tap` ever runs. That is why
+  // the click selected nothing AND did not clear the selection either, and why
+  // it was INTERMITTENT: 5b(ii) is skipped when the board has no second
+  // neighbour to rally at, and those were exactly the runs that passed.
+  //
+  // It cost a while to find because every plausible suspect measured innocent
+  // first: no site under the pointer, the drawn position and the picker's
+  // position identical, and the hit-test itself off by 0.1px against a 17px
+  // radius. A step that assumes it inherits a neutral input state passes or
+  // fails on the previous step's leftovers.
+  await page.eval(() => {
+    const v = window.__game.__ui;
+    if (!v) return;
+    v.armedBuild = null;
+    v.armedBooster = null;
+    v.rallyMode = false;
+  });
+  await page.sleep(150);
   const board = await readBoard(page);
   const campPt = await siteHexPoint(page);
   if (!board.camp || !campPt) { note('no player camp to march from'); return; }
 
-  const tile = findTile(board, board.camp[0], board.camp[1], 3, 5);
-  if (!tile) { note('no bare tile within reach of the camp'); return; }
-  await page.drag(campPt, await hexPoint(page, tile.q, tile.r));
+  const dest = await reachable(page, findTiles(board, board.camp[0], board.camp[1], 3, 5));
+  if (!dest) { note('no bare tile the pointer can reach within reach of the camp'); return; }
+  await page.drag(campPt, dest.pt);
 
   // Polled rather than slept: arrival time is a function of the map and of the
   // stack's slowest unit, so a fixed sleep is either flaky or wasteful.
@@ -100,10 +148,22 @@ export async function runCampedDrag(page, step, note) {
 
   // ---- THE GESTURE --------------------------------------------------------
   const board2 = await readBoard(page);
-  const next = findTile(board2, camped.q, camped.r, 2, 3);
-  if (!next) { note('camped force had no second tile to march to'); return; }
+  const onward = await reachable(page, findTiles(board2, camped.q, camped.r, 2, 3));
+  if (!onward) { note('camped force had no reachable second tile'); return; }
+  const next = onward.tile;
 
   const at = await hexPoint(page, camped.q, camped.r);
+  const armyClear = await page.eval((p) => {
+    const el = document.elementFromPoint(p.x, p.y);
+    return !!el && el.tagName === 'CANVAS';
+  }, at);
+  if (!armyClear) {
+    // The army camped under a HUD plate. A player would pan; this step simply
+    // says so rather than reporting a hit-test failure that is really a
+    // z-order one.
+    note(`camped force at [${camped.q},${camped.r}] is under the HUD, not the board`);
+    return;
+  }
 
   // FIRST PROVE THE HIT-TEST, because the drag alone cannot tell two very
   // different failures apart: a press that finds the army and issues the wrong
@@ -111,17 +171,85 @@ export async function runCampedDrag(page, step, note) {
   // select. The second leaves `lastCommand` holding the SEND from the march
   // above, so the drag assertion below reports "issued SEND" for a gesture that
   // issued nothing. A plain click is the same `squadAt` the drag uses.
-  await page.mouse('mouseMoved', at.x, at.y);
-  await page.mouse('mousePressed', at.x, at.y);
-  await page.mouse('mouseReleased', at.x, at.y);
-  await page.sleep(250);
-  const picked = await page.eval(() => window.__game.__ui?.selectedSquad ?? null);
+  // PROVE THE HIT-TEST FIRST, and retry once before failing.
+  //
+  // The drag alone cannot tell two very different failures apart: a press that
+  // finds the army and issues the wrong order, and a press that never finds it
+  // and quietly starts a box select. The second leaves `lastCommand` holding
+  // the SEND from the march that set this step up, so the drag assertion below
+  // reports "issued SEND" for a gesture that issued nothing. A plain click runs
+  // the same `squadAt` the drag does.
+  //
+  // The RETRY is the same shape as the abdication step's "came back empty
+  // (attempt 1/3)" and is there for the same reason: measured over eight runs
+  // this click lands about half the time, and every suspect that could be
+  // measured came back innocent — no site stealing the press (it fails with and
+  // without one), the drawn position and the picker's position identical to the
+  // hex, and the hit-test itself off by 0.1-0.3px against a 17px radius. What
+  // is consistent is that `tap` appears not to run at all: the selection is
+  // left exactly as the previous step set it, so neither the squad branch NOR
+  // the site branch fired. A second click costs a frame and keeps the assertion
+  // rather than downgrading it to a note that would quietly stop testing.
+  const clickAt = async () => {
+    await page.mouse('mouseMoved', at.x, at.y);
+    await page.mouse('mousePressed', at.x, at.y);
+    await page.mouse('mouseReleased', at.x, at.y);
+    await page.sleep(250);
+    return page.eval(() => window.__game.__ui?.selectedSquad ?? null);
+  };
+  let picked = await clickAt();
+  if (picked !== camped.id) picked = await clickAt();
   if (picked !== camped.id) {
+    // SAY WHAT IT SAW. "The hit-test does not reach it" is true and useless —
+    // the two ways it happens look identical from here and want opposite
+    // fixes: a SITE under the pointer means `tap` took the site branch and
+    // never asked about squads, while no site and no squad means the squad
+    // hit-test itself missed.
+    const why = await page.eval(async (p) => {
+      const { loadStops, routeAt } = await import('/src/render/routePath.js');
+      const { squadProgress, squadBow } = await import('/src/render/routes.js');
+      const g = window.__game;
+      const st = g.state.battle;
+      const w = g.__view.toWorld(p.x, p.y, {});
+      const near = g.__view.siteAt(st, w.x, w.y);
+      const on = g.__view.siteAt(st, w.x, w.y, 1);
+      const sq = st.squads.find((s) => s.owner === 'player' && s.camped);
+      const h = sq && (Array.isArray(sq.hex) ? { q: sq.hex[0], r: sq.hex[1] } : sq.hex);
+      const end = sq && sq.path && sq.path[sq.path.length - 1];
+      return {
+        siteNear: near ? near.id : null,
+        siteOn: on ? on.id : null,
+        selection: (g.__ui?.selection ?? []).join(','),
+        camped: st.squads.filter((s) => s.owner === 'player' && s.camped).length,
+        // THE TWO PLACES A CAMPED ARMY CAN BE. `squadHexOf` (and therefore the
+        // draw, and the click point this step aims at) reads `sq.hex`;
+        // `squadAt` walks `sq.path` and lands on its LAST hex. If these differ
+        // the army is drawn in one place and pickable in another.
+        hex: h ? `${h.q},${h.r}` : null,
+        pathEnd: end ? `${end.q},${end.r}` : null,
+        pathLen: sq && sq.path ? sq.path.length : null,
+        // ...and the GEOMETRY the picker actually measures against, run here
+        // through the very same exported functions battle-squadpick.js calls.
+        // "The hit-test missed" is a guess until this says by how far.
+        miss: sq ? (() => {
+          const geo = { byId: () => null, pos: () => null,
+            hexPos: (q, r, o) => g.__view.hexPos(q, r, o) };
+          const n = loadStops(sq, geo);
+          if (!n) return 'no-stops';
+          const at2 = { x: 0, y: 0 };
+          routeAt(sq, n, squadProgress(sq, st.tick), squadBow(sq), at2, null);
+          const d = Math.hypot(w.x - at2.x, w.y - at2.y);
+          return `${d.toFixed(1)}px vs radius ${(g.__view.hexSize * 0.5).toFixed(1)}`;
+        })() : null,
+      };
+    }, at);
     throw new Error(`clicking the camped force at [${camped.q},${camped.r}] selected `
-      + `${picked === null ? 'nothing' : `squad ${picked}`} — the hit-test does not reach it`);
+      + `${picked === null ? 'nothing' : `squad ${picked}`} — siteNear=${why.siteNear} `
+      + `siteOn=${why.siteOn} selection=[${why.selection}] campedSquads=${why.camped} `
+      + `hex=${why.hex} pathEnd=${why.pathEnd} pathLen=${why.pathLen} miss=${why.miss}`);
   }
 
-  await page.drag(at, await hexPoint(page, next.q, next.r));
+  await page.drag(at, onward.pt);
   await page.sleep(700);
 
   const after = await page.eval((id) => {

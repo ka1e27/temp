@@ -206,8 +206,16 @@ export function ticksAlong(state, route, comp, faction) {
  * Pure in `state.tick`, so a squad still stores no position and a replay lands
  * a column on exactly the hex the original run did.
  */
-export function squadHexOf(state, sq) {
-  if (sq.camped && sq.hex) return asHex(sq.hex);
+const _lerp = { q: 0, r: 0 };
+
+export function squadHexOf(state, sq, out = null) {
+  if (sq.camped && sq.hex) {
+    const h = asHex(sq.hex);
+    if (!out) return h;
+    out.q = h.q;
+    out.r = h.r;
+    return out;
+  }
   const path = sq.path;
   if (!path || !path.length) return null;
   const last = path.length - 1;
@@ -219,7 +227,14 @@ export function squadHexOf(state, sq) {
   const k = t - i;
   const a = path[i];
   const b = path[j];
-  return round({ q: a.q + (b.q - a.q) * k, r: a.r + (b.r - a.r) * k });
+  // `out` is optional and is the house scratch idiom (`sitePos`,
+  // `worldToScreen`, `hexPos`): hand in a reused object and this allocates
+  // nothing, which is what lets the RENDERER ask where every column is once a
+  // frame without breaking the no-per-frame-allocation rule. `_lerp` is this
+  // module's own scratch for the fractional hex `round` reads.
+  _lerp.q = a.q + (b.q - a.q) * k;
+  _lerp.r = a.r + (b.r - a.r) * k;
+  return round(_lerp, out);
 }
 
 /**

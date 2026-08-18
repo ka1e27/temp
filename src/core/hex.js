@@ -90,7 +90,7 @@ export function fromPixel(x, y, size) {
 }
 
 /** Round fractional axial coords to the nearest hex (via cube rounding). */
-export function round(frac) {
+export function round(frac, out = null) {
   let x = frac.q;
   let z = frac.r;
   let y = -x - z;
@@ -104,6 +104,11 @@ export function round(frac) {
   if (dx > dy && dx > dz) rx = -ry - rz;
   else if (dy > dz) ry = -rx - rz;
   else rz = -rx - ry;
+  // `out` is the same scratch idiom `sitePos`/`worldToScreen`/`hexPos` already
+  // use: a caller on a per-frame path hands in a reused object and this
+  // allocates nothing. Every existing caller passes nothing and gets the
+  // object it always got.
+  if (out) { out.q = rx; out.r = rz; return out; }
   return { q: rx, r: rz };
 }
 

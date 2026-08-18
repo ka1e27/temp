@@ -36,7 +36,7 @@ import { perceivedSite, perceivedSquads, siteKnown } from '../battle/vision.js';
 import {
   perceivedInfluence, computeVeil, drawVeil, GHOST_ALPHA, drawAssaultWash,
 } from './fog.js';
-import { capOf, signature } from './battleViewSig.js';
+import { capOf, signature, squadSightSig } from './battleViewSig.js';
 import { createLabelPass } from './battleLabels.js';
 
 const HEX_SIZE = 34;   // world units; the camera does all the zooming
@@ -167,8 +167,13 @@ export function createBattleView(opts) {
     draw(state, alpha, view, frameMs) {
       state0 = state;
       if (autoFit && firstFit) { api.fitTo(state); firstFit = false; }
-      const sig = signature(state);
-      // Ownership, level or influence changed: that is a REPAINT, not a slide.
+      // ...plus WHERE THIS FACTION'S ARMIES ARE. The veil is painted on the
+      // background, and a squad lights its own ring — so without this the fog
+      // never opened ahead of a march nor closed behind it. It is a hex-crossing
+      // trigger, not a per-tick one; see battleViewSig.js `squadSightSig`.
+      const sig = (signature(state) * 31 + squadSightSig(state, viewFaction)) | 0;
+      // Ownership, level, influence or a column's position changed: that is a
+      // REPAINT, not a slide.
       if (sig !== lastSig) { lastSig = sig; bgCache.markDirty(true); }
       if (bgCache.take()) redrawBg(state);
       bgCache.sync();

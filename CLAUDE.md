@@ -1659,6 +1659,37 @@ condition and the correct one are the same condition.
 It is not free: giving both commanders memory of what their columns saw moved the campaign
 **+6 to +11 points across tier 4** and had to be paid for in the dial.
 
+**THE VEIL FOLLOWS A COLUMN NOW, AND CLOSES BEHIND IT.** The sim rule was always
+right — `canSee` grants any squad, marching or camped, its own hex and the ring around
+it — but the veil is painted on the BACKGROUND canvas, and nothing marked that dirty
+when an army moved. So `computeVeil` folded squad sight in perfectly and then sat
+frozen at whatever the last capture or construction happened to leave: fog neither
+opened ahead of a march nor closed behind it.
+
+`battleViewSig.js squadSightSig` folds the viewing faction's own squad POSITIONS into
+the repaint signature, and the whole feature turns on one fact: **a column crosses a
+HEX, not a TICK.** A leg is 0.7–2.5 seconds (see the march table under "Tuning"), so
+this changes a couple of times a second per marching column rather than ten, and
+`markBgDirty` is already throttled to 8/s on top. Hashing `state.tick` instead is the
+regression `bgcache.js` measured at 60fps → 31.
+
+**A CAMPED FORCE COSTS NOTHING AND KEEPS ITS RING**, and that is the same rule rather
+than a second one: its hex does not change, so it forces no repaints, and `canSee` goes
+on answering true around it. Fog closes behind troops moving through and stays open
+around troops standing still, with neither as a special case.
+
+Measured rather than assumed, because this is exactly the shape of change that cost
+this project 60fps once: **60.1 fps with 56 columns marching on widowsgate** (336 hexes,
+the board the fog table above was taken on, which recorded 59.2 before). And the
+background bitmap genuinely changes — sampled during a march, 5 distinct frames in 8,
+with total brightness rising and falling again as the column opens ground ahead and the
+smoke closes in behind.
+
+`squadHexOf` and `core/hex.js round` grew an optional `out` parameter for this — the
+same scratch idiom `sitePos`/`worldToScreen`/`hexPos` already use — so asking where
+every column is once a frame allocates nothing. Every existing caller passes nothing
+and is untouched.
+
 **A marching squad NEVER bumps `influenceVersion`, and that is the one accepted cost.**
 That counter is what marks the background canvas dirty, so bumping it per tick would
 force a full repaint per tick — the exact regression `bgcache.js` already measured once
@@ -2674,6 +2705,20 @@ order. `.hud-selection` carries `z-index: 2` now, and the rule is worth stating 
   same rule: the world map's shop step selected `.wm-actions button`, so the moment
   "Incursions" joined that row it would have been hit-testing the wrong control while
   still reporting the shop was fine. It is `.btn.wm-shop` now.
+- **A SMOKE STEP MUST ASSERT `document.elementFromPoint`, and skipping it cost half a
+  session.** `#screen-root` is `pointer-events: none` and the HUD plates that opt back
+  in sit OVER the board, so a hex can be perfectly visible, perfectly hit-testable by
+  the game's own geometry, and still be under the site panel. The camped-drag step did
+  not check, and failed about half its runs — always on the same hexes. Every suspect
+  that could be measured came back innocent: no site stealing the press (it failed with
+  and without one), the drawn position and the picker's identical, and the hit-test off
+  by **0.1px against a 17px radius**. The tell, in hindsight, was that the selection was
+  left exactly as the previous step set it — neither the squad branch NOR the site
+  branch of `tap` had run, because the events never reached the canvas at all. The step
+  now picks the first candidate hex whose screen point hit-tests to the canvas, and says
+  so plainly when an army camps under a plate. This is the same rule the suite learned
+  once already ("a release once shipped completely unclickable"); it is not enough to
+  dispatch real pointer events if nobody checks where they land.
 - **A smoke FIXTURE picked out of a live battle is the same failure one layer down.**
   `smoke-orders.mjs`'s drag step wanted a known non-player site or another friendly one
   within the camp's reach, which is a claim about a board ten seconds in — and it came up
