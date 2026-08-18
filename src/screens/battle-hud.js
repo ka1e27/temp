@@ -27,7 +27,7 @@ import { createHudInsets } from './battle-insets.js';
 import { createSpeedControl } from './battle-speed.js';
 import {
   buildTrainPicker, updatePreview, placeFan, placeRails, buildReadouts,
-  trainFanUnits,
+  trainFanUnits, buildFrame,
 } from './battle-parts.js';
 // `updateTrain` indexes the chips against the SAME list they were built from,
 // so this stays here even though the fan itself moved.
@@ -149,57 +149,15 @@ export function createBattleHud(o) {
   el.selection = site.el;
   el.withdraw = withdraw.el;
 
-  el.tl = h('div.hud-corner.hud-tl', {},
-    h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow),
-    h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
-    alert.el);
-  el.tr = h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el, withdraw.hint);
-  // Each card is a header row (the label, full width, ruled off) over a
-  // CONTROLS row. Two real rows, not one flex row with the label faked into
-  // its own line via flex-basis — that trick fooled the browser's own
-  // max-content sizing (used because the dock sizes itself to its content)
-  // into measuring the label as if it could grow arbitrarily wide, which
-  // quietly inflated every card by 30-40% and pushed the dock into wrapping a
-  // full viewport step earlier than intended.
-  // FOUR CARDS ALONG THE BOTTOM WAS TOO MANY, and the two that moved are the
-  // two you touch least often: the troop filter is a standing preference you
-  // set once, and a booster is fired a handful of times a battle. What is left
-  // at the bottom is what you change constantly — how much of a garrison an
-  // order sends, what a drag means, and how fast the battle runs.
-  //
-  // The rail is a COLUMN down the left, which costs board width rather than
-  // board height. That is the right trade on both screens this has to work on:
-  // a phone is tall and narrow, and a laptop is wide and short.
-  el.dock = h('div.hud-dock', {},
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: '% of garrison' }),
-      h('div.hud-group-row', {}, ...strength)),
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Drag does' }),
-      h('div.hud-group-row', {}, ...dragMode)),
-    speed.el);
-  // ONE RAIL PER SIDE, because both together do not fit in one column: eight
-  // named troop chips and five boosters stack to about 700px and a 760px
-  // viewport has roughly 500 to give once the readouts and the dock have taken
-  // theirs. Splitting them also puts each next to the corner it belongs with —
-  // the filter beside the treasury you spend, the boosters beside the clock
-  // they are raced against.
-  el.rail = h('div.hud-rail', {},
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Troop types' }),
-      h('div.hud-group-row', {}, ...chips)));
-  el.railRight = h('div.hud-rail.hud-rail-right', {},
-    h('div.hud-group.panel', {}, h('span.hud-group-label', { text: 'Boosters' }),
-      h('div.hud-group-row', {}, ...boosters)));
-  // A THIRD rail, stacked under Boosters rather than reparented on its own —
-  // see placeRails's own comment on why the build rail rides in the right
-  // corner. Built by battle-actions.js `createBuildRail`, same as the site
-  // panel used to, but no longer anything the panel owns.
-  el.railBuild = buildRail.el;
-  // MOUNTED INSIDE THE CORNERS, not as free-floating siblings. As a sibling the
-  // rail was centred on the viewport and promptly sat on top of the gold
-  // readout while its own bottom card ran off under the dock — a tall column and
-  // a top-anchored stack both laying claim to the same edge with nothing
-  // arbitrating. Inside a corner they are one flow: the rail starts where the
-  // readouts end, and the corner's height cap makes it scroll rather than
-  // collide with the dock.
+  // THE OTHER HALF OF THE GAME, WHICH THIS SCREEN NEVER MENTIONED — a code
+  // search over `src/screens/battle*` found ZERO readers of crowns or income,
+  // so the one-line pitch was unobservable for the 8-20 minutes a battle lasts.
+  // A quiet line under the objective, not a second plate: battle gold and
+  // empire crowns are different pots and only one is spendable here.
+  el.empire = h('div.hud-empire', { text: '' });
+  buildFrame(el, {
+    alert, withdraw, speed, strength, dragMode, chips, boosters, buildRail,
+  });
   mount(root, el.tl, el.tr, el.dock, site.el, el.preview, el.train);
 
   /**
@@ -235,6 +193,7 @@ export function createBattleHud(o) {
   set.drain = bindClass(el.rate, 'is-drain');
   set.clock = bindText(el.clock, '');
   set.tally = bindText(el.tally, '');
+  set.empire = bindText(el.empire, '');
   set.runway = bindText(el.runway, '');
   set.urgent = bindClass(el.clockBox, 'is-urgent');
   set.pvOpen = bindClass(el.preview, 'is-open');
@@ -306,6 +265,10 @@ export function createBattleHud(o) {
     const sec = state.tick / TICK_HZ;
     set.clock(clock(sec));
     set.runway(` / ${clock(state.rules.hardCapTicks / TICK_HZ)}`);
+    // Injected, not imported: this file stays a renderer. Absent (a fixture,
+    // demo.html) it renders nothing and `:empty` hides the row.
+    const empire = o.getEmpire?.();
+    set.empire(empire ? `EMPIRE · ${compact(empire.crowns)} crowns · ${rate(empire.perSec)}` : '');
     const tally = `${sitesOwned(state, 'player').length} v ${sitesOwned(state, 'enemy').length}`;
     set.tally(tally);
     // ...AND WHETHER IT HAS STOPPED MOVING. A timeout runs the FULL hard cap —

@@ -17,6 +17,7 @@ import { fxVisible } from '../render/fog.js';
 import { createBattleInput, createView } from '../screens/battle-input.js';
 import { createBattleHud, travelSecondsFor } from '../screens/battle-hud.js';
 import { saveBattle, clearBattle } from '../meta/resume.js';
+import { incomePerSec } from '../meta/idle.js';
 import { qs } from '../ui/dom.js';
 import { createSound } from '../ui/sound.js';
 
@@ -154,6 +155,26 @@ export function createBattleScene(ctx) {
         // The player's saved pace. A preference, not battle state, so it
         // rides meta rather than the BattleConfig.
         initialSpeed: ctx.state?.meta?.settings?.defaultSpeed ?? 1,
+        // THE IDLE HALF, VISIBLE WHILE THE REAL-TIME HALF RUNS. The battle
+        // screen never mentioned crowns at all, so the game's own one-line
+        // pitch was unobservable for the 8-20 minutes a battle lasts. Read
+        // fresh each refresh because idle accrues on the WALL clock and keeps
+        // paying while the battle is fought; `incomePerSec` is meta's own
+        // function rather than a second derivation of the same sum.
+        // NOTHING UNTIL THERE IS SOMETHING. During battle one both figures are
+        // zero — crowns and income only exist once a region has FALLEN — and a
+        // row of zeros in the most crowded minute of onboarding teaches less
+        // than the results screen already does ("That region now pays you
+        // crowns every second, whether or not the tab is open"). So the line
+        // first appears in battle two, right after the player learned what
+        // crowns are, which is a reveal rather than a readout.
+        getEmpire: () => {
+          const m = ctx.state?.meta;
+          if (!m) return null;
+          const perSec = incomePerSec(m);
+          const crowns = m.crowns ?? 0;
+          return crowns > 0 || perSec > 0 ? { crowns, perSec } : null;
+        },
         getSpeed: () => ctx.loop?.speed ?? 1,
       });
       view = presentation;

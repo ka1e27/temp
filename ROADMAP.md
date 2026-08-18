@@ -268,11 +268,15 @@ The idle half is a well-made finite game; "endless" lives entirely in the RTS ha
       meta-shop). The away banner now explains it after the fact — which is most of the
       fix and shipped this session — but nothing warns before the cap binds, and nothing
       on the world map says "your cap is still at the floor".
-- [ ] **THE IDLE ECONOMY IS INVISIBLE FOR THE ENTIRE LENGTH OF A BATTLE.** Code search:
+- [x] ~~**THE IDLE ECONOMY IS INVISIBLE FOR THE ENTIRE LENGTH OF A BATTLE.**~~ **FIXED.** Code search:
       **zero** UI surface under `src/screens/battle*` reads crowns or income. For a game
       whose one-line pitch is idle income married to real-time conquest, the two halves
       never appear on screen together — for 8-20 minutes at a stretch, which is most of a
-      session's wall clock.
+      session's wall clock. `EMPIRE · 12K crowns · +15.0/s` under the objective now, gold
+      hue so it cannot be read as the battle treasury, and HIDDEN until there is something
+      to show: during battle one both figures are zero and a row of zeros in the most
+      crowded minute of onboarding teaches less than the results screen already does. It
+      first appears in battle two, which makes it a reveal rather than a readout.
 - [ ] **Four of twenty-four shop waypoints miss the project's own ~180s
       time-to-next-purchase pacing target** (up to 316s), clustered at the tier 3→6
       transition. Never felt in practice because the next battle absorbs it — flagged

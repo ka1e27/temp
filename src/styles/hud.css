@@ -70,6 +70,16 @@
   color: var(--c-text-dim); padding-left: var(--s-2);
   border-left: 2px solid color-mix(in srgb, var(--c-accent) 45%, transparent);
 }
+/* THE IDLE HALF, WHILE THE REAL-TIME HALF RUNS. Under the objective rather than
+   beside the treasury on purpose: battle gold and empire crowns are different
+   pots and only one is spendable here, so side by side invites reading them as
+   one. Gold hue, because that is what crowns are everywhere else. */
+.hud-empire {
+  font-size: var(--t-xs); letter-spacing: var(--track-label);
+  color: color-mix(in srgb, var(--c-gold) 62%, var(--c-text-dim));
+  padding-left: calc(var(--s-2) + 2px);
+}
+.hud-empire:empty { display: none; }
 .hud-clock { display: flex; align-items: baseline; gap: var(--s-2); padding: var(--s-2) var(--s-3); }
 .hud-clock .hud-value { font: var(--w-bold) var(--t-lg) / 1 var(--font-num); }
 .hud-clock.is-urgent { border-color: color-mix(in srgb, var(--c-danger) 55%, transparent); }
@@ -337,55 +347,6 @@
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-accent) 55%, transparent);
 }
 .hud-speeds.is-slow .label { color: var(--c-accent); }
-
-/* --- Outcome preview -----------------------------------------------------
-   The design's load-bearing promise: this panel calls the same resolveField()
-   the simulation calls, so it is a guarantee, not a prediction.
-   Sits ABOVE the dock rather than beside it: at 1280px the boosters and the
-   preview fight for the same corner, and clipping the booster bar is worse
-   than stacking. */
-
-.hud-preview {
-  --state: var(--c-neutral);
-  position: absolute; right: var(--s-3); bottom: calc(var(--dock-h) + var(--s-3));
-  width: max-content; min-width: min(360px, 42vw); max-width: min(640px, 52vw);
-  padding: var(--s-3) var(--s-4); display: flex; flex-direction: column; gap: var(--s-2);
-  border-left-width: var(--plate-edge); border-left-color: var(--state);
-  opacity: 0; visibility: hidden; transform: translateY(6px);
-  transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease-out),
-    visibility 0s linear var(--d-fast);
-}
-.hud-preview.is-open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
-.hud-preview.is-win { --state: var(--c-player); }
-.hud-preview.is-loss { --state: var(--c-danger); }
-.hud-preview.is-reinforce { --state: var(--c-accent); }
-
-.pv-head {
-  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3);
-  font-size: var(--t-xs); letter-spacing: var(--track-label);
-  text-transform: uppercase; color: var(--c-text-dim);
-}
-.pv-verdict { font-weight: var(--w-bold); letter-spacing: var(--track-tag); color: var(--state); }
-.pv-line {
-  font: var(--w-bold) var(--t-md) / 1.45 var(--font-num);
-  color: var(--c-text); word-spacing: 0.05em;
-}
-.pv-note { font-size: var(--t-sm); color: var(--c-warn); }
-.pv-note:empty { display: none; }
-.pv-note.is-blocked { color: var(--c-danger); }
-.pv-caveats { display: flex; flex-wrap: wrap; gap: var(--s-1); }
-.pv-caveat {
-  padding: 2px var(--s-2); border-radius: var(--r-pill);
-  background: var(--c-surface-2); border: var(--hairline);
-  font-size: var(--t-xs); color: var(--c-text-dim);
-}
-/* Mirrors the on-canvas garrison bar, so the same five hues mean the same five
-   things in both places. */
-.pv-comp {
-  display: flex; height: var(--bar-h); border-radius: var(--r-1);
-  overflow: hidden; background: var(--c-surface-2);
-}
-.pv-comp span { display: block; height: 100%; }
 
 /* --- Responsive ----------------------------------------------------------
    Every viewport rule for the HUD lives in ./hud.responsive.css, split out
