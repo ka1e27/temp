@@ -66,6 +66,117 @@ its own box exists here.
       `scratchpad/crit-<lens>.md`. **Transcribe each into this list the moment it lands** —
       the scratchpad does not survive a session, which is exactly how these four were lost.
 
+      **TWO OF THE FOUR HAVE NOW LANDED — game feel and board readability — and their
+      findings are transcribed below.** Retention (hours 2-10) and input/accessibility
+      are still completely unexamined and are what remains of this item.
+
+### From the game-feel critic
+
+Driven live through `tools/cdp.js`; every finding reproduced with a probe or a
+screenshot, and the report separates measured from reasoned throughout.
+
+- [x] ~~**THE MOST-REPEATED REWARD BEAT IN THE GAME NEVER ESCALATED WITH STAKES.**~~
+      **FIXED.** `site-captured` has carried `kind` since the event was written and
+      `fxFromEvent` never read it — proven by calling the shipped function with two
+      events differing ONLY in `kind` and screenshotting both, which came out
+      indistinguishable. Taking an undefended farm and breaking the enemy's throne fired
+      pixel-identical bursts, rings and `TAKEN` text. Magnitude now derives from
+      `siteTier` (which already means "how much attention does this kind deserve"), the
+      objective gets a second, delayed ring rather than a bigger one, and `delay` is
+      implemented rather than being a silently-ignored spawn field. Pinned by
+      `tests/captureweight.test.js`, five of whose eight tests fail against the previous
+      commit while the three negative controls pass.
+
+- [ ] **A WRONG-WAY SEND COSTS A FULL ROUND TRIP, NOT A REDIRECT, AND THERE IS NO ORDER
+      THAT FIXES IT.** Source-confirmed and then measured: `MOVE_SQUAD` refuses any squad
+      that is not `camped` (`'squad-in-transit'`), and `RETREAT_SQUAD` takes no
+      destination — it only ever aims at the nearest friendly site. So correcting a
+      mistaken march is structurally three legs (out, back, then a fresh send) with no
+      way to cut across. Measured on one real trial: a squad corrected 2.7s into a 6.7s
+      wrong-way march was back at its start tile at **5.9s**, having accomplished
+      nothing, with a **fourth** action still needed to go where it was meant to.
+      The correction command itself registers in ≤101ms, so this is not latency — it is
+      the absence of a verb. Given the design centre (free movement, cheap sends, "both
+      sides shuttle tiny columns"), misdirected sends are a predictable byproduct of
+      playing as designed rather than a rare misclick.
+      **The obvious fix — let `MOVE_SQUAD` re-task a marching squad — is a SIM change and
+      therefore a balance change**, so it needs the harness before it needs the UI: the
+      bot never issues `MOVE_SQUAD` at all today, so nothing measured would move, but the
+      shipped game would get materially more forgiving. Decide which of those is wanted.
+
+- [ ] **DEAD AIR CAN EAT MOST OF A BATTLE.** Two independent methods agree: a live
+      passive playthrough held **2 sites v 7 for 3m44s** with nothing changing on screen
+      but two garrison numbers, and a recovered harness run of the same scenario shows
+      the stall holding for **~16 of an 18-minute cap** (89% of the battle). Partly
+      mitigated already — the stalemate alert this pass shipped fires at three minutes —
+      but the alert is a message about stasis, not an escape from it. Ranked highest by
+      the critic because it reads as "the game is broken" to a new player in their first
+      session, before they have learned Withdraw or a better opening.
+      Related to, and probably the same problem as, the "zero known targets at tick 0"
+      item above.
+
+- [ ] **SUCCESS IS SILENT AND FAILURE IS LOUD.** An accepted order produces no HUD
+      acknowledgement at all — only a quiet 90ms whoosh and the squad's own departure —
+      while a rejected one lights the alert strip amber/red (and, for boosters, shakes
+      the button). Defensible as "don't nag on success", but it means a new player's
+      first sends are confirmed only by peripheral cues at exactly the moment they are
+      deciding whether they trust the interface. Latency itself is excellent and is not
+      the problem: measured 15-125ms typical, which is one sim tick, exactly what the
+      10Hz-plus-decoupled-renderer model predicts.
+
+- [ ] **THE ONE-LINE ALERT CHANNEL DROPS MORE MESSAGES THE FASTER YOU PLAY.** `show()`
+      replaces whatever is displayed — no queue, no counter, no history — and its hold is
+      a fixed number of wall-clock ms, while event rate scales roughly linearly with sim
+      speed (measured 2 -> 5 -> 12 events per 3s at 1x/4x/8x in one sample, 8 -> 21 at
+      1x/4x in another). So at 4x, several alert-worthy events can arrive and be
+      overwritten before the first could be read. The renderer stays crisp throughout —
+      this is an information-channel failure, not a legibility one. Lowest-ranked of the
+      five because it only bites players running above the free 2x tier.
+
+### From the board-readability critic
+
+- [ ] **AMONG THE COLUMNS A PLAYER CAN ACTUALLY SEE, NOTHING DISTINGUISHES A NUISANCE
+      FROM AN ASSAULT.** Every inbound force is the same red pennant at the same opacity;
+      the only signal is a numeral, and the pennants overlap and stop being individually
+      countable above ~4-5. Contrast measured off the rendered pixels rather than off the
+      tokens: enemy pennant red against owned-territory green is **2.24:1** — below
+      WCAG's 3:1 bar for graphical objects, and *less* contrast than a friendly marker
+      gets against the same fill (3.83:1). Enemy red against the danger-alert red is
+      **1.23:1**, so "whose troops" and "how urgent" share one hue almost exactly.
+      Meanwhile the alert names a site (`ATTACKED — training ground will fall`) that the
+      board gives no visual priority to whatsoever: the player must find it among 3-6
+      similar glyphs and trust the text over the picture. On one gallowmoor screenshot,
+      five enemy counts (5, 7, 8, 7, 6) sat within a screen-width of the player's own
+      green counts (56, 1, 4) at nearly the same size — "7 8" beside "56" close enough to
+      misread as one run of digits.
+
+- [x] ~~**Decide: fewer, larger enemy columns, or a board that tells threat from
+      traffic.**~~ **DECIDED — the board, not the balance**, and the critic's own
+      measurement is what decides it. `canSee` grants sight from three sources only
+      (the per-site vision map, a fight you are yourself party to, and a radius-1 bubble
+      around your own squads), so the documented ~106 columns/minute overwhelmingly
+      happen where the player cannot perceive them at all. Reproduced twice: the enemy
+      reached and fought a neutral garrison at hex-distance 2 and 5 from the player's
+      camp with `state.vision.player` false at that hex both times, and the screen pixel
+      there sampled flat `rgb(16,20,26)` — identical to unrelated fog. So "too many
+      columns" is largely not a player-facing problem, and re-tuning `concurrent` /
+      `freeLunchHexes` would spend a campaign-wide balance change on traffic nobody sees.
+      The player-facing problem is the narrower one above, and it is render-only.
+
+- [ ] **NOTHING DISTINGUISHES "UNSCOUTED" FROM "NOTHING IS THERE".** 85-90% of the frame
+      is flat near-black on both screenshots taken, which matches the documented opening
+      and does not stop being true mid-battle on a beachhead-sized empire. A new player
+      has no way to tell fog from empty ground, and most of the frame is therefore not
+      information but the absence of it. Cheap partial answer: the board already knows
+      the shape mask and the grid, so out-of-play rock and merely-unlit ground could read
+      differently without revealing anything.
+
+- [ ] **A STATIONARY CLICK ON BARE BOARD DOES NOT CLEAR THE SITE PANEL.** `view.selection`
+      is reset only by `boxSelect`, which requires actual pointer movement, so a
+      zero-distance click is read as a tap and a tap on empty ground is a no-op. Minor,
+      but it means the panel — which on a phone is capped precisely because it eats the
+      board — has no obvious dismissal.
+
 **WHAT THIS PASS SHIPPED, so a resume does not redo it:** the empty-booster false
 affordance; the results screen's two false claims (the no-gate territorial claim and
 "nothing was lost but time"); the stalemate signal; the castle gate shown before the
