@@ -184,8 +184,14 @@ screenshot, and the report separates measured from reasoned throughout.
       decision (`alarmSite`), two surfaces, four red corner brackets on the named site.
       Verified in a real browser: 137 red pixels with the mark on, zero with it off.
 
-- [ ] **THERE IS NO ARMY CENSUS ANYWHERE IN THE HUD, and this is the same blind spot
-      the project already diagnosed for the BOT.** Gold gets a running total *and* a
+- [x] ~~**THERE IS NO ARMY CENSUS ANYWHERE IN THE HUD, and this is the same blind spot
+      the project already diagnosed for the BOT.**~~ **FIXED** — `N troops · M marching`
+      under the income breakdown, and it turned up a real omission underneath:
+      `armySize` promised "anywhere" and never counted a column in a field battle, so a
+      faction's total dipped for six seconds every time it attacked anything.
+      Superseded detail below, kept for the reasoning.
+
+      **THERE IS NO ARMY CENSUS ANYWHERE IN THE HUD.** Gold gets a running total *and* a
       rate; troops get neither. Enumerated from source across `buildReadouts`/
       `buildFrame`/`battle-panel`/`battle-econ`: there is no number for how many bodies
       you command, how many are standing in a garrison versus marching, or how many

@@ -16,7 +16,7 @@ import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from 
 import { compact, clock, percent, rate } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, filterUnits, needsTarget } from './battle-keys.js';
 import { siteOf } from './battle-preview.js';
-import { sitesOwned } from '../battle/siteinfo.js';
+import { sitesOwned, armyCensus } from '../battle/siteinfo.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import {
   createSitePanel, createWithdraw, createAlert, createBuildRail, wireAlerts,
@@ -191,6 +191,7 @@ export function createBattleHud(o) {
   set.gold = bindText(el.gold, '0');
   set.rate = bindText(el.rate, '');
   set.flow = bindText(el.flow, '');
+  set.army = bindText(el.army, '');
   set.drain = bindClass(el.rate, 'is-drain');
   set.clock = bindText(el.clock, '');
   set.tally = bindText(el.tally, '');
@@ -270,6 +271,12 @@ export function createBattleHud(o) {
     set.rate(rate(flow.net));
     set.drain(flow.net < 0);
     set.flow(flowLine(flow));
+    // TROOPS, AND WHERE THEY ARE. Empty until there is an army, so battle one
+    // does not open on a zero — same rule the EMPIRE line below follows.
+    const army = armyCensus(state, 'player');
+    set.army(army.total
+      ? `${army.total} troops · ${army.marching} marching`
+      : '');
     const sec = state.tick / TICK_HZ;
     set.clock(clock(sec));
     set.runway(` / ${clock(state.rules.hardCapTicks / TICK_HZ)}`);

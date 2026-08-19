@@ -16,16 +16,53 @@ export const siteById = (state, id) => state.sites.find((s) => s.id === id);
 
 export const hexKey = (hex) => `${hex[0]},${hex[1]}`;
 
-/** Total units a faction has anywhere: garrisons, sieges, and squads in flight. */
-export function armySize(state, faction) {
-  let n = 0;
-  const count = (c) => UNIT_IDS.reduce((a, u) => a + (c[u] || 0), 0);
+const bodies = (c) => (c ? UNIT_IDS.reduce((a, u) => a + (c[u] || 0), 0) : 0);
+
+/**
+ * WHERE A FACTION'S ARMY IS, not merely how big it is.
+ *
+ * `{ total, standing, marching }`. The split is ARRIVED versus IN TRANSIT,
+ * because that is the question the number is worth asking: CLAUDE.md's own
+ * harness analysis found the bot commanding 1,092 bodies with 239 of them
+ * standing anywhere — 78% permanently walking — and treated it as a
+ * first-order balance problem. No surface ever showed a player the same thing.
+ *
+ * FOUR BUCKETS, AND THE FOURTH IS WHY THIS FUNCTION EXISTS RATHER THAN A
+ * SECOND LOOP. `armySize` counted garrisons, sieges and squads, and its own
+ * docstring promised "anywhere" — but a column at a site it is assaulting is
+ * off `state.squads` for `MELEE.seconds` and lives in `site.melee` (contract
+ * v12), a bucket that did not exist when that sentence was written. So the
+ * total dipped for six seconds every time anyone attacked anything. As a peak
+ * statistic that is nearly invisible (a peak is a max over every tick, and
+ * some other tick catches it); as a readout a player watches, a total that
+ * falls when you commit to an assault is simply wrong.
+ *
+ * A CAMPED SQUAD IS STANDING, NOT MARCHING. It is on `state.squads` like a
+ * column in flight and is holding ground like a garrison, so the `camped` flag
+ * the sim already keys off is what separates them. Counting it as marching
+ * would make "park a force on a hex" read as indecision.
+ */
+export function armyCensus(state, faction) {
+  let standing = 0;
+  let marching = 0;
   for (const s of state.sites) {
-    if (s.owner === faction) n += count(s.garrison);
-    if (s.siege?.owner === faction) n += count(s.siege.comp);
+    if (s.owner === faction) standing += bodies(s.garrison);
+    if (s.siege?.owner === faction) standing += bodies(s.siege.comp);
+    if (s.melee?.owner === faction) standing += bodies(s.melee.comp);
   }
-  for (const sq of state.squads) if (sq.owner === faction) n += count(sq.comp);
-  return n;
+  for (const sq of state.squads) {
+    if (sq.owner !== faction) continue;
+    if (sq.camped) standing += bodies(sq.comp);
+    else marching += bodies(sq.comp);
+  }
+  return { total: standing + marching, standing, marching };
+}
+
+/** Total units a faction has anywhere: garrisons, sieges, melees, squads.
+ *  Expressed against `armyCensus` so there is exactly one fold and the total
+ *  can never disagree with its own parts. */
+export function armySize(state, faction) {
+  return armyCensus(state, faction).total;
 }
 
 export function sitesOwned(state, faction) {

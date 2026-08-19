@@ -21,12 +21,12 @@ export { blockedSet, isBlocked, recomputeOccupancy };
 // has to know that file exists. `clampRallyKeep` is imported (not just
 // re-exported) because `createBattleState` below calls it directly.
 import {
-  siteById, hexKey, armySize, sitesOwned, siteControlFraction, castleSealed,
+  siteById, hexKey, armySize, armyCensus, sitesOwned, siteControlFraction, castleSealed,
   effectiveLevel, upgradeProgress, buildProgress, clampRallyKeep, rallyKeepOf,
   rallyTargetsOf, ralliesTo,
 } from './siteinfo.js';
 export {
-  siteById, hexKey, armySize, sitesOwned, siteControlFraction, castleSealed,
+  siteById, hexKey, armySize, armyCensus, sitesOwned, siteControlFraction, castleSealed,
   effectiveLevel, upgradeProgress, buildProgress, clampRallyKeep, rallyKeepOf,
   rallyTargetsOf, ralliesTo,
 };

@@ -57,6 +57,15 @@
   border-top: var(--hairline);
   font: var(--w-normal) var(--t-xs) / 1 var(--font-num); color: var(--c-text-dim);
 }
+/* WHERE THE ARMY IS. Sits under the income breakdown on the same full-width
+   row rule, one step dimmer again: gold is what you spend this second and the
+   army is what you spent it on, so it reads as the footnote it is. `:empty`
+   collapses it, which is what keeps battle one from opening on a zero. */
+.hud-army {
+  grid-column: 1 / -1; font: var(--w-normal) var(--t-xs) / 1 var(--font-num);
+  color: var(--c-text-dim); opacity: 0.85;
+}
+.hud-army:empty { display: none; }
 /* The treasury edge itself turns to the danger hue while it drains, so the
    state reads off the SHAPE of the panel before the numbers are even parsed —
    the same edged-plate language the site panel and the outcome preview use. */

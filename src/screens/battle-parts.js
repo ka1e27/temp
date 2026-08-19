@@ -278,6 +278,18 @@ export function buildReadouts(el) {
     text: '+0.0/s', title: 'Net gold per second — income minus training',
   });
   el.flow = h('span.hud-flow.num', { text: '' });
+  // WHERE YOUR ARMY IS, which nothing anywhere answered. Gold carries a total
+  // AND a rate; troops carried neither — no bodies commanded, no standing
+  // versus marching, no orders in flight. CLAUDE.md writes that exact blind
+  // spot up at length for the HARNESS BOT (1,092 bodies with 239 standing, 78%
+  // permanently in transit) and treats it as a first-order balance concern; the
+  // player had the same problem and no readout to notice it by.
+  //
+  // It rides the gold panel because that panel is already the "totals plus a
+  // breakdown" shape this is asking for, and because troops and gold are the
+  // two things a battle is spent in. Hidden until there is an army, so battle
+  // one does not open on a row of zeros.
+  el.army = h('span.hud-army.num', { text: '' });
   el.clock = h('span.hud-value.num', { text: '0:00' });
   // ELAPSED AND THE CAP. It counted up with no end in sight, and the hard cap
   // was stated exactly once, on the pre-battle brief — so a player who did not
@@ -327,7 +339,7 @@ export function buildReadouts(el) {
 export function buildFrame(el, parts) {
   const { alert, withdraw, speed, strength, dragMode, chips, boosters, buildRail } = parts;
   el.tl = h('div.hud-corner.hud-tl', {},
-    h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow),
+    h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow, el.army),
     h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
     el.empire,
     alert.el);
