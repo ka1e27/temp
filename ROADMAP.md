@@ -57,6 +57,15 @@ its own box exists here.
 - [x] ~~**Transcribe the six specialist reports into ranked items below.**~~ Done for the
       two that survived. **FOUR OF THE SIX DIED TO A SESSION LIMIT BEFORE WRITING
       ANYTHING** — see the warning below.
+- [x] ~~**Make the bot build yards, not farms, when it is rich.**~~ **DONE, and it is the
+      biggest single number this pass produced.** `--richyards` is worth **+62 on
+      gallowmoor (38% -> 100%) and +38 on thanescar (25% -> 63%)** at n=8 with matched
+      seeds, with the all-run medians falling as far as the win rates (38.0m -> 22.5m,
+      30.4m -> 20.3m). It **ships OFF**, and not out of doubt: gallowmoor at 100% is
+      twenty-eight points above its tier ceiling, so turning it on does not improve the
+      table, it invalidates it the other way. **The re-tune should re-base with it ON
+      before spending another dial** — see CLAUDE.md for the numbers and the argument.
+
 - [ ] **RE-RUN THE FOUR CRITICS THAT NEVER REPORTED: game feel, hours 2-10, board
       readability, input and accessibility.** Those four lenses are still completely
       unexamined. Each brief was: drive the REAL game through `tools/cdp.js` at

@@ -12,6 +12,7 @@
 //   node tools/simrunner.js --all --nomicrosend   # ...one held to the blanket 5-body floor
 //   node tools/simrunner.js --all --nothrone      # ...one that will not commit to the last gate
 //   node tools/simrunner.js --all --pool          # ...one that CAN mass several sites at once
+//   node tools/simrunner.js --all --richyards     # ...one that builds YARDS when it cannot spend
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -158,7 +159,7 @@ for (const id of regionIds) {
   const opts = {
     upgrades: !args.noupgrades, construct: !args.noconstruct, scout: !args.noscout,
     reinforce: !args.noreinforce, microsend: !args.nomicrosend,
-    throne: !args.nothrone, pool: !!args.pool,
+    throne: !args.nothrone, pool: !!args.pool, richYards: !!args.richyards,
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
     sightedAi: SIGHTED.ai, sightedBot: SIGHTED.bot,

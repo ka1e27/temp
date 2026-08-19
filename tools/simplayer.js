@@ -266,7 +266,7 @@ export function playerTurn(state, opts = {}) {
   // measuring a spender rather than an ordinary player.
   if (opts.upgrades === false) return;
   upgradeTurn(view, front);
-  if (opts.construct !== false) constructTurn(view, front, buildHexes(view));
+  if (opts.construct !== false) constructTurn(view, front, buildHexes(view), opts);
 }
 
 /**

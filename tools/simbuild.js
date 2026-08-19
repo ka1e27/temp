@@ -191,13 +191,32 @@ export function upgradeTurn(state, front) {
  */
 const WANT_YARDS = 3;
 
-export function constructTurn(state, front, hexes) {
+/** RULE 4: three yards is a beachhead's answer and the bot keeps playing it with
+ *  fifty sites. Measured on thanescar at minute fifteen — 41 farms, 8 yards,
+ *  nine places to turn gold into a body, 118,303 unspent gold against an 11.7/s
+ *  bill. What rule 1 implies and then caps: if you cannot spend your income,
+ *  what you are short of is somewhere to spend it. `RICH_SEC` is generous on
+ *  purpose; at one minute this is a strategy, not a correction. Evidence in
+ *  CLAUDE.md, "the conversion half". */
+export const RICH_SEC = 120;
+export const cannotSpendIt = (state) => {
+  const gold = goldOf(state.factions.player) / CENTIGOLD;
+  const bill = factionTrainCostPerSec(state, 'player');
+  return bill <= 0 ? gold > RESERVE_FLOOR : gold > bill * RICH_SEC;   // no bill: purest case
+};
+
+export function constructTurn(state, front, hexes, opts = {}) {
   if (state.sites.some((s) => s.owner === 'player'
     && (s.buildTicksLeft > 0 || s.upgradeTicksLeft > 0))) return;
 
   const mine = state.sites.filter((s) => s.owner === 'player');
   const yards = mine.filter((s) => SITES[s.kind].train > 0).length;
-  const kind = yards < WANT_YARDS ? 'trainingGround' : 'farm';
+  // Opt-in (`--richyards`): this CHANGES an existing policy rather than adding
+  // a new one, and every number in regions.data.js was taken without it while
+  // the re-tune is mid-search. The flag is what keeps the delta re-takeable.
+  const wantYard = yards < WANT_YARDS
+    || (opts.richYards === true && cannotSpendIt(state));
+  const kind = wantYard ? 'trainingGround' : 'farm';
   const spec = BUILD_COSTS[kind];
 
   const gold = goldOf(state.factions.player) / CENTIGOLD;

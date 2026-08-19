@@ -1333,6 +1333,51 @@ generalising past the Marshal'd rows.
 ROADMAP entry proposing it priced it at. It disproved its own hypothesis and replaced it
 with a narrower one. That is the shape a speculative diagnosis should have.
 
+### ...and fixing the conversion half is worth more than any dial in the table
+
+`--richyards` (`tools/simbuild.js cannotSpendIt`) adds `constructTurn`'s fourth rule:
+past `WANT_YARDS`, build a YARD anyway when the treasury is more than `RICH_SEC` (120)
+seconds of the empire's own training bill. Measured, n=8, matched seeds, nothing else
+changed:
+
+```
+region        --richyards off        on          delta
+gallowmoor    38%  24.6m win-med    100%  22.5m   +62
+thanescar     25%  18.3m win-med     63%  12.5m   +38
+```
+
+**This is the largest harness improvement since `PRIORITY`** (0% → 75% on gallowmoor),
+and it is the same defect one layer up: the bot could always build yards, it simply
+chose farms while holding 2.8 hours of training money. The all-run medians move as much
+as the win rates — gallowmoor 38.0m → 22.5m, thanescar 30.4m → 20.3m — so this is not a
+bot squeaking over the line, it is a bot that stops running out of clock.
+
+**Confidence, stated honestly.** n=8 is a small sample and the usual warning applies —
+but gallowmoor's baseline read **38%, exactly the n=24 figure** recorded in the re-tune
+screen below, which is the strongest cross-check available at this sample size. A 62-point
+gap does not come out of an n=8 noise band.
+
+**IT SHIPS OFF, and the reason is not doubt about the effect — it is that the effect is
+too big to land mid-search.** Gallowmoor at 100% is twenty-eight points ABOVE its tier
+ceiling, so turning this on does not improve the table, it invalidates it in the other
+direction and demands the whole re-tune be re-based. Every number in `regions.data.js`
+was measured without it.
+
+**So the recommendation to the re-tune is explicit: re-base with `--richyards` ON before
+spending another dial.** The campaign is currently being tuned against a bot with a
+known, one-line, measured conversion defect, and eleven of the fifteen tier 3-6 rows are
+below their floor. Two of those rows are worth +38 and +62 from this alone — which is
+larger than every dial move that pass has made put together. Tuning `enemyMult` to
+compensate for a bot that cannot spend its own money is exactly the work this file warns
+about at "a session would have been spent moving dials to compensate for defenders
+silently dropping half the orders given to them — and then spent again undoing it".
+
+`tests/richyards.test.js` pins the rule and its negative controls, including that the
+flag changes nothing for a bot whose economy is working. Worth knowing if you extend it:
+`trainType: null` does NOT silence a site's training bill (`trainableUnit` falls back to
+a buildable type), so the only faction with a zero bill is one holding nothing that
+trains at all.
+
 ## The harness bot cannot concentrate force, and it is the only actor that cannot
 
 **⚠ SUPERSEDED — this is the hypothesis, and the section above is the measurement that
