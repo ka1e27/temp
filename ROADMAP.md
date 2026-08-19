@@ -249,7 +249,17 @@ dump; every finding reproduced before it was believed.
       keyboard-operable buttons once it is open — which is what makes this a
       reachability gap rather than a rewrite.
 
-- [ ] **THE DRAG PREVIEW DRAWS A CONFIDENT ROUTE ONTO A MOUNTAIN THAT THE ORDER
+- [x] ~~**THE DRAG PREVIEW DRAWS A CONFIDENT ROUTE ONTO A MOUNTAIN THAT THE ORDER
+      THEN REFUSES.**~~ **FIXED, and the critic's untested extension turned out to be
+      a SIM bug worth more than the preview one.** `marchBlocker` is now one
+      predicate with three consumers; and `routeBlocker` extends it to every stop on
+      a drawn route, because `passableFor` waives the terrain check for each A* leg's
+      GOAL — so only the final hex was ever validated and a road drawn deliberately
+      through a mountain was ACCEPTED, producing a squad whose path stood on blocked
+      rock. Provably inert on balance: `waypoints` appears nowhere in `tools/` or
+      `battle/ai*.js`. Original:
+
+      **THE DRAG PREVIEW DRAWS A CONFIDENT ROUTE ONTO A MOUNTAIN THAT THE ORDER
       THEN REFUSES.** A reproducible counter-example to "the preview never lies",
       softened by a clear worded rejection and no lost troops — but it is the one
       invariant this project treats as load-bearing, so it should either be fixed

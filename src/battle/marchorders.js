@@ -42,6 +42,62 @@ export function filterComp(comp, filter) {
  * one. `toHex` and `waypoints` are both optional and both absent on every order
  * the AI and the harness issue, so the old shape is still the common one.
  */
+/**
+ * CAN A MARCH END ON THIS HEX AT ALL? One predicate, three consumers.
+ *
+ * `cmdSend` and `cmdMoveSquad` each carried this test inline, and the DRAG
+ * PREVIEW carried no version of it — which made the preview lie about the one
+ * terrain feature the game draws most prominently. `battle-waypoints.js
+ * previewPath` builds its route with `pathThrough`, whose A* uses
+ * `occupancy.js passableFor`, and that function gives the GOAL hex a free pass
+ * BEFORE it consults `isBlocked` (line 92 against 93) so a column can target a
+ * building it means to assault. That exemption was written for buildings and
+ * nothing confined it to them: aim a drag at a mountain and A* returns a
+ * confident seven-hex route ending on the rock, the board draws it hex by hex
+ * with a chevron on the final tile, and releasing produces no squad and a
+ * rejection banner. Measured live on a generated map with eleven blocked hexes.
+ *
+ * `render/routes.js drawDragArc`'s own comment claimed the two were the same
+ * question ("the SAME pathThrough the order will be validated by"). They were
+ * not, and invariant 3 is the thing this project protects hardest.
+ *
+ * @returns {?string} the rejection reason, or null if the hex is a legal target
+ */
+export function marchBlocker(state, toHex) {
+  if (!toHex) return null;
+  // `spawnSquad` falls back to a straight line when A* finds nothing, so an
+  // off-map order would produce a column marching into the void with a
+  // perfectly ordinary arrival tick.
+  if (!inGrid(state.grid, toHex) || isBlocked(state, toHex.q, toHex.r)) return 'bad-hex';
+  return null;
+}
+
+/**
+ * ...AND THE SAME QUESTION OF EVERY STOP ON A DRAWN ROUTE.
+ *
+ * `pathThrough` stitches one A* leg per stop, and `passableFor` waives the
+ * terrain check for each LEG'S GOAL — so an intermediate waypoint got the same
+ * free pass the destination did. Only the final `toHex` was ever validated,
+ * which meant a route drawn deliberately through a mountain was ACCEPTED and
+ * the resulting squad's path contained a step standing on blocked rock.
+ * Measured: order accepted, `path.length` 9, one step on `{q:6,r:0}`. Mountains
+ * are the one piece of terrain the game promises is impassable, and a player
+ * could walk an army through one by drawing the road themselves.
+ *
+ * Provably inert on balance: `waypoints` is absent from every order the AI and
+ * the harness issue — a grep over `tools/` and `battle/ai*.js` finds no
+ * occurrence at all — so no measured number can move.
+ */
+export function routeBlocker(state, toHex, waypoints) {
+  const bad = marchBlocker(state, toHex);
+  if (bad) return bad;
+  if (!Array.isArray(waypoints)) return null;
+  for (const w of waypoints) {
+    if (marchBlocker(state, asHex(w))) return 'bad-waypoint';
+  }
+  return null;
+}
+
 export function cmdSend(state, cmd, by) {
   const from = siteById(state, cmd.from);
   if (!from) return 'unknown-site';
@@ -53,12 +109,8 @@ export function cmdSend(state, cmd, by) {
   if (!to && !toHex) return 'no-destination';
   if (to && from.id === to.id) return 'same-site';
   // A HEX DESTINATION HAS TO BE ON THE BOARD, and nothing downstream re-checks:
-  // `spawnSquad` falls back to a straight line when A* finds nothing, so an
-  // off-map order would produce a column marching into the void with a
-  // perfectly ordinary arrival tick.
-  if (toHex && (!inGrid(state.grid, toHex) || isBlocked(state, toHex.q, toHex.r))) {
-    return 'bad-hex';
-  }
+  const bad = routeBlocker(state, toHex, cmd.waypoints);
+  if (bad) return bad;
   // ...AND IT HAS TO BE GROUND, not somebody else's front step. `passableFor`
   // gives the GOAL hex a free pass so an army can path onto a site it means to
   // assault — right for an order aimed AT a building, wrong for a march to a
@@ -134,9 +186,8 @@ export function cmdMoveSquad(state, cmd, by) {
   const toHex = cmd.toHex ? asHex(cmd.toHex) : null;
   if (cmd.to != null && !to) return 'unknown-site';
   if (!to && !toHex) return 'no-destination';
-  if (toHex && (!inGrid(state.grid, toHex) || isBlocked(state, toHex.q, toHex.r))) {
-    return 'bad-hex';
-  }
+  const badTo = routeBlocker(state, toHex, cmd.waypoints);
+  if (badTo) return badTo;
   // ...AND IT HAS TO BE GROUND, not somebody else's front step. `passableFor`
   // gives the GOAL hex a free pass so an army can path onto a site it means to
   // assault — right for an order aimed AT a building, wrong for a march to a

@@ -40,6 +40,11 @@ export const REJECTIONS = Object.freeze({
   // (bad-hex).` — the single place an otherwise fully humanised error system
   // showed the player what reads like a leftover debug string.
   'bad-hex': 'That ground cannot be reached — a mountain or the map edge is in the way.',
+  // The same rule about a stop on a DRAWN route rather than its end, so it has
+  // to say which part failed: the destination is fine and the road is not, and
+  // "that ground cannot be reached" pointing at a reachable destination would
+  // be the more confusing of the two.
+  'bad-waypoint': 'That road crosses ground they cannot walk. Draw it around.',
   'same-site': 'That is where they already are.',
   'not-adjacent': 'That is out of reach.',
   'bad-fraction': 'Nothing selected to send.',

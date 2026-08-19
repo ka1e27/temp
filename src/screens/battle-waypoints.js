@@ -19,6 +19,7 @@
 // accumulates the trail as the gesture happens, battle-orders.js trims it as
 // the order is issued, and a copy in each is two rules that drift.
 import { fromPixel } from '../core/hex.js';
+import { marchBlocker } from '../battle/marchorders.js';
 import { pathThrough } from '../battle/movement.js';
 
 /**
@@ -126,6 +127,20 @@ export function previewPath(state, from, to, trail) {
     for (const w of trimWaypoints(trail)) stops.push({ q: w[0], r: w[1] });
   }
   stops.push({ q: end[0], r: end[1] });
+  // THE SAME QUESTION THE ORDER ASKS. `pathThrough`'s A* uses `passableFor`,
+  // which gives the GOAL hex a free pass BEFORE consulting `isBlocked` so a
+  // column can target a building it means to assault — and nothing confined
+  // that exemption to buildings, so aiming at a MOUNTAIN returned a confident
+  // route ending on the rock while `cmdSend` refused the identical order.
+  // Measured live: a seven-hex path drawn hex by hex, chevron on the final
+  // tile, then no squad and a rejection banner. Returning null here drops the
+  // board back to the bowed dashed arc, which is exactly what "no legal route"
+  // already means.
+  // ONLY ON THE BARE-HEX PATH, because that is exactly where `cmdSend` checks:
+  // a site target is guaranteed in-grid by `assertBattleConfig`, so gating it
+  // here would make the preview STRICTER than the order, which is the same
+  // class of disagreement in the other direction.
+  if (!to && marchBlocker(state, stops[stops.length - 1])) return null;
   return pathThrough(state, stops, 'player');
 }
 
@@ -140,6 +155,7 @@ export function previewPath(state, from, to, trail) {
 function previewPathToHex(state, from, endHex) {
   if (!from || !endHex) return null;
   const stops = [{ q: from.hex[0], r: from.hex[1] }, { q: endHex[0], r: endHex[1] }];
+  if (marchBlocker(state, stops[1])) return null;
   return pathThrough(state, stops, 'player');
 }
 

@@ -100,7 +100,14 @@ test('an unreachable waypoint fails the WHOLE order, never silently drops it', (
   assert.equal(s.squads.length, 0, 'an impossible route produced a marching army');
   assert.equal(s.sites.find((x) => x.id === 'camp').garrison.militia, before,
     'a refused order must not have spent the garrison');
-  assert.ok(s.events.some((e) => e.reason === 'no-route'),
+  // THE PROPERTY IS THAT IT NAMES ITSELF, not which of the two names it uses.
+  // This asserted `no-route` exactly, and the string moved when `routeBlocker`
+  // started validating every stop up front: `[99,99]` is off the map, so it is
+  // now caught before pathing as the more specific `bad-waypoint`. A waypoint
+  // that is on the map and merely unroutable still answers `no-route`. Pinning
+  // the constant would have failed a change that made the message BETTER —
+  // which is the trap this project records at `resultreason`.
+  assert.ok(s.events.some((e) => e.reason === 'bad-waypoint' || e.reason === 'no-route'),
     'the refusal must name itself');
 });
 
