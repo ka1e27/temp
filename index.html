@@ -64,8 +64,12 @@ if (location.protocol === 'file:') {
 </head>
 <body>
   <div id="game">
-    <canvas id="board-bg"></canvas>
-    <canvas id="board-fx"></canvas>
+    <!-- The background canvas is the SAME picture underneath the live one, so
+         it is hidden from the accessibility tree rather than announced as a
+         second nameless canvas. `#board-fx` carries the name; see
+         screens/battle-status.js `boardSummary`. -->
+    <canvas id="board-bg" aria-hidden="true"></canvas>
+    <canvas id="board-fx" role="img" aria-label="Battle map"></canvas>
     <div id="hud"></div>
     <div id="screen-root"></div>
   </div>

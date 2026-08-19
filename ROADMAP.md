@@ -235,7 +235,17 @@ dump; every finding reproduced before it was believed.
       camped one being worse because `cmdMoveSquad` takes a fraction and so SPLIT
       the force rather than merely re-tasking it.
 
-- [ ] **THE BOARD IS A NAMELESS CANVAS — a screen-reader user gets zero spatial
+- [~] **THE BOARD IS A NAMELESS CANVAS.** **PARTLY FIXED**: it now carries
+      `role="img"` and a live-built name ("Battle map. You hold 4 sites, the enemy
+      12. 21 troops, 0 marching. 2 sites under attack."), the composition bar's own
+      pattern one level up, with `#board-bg` hidden so the duplicate underneath is
+      not announced. Deliberately NOT a live region (the treasury measured 3.0
+      announcements a second and drowned the queue) and NOT focusable (a stop that
+      activates nothing is the mistake the comp bar fix reversed). **What is left is
+      the real gap**: a summary is not spatial information. Where things ARE, and
+      the ability to act on them, still need the keyboard path below. Original:
+
+      **THE BOARD IS A NAMELESS CANVAS — a screen-reader user gets zero spatial
       information for an entire battle.** Confirmed from a live
       `Accessibility.getFullAXTree`, not inferred. Already known in outline (the
       ten-specialist review recorded "the DOM layer is good and the canvas has

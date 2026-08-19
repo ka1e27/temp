@@ -148,6 +148,9 @@ export function createBattleScene(ctx) {
       });
       hud = createBattleHud({
         root: ctx.hudRoot, getState, view: presentation, input, board,
+        // The canvas the accessibility tree sees — see battle-status.js
+        // `boardSummary` for why it is named rather than left blank.
+        boardEl: qs('#board-fx'),
         bus: ctx.bus, travelSeconds: travelSecondsFor,
         // The HUD must not reach the loop directly; presentation never drives
         // the clock. It asks, and the shell decides.

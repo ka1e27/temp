@@ -31,7 +31,7 @@ import {
 } from './battle-econ.js';
 import { rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
 import { squadById, hpColor, statusLine, offerTitle } from './battle-status.js';
-export { objectiveLine } from './battle-status.js';
+export { objectiveLine, boardSummary } from './battle-status.js';
 import { createKeepRow, createRecruitRow } from './battle-actions.js';
 // Re-exported so nothing downstream has to know the actions group moved out.
 // `createBuildRail` in particular never touches the selected site at all any

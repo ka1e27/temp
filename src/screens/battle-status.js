@@ -10,7 +10,7 @@ import { rallyTargetsOf } from '../battle/state.js';
 import { perceivedSquads } from '../battle/vision.js';
 import { gateLine } from './battle-econ.js';
 import { REJECTIONS } from './battle-upgrade.js';
-import { siteControlFraction } from '../battle/siteinfo.js';
+import { siteControlFraction, sitesOwned, armyCensus } from '../battle/siteinfo.js';
 
 export function squadById(state, id) {
   // FOG. A squad carries no ghost (battle/vision.js) — `perceivedSquads`
@@ -97,4 +97,53 @@ export function objectiveLine(state) {
   return have >= need
     ? { text: `Take the Castle · THE GATE IS OPEN`, open: true }
     : { text: `Take the Castle · hold ${pct}% of ${goal}%`, open: false };
+}
+
+/**
+ * WHAT THE BOARD IS, IN A SENTENCE — because to a screen reader it is a canvas
+ * with no name, no role and no content at all.
+ *
+ * Measured from a live `Accessibility.getFullAXTree` against a real battle: the
+ * board is a nameless "Canvas" node. Not a degraded experience, an absent one —
+ * everything else on this screen is properly labelled (the composition bar
+ * announces "Garrison 9: 6 Militia, 3 Spearmen", the speed control is a labelled
+ * slider, the alert strip is a wired `role="status"`), and the thing the game
+ * actually IS announces nothing.
+ *
+ * The pattern is the composition bar's, one level up: `role="img"` plus a name
+ * built in the same pass that draws the picture, so the sentence and the picture
+ * cannot disagree. Two decisions this project has already made and written down
+ * are inherited rather than re-argued:
+ *
+ *   NOT A LIVE REGION. The treasury was `aria-live="polite"` on a 250ms refresh
+ *   and measured at 3.0 announcements a second — "a polite queue that never
+ *   drains and a screen reader that says nothing else about this screen ever
+ *   again". A board that narrated itself ten times a second would be worse.
+ *
+ *   NOT FOCUSABLE. The comp bar's segments took `tabIndex = 0` and were five
+ *   keyboard stops that activated nothing; the fix was to name the bar and take
+ *   them OUT of the tab order. "A readout should not have to be operated." Until
+ *   there is a keyboard path to the core verb, a focusable board would be a stop
+ *   that does nothing — which is the same mistake.
+ *
+ * Everything here is already computed by the HUD for its own readouts, so this
+ * derives nothing new and cannot drift from what is on screen.
+ */
+export function boardSummary(state, alarms) {
+  if (!state) return 'Battle map';
+  const mine = sitesOwned(state, 'player').length;
+  const theirs = sitesOwned(state, 'enemy').length;
+  const army = armyCensus(state, 'player');
+  let out = `Battle map. You hold ${mine} site${mine === 1 ? '' : 's'}`
+    + `, the enemy ${theirs}.`;
+  // Troops only once there are some — battle one opens before any exist, and
+  // "0 troops, 0 marching" is noise rather than information.
+  if (army.total > 0) {
+    out += ` ${army.total} troops, ${army.marching} marching.`;
+  }
+  // The threats the board is marking, which is the one thing a sighted player
+  // gets from the picture that no other surface repeats.
+  const n = alarms ? Object.keys(alarms).length : 0;
+  if (n > 0) out += ` ${n} site${n === 1 ? '' : 's'} under attack.`;
+  return out;
 }

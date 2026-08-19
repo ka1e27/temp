@@ -9,11 +9,12 @@
 // was even takeable.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { objectiveLine } from '../src/screens/battle-status.js';
+import { objectiveLine, boardSummary } from '../src/screens/battle-status.js';
 
 /** Only what the line reads: the gate rule and who owns what. */
 const board = (need, mine, theirs) => ({
   rules: { castleGateFrac: need },
+  squads: [],
   sites: [
     { kind: 'castle', owner: 'enemy' },
     ...Array.from({ length: mine }, () => ({ kind: 'farm', owner: 'player' })),
@@ -73,4 +74,52 @@ test('the percentages match how the castle panel rounds them', () => {
   // checking one against the other cannot see them disagree by a point.
   const o = objectiveLine(board(0.6, 1, 2));   // 1/3 = 33.33%
   assert.match(o.text, /33% of 60%/);
+});
+
+// ---------------------------------------------------------------------------
+// ...and what the BOARD says, which to a screen reader was nothing at all
+// ---------------------------------------------------------------------------
+
+test('the board names itself even before there is a battle', () => {
+  // `boardSummary` is read on every HUD refresh, including the frames between
+  // scenes where `state` is null. An empty name is worse than a plain one: the
+  // AX tree would go back to reporting a nameless Canvas.
+  assert.equal(boardSummary(null), 'Battle map');
+  assert.equal(boardSummary(undefined), 'Battle map');
+});
+
+test('it says who holds what', () => {
+  // `board(_, mine, theirs)` also puts an ENEMY castle on the map, so the
+  // enemy total is theirs + 1. That is correct — they do hold it — and the
+  // first draft of this assertion forgot the throne.
+  const s = board(0, 3, 7);
+  s.sites.push({ kind: 'farm', owner: 'neutral' });
+  const said = boardSummary(s, {});
+  assert.match(said, /You hold 3 sites, the enemy 8\./);
+  assert.doesNotMatch(said, /neutral/i, 'unclaimed ground is not a side');
+});
+
+test('one site is singular', () => {
+  assert.match(boardSummary(board(0, 1, 4), {}), /You hold 1 site, the enemy 5\./);
+});
+
+test('troops are omitted until there are some', () => {
+  // Battle one opens before any exist, and "0 troops, 0 marching" is noise.
+  assert.doesNotMatch(boardSummary(board(0, 3, 7), {}), /troops/);
+});
+
+test('...and reported once there are, marching included', () => {
+  const s = board(0, 2, 5);
+  s.sites[1].garrison = { militia: 6 };
+  s.squads = [{ owner: 'player', comp: { militia: 4 }, camped: false }];
+  assert.match(boardSummary(s, {}), /10 troops, 4 marching\./);
+});
+
+test('it counts the threats the board is marking', () => {
+  // The one thing a sighted player reads off the picture that no other surface
+  // repeats — the corner brackets from `view.alarms`.
+  assert.match(boardSummary(board(0, 3, 7), { a: 1, b: 2 }), /2 sites under attack\./);
+  assert.match(boardSummary(board(0, 3, 7), { a: 1 }), /1 site under attack\./);
+  assert.doesNotMatch(boardSummary(board(0, 3, 7), {}), /under attack/);
+  assert.doesNotMatch(boardSummary(board(0, 3, 7), null), /under attack/);
 });

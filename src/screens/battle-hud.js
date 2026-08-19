@@ -12,7 +12,9 @@
 import { UNIT_IDS, SITES, SEND_FRACTIONS, BOOSTERS } from '../content/balance.js';
 import { UNITS_UI, RESULTS } from '../content/strings.js';
 import { TICK_HZ } from '../core/loop.js';
-import { h, mount, clear, bindText, bindClass, bindStyle, createDisposer } from '../ui/dom.js';
+import {
+  h, mount, clear, bindText, bindClass, bindStyle, bindAttr, createDisposer,
+} from '../ui/dom.js';
 import { compact, clock, percent, rate } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, filterUnits, needsTarget } from './battle-keys.js';
 import { siteOf } from './battle-preview.js';
@@ -20,7 +22,7 @@ import { sitesOwned, armyCensus } from '../battle/siteinfo.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import {
   createSitePanel, createWithdraw, createAlert, createBuildRail, wireAlerts,
-  stalemateCheck, objectiveLine,
+  stalemateCheck, objectiveLine, boardSummary,
 } from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
@@ -192,6 +194,9 @@ export function createBattleHud(o) {
   set.flow = bindText(el.flow, '');
   set.army = bindText(el.army, '');
   set.objective = bindText(el.objective, '');
+  // THE BOARD'S OWN NAME. Injected rather than queried, so this file stays a
+  // renderer and a fixture with no canvas simply does not pass one.
+  set.boardName = o.boardEl ? bindAttr(o.boardEl, 'aria-label') : () => false;
   set.gateOpen = bindClass(el.objective, 'is-open');
   set.drain = bindClass(el.rate, 'is-drain');
   set.clock = bindText(el.clock, '');
@@ -291,6 +296,7 @@ export function createBattleHud(o) {
       : '');
     const obj = objectiveLine(state);
     set.objective(obj.text);
+    set.boardName(boardSummary(state, view.alarms));
     set.gateOpen(obj.open);
     const sec = state.tick / TICK_HZ;
     set.clock(clock(sec));
