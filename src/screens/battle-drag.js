@@ -34,6 +34,54 @@ export function campedAt(ord, state, wx, wy) {
  *   means it was not a drag from anything, and the caller should fall through
  *   to its box-select and tap branches.
  */
+/**
+ * DID THIS DRAG COME BACK TO WHERE IT STARTED?
+ *
+ * `battle-waypoints.js updateDragPreview` deliberately nulls `view.dragTo`
+ * whenever the snap target resolves back to the drag's own origin — that is the
+ * "so you can clear a rally" pattern, and it is right for a rally. For a SEND it
+ * made a returning drag INDISTINGUISHABLE from a release on open ground, so it
+ * fell into the bare-ground branch and marched a share of the garrison onto the
+ * tile it was already standing on.
+ *
+ * Measured before the fix: press on the camp, drag out 30px, come back and
+ * release on the camp — squads-from-camp went 0 to 1, a new squad appeared
+ * `{to: null, camped: true}` having marched nowhere, and repeating the gesture
+ * peeled off ANOTHER share. The detachment then sits exactly on its own site's
+ * hex, where `siteAt` wins every hit-test, so it can never be selected again.
+ *
+ * So the single most natural way to abort a gesture — start a drag by accident,
+ * bring it back, let go — silently and permanently fragmented the garrison, with
+ * no error and nothing on screen to notice. `resolveDrag`'s own comment already
+ * said "releasing back on the source is an explicit cancel"; the comment was the
+ * specification and the code had drifted from it, which is this project's
+ * most-repeated failure shape.
+ *
+ * The test is the LAST TRAIL HEX against the origin's own hex rather than
+ * `dragTo`, because `dragTo` is exactly the signal that was thrown away.
+ */
+function backAt(view, q, r) {
+  const at = view.dragTrail[view.dragTrail.length - 1];
+  return !!at && at.q === q && at.r === r;
+}
+
+/** The garrison form: the origin is a SITE, whose `hex` is a `[q,r]` array. */
+const backAtSource = (view, from) => !!from && backAt(view, from.hex[0], from.hex[1]);
+
+/**
+ * The camped form, and it is the same bug one verb along. A camped force
+ * dragged back onto its own tile fell into `issueMove(sq, null, {toHex})`,
+ * and `cmdMoveSquad` takes a FRACTION — so instead of marching nowhere it
+ * SPLIT, leaving two camped squads stacked on one hex. `sq.hex` may be either
+ * shape, so it is read the way `movement.js squadHexOf` reads it.
+ */
+function backAtSquad(view, sq) {
+  if (!sq?.camped || !sq.hex) return false;
+  const q = Array.isArray(sq.hex) ? sq.hex[0] : sq.hex.q;
+  const r = Array.isArray(sq.hex) ? sq.hex[1] : sq.hex.r;
+  return backAt(view, q, r);
+}
+
 export function resolveDrag(ord, view, state) {
   // A CAMPED FORCE RESOLVES ITS DRAG FIRST, and down the same three branches
   // a garrison's does: onto a site (assault or reinforce), or onto bare
@@ -47,7 +95,7 @@ export function resolveDrag(ord, view, state) {
     const waypoints = drawn ? ord.trimWaypoints(view.dragTrail) : [];
     if (sq && to) {
       ord.issueMove(sq, to, { waypoints });
-    } else if (sq) {
+    } else if (sq && !backAtSquad(view, sq)) {
       const at = view.dragTrail[view.dragTrail.length - 1];
       if (at) ord.issueMove(sq, null, { toHex: at, waypoints });
     }
@@ -58,7 +106,8 @@ export function resolveDrag(ord, view, state) {
 
   if (!from) return false;
   {
-    // Drag order. Releasing back on the source is an explicit cancel.
+    // Drag order. Releasing back on the source is an explicit cancel — see
+    // `backAtSource` above for how nearly that was only a comment.
     const to = view.dragTo ? ord.site(view.dragTo) : null;
     if (view.dragSources) {
       // CONCENTRATING FORCE. No waypoints — see battle-orders.js
@@ -69,7 +118,7 @@ export function resolveDrag(ord, view, state) {
       // the cost this gesture exists to remove.
       if (to && to.id !== from.id) {
         ord.sendFromSelection(to);
-      } else if (!to) {
+      } else if (!to && !backAtSource(view, from)) {
         const at = view.dragTrail[view.dragTrail.length - 1];
         if (at) ord.sendFromSelection(null, { toHex: at });
       }
@@ -85,13 +134,14 @@ export function resolveDrag(ord, view, state) {
       const waypoints = drawn ? ord.trimWaypoints(view.dragTrail) : [];
       if (to && to.id !== from.id) {
         ord.issueSend(from, to, { waypoints });
-      } else if (!to) {
+      } else if (!to && !backAtSource(view, from)) {
         // RELEASED ON OPEN GROUND: take the position rather than abandoning
         // the gesture. This is the other half of what the squad rewrite
         // bought — an army can hold a tile, so a drag has somewhere to end
         // that is not a building. `snapTarget` already magnets to a nearby
         // site, so landing here means the player really did release in
-        // open country.
+        // open country — and `backAtSource` is what makes "really" true:
+        // without it a drag that came home read as open country too.
         const at = view.dragTrail[view.dragTrail.length - 1];
         if (at) ord.issueSend(from, null, { toHex: at, waypoints });
       }

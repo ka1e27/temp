@@ -214,6 +214,58 @@ against a freshly wiped save and `simrunner` spot-checks.
       already-measured `--richyards` conversion fix is the single biggest lever on
       this** — see CLAUDE.md.
 
+### From the input-and-accessibility critic
+
+Driven live through CDP with real pointer and key events and a real AX-tree
+dump; every finding reproduced before it was believed.
+
+- [x] ~~**"CANCEL BY DRAGGING BACK TO THE SOURCE" SILENTLY AND PERMANENTLY
+      DESTROYED TROOPS.**~~ **FIXED.** `updateDragPreview` nulls `view.dragTo`
+      when the snap target resolves back to the drag's own origin — right for a
+      rally, which is what that line was written for — and for a SEND it made a
+      returning drag indistinguishable from a release on open ground, so it
+      marched a share of the garrison onto the tile it was already standing on.
+      Measured with real pointer events: squads-from-camp went 0 to 1, a new
+      `{to: null, camped: true}` squad appeared having marched nowhere, and
+      repeating the "safe" gesture peeled off another share; the detachment then
+      sits on its own site's hex where `siteAt` wins every hit-test, so it can
+      never be selected or reabsorbed. `resolveDrag`'s own comment already said
+      this was a cancel — the comment was the specification and the code had
+      drifted. Fixed in all three branches (garrison, multi-source, camped), the
+      camped one being worse because `cmdMoveSquad` takes a fraction and so SPLIT
+      the force rather than merely re-tasking it.
+
+- [ ] **THE BOARD IS A NAMELESS CANVAS — a screen-reader user gets zero spatial
+      information for an entire battle.** Confirmed from a live
+      `Accessibility.getFullAXTree`, not inferred. Already known in outline (the
+      ten-specialist review recorded "the DOM layer is good and the canvas has
+      nothing"), but this is the first time it has been dumped rather than
+      reasoned about. Categorically absent rather than degraded.
+
+- [ ] **THERE IS NO KEYBOARD PATH TO THE CORE VERB.** A keyboard-only player can
+      pause and change speed and nothing else: every verb that changes the
+      battle's state needs a mouse gesture to have happened first, and the site
+      panel cannot be opened without one. The panel's own controls ARE proper
+      keyboard-operable buttons once it is open — which is what makes this a
+      reachability gap rather than a rewrite.
+
+- [ ] **THE DRAG PREVIEW DRAWS A CONFIDENT ROUTE ONTO A MOUNTAIN THAT THE ORDER
+      THEN REFUSES.** A reproducible counter-example to "the preview never lies",
+      softened by a clear worded rejection and no lost troops — but it is the one
+      invariant this project treats as load-bearing, so it should either be fixed
+      or the invariant's scope written down honestly.
+
+- [ ] **SITE HIT-TARGETS FALL TO 34px (farm) / 31px (watchtower) AT THE DEFAULT
+      ZOOM ON THE BIGGEST MAPS** — under the 44px guideline on exactly the boards
+      that carry the most simultaneous action. Player-fixable by zooming, but the
+      default state is the one that matters. Related to the readability critic's
+      independent finding that widowsgate renders at 34.9 px/hex against
+      riverfen's 65.8.
+
+- [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
+      The coarse-pointer media query is verified working, which is why the phone
+      audit passes — it simply does not apply to a mouse or trackpad.
+
 ### From the board-readability critic
 
 - [ ] **AMONG THE COLUMNS A PLAYER CAN ACTUALLY SEE, NOTHING DISTINGUISHES A NUISANCE
