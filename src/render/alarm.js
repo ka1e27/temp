@@ -36,34 +36,44 @@ const OUT = 2.05;
 const ARC = TAU / 22;
 
 /**
- * @param {object} view the UI view state — `alarmId` is set by the HUD when a
- *   danger alert names a site, and cleared by the HUD when it expires. The
- *   renderer therefore needs no clock of its own.
+ * EVERY live threat, not the most recent one. The alert strip is
+ * last-write-wins and cannot represent simultaneity — measured, five threats
+ * were live on one gallowmoor frame and the one line could only name a single
+ * training ground. The board has room for all of them, and marking them all is
+ * a better aggregate than a count would be, because it says WHERE.
+ *
+ * @param {object} view the UI view state — `alarms` is `siteId -> deadline`,
+ *   written by the HUD when a danger alert names a site and expired by the
+ *   HUD's own refresh. The renderer therefore needs no clock of its own.
  * @param {(id:string)=>object|null} byId resolves through `perceivedSite`, so a
  *   site the player cannot see cannot be marked. Belt and braces: `alarmSite`
  *   is already fog-safe by construction, since every danger alert names ground
  *   the player owns or is themselves assaulting.
  */
 export function drawAlarm(ctx, view, byId, sitePos, at, hexSize, p, px, pulse) {
-  const id = view?.alarmId;
-  if (!id) return;
-  const s = byId(id);
-  if (!s) return;
-  sitePos(s, at);
-  const r = siteRadius(s.kind, hexSize) * OUT;
+  const alarms = view?.alarms;
+  if (!alarms) return;
   ctx.strokeStyle = p.danger;
   ctx.lineWidth = px * 2.5;
   ctx.lineCap = 'butt';
   // The pulse is inherited rather than minted so this breathes in step with the
   // selection halo instead of beating against it.
   ctx.globalAlpha = 0.55 + 0.45 * pulse;
-  for (let i = 0; i < 4; i++) {
-    // Corners rather than the axes: a bracket on the vertical would sit on the
-    // garrison plaque, which is the number the player is trying to read.
-    const mid = TAU * (i / 4) + TAU / 8;
-    ctx.beginPath();
-    ctx.arc(at.x, at.y, r, mid - ARC, mid + ARC);
-    ctx.stroke();
+  // `for..in` rather than Object.keys: this runs every frame and the keys array
+  // would be a per-frame allocation, which the whole fx path forbids.
+  for (const id in alarms) {
+    const s = byId(id);
+    if (!s) continue;
+    sitePos(s, at);
+    const r = siteRadius(s.kind, hexSize) * OUT;
+    for (let i = 0; i < 4; i++) {
+      // Corners rather than the axes: a bracket on the vertical would sit on
+      // the garrison plaque, which is the number the player is trying to read.
+      const mid = TAU * (i / 4) + TAU / 8;
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, r, mid - ARC, mid + ARC);
+      ctx.stroke();
+    }
   }
   ctx.globalAlpha = 1;
 }

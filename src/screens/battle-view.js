@@ -89,6 +89,18 @@ export function createView(init = {}) {
     rallyFrom: null,
     rallyTo: null,
     pointer: { x: 0, y: 0 },
+    /**
+     * `siteId -> wall-clock deadline`: the sites a DANGER alert has named
+     * recently, which the board marks so the words and the picture agree.
+     *
+     * A MAP rather than one id, because the alert strip is last-write-wins and
+     * that is the readability complaint it exists to answer: five threats can
+     * be live at once and one line can only narrate the most recent. Written by
+     * `battle-alert.js wireAlerts` through the HUD's `onFlag`, expired by the
+     * HUD's own 10Hz refresh — so the renderer needs no clock and simply draws
+     * whatever is currently in here.
+     */
+    alarms: {},
     box: null,
     trainPickerFor: null,
     lastCommand: null,

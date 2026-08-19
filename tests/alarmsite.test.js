@@ -58,6 +58,7 @@ function harness(state) {
 const board = {
   sites: [
     { id: 'ps01', kind: 'trainingGround', owner: 'player', hex: [1, 1] },
+    { id: 'ps02', kind: 'farm', owner: 'player', hex: [2, 1] },
     { id: 'es04', kind: 'stronghold', owner: 'enemy', hex: [5, 5] },
   ],
 };
@@ -135,4 +136,35 @@ test('wireAlerts works with no onFlag at all', () => {
   assert.doesNotThrow(() => handlers['battle:site-captured']({
     siteId: 'ps01', kind: 'farm', from: 'player', to: 'enemy',
   }));
+});
+
+test('SEVERAL live threats are all marked, not just the most recent', () => {
+  // The readability complaint this exists to answer: the strip is
+  // last-write-wins, and five threats were live on one measured frame while
+  // the one line could name a single training ground. The board has room.
+  const h = harness(board);
+  h.handlers['battle:field-battle']({ siteId: 'ps01', attacker: 'enemy', win: true });
+  h.handlers['battle:siege-begun']({
+    siteId: 'ps02', kind: 'farm', owner: 'enemy', defender: 'player',
+  });
+  assert.equal(h.flagged.length, 2);
+  assert.deepEqual(h.flagged.map((f) => f.siteId).sort(), ['ps01', 'ps02']);
+  // ...and the strip still only ever says the latest, which is correct: one
+  // line cannot say two things, which is the whole reason the board says them.
+  assert.equal(h.shown.length, 2);
+});
+
+test('re-arming a site that is already marked extends it rather than doubling', () => {
+  // A threat that keeps firing should stay lit, not accumulate entries. The
+  // view state is keyed by site id, so this is a property of the shape rather
+  // than of a de-duplication step — asserted so a future change to a list
+  // cannot quietly reintroduce the pile-up.
+  const view = { alarms: {} };
+  const h = harness(board);
+  for (const f of [0, 1, 2]) {
+    h.handlers['battle:field-battle']({ siteId: 'ps01', attacker: 'enemy', win: true });
+    void f;
+  }
+  for (const f of h.flagged) view.alarms[f.siteId] = f.until;
+  assert.equal(Object.keys(view.alarms).length, 1);
 });

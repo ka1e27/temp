@@ -203,7 +203,15 @@ screenshot, and the report separates measured from reasoned throughout.
       cheapest item in this section: the tally beside it (`SITES 3 v 5`) is the exact
       shape and the exact place.
 
-- [ ] **THE HUD IS GOOD AT SINGLE FACTS AND HAS NOTHING THAT AGGREGATES.** The critic's
+- [ ] **THE HUD IS GOOD AT SINGLE FACTS AND HAS NOTHING THAT AGGREGATES.**
+      **PARTLY ANSWERED** — the army census landed, and the board now marks EVERY
+      live threat rather than the most recent, so "several threats at once" is
+      answered positionally instead of by a count (which is better: it says where).
+      What is left of this item is the alert strip itself, which is still
+      last-write-wins, and `STALLED` still competing for the same line as a rejected
+      click.
+
+      Original: The critic's
       own summing-up, and it is the thread through three of its five sections: one gold
       number, one site count, one alert. The moment the game produces several
       simultaneous facts of the same kind — several threats, several fronts, an army

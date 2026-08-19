@@ -58,7 +58,6 @@ export function createBattleHud(o) {
   const _stallNow = { tally: '', tick: 0, hz: TICK_HZ };
   const stallMemo = { tally: null, since: 0, warnedAt: 0 };
   let shakeUntil = 0;
-  let alarmUntil = 0;
   let shaken = -1;
 
   const boosterIds = Object.keys(BOOSTERS);
@@ -236,7 +235,16 @@ export function createBattleHud(o) {
       // `shakeUntil` does: this function already runs every frame with a clock
       // in hand, so the renderer needs no clock at all and simply draws
       // whatever is currently set.
-      onFlag: (siteId, until) => { view.alarmId = siteId; alarmUntil = until; },
+      // WHICH SITES THE ALERTS MEANT, onto `view` for the board to draw. A
+      // MAP rather than one id, because the strip is last-write-wins and that
+      // is exactly the readability complaint: five threats can be live at once
+      // and the one line can only narrate the most recent. The board has room
+      // for all of them, and marking them all is a better aggregate than a
+      // count would be — it says WHERE, which a number cannot.
+      //
+      // Re-arming an already-marked site just extends it, so a threat that
+      // keeps firing stays lit rather than accumulating entries.
+      onFlag: (siteId, until) => { view.alarms[siteId] = until; },
     });
   }
 
@@ -263,7 +271,9 @@ export function createBattleHud(o) {
     alert.update(t);
     withdraw.update(Date.now());
     if (shaken >= 0 && t >= shakeUntil) { boostShake[shaken](false); shaken = -1; }
-    if (view.alarmId && t >= alarmUntil) view.alarmId = null;
+    // Expire on the 10Hz refresh, not per frame: this is a 6-second timer and
+    // a `for..in` over a handful of keys ten times a second is free.
+    for (const id in view.alarms) if (t >= view.alarms[id]) delete view.alarms[id];
     if (!state) return;
 
     const flow = goldFlow(state, 'player');
