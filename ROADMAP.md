@@ -180,6 +180,63 @@ screenshot, and the report separates measured from reasoned throughout.
       the shape mask and the grid, so out-of-play rock and merely-unlit ground could read
       differently without revealing anything.
 
+- [x] ~~**The alert names a site the board gives no priority to.**~~ **FIXED** — one
+      decision (`alarmSite`), two surfaces, four red corner brackets on the named site.
+      Verified in a real browser: 137 red pixels with the mark on, zero with it off.
+
+- [ ] **THERE IS NO ARMY CENSUS ANYWHERE IN THE HUD, and this is the same blind spot
+      the project already diagnosed for the BOT.** Gold gets a running total *and* a
+      rate; troops get neither. Enumerated from source across `buildReadouts`/
+      `buildFrame`/`battle-panel`/`battle-econ`: there is no number for how many bodies
+      you command, how many are standing in a garrison versus marching, or how many
+      orders are in flight. CLAUDE.md writes that exact blind spot up at length on the
+      harness side — *"1,092 bodies and only 239 of them are standing anywhere"*, 78%
+      permanently in transit — and treats it as a first-order balance concern. The human
+      player has the identical visibility problem and no readout to notice it by.
+      A single `N marching / M garrisoned` figure beside GOLD answers it, and it is the
+      cheapest item in this section: the tally beside it (`SITES 3 v 5`) is the exact
+      shape and the exact place.
+
+- [ ] **THE HUD IS GOOD AT SINGLE FACTS AND HAS NOTHING THAT AGGREGATES.** The critic's
+      own summing-up, and it is the thread through three of its five sections: one gold
+      number, one site count, one alert. The moment the game produces several
+      simultaneous facts of the same kind — several threats, several fronts, an army
+      spread over dozens of columns — nothing is built to rank or total them. The alert
+      strip cannot say "3 sites under attack"; it can only narrate the most recent
+      event, and `STALLED` competes for the same single line as a rejected click.
+      Worth deciding as one question rather than three, because a threat COUNT, an army
+      census and an alert queue are the same missing affordance seen from three angles.
+
+- [ ] **THE CASTLE GATE IS BURIED ONCE THE BATTLE STARTS.** It was surfaced on the world
+      map and the pre-battle brief by an earlier pass, but in battle it appears only
+      inside the castle's own site panel, and only once a siege is already active. Over a
+      10-20 minute fight a player has nowhere to re-check "am I clear to besiege the
+      throne yet" without knowing to click that one building.
+
+- [ ] **TERRITORY FILL IS NEAR-ISOLUMINANT AND THE WEAVE IS DOING MORE FOR A TEST THAN
+      FOR A GLANCE.** Measured off real pixels: player fill `rgb(34,70,63)` against enemy
+      `rgb(84,41,44)` is **1.175:1**, deep in "identical grey" territory under
+      desaturation. The `ownerWeave` fix does inject a genuine hue-independent signal —
+      independently re-verified here by a directional-gradient measure that reverses sign
+      between the two factions (0.68 vs 1.50) — but it is subtle enough that it protects
+      an automated check more than a five-second look. `ownerDash`'s solid/dashed/dotted
+      site outlines are the robust channel and they only cover building glyphs, not the
+      ground fill that is most of the screen. **Recorded rather than actioned**: the
+      weave was measured and shipped deliberately, so this is a request to re-judge its
+      strength, not a claim that it is broken.
+
+- [ ] **SCALE IS UNDIFFERENTIATED, AND IT MAY BE CORRECT.** The camera auto-fits the
+      whole grid once, so a bigger board is not panned into, it is shrunk to match:
+      riverfen renders at **65.8 screen-px per hex-distance and widowsgate at 34.9**, a
+      1.89x ratio against the 1.84x that "fit the area" predicts — so the fit is doing
+      exactly what it says. Numbers stay legible (`LABEL_PX` is genuinely zoom-invariant,
+      confirmed in source and in a matched crop); what shrinks is the silhouette that
+      says *what kind of building* and the room between glyphs. Net effect: a
+      1-site-left, camp-under-siege moment on the biggest map in the game is visually
+      almost indistinguishable in complexity from an ordinary opening on the smallest.
+      **Filed as a judgement call, not a defect** — the alternatives are a comically
+      small starting cluster or making a new player pan before they can read anything.
+
 - [ ] **A STATIONARY CLICK ON BARE BOARD DOES NOT CLEAR THE SITE PANEL.** `view.selection`
       is reset only by `boxSelect`, which requires actual pointer movement, so a
       zero-distance click is read as a tap and a tap on empty ground is a no-op. Minor,
