@@ -10,6 +10,7 @@ import { rallyTargetsOf } from '../battle/state.js';
 import { perceivedSquads } from '../battle/vision.js';
 import { gateLine } from './battle-econ.js';
 import { REJECTIONS } from './battle-upgrade.js';
+import { siteControlFraction } from '../battle/siteinfo.js';
 
 export function squadById(state, id) {
   // FOG. A squad carries no ghost (battle/vision.js) — `perceivedSquads`
@@ -56,4 +57,44 @@ export function statusLine(site, intel) {
 export function offerTitle(o) {
   if (o.can) return `Spend ${o.cost} gold · ${o.sec}s to build`;
   return REJECTIONS[o.why] || 'Cannot upgrade';
+}
+
+/**
+ * THE OBJECTIVE LINE, WHICH WAS WALLPAPER.
+ *
+ * It read `Take the Castle. Don't lose the Camp.` and never changed, so the
+ * one sentence permanently on screen said nothing about the battle it was
+ * sitting over. Meanwhile `castleGateFrac` — the share of the countryside you
+ * must hold before a siege of the throne can COMPLETE, i.e. the actual win
+ * condition on nineteen of the twenty-four regions — appears in battle only
+ * inside the castle's own site panel, and only once a siege is already
+ * running. A player who has forgotten the pre-battle number over a 10-20
+ * minute fight has nowhere to re-check whether the throne is even takeable
+ * without knowing to click that one building.
+ *
+ * NOTHING NEW IS COMPUTED. `siteControlFraction` is the sim's own answer, the
+ * same one `castleSealed` gates on and the same one the castle panel shows, so
+ * this line cannot drift from the rule it is describing.
+ *
+ * A REGION WITH NO GATE SAYS NOTHING EXTRA, and that is a rule rather than a
+ * tidiness: five regions ship `castleGateFrac: 0`, including the campaign
+ * opener, and this project has already shipped a coach line that described the
+ * gate in a region that has none. `0% of 0%` would be worse than the silence.
+ *
+ * @returns {{text:string, open:boolean}} `open` is for the caller to style —
+ *   the moment the gate clears is the moment the win becomes available, and
+ *   nothing in the game announced it.
+ */
+export function objectiveLine(state) {
+  const base = 'Take the Castle. Don’t lose the Camp.';
+  const need = state?.rules?.castleGateFrac ?? 0;
+  if (!need) return { text: base, open: false };
+  const have = siteControlFraction(state, 'player');
+  // Rounded the way the castle panel rounds it, so the two never disagree by a
+  // point at the moment the player is checking one against the other.
+  const pct = Math.round(have * 100);
+  const goal = Math.round(need * 100);
+  return have >= need
+    ? { text: `Take the Castle · THE GATE IS OPEN`, open: true }
+    : { text: `Take the Castle · hold ${pct}% of ${goal}%`, open: false };
 }

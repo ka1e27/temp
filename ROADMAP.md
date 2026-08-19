@@ -221,7 +221,14 @@ screenshot, and the report separates measured from reasoned throughout.
       Worth deciding as one question rather than three, because a threat COUNT, an army
       census and an alert queue are the same missing affordance seen from three angles.
 
-- [ ] **THE CASTLE GATE IS BURIED ONCE THE BATTLE STARTS.** It was surfaced on the world
+- [x] ~~**THE CASTLE GATE IS BURIED ONCE THE BATTLE STARTS.**~~ **FIXED** — the
+      objective line, which was one fixed sentence for the whole battle, now carries
+      `hold N% of M%` and turns the player hue the moment the gate clears. A region
+      with no gate still gets the plain sentence, because five ship `castleGateFrac: 0`
+      and this project has already shipped a coach line describing a gate that was not
+      there. Original:
+
+      **THE CASTLE GATE IS BURIED ONCE THE BATTLE STARTS.** It was surfaced on the world
       map and the pre-battle brief by an earlier pass, but in battle it appears only
       inside the castle's own site panel, and only once a siege is already active. Over a
       10-20 minute fight a player has nowhere to re-check "am I clear to besiege the

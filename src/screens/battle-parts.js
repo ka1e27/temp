@@ -290,6 +290,11 @@ export function buildReadouts(el) {
   // two things a battle is spent in. Hidden until there is an army, so battle
   // one does not open on a row of zeros.
   el.army = h('span.hud-army.num', { text: '' });
+  // WALLPAPER UNTIL NOW: one fixed sentence for the whole battle, while the
+  // castle gate — the win condition on nineteen of twenty-four regions — was
+  // only ever visible inside the castle's own panel, mid-siege. The line is
+  // live; battle-status.js `objectiveLine` is the whole reasoning.
+  el.objective = h('div.hud-objective', { text: '' });
   el.clock = h('span.hud-value.num', { text: '0:00' });
   // ELAPSED AND THE CAP. It counted up with no end in sight, and the hard cap
   // was stated exactly once, on the pre-battle brief — so a player who did not
@@ -340,7 +345,7 @@ export function buildFrame(el, parts) {
   const { alert, withdraw, speed, strength, dragMode, chips, boosters, buildRail } = parts;
   el.tl = h('div.hud-corner.hud-tl', {},
     h('div.hud-gold.panel', {}, el.gold, el.rate, el.flow, el.army),
-    h('div.hud-objective', { text: 'Take the Castle. Don’t lose the Camp.' }),
+    el.objective,
     el.empire,
     alert.el);
   el.tr = h('div.hud-corner.hud-tr', {}, el.clockBox, withdraw.el, withdraw.hint);

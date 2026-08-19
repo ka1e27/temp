@@ -20,7 +20,7 @@ import { sitesOwned, armyCensus } from '../battle/siteinfo.js';
 import { goldFlow, flowLine } from './battle-econ.js';
 import {
   createSitePanel, createWithdraw, createAlert, createBuildRail, wireAlerts,
-  stalemateCheck,
+  stalemateCheck, objectiveLine,
 } from './battle-panel.js';
 import { createUnitTip } from './battle-tip.js';
 import { createHudInsets } from './battle-insets.js';
@@ -191,6 +191,8 @@ export function createBattleHud(o) {
   set.rate = bindText(el.rate, '');
   set.flow = bindText(el.flow, '');
   set.army = bindText(el.army, '');
+  set.objective = bindText(el.objective, '');
+  set.gateOpen = bindClass(el.objective, 'is-open');
   set.drain = bindClass(el.rate, 'is-drain');
   set.clock = bindText(el.clock, '');
   set.tally = bindText(el.tally, '');
@@ -287,6 +289,9 @@ export function createBattleHud(o) {
     set.army(army.total
       ? `${army.total} troops · ${army.marching} marching`
       : '');
+    const obj = objectiveLine(state);
+    set.objective(obj.text);
+    set.gateOpen(obj.open);
     const sec = state.tick / TICK_HZ;
     set.clock(clock(sec));
     set.runway(` / ${clock(state.rules.hardCapTicks / TICK_HZ)}`);

@@ -79,6 +79,17 @@
   color: var(--c-text-dim); padding-left: var(--s-2);
   border-left: 2px solid color-mix(in srgb, var(--c-accent) 45%, transparent);
 }
+/* THE GATE CLEARING IS THE MOMENT THE WIN BECOMES AVAILABLE, and nothing in the
+   game announced it. The objective's own edge takes the good hue — the same
+   read-the-shape-before-the-words language the draining treasury uses at
+   `.hud-gold:has(.hud-rate.is-drain)` — so it registers peripherally while the
+   player is looking at the board. `--c-player` rather than a new token: it is
+   what the alert's own `good` tone already resolves to (`.hud-alert.is-good`),
+   and a second green would be a second thing to keep in step. */
+.hud-objective.is-open {
+  color: var(--c-player);
+  border-left-color: var(--c-player);
+}
 /* THE IDLE HALF, WHILE THE REAL-TIME HALF RUNS. Under the objective rather than
    beside the treasury on purpose: battle gold and empire crowns are different
    pots and only one is spendable here, so side by side invites reading them as
