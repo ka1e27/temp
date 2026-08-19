@@ -155,6 +155,55 @@ screenshot, and the report separates measured from reasoned throughout.
       this is an information-channel failure, not a legibility one. Lowest-ranked of the
       five because it only bites players running above the free 2x tier.
 
+### From the hours-2-to-10 critic
+
+Measured by headless simulation over the game's own pure functions
+(`meta/upgrades.js`, `meta/idle.js`, `core/store.js`), plus live browser probes
+against a freshly wiped save and `simrunner` spot-checks.
+
+- [ ] **TWO OF THE THREE ENDGAME LOOPS ARE INVISIBLE UNTIL THEY UNLOCK, AND THE
+      GAME ALREADY PROVED THE OPPOSITE PATTERN.** Source-confirmed: the Incursions
+      button (`screens/worldmap.js`) and the Abdicate entry (`screens/mainmenu.js`)
+      are absent from the DOM entirely until the campaign is finished — not
+      shown-disabled, not shown-locked. Their own explanatory copy is therefore
+      unreachable dead text, which is the same "sold and did nothing" shape this
+      project has refunded four upgrades for. Meanwhile the Crown shop tier is
+      displayed locked, WITH its price and its unlock condition, from a region-1
+      save — verified live. So the fix is not a new pattern, it is applying the one
+      already built and proven, to the two systems that most answer "is there
+      anything to look forward to".
+
+- [ ] **THE UPGRADE CADENCE FALLS OFF A CLIFF, ~10x.** Measured against the real
+      cost/income formulas: roughly one purchase a minute in hour one, one every
+      6-12 minutes by tier 5-6. Prices compound and effects add, so power grows
+      with the log of crowns spent — that is the intended shape and it is not
+      broken, but the deceleration lands squarely inside the window this review
+      covers. Recorded rather than actioned: changing it is a balance pass.
+
+- [ ] **EVERY UNLOCK IN THE GAME IS BOUGHT BY REGION 8 OF 24**, about ninety
+      minutes in, under simple cheapest-first shopping. So for the remaining
+      sixteen regions and the majority of playtime there is nothing NEW to
+      acquire — only larger numbers on things already owned. This compounds with
+      the cadence item above and is the strongest structural answer to "what is
+      there to look forward to".
+
+- [ ] **BATTLE LENGTH ROUGHLY DOUBLES AT EXACTLY REGION 10**, the tier 2-to-3
+      boundary: 6.5-10 minutes advertised through tier 2, then 16-20 with 30-38
+      minute caps for the 63% of the campaign that follows. Confirmed in the table
+      AND live on the world map. Same underlying item as the advertised-length
+      entry from my own pass; recorded here because the critic independently
+      reached it from the retention side, which is evidence it matters to a player
+      rather than only to a test.
+
+- [ ] **TIER 3-6 IS WHERE A REAL PLAYER CLOSES THE TAB, and a failed attempt costs
+      up to a 30-38 minute sitting.** Independently measured this session
+      (`gallowmoor n=8`: 38%, all-run median 38.0m — i.e. half of all runs hit the
+      full cap), matching the in-repo n=24 sweep. Not a new finding, but the
+      retention framing is: this is not "a hard region", it is half an hour spent
+      on a battle that was going to time out from the first minute. **The
+      already-measured `--richyards` conversion fix is the single biggest lever on
+      this** — see CLAUDE.md.
+
 ### From the board-readability critic
 
 - [ ] **AMONG THE COLUMNS A PLAYER CAN ACTUALLY SEE, NOTHING DISTINGUISHES A NUISANCE
@@ -271,11 +320,20 @@ screenshot, and the report separates measured from reasoned throughout.
       **Filed as a judgement call, not a defect** — the alternatives are a comically
       small starting cluster or making a new player pan before they can read anything.
 
-- [ ] **A STATIONARY CLICK ON BARE BOARD DOES NOT CLEAR THE SITE PANEL.** `view.selection`
-      is reset only by `boxSelect`, which requires actual pointer movement, so a
-      zero-distance click is read as a tap and a tap on empty ground is a no-op. Minor,
-      but it means the panel — which on a phone is capped precisely because it eats the
-      board — has no obvious dismissal.
+- [x] ~~**A STATIONARY CLICK ON BARE BOARD DOES NOT CLEAR THE SITE PANEL.**~~
+      **FALSE, on both the mechanism and the symptom — struck rather than deleted,
+      per rule 7.** The claim was that `view.selection` is reset only by `boxSelect`
+      and a zero-distance click is a no-op. `battle-input.js tap` has always ended
+      `!hit` with `ord.selectOnly(null)`. Checked in the real browser with real
+      pointer events, at a point asserted to hit-test to `#board-fx`: clicking a
+      player site gives `selection: ["camp"]`, clicking bare board gives
+      `selection: []`, and the panel settles at `opacity: 0`, `visibility: hidden`,
+      with a hit-test at its own centre landing on the canvas behind it.
+      **What made it look true is worth keeping**: the panel fades rather than
+      un-mounting, so a sample taken 250ms after the click reads `display: flex`
+      and a 217x82 box — opacity does not collapse layout — while the opacity at
+      that instant was 0.000156. A probe that measures a box mid-transition will
+      report a dismissed panel as a live one.
 
 **WHAT THIS PASS SHIPPED, so a resume does not redo it:** the empty-booster false
 affordance; the results screen's two false claims (the no-gate territorial claim and
