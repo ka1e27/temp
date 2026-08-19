@@ -131,6 +131,51 @@ export function fightAlert(ev, site, faction = 'player') {
 }
 
 /**
+ * HOW LONG THE BOARD KEEPS SHOWING WHICH SITE THE ALERT MEANT, in ms.
+ *
+ * Deliberately LONGER than the alert's own hold. The text is a sentence you
+ * read once; the mark is where you look after reading it, and a mark that
+ * expired with the words would answer a question the player only asks once the
+ * words are gone. Short enough that a battle does not accumulate a board full
+ * of standing alarms — a threat that is still live re-fires and re-arms this.
+ */
+export const ALARM_MS = 6000;
+
+/**
+ * WHICH SITE, IF ANY, THE ALERT IS TALKING ABOUT.
+ *
+ * The alert strip has said `ATTACKED — training ground will fall` since the
+ * melee layer shipped, and the board has never singled that site out. Measured
+ * by a readability pass on a real gallowmoor frame: five enemy counts (5, 7, 8,
+ * 7, 6) within one screen-width of the player's own (56, 1, 4) at nearly the
+ * same size, every inbound force the same red pennant, and nothing anywhere
+ * saying which of them the sentence named. The player has to already know which
+ * glyph is a training ground, find it among three to six similar icons, and
+ * trust the text over the picture.
+ *
+ * So this is the `buildBlocker`/`boosterBlocker` pattern once more: ONE
+ * decision, two surfaces. The text and the mark cannot name different sites,
+ * because there is only one answer and both read it.
+ *
+ * ONLY DANGER. `TAKEN — farm` is good news about something that has already
+ * finished happening; there is nothing to go and look at. This exists to answer
+ * "what needs attention", and a mark that also fired on success would be back
+ * to 25-a-minute chatter in a second channel.
+ *
+ * FOG-SAFE BY CONSTRUCTION rather than by a check, which is why there is no
+ * `canSee` call here: every danger alert that names a site names one the player
+ * OWNS (`LOST`, `UNDER SIEGE` with `defender === 'player'`, `ATTACKED` with
+ * `site.owner === faction`) or one they are themselves assaulting (`LOSING`,
+ * which `siteFightSight` lights for exactly that reason). There is no path
+ * through here that can point at ground the player cannot see.
+ *
+ * PURE — takes what the handler already has, returns an id or null.
+ */
+export function alarmSite(tone, siteId) {
+  return tone === 'danger' && siteId != null ? siteId : null;
+}
+
+/**
  * One-line inline message: rejections, and what an armed booster is waiting
  * for. Empty text renders nothing at all, so it costs no space when silent.
  * @param {{ttlMs?:number}} [o]
@@ -238,12 +283,22 @@ export function createAlert(o = {}) {
  *
  * @param {{bus:object, off:Function, alert:object, getState:()=>object,
  *          boosterIds:string[], boostShake:Function[], aiming:(id:string)=>string,
- *          onShake:(i:number, until:number)=>void}} o
+ *          onShake:(i:number, until:number)=>void,
+ *          onFlag?:(siteId:string, until:number)=>void}} o
  */
 export function wireAlerts(o) {
   const { bus, off, alert, getState, boosterIds, boostShake, aiming, onShake } = o;
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const kindOf = (ev) => spaceCase(ev.kind).toLowerCase();
+  // Say it and point at it in one call, so a handler cannot do one and forget
+  // the other. `onFlag` is optional: `wireAlerts` has other callers (tests) that
+  // have no board to mark.
+  const say = (text, tone, siteId) => {
+    const t = now();
+    alert.show(text, t, tone);
+    const id = alarmSite(tone, siteId);
+    if (id && o.onFlag) o.onFlag(id, t + ALARM_MS);
+  };
 
   off(bus.on('battle:command-rejected', (ev) => {
     const t = now();
@@ -258,7 +313,7 @@ export function wireAlerts(o) {
   // types, so the enemy could take a stronghold off you and leave no trace but a
   // ring in their colour on a 41px glyph.
   off(bus.on('battle:site-captured', (ev) => {
-    if (ev.from === 'player') alert.show(`LOST — ${kindOf(ev)} taken`, now(), 'danger');
+    if (ev.from === 'player') say(`LOST — ${kindOf(ev)} taken`, 'danger', ev.siteId);
     else if (ev.to === 'player') alert.show(`TAKEN — ${kindOf(ev)}`, now(), 'good');
   }));
   // BOTH ENDS. `owner` is who is besieging, `defender` whose ground it is —
@@ -267,7 +322,7 @@ export function wireAlerts(o) {
   // which reads identically to your own farm being stormed.
   off(bus.on('battle:siege-begun', (ev) => {
     if (ev.owner === 'enemy' && ev.defender === 'player') {
-      alert.show(`UNDER SIEGE — ${kindOf(ev)}`, now(), 'danger');
+      say(`UNDER SIEGE — ${kindOf(ev)}`, 'danger', ev.siteId);
     }
   }));
   // A FIGHT NOW HAS A MIDDLE, and nothing said so — see `fightAlert` above for
@@ -284,6 +339,6 @@ export function wireAlerts(o) {
     const st = getState();
     const s = st && ev.siteId ? siteOf(st, ev.siteId) : null;
     const a = fightAlert(ev, s);
-    if (a) alert.show(a.text, now(), a.tone);
+    if (a) say(a.text, a.tone, ev.siteId);
   }));
 }

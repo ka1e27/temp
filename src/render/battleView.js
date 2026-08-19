@@ -24,6 +24,7 @@ import {
 import { siteHeadYAt } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
 import { drawBuildTargets } from './buildTargets.js';
+import { drawAlarm } from './alarm.js';
 import {
   drawSquads, drawDragArc, drawBox, drawSquadRoutes,
 } from './routes.js';
@@ -346,6 +347,9 @@ export function createBattleView(opts) {
       sitePos(s, _a);
       drawSelection(ctx, s, _a.x, _a.y, siteRadius(s.kind, hexSize), p, px, pulse);
     }
+    // LAST, so the one site that needs attention is not drawn over by a
+    // selection halo the player set several seconds ago.
+    drawAlarm(ctx, view, byId, sitePos, _a, hexSize, p, px, pulse);
   }
 
   /** A stack that is AT a site rather than marching to one — besieging it, or

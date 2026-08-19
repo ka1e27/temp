@@ -58,6 +58,7 @@ export function createBattleHud(o) {
   const _stallNow = { tally: '', tick: 0, hz: TICK_HZ };
   const stallMemo = { tally: null, since: 0, warnedAt: 0 };
   let shakeUntil = 0;
+  let alarmUntil = 0;
   let shaken = -1;
 
   const boosterIds = Object.keys(BOOSTERS);
@@ -229,6 +230,12 @@ export function createBattleHud(o) {
     wireAlerts({
       bus, off, alert, getState, boosterIds, boostShake, aiming: AIMING,
       onShake: (i, until) => { shaken = i; shakeUntil = until; },
+      // WHICH SITE THE ALERT MEANT, onto `view` for the board to draw. The
+      // timer lives here rather than in the renderer for the same reason
+      // `shakeUntil` does: this function already runs every frame with a clock
+      // in hand, so the renderer needs no clock at all and simply draws
+      // whatever is currently set.
+      onFlag: (siteId, until) => { view.alarmId = siteId; alarmUntil = until; },
     });
   }
 
@@ -255,6 +262,7 @@ export function createBattleHud(o) {
     alert.update(t);
     withdraw.update(Date.now());
     if (shaken >= 0 && t >= shakeUntil) { boostShake[shaken](false); shaken = -1; }
+    if (view.alarmId && t >= alarmUntil) view.alarmId = null;
     if (!state) return;
 
     const flow = goldFlow(state, 'player');
