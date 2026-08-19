@@ -96,6 +96,19 @@ screenshot, and the report separates measured from reasoned throughout.
       `tests/captureweight.test.js`, five of whose eight tests fail against the previous
       commit while the three negative controls pass.
 
+- [x] ~~**A FIGHT OPENED LOUDLY AND ENDED IN SILENCE.**~~ **FIXED.** `FIELD_BATTLE`
+      fires when a melee starts or is reinforced; six seconds later the ONLY
+      resolution that announced anything was the one that opens a siege. So a column
+      of your troops being wiped out simply stopped being on the board, and a
+      garrison of yours HOLDING — the one piece of good news the melee layer can give
+      a player — was invisible. Both silent outcomes are the ones a player would act
+      on. `FIELD_BATTLE_ENDED` now fires on every resolution and the board draws a
+      beat SIZED BY WHAT IT COST, drawing nothing under three casualties (fights
+      resolve about once a second late on, so a flat effect would be a strobe) and
+      capped at forty (an uncapped one would black out the board it informs).
+      Provably inert on balance: nothing in `battle/` or `tools/` reads
+      `state.events` at all except the clear at the top of `step`.
+
 - [ ] **A WRONG-WAY SEND COSTS A FULL ROUND TRIP, NOT A REDIRECT, AND THERE IS NO ORDER
       THAT FIXES IT.** Source-confirmed and then measured: `MOVE_SQUAD` refuses any squad
       that is not `camped` (`'squad-in-transit'`), and `RETREAT_SQUAD` takes no

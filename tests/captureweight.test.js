@@ -131,3 +131,50 @@ test('an undelayed effect is untouched by the delay support', () => {
   fx.draw(ctx, PALETTE, 1);
   assert.ok(strokes > 0, 'an ordinary effect still draws immediately');
 });
+
+// ---------------------------------------------------------------------------
+// ...and a fight that ENDS, which used to say nothing at all
+// ---------------------------------------------------------------------------
+
+const ended = (attLost, defLost) => {
+  const fx = recorder();
+  fxFromEvent(fx, {
+    type: 'field-battle-ended', x: 0, y: 0,
+    attacker: 'enemy', defender: 'player', won: false, attLost, defLost,
+  }, PALETTE, 34);
+  return fx.spawns;
+};
+
+test('a resolution nobody paid for draws NOTHING', () => {
+  // Two-troop columns meet about once a second in a late battle (measured: one
+  // field battle per second on gallowmoor). Marking every one of those is a
+  // strobe; the point is to mark the ones that COST.
+  assert.equal(ended(1, 1).length, 0, 'two bodies is a formality');
+  assert.equal(ended(0, 0).length, 0);
+});
+
+test('...and one that cost something does', () => {
+  const big = ended(20, 4);
+  assert.ok(big.length > 0);
+  assert.ok(big.some((s) => s.kind === 'float' && s.text === '-24'),
+    'it says what it cost, both sides together');
+});
+
+test('the beat grows with the losses and then STOPS growing', () => {
+  // Uncapped, a late-campaign assault of several hundred bodies would black out
+  // the board it is meant to inform.
+  const r = (a, d) => Math.max(...ended(a, d).map((s) => s.r1 ?? 0));
+  const small = r(4, 0);
+  const mid = r(20, 4);
+  const huge = r(400, 90);
+  assert.ok(mid > small, `${mid} should out-reach ${small}`);
+  assert.ok(huge >= mid);
+  assert.ok(huge < small * 4, `${huge} against ${small} is not a cap`);
+});
+
+test('a missing loss count is nothing, not NaN', () => {
+  // The event always carries both, but a NaN radius draws an invisible
+  // particle that still occupies a pool slot — a leak with no symptom.
+  assert.doesNotThrow(() => ended(undefined, undefined));
+  assert.equal(ended(undefined, undefined).length, 0);
+});

@@ -340,6 +340,33 @@ function siteMelees(state) {
     recordCasualties(state, m.owner, site.owner, m.comp0, step.att);
     recordCasualties(state, site.owner, m.owner, m.garrison0, step.def);
     site.melee = null;
+    // THE FIGHT IS OVER, AND ONLY ONE OF ITS TWO OUTCOMES USED TO SAY SO. The
+    // branch below announces a won assault (as SIEGE_BEGUN); a repulsed one
+    // announced nothing at all, so a column of your troops simply stopped being
+    // on the board — and so did a garrison of yours HOLDING, which is the one
+    // piece of good news this layer can give a player. Losses are the
+    // interesting half and both sides' are known here, so the event carries
+    // them rather than making a screen difference two comps it never sees.
+    //
+    // `siteId` and NOT `hex`. `fxVisible` reads `ev.hex.q`, an OBJECT, and
+    // returns on it BEFORE the site fallback — so passing `site.hex`, which is
+    // the `[q,r]` ARRAY, resolves undefined and would silently fog this event
+    // away from the one player who most needs it.
+    //
+    // THE OPEN-GROUND CLASH IN `hexMelees` DELIBERATELY DOES NOT PUSH THIS.
+    // There, `step.done` is evaluated per SQUAD, so one event per resolution
+    // would become one per column and the beat would multiply with the size of
+    // the fight. It is also the weaker case: on bare ground the columns
+    // themselves are drawn and visibly shrink to nothing, where an assaulting
+    // column at a site lives inside `site.melee` and simply disappears. The
+    // asymmetry fixed here is the one that existed — won said something, lost
+    // did not.
+    pushEvent(state, EVENTS.FIELD_BATTLE_ENDED, {
+      siteId: site.id, attacker: m.owner, defender: site.owner,
+      won: total(step.att) > 0 && total(step.def) === 0,
+      attLost: total(m.comp0) - total(step.att),
+      defLost: total(m.garrison0) - total(step.def),
+    });
     if (total(step.att) > 0 && total(step.def) === 0) {
       // Beating the garrison does NOT capture: the siege begins.
       site.garrison = emptyComp();

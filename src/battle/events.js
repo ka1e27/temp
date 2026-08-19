@@ -23,6 +23,24 @@ export const EVENTS = Object.freeze({
    *  every time somebody took up a position. */
   SQUAD_CAMPED: 'squad-camped',
   FIELD_BATTLE: 'field-battle',
+  /** ...AND THE SAME FIGHT SIX SECONDS LATER, which nothing reported.
+   *
+   *  `FIELD_BATTLE` fires when a fight OPENS or is reinforced. Its resolution
+   *  fired an event only on the ONE outcome that starts a siege — so a column
+   *  that beat a garrison was announced and a column that was wiped out was
+   *  not, and neither was a garrison that held. Both silent outcomes are the
+   *  ones a player would act on: your assault dying is what you would have
+   *  relieved, and your farm holding is the only good news the melee layer can
+   *  give you.
+   *
+   *  Carries a POSITION, one way or the other: `siteId` at a building, `hex`
+   *  on open ground. It must have one — the fifth fog leak this project found
+   *  was an event with no position being let through the gate as "not a
+   *  positional claim", so it was inaudible-visible inverted. Note the two are
+   *  NOT interchangeable: `fxVisible` reads `ev.hex.q`, an object, and returns
+   *  on it before the site fallback, so handing it the `[q,r]` array off a site
+   *  fogs the event away from the player it is for. */
+  FIELD_BATTLE_ENDED: 'field-battle-ended',
   // Carries `kind` as well as `siteId`, because the HUD banner reads
   // "UNDER SIEGE — stronghold" and read "— undefined" for as long as it
   // existed: SITE_CAPTURED below carried a kind and this one did not. A payload

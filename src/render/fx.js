@@ -13,6 +13,13 @@ import { siteTier } from './siteShapes.js';
 const RING = 0, BURST = 1, FLOAT = 2, SHOCK = 3, WASH = 4;
 const TYPES = { ring: RING, burst: BURST, float: FLOAT, shock: SHOCK, wash: WASH };
 const TAU = Math.PI * 2;
+/** Casualties under which a resolved fight draws nothing. Two-troop columns
+ *  meet each other about once a second in a late battle; marking every one of
+ *  those is a strobe, and the whole point is to mark the ones that COST. */
+const MIN_LOSSES = 3;
+/** Where the effect stops growing. A late assault is hundreds of bodies and an
+ *  uncapped radius would black out the board it is meant to inform. */
+const BIG_LOSSES = 40;
 /** See `towerFxDue`: a wall fires every tick, so the spark is throttled per
  *  column rather than per shot. */
 const TOWER_FX_GAP = 650;
@@ -276,6 +283,31 @@ export function fxFromEvent(fx, ev, p, hexSize = 34, locate = null) {
     case 'field-battle':
       fx.spawn('burst', ev.x, ev.y, { color: p.warn, life: 0.45, r0: hexSize * 0.3, r1: hexSize, n: 12 });
       break;
+    case 'field-battle-ended': {
+      // A FIGHT USED TO OPEN LOUDLY AND END IN SILENCE. `field-battle` above
+      // fires when one starts; six seconds later the only resolution that said
+      // anything was the one that opens a siege, so a column of your troops
+      // being wiped out simply stopped being on the board, and a garrison of
+      // yours HOLDING — the one piece of good news the melee layer can give —
+      // was invisible.
+      //
+      // THE BEAT IS SIZED BY WHAT IT COST, not by who won. A two-troop
+      // free-lunch grab and a forty-body assault resolve about a second apart
+      // in this game (measured: ~one field battle per second on gallowmoor), so
+      // a flat effect on every resolution would be a strobe that says nothing.
+      // Under `MIN_LOSSES` bodies it draws nothing at all — the fight was a
+      // formality and the shrinking stack already told that story.
+      const lost = (ev.attLost ?? 0) + (ev.defLost ?? 0);
+      if (lost < MIN_LOSSES) break;
+      // Capped, or a late-campaign assault would fill the pool on its own.
+      const w = Math.min(1, lost / BIG_LOSSES);
+      fx.spawn('shock', ev.x, ev.y, {
+        color: p.danger, life: 0.3 + w * 0.25,
+        r0: hexSize * 0.35, r1: hexSize * (0.9 + w * 1.4),
+      });
+      fx.spawn('float', ev.x, ev.y, { color: p.danger, life: 0.8, text: `-${lost}` });
+      break;
+    }
     case 'tower-fired':
       // A SPARK ON THE COLUMN, not a number. `lost` is a FRACTION of a body per
       // tick (towers.js carries the remainder on the squad), so a floating "-N"
