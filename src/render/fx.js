@@ -1,3 +1,5 @@
+import { siteTier } from './siteShapes.js';
+
 // Transient visual effects: capture flashes, siege impacts, floating numbers.
 //
 // A FIXED POOL, allocated once. Spawning grabs a dead slot and overwrites its
@@ -29,7 +31,13 @@ export function createFx(opts = {}) {
   /**
    * @param {'ring'|'burst'|'float'|'shock'|'wash'} kind
    * @param {number} x world x @param {number} y world y
-   * @param {{color?:string, life?:number, r0?:number, r1?:number, text?:string, n?:number}} [o]
+   * `delay` (seconds) holds an effect back without a timer or a second pool:
+   * the clock simply STARTS NEGATIVE and `update` walks it up to zero, so a
+   * delayed effect costs exactly one slot and nothing per frame. The three draw
+   * passes skip while `t < 0` — without that guard a negative `t` draws a
+   * shrinking radius at alpha > 1, which is a brighter bug than no bug.
+   * @param {{color?:string, life?:number, r0?:number, r1?:number, text?:string,
+   *   n?:number, delay?:number}} [o]
    */
   function spawn(kind, x, y, o = {}) {
     // Round-robin: when saturated the oldest effect is recycled rather than
@@ -47,7 +55,7 @@ export function createFx(opts = {}) {
     e.kind = TYPES[kind] ?? RING;
     e.x = x;
     e.y = y;
-    e.t = 0;
+    e.t = -(o.delay ?? 0);
     e.life = o.life ?? 0.6;
     e.r0 = o.r0 ?? 6;
     e.r1 = o.r1 ?? 34;
@@ -79,7 +87,7 @@ export function createFx(opts = {}) {
   function drawGround(ctx, p, px) {
     for (let i = 0; i < max; i++) {
       const e = pool[i];
-      if (!e.on || e.kind !== WASH) continue;
+      if (!e.on || e.t < 0 || e.kind !== WASH) continue;
       const f = e.t / e.life;
       const r = e.r0 + (e.r1 - e.r0) * easeOut(f);
       ctx.globalAlpha = 0.45 * (1 - f);
@@ -96,7 +104,7 @@ export function createFx(opts = {}) {
     ctx.lineCap = 'round';
     for (let i = 0; i < max; i++) {
       const e = pool[i];
-      if (!e.on || e.kind === FLOAT || e.kind === WASH) continue;
+      if (!e.on || e.t < 0 || e.kind === FLOAT || e.kind === WASH) continue;
       const f = e.t / e.life;
       const fade = 1 - f;
       // Linear for a SHOCK: `fade*fade` put the perceptible life of a capture
@@ -135,7 +143,7 @@ export function createFx(opts = {}) {
   function drawText(ctx, p, px) {
     for (let i = 0; i < max; i++) {
       const e = pool[i];
-      if (!e.on || e.kind !== FLOAT) continue;
+      if (!e.on || e.t < 0 || e.kind !== FLOAT) continue;
       const f = e.t / e.life;
       ctx.globalAlpha = 1 - f * f;
       ctx.fillStyle = e.color || p.text;
@@ -198,6 +206,21 @@ const easeOut = (t) => 1 - (1 - t) * (1 - t);
  *
  * @param {(siteId:string)=>({x:number,y:number}|null)} locate
  */
+/**
+ * What a capture SAYS. `TAKEN`/`LOST` is right for a farm and much too quiet
+ * for the win condition — the castle is the whole objective and the camp is the
+ * whole lose condition, so the two of them get the word for it. Read off the
+ * kind rather than off `rules.victory`: this function has an event and a
+ * palette and deliberately nothing else, and a renderer that had to be handed
+ * the victory rule to name a flash would be a second place that rule lives.
+ */
+function captureWord(ev) {
+  const mine = ev.to === 'player';
+  if (ev.kind === 'castle') return mine ? 'THRONE TAKEN' : 'THRONE LOST';
+  if (ev.kind === 'camp') return mine ? 'CAMP TAKEN' : 'CAMP LOST';
+  return mine ? 'TAKEN' : 'LOST';
+}
+
 export function fxFromEvent(fx, ev, p, hexSize = 34, locate = null) {
   const at = ev.siteId != null && locate ? locate(ev.siteId) : null;
   if (at) { ev = { ...ev, x: at.x, y: at.y }; }
@@ -205,18 +228,51 @@ export function fxFromEvent(fx, ev, p, hexSize = 34, locate = null) {
   // `site-captured` carries from/to rather than owner; prefer the new holder.
   const color = p.owner[ev.to ?? ev.owner] || p.accent;
   switch (ev.type) {
-    case 'site-captured':
+    case 'site-captured': {
       // THE VERB OF THE GAME, and it used to be a 300ms translucent ring over an
       // instant repaint — you did not win a site, you observed that the number
       // changed. Three layers now: the colour arriving as ground (under the
       // sites, see drawGround), a hard short ring, and a word.
-      fx.spawn('wash', ev.x, ev.y, { color, life: 0.42, r0: hexSize * 0.5, r1: hexSize * 3 });
-      fx.spawn('shock', ev.x, ev.y, { color, life: 0.5, r0: hexSize * 0.4, r1: hexSize * 2.4 });
-      fx.spawn('burst', ev.x, ev.y, { color, life: 0.5, r0: hexSize * 0.5, r1: hexSize * 1.3, n: 10 });
+      //
+      // ...AND IT USED TO BE THE SAME THREE LAYERS FOR A FARM AND FOR THE THRONE.
+      // `ev.kind` has crossed on this payload since the event was written and
+      // nothing read it, so taking an undefended farm and breaking the enemy's
+      // castle — the literal win condition — fired pixel-identical bursts,
+      // differing only in tint. Measured by calling this function directly with
+      // two events differing only in `kind`: indistinguishable screenshots. This
+      // is the most-repeated reward beat in the game, so it was also the flattest.
+      //
+      // The magnitude is DERIVED FROM `siteTier`, not a second table. That
+      // constant already means "how much attention does this kind deserve" — it
+      // is what sets outline weight — so a capture flash keyed off it cannot
+      // drift out of step with how the site is drawn the rest of the time. A
+      // fresh table would be a second thing to keep correct, and the one place
+      // the two disagreed would be a farm that flashed like a keep.
+      const t = siteTier(ev.kind);          // 0 ambient, 1 martial, 2 objective
+      const big = 1 + t * 0.42;             // 1.00 / 1.42 / 1.84
+      fx.spawn('wash', ev.x, ev.y, {
+        color, life: 0.42 + t * 0.10, r0: hexSize * 0.5, r1: hexSize * 3 * big,
+      });
+      fx.spawn('shock', ev.x, ev.y, {
+        color, life: 0.5 + t * 0.12, r0: hexSize * 0.4, r1: hexSize * 2.4 * big,
+      });
+      fx.spawn('burst', ev.x, ev.y, {
+        color, life: 0.5 + t * 0.15, r0: hexSize * 0.5, r1: hexSize * 1.3 * big, n: 10 + t * 7,
+      });
+      // A SECOND RING ON THE OBJECTIVE ONLY, offset in time. Scaling one ring
+      // further just makes it faster and thinner at the same moment; a second
+      // arrival is what reads as "that was a different kind of event" rather
+      // than "that was a bigger one".
+      if (t >= 2) {
+        fx.spawn('shock', ev.x, ev.y, {
+          color, life: 0.75, r0: hexSize * 1.2, r1: hexSize * 5.2, delay: 0.14,
+        });
+      }
       fx.spawn('float', ev.x, ev.y, {
-        color, life: 1.0, text: ev.to === 'player' ? 'TAKEN' : 'LOST',
+        color, life: 1.0 + t * 0.35, text: captureWord(ev),
       });
       break;
+    }
     case 'field-battle':
       fx.spawn('burst', ev.x, ev.y, { color: p.warn, life: 0.45, r0: hexSize * 0.3, r1: hexSize, n: 12 });
       break;
