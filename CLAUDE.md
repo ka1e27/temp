@@ -2896,8 +2896,117 @@ rides under the objective — not beside the treasury, because only one of the t
 spendable there — and is hidden until there is something to show, so it first appears in
 battle two rather than as a row of zeros in the busiest minute of onboarding.
 
+## What the game SAYS versus what it DOES: the fun pass
+
+Four critics drove the shipped game — feel, board readability, hours 2-10, input
+and accessibility — and every finding was reproduced with a probe or a
+screenshot before it was believed. What follows is the part worth keeping: the
+mechanisms, not the fixes.
+
+**A GESTURE THAT SAID "CANCEL" DESTROYED TROOPS.** `battle-waypoints.js
+updateDragPreview` nulls `view.dragTo` whenever the snap target resolves back to
+the drag's own origin. That is right for a RALLY — it is the "so you can clear a
+rally" pattern and it is what the line was written for — and for a SEND it made a
+returning drag **indistinguishable from a release on open ground**, so
+`resolveDrag` took the bare-ground branch and marched a share of the garrison
+onto the tile it was already standing on. Measured with real pointer events:
+squads-from-camp 0 → 1 → 2 over two "cancels", each a new `{to: null, camped:
+true}` squad that had marched nowhere. The detachment then sits exactly on its
+own site's hex, where `siteAt` wins every hit-test, so it can never be selected
+or reabsorbed. `resolveDrag`'s own comment already called this a cancel.
+
+**The camped branch was worse for a reason worth remembering: `cmdMoveSquad`
+takes a FRACTION**, so a camped force dragged back onto itself SPLIT rather than
+re-tasking in place. `battle-drag.js backAtSource`/`backAtSquad` test the last
+trail hex against the origin's own hex — `dragTo` is precisely the signal that
+was thrown away — and the match is EXACT, because anything fuzzier eats the
+shortest legal order in the game.
+
+**THE PREVIEW PROMISED A MARCH ONTO A MOUNTAIN, AND `passableFor` IS WHY.**
+`occupancy.js passableFor` returns true for the GOAL hex *before* it consults
+`isBlocked` (line 92 against 93), so a column can target a building it means to
+assault. Nothing confined that to buildings: A* would happily return a route
+ending on rock, `previewPath` drew it hex by hex with a chevron, and `cmdSend`
+answered `bad-hex` for the same order. `marchBlocker` is now one predicate with
+three consumers — and it is applied on the BARE-HEX path only, because a site is
+guaranteed in-grid by `assertBattleConfig` and gating it would make the preview
+STRICTER than the order, which is the same disagreement pointing the other way.
+
+**...and the same exemption applies per LEG, which was a simulation bug.**
+`pathThrough` stitches one A* leg per stop, so an intermediate waypoint got the
+free pass too, and only the final `toHex` was ever validated. Measured: a route
+drawn deliberately through a mountain was **accepted**, and the squad's path was
+nine hexes with one standing on blocked rock. `routeBlocker` checks every stop.
+Provably inert on balance — `waypoints` appears nowhere in `tools/` or
+`battle/ai*.js`, and a matched gallowmoor n=8 is identical digit for digit.
+
+**`armySize` PROMISED "ANYWHERE" AND MISSED A BUCKET.** It counted garrisons,
+sieges and squads — and since contract v12 an assaulting column is off
+`state.squads` for `MELEE.seconds` and lives in `site.melee`, a fourth bucket
+that did not exist when the docstring was written. So a faction's total DIPPED
+for six seconds every time it attacked anything. Nearly invisible as a peak
+statistic (a peak is a max over every tick) and plainly wrong as a readout a
+player watches. `armyCensus` is the one fold over all four and `armySize` is its
+total, so the total cannot disagree with its own parts. The split it adds is
+ARRIVED versus IN TRANSIT, because a camped force is on `state.squads` and is
+holding ground — counting it as marching would make parking a force read as
+indecision.
+
+**EVENTS ARE A ONE-WAY STREET, AND THAT IS WHAT MAKES THEM FREE.** Nothing in
+`battle/` or `tools/` reads `state.events` at all — the only reference anywhere
+is the clear at the top of `step`. So adding an event type cannot move a balance
+number, which is what let `FIELD_BATTLE_ENDED` ship without a re-measure. Worth
+knowing before anyone hesitates over the next one.
+
+**A FIGHT OPENED LOUDLY AND ENDED IN SILENCE.** `FIELD_BATTLE` fires when a melee
+starts or is reinforced; six seconds later the only resolution that announced
+anything was the one that opens a siege. So a column being wiped out was silent,
+and so was a garrison HOLDING — the one piece of good news this layer can give.
+The beat is sized by casualties rather than by who won, because fights resolve
+about once a second late in a battle: under three bodies it draws nothing, and it
+stops growing at forty.
+
+**AND A CAPTURE NEVER ESCALATED.** `site-captured` has carried `kind` since the
+event was written and `fxFromEvent` never read it, so taking an undefended farm
+and breaking the enemy's throne fired pixel-identical bursts. Magnitude derives
+from `siteTier`, which already means "how much attention does this kind deserve"
+— a second table would be a second thing to keep in step.
+
+**TWO FINDINGS WERE FALSE, and both failed the same way — a probe measuring the
+wrong thing.** "A click on bare board does not dismiss the site panel": it does,
+but the panel FADES, so a sample 250ms in reads `display: flex` and a 217x82 box
+while the opacity is 0.00016. Opacity does not collapse layout. And "the enemy's
+column throughput is a player-facing problem": `canSee` grants sight from three
+sources only, so most of the documented ~106 columns/minute happen where the
+player provably cannot perceive them — reproduced twice, with the screen pixel at
+a live enemy-vs-neutral fight sampling flat fog colour.
+
+**THE OPEN ONES, ranked by what they cost a player.** The board is a nameless
+canvas with no AX node, so a screen-reader user gets nothing spatial for a whole
+battle. There is no keyboard path to the core verb — the site panel's own
+controls are proper buttons, but the panel cannot be opened without a mouse. Site
+hit-targets fall to 34px at the default zoom on the biggest maps. And every
+unlock in the game is bought by about region 8 of 24, so the back half of the
+campaign has nothing new to acquire.
+
 ## Gotchas that have already cost time
 
+- **A PROBE THAT MEASURES A BOX MID-TRANSITION REPORTS A DISMISSED PANEL AS A
+  LIVE ONE.** `.hud-selection` fades rather than un-mounting, so 250ms after a
+  deselect it still reports `display: flex` and a 217x82 rect — opacity does not
+  collapse layout. A whole finding was filed against the game on that reading.
+  Sample `getComputedStyle(...).opacity`, or wait for the transition.
+- **AND A PROBE AGAINST A PAUSED SIM READS "NOT REJECTED" FOR AN ORDER NOTHING
+  HAS LOOKED AT.** Commands drain at the top of a TICK, so at `setSpeed(0)` a
+  pushed command sits in `state.commands` forever. The same session read a
+  correctly-refused order as silently accepted for exactly this reason.
+- **`markConquered` WRITES `rec.status = 'conquered'`, NOT `rec.conquered`, and a
+  fresh save carries records only for regions the player has TOUCHED.** Seeding a
+  finished campaign by iterating `meta.regions` therefore reaches almost none of
+  them — `tools/smoke-meta.mjs` does it correctly and is the copy to steal.
+- **`grid.blocked` HOLDS STRING KEYS (`"q,r"`), not arrays or `{q,r}`.** A probe
+  that reads `blocked[0].q` gets `undefined` and projects to NaN screen
+  coordinates, which the camera happily accepts.
 - **A SPLIT THAT MOVES A CLOSURE TURNS ITS CAPTURED VARIABLES INTO FREE ONES, AND A FREE
   VARIABLE IS NOT A SYNTAX ERROR.** `createSelection` destructured four of its seven
   dependencies; the two functions the split moved had also closed over `board`,
