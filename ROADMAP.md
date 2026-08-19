@@ -261,8 +261,23 @@ their files; they do not exist.
       and "Nothing of yours was left on the board" are both true and both better than the
       old bare stat rows, but neither says whether the camp was overrun or simply left
       empty — and the sim records nothing `resultReason` could read to tell them apart.
-      **7 of 13 sampled battles ended this way**, so it is the most common loss text in
-      the game.
+
+      **⚠ THE EVIDENCE FOR THIS ONE DID NOT REPRODUCE, AND THAT IS WHY IT IS STILL
+      UNBUILT.** The report's supporting number — *"7 of 13 sampled battles ended this
+      way"*, with vaelstrand losing both its sampled seeds to the camp falling inside ten
+      minutes — was checked before spending a CONTRACT BUMP on it. Re-run through
+      `startRun`/`playerTurn`/`step` at the harness's own defaults (`idleMinutes` 10, the
+      real `before` list), **the camp did not fall in EIGHT of eight vaelstrand seeds** —
+      four arbitrary (0/1/2/3) and four of the harness's own (1000/8919/16838/24757).
+      Seven timed out and one was won, ending on 10 to 68 sites.
+      The likeliest explanation is a harness setup difference — `idleMinutes: 0` or an
+      empty `conquered` list makes a far poorer player who loses fast — which is exactly
+      the trap this project already records for `--weights` and for the seed prefix.
+      **So the DESIGN point may well stand for a human, who plays worse than the bot; the
+      MEASUREMENT behind it does not.** Anyone picking this up should re-establish the
+      frequency first, because the fix costs a `CONTRACT_VERSION` bump (the sim would have
+      to record the camp's garrison at the moment it changed hands) and that is not a
+      price to pay for a number nobody can reproduce.
 - [x] ~~**The why-line has no visual priority over the flavour line above it.**~~
       **FIXED** — it outranks the flavour line on two channels now rather than one:
       14px against 12px, and `--c-text` against `--c-text-dim`. Colour alone was not
