@@ -20,6 +20,7 @@ import {
   campaignGap, CAMPAIGN_GAP_WARN,
 } from '../meta/world.js';
 import { incursionView } from '../meta/incursion.js';
+import { endgameEntry } from './endgate.js';
 import { incomePerSec, offlineNotice } from '../meta/idle.js';
 import { offlineCapMs } from '../meta/upgrades.js';
 import { OFFLINE } from '../content/upgrades.data.js';
@@ -102,11 +103,14 @@ export function createWorldMapScene(ctx) {
       // ctx.scenes.replace(...results...) to land HERE (see
       // beginAutoResolve) — so each is disabled for the duration rather than
       // guarded ad hoc in a handler that could be added later and forget to.
-      const incursionBtn = incursionView(meta()).open ? h('button.btn.wm-incursion', {
-        text: ENDGAME.incursionTitle, type: 'button',
-        'aria-label': 'Open the incursion briefing',
-        on: { click: () => ctx.scenes.push(ctx.screens.incursion) },
-      }) : null;
+      // Shown LOCKED rather than absent — see screens/endgate.js for why that
+      // reversed, and for the shop's own precedent.
+      const incursionBtn = endgameEntry({
+        cls: 'wm-incursion', text: ENDGAME.incursionTitle,
+        open: incursionView(meta()).open, why: ENDGAME.incursionLocked,
+        label: 'Open the incursion briefing',
+        onOpen: () => ctx.scenes.push(ctx.screens.incursion),
+      });
       // `.wm-shop` on the control itself, not "the first button in the
       // header": tools/smoke.mjs used to select `.wm-actions button`, and the
       // moment a second button joined that row the smoke test would have been
@@ -136,11 +140,9 @@ export function createWorldMapScene(ctx) {
           h('span.label', { text: UI.relics }), relics,
           h('span.label', { text: UI.income }), income,
           h('span.label', { text: UI.offlineCap }), away),
-        // The endless ladder, and only once there is one. Built here rather
-        // than in the detail panel because a rung has no hex of its own: it is
-        // fought on ground the player already holds. Absent until the campaign
-        // is finished, so it can never be a button that explains why it is
-        // disabled — see meta/incursion.js `campaignComplete`.
+        // The endless ladder, built here rather than in the detail panel
+        // because a rung has no hex of its own — it is fought on ground the
+        // player already holds.
         h('div.wm-actions', {}, ...navButtons));
 
       // The window and the world. `map` clips and hears the gesture; `board` is

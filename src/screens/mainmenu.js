@@ -19,6 +19,7 @@ import { compact, rate } from '../ui/format.js';
 import { UI, SAVE, ENDGAME } from '../content/strings.js';
 import { renderSettings } from './mainmenu-settings.js';
 import { renderAbdicate } from './mainmenu-legacy.js';
+import { endgameEntry } from './endgate.js';
 import { renderRecord } from './mainmenu-record.js';
 import { renderRefusal } from './mainmenu-recovery.js';
 import { renderExport, renderImport } from './mainmenu-io.js';
@@ -266,15 +267,18 @@ export function createMainMenuScene(ctx) {
       h('button.btn.ghost.menu-settings-btn', {
         type: 'button', text: 'Settings', on: { click: showSettings },
       }));
-    // Offered only when it can actually be taken (every region held), so it is
-    // never a button whose whole job is to explain why it is disabled. The drawer
-    // still handles the locked case, because a menu left open across a battle is
-    // a stale menu.
-    if (canAbdicate(meta())) {
-      mount(actions, h('button.btn.menu-abdicate', {
-        type: 'button', text: ENDGAME.abdicateTitle, on: { click: showAbdicate },
-      }));
-    }
+    // Shown LOCKED rather than omitted — see screens/endgate.js. It used to be
+    // built only when it could be taken, on the argument that a button whose
+    // whole job is to explain why it is disabled is clutter; the cost was that a
+    // player mid-campaign had no way to learn abdication exists, and
+    // `ENDGAME.abdicateLocked` had no reader anywhere. The drawer still handles
+    // the locked case independently, because a menu left open across a battle
+    // is a stale menu.
+    mount(actions, endgameEntry({
+      cls: 'menu-abdicate', text: ENDGAME.abdicateTitle,
+      open: canAbdicate(meta()), why: ENDGAME.abdicateLocked,
+      label: 'End this empire and start again', onOpen: showAbdicate,
+    }));
     actions.firstChild?.focus?.();
   }
 

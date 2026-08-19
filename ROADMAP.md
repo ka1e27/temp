@@ -161,7 +161,17 @@ Measured by headless simulation over the game's own pure functions
 (`meta/upgrades.js`, `meta/idle.js`, `core/store.js`), plus live browser probes
 against a freshly wiped save and `simrunner` spot-checks.
 
-- [ ] **TWO OF THE THREE ENDGAME LOOPS ARE INVISIBLE UNTIL THEY UNLOCK, AND THE
+- [x] ~~**TWO OF THE THREE ENDGAME LOOPS ARE INVISIBLE UNTIL THEY UNLOCK.**~~
+      **FIXED** — both are shown locked now, with their own copy, through one
+      shared `screens/endgate.js` so the two cannot drift into one showing what is
+      coming and the other not. Verified on a freshly wiped save in a real browser:
+      Incursions and Abdicate both present, disabled, `data-locked`, dashed at 0.55
+      opacity, each carrying its own explanation as title AND accessible name.
+      `tests/endgate.test.js` adds the guard that would have caught it — every
+      `*Locked` string in `ENDGAME` must reach a screen, the same check
+      `offlinenotice.test.js` applies to `IDLE`. Original:
+
+      **TWO OF THE THREE ENDGAME LOOPS ARE INVISIBLE UNTIL THEY UNLOCK, AND THE
       GAME ALREADY PROVED THE OPPOSITE PATTERN.** Source-confirmed: the Incursions
       button (`screens/worldmap.js`) and the Abdicate entry (`screens/mainmenu.js`)
       are absent from the DOM entirely until the campaign is finished — not

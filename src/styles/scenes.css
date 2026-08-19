@@ -235,6 +235,15 @@
   content: ' \25CF'; color: var(--c-text-dim); font-size: 0.6em; vertical-align: middle;
 }
 .shop-row[data-locked='1'] { opacity: 0.62; border-left: 2px dashed var(--c-line); }
+/* A WAY IN THAT IS NOT YET EARNED — the incursion ladder and abdication, which
+   used to be absent from the DOM entirely (screens/endgate.js). The DASHED edge
+   is deliberately the same one the locked shop row above uses: "you have not
+   unlocked this" is one state and it should look like one state wherever it
+   appears. `not-allowed` rather than the default disabled cursor, because the
+   button is reachable and inert on purpose rather than broken. */
+.btn[data-locked='1'] {
+  opacity: 0.55; border-style: dashed; cursor: not-allowed;
+}
 .shop-locked {
   font: var(--w-bold) var(--t-xs) / 1 var(--font-num);
   color: var(--c-text-dim); letter-spacing: var(--track-tag);
