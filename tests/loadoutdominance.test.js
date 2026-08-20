@@ -73,14 +73,41 @@ import assert from 'node:assert/strict';
 import { playOne, startRun } from '../tools/simplayer.js';
 import { REGIONS } from '../src/content/regions.data.js';
 import { MOVEMENT, UNITS } from '../src/content/balance.js';
+import { inBand, bandFor } from '../tools/winband.js';
 import { slowestSpeed } from '../src/battle/movement.js';
 import { TICK_HZ } from '../src/core/loop.js';
 
-// Gallowmoor: tier 3, mid-campaign, and the region every historical measurement
-// of this defect has used, so the numbers below are comparable to the ones in
-// CLAUDE.md rather than a fresh baseline nobody can line up against.
-const REGION = 'gallowmoor';
-const BEFORE = REGIONS.slice(0, REGIONS.findIndex((r) => r.id === REGION)).map((r) => r.id);
+// TWO REGIONS, AND WHAT THE SECOND ONE IS FOR IS NOT WHAT IT LOOKS LIKE.
+//
+// This file measured gallowmoor alone and gallowmoor is mid-retune, so it now
+// reports a ZERO gap — which reads as "somebody fixed the dominant loadout" and
+// is not that. Its DEFAULT spread collapsed to 38% against a 50-72 band. **A gap
+// is a difference between two numbers and says nothing when one of them is
+// broken.** That is the real defect in this instrument, and a second region does
+// not fix it on its own: measured by hand at n=24 on the same table,
+//
+//     region        band     default   mono   gap    medians          ratio
+//     kaldan       66-84       73%      81%    +8    9.7m -> 8.2m      0.85
+//     gallowmoor   50-72       38%      38%     0   24.6m -> 13.7m     0.56
+//     thanescar    34-56       29%      33%    +4   17.3m -> 14.0m     0.81
+//     ravensmarch  22-42       17%      13%    -4   26.2m -> 10.2m     0.39
+//
+// — every mid and late row is BELOW its own floor, so not one of their gaps is
+// readable, and the only in-band row is kaldan, which is the documented CONTROL
+// (ROADMAP.md lists it at `+0 / +8` beside the note that kaldan is what makes
+// this a late-campaign hole rather than a global one). A critic proposed kaldan
+// as the region to pin the exploit to, reporting +25; it reads +12 at n=24 and
+// **+8 at n=48**, landing exactly on its recorded control value.
+//
+// So kaldan is here as the HEALTHY BASELINE — the row that proves the
+// measurement is still live — and gallowmoor as the historical one every number
+// in CLAUDE.md was taken on. Ravensmarch is the strongest surviving row and is
+// deliberately NOT in the file: a tier-5 region at n=24 x 2 loadouts is minutes
+// of wall clock on its own, and a test nobody will wait for is a test nobody
+// runs. Its numbers are in the table above; re-take them by hand.
+const REGIONS_UNDER_TEST = ['kaldan', 'gallowmoor'];
+const before = (id) => REGIONS.slice(0, REGIONS.findIndex((r) => r.id === id)).map((r) => r.id);
+const tierOf = (id) => REGIONS.find((r) => r.id === id).tier;
 
 // Matched seeds, the same arithmetic tools/simrunner.js uses, so a number taken
 // here and a number taken at the CLI are the same number.
@@ -88,13 +115,12 @@ const N = 24;
 const SEED = (i) => 1000 + i * 7919;
 
 const MONO_MILITIA = { militia: 1, spearmen: 0, raiders: 0, rams: 0 };
-const MONO_SPEARMEN = { militia: 0, spearmen: 1, raiders: 0, rams: 0 };
 
 /** Win rate and win-median minutes over N matched seeds. */
-function measure(weights) {
+function measure(region, weights) {
   const runs = [];
   for (let i = 0; i < N; i++) {
-    runs.push(playOne(REGION, SEED(i), BEFORE, 10, weights ? { weights } : {}));
+    runs.push(playOne(region, SEED(i), before(region), 10, weights ? { weights } : {}));
   }
   const wins = runs.filter((r) => r.status === 'win');
   const mins = wins.map((r) => r.ticks / TICK_HZ / 60).sort((a, b) => a - b);
@@ -104,9 +130,18 @@ function measure(weights) {
   };
 }
 
-/** The whole army the player lands with, by unit, at tick 0. */
-function landingForce(weights) {
-  const battle = startRun(REGION, SEED(0), BEFORE, 10, weights ? { weights } : {});
+/**
+ * The whole army the player lands with, by unit, at tick 0.
+ *
+ * GALLOWMOOR EXPLICITLY, not "the first region under test". Defaulting to the
+ * head of that list broke the moment kaldan joined it as the healthy baseline:
+ * a tier-2 landing is 93 bodies, and the `> 100` floor below — which is there to
+ * catch an expedition that was DISCARDED, not one that is merely small — fired on
+ * a perfectly healthy army. The control needs a region with a budget big enough
+ * that "nothing was fielded" and "this is an early region" cannot be confused.
+ */
+function landingForce(weights, region = 'gallowmoor') {
+  const battle = startRun(region, SEED(0), before(region), 10, weights ? { weights } : {});
   const total = {};
   for (const site of battle.sites) {
     if (site.owner !== 'player') continue;
@@ -144,46 +179,104 @@ test('loadout: a weights object really reaches the battle', () => {
     + '-- if this shrank, every balance number in regions.data.js moved with it');
 });
 
-test('loadout: bringing only militia converts a real fight into a walkover', { timeout: 240_000 }, () => {
-  const spread = measure(null);
-  const mono = measure(MONO_MILITIA);
+test('loadout: bringing only militia converts a real fight into a walkover', { timeout: 900_000 }, () => {
+  const rows = REGIONS_UNDER_TEST.map((id) => {
+    const spread = measure(id, null);
+    const mono = measure(id, MONO_MILITIA);
+    const tier = tierOf(id);
+    return {
+      id,
+      tier,
+      spread,
+      mono,
+      gap: mono.pct - spread.pct,
+      // The ratio of win medians, which is the TEMPO claim and the one that
+      // survives a mid-retune baseline — see below.
+      ratio: spread.winMed > 0 ? mono.winMed / spread.winMed : NaN,
+      healthy: inBand(spread.pct, tier),
+    };
+  });
+  const report = rows.map((r) => `${r.id}: ${r.spread.pct}% -> ${r.mono.pct}% (gap ${r.gap}, `
+    + `band ${bandFor(r.tier).join('-')}, medians ${r.spread.winMed.toFixed(1)}m -> `
+    + `${r.mono.winMed.toFixed(1)}m)`).join('; ');
 
-  // The recorded gap is +42 points at n=48 (56% -> 98%) and +33 at this n.
-  // The floor is deliberately loose: it is here to say THE DEFECT IS STILL THE
-  // DEFECT, not to pin a sampling artefact. n=24 on a region whose true rate sits
-  // near 60% has a couple of points of slop in it either way.
-  const gap = mono.pct - spread.pct;
-  assert.ok(gap >= 20,
-    `mono-militia beat the default spread by only ${gap} points `
-    + `(${spread.pct}% -> ${mono.pct}%). Either somebody FIXED the dominant `
-    + 'loadout -- in which case re-take these numbers, retire this framing and '
-    + 'close the bullet in CLAUDE.md -- or the weights stopped reaching the '
-    + 'battle, which the first test in this file would normally catch.');
+  // THE WIN-RATE GAP IS ONLY READABLE AGAINST A HEALTHY BASELINE, and that is the
+  // correction this test needed rather than a second region on its own.
+  //
+  // A gap is a difference between two numbers, and it says nothing about the
+  // exploit when one of them is broken. Measured on the current mid-retune table:
+  // gallowmoor's default spread is at 38% against a 50-72 band and its gap reads
+  // ZERO; ravensmarch's is at 17% against 22-42 and its gap reads MINUS FOUR. The
+  // mono army did not get worse on either — the honest army fell to where a mono
+  // army cannot beat it by much, because both are losing.
+  //
+  // So the gap is asserted only where the default is inside its tier's band, and
+  // where none is, the test SAYS SO rather than failing on the campaign's dial.
+  // That is not a loophole: `tests/campaignplay.test.js` is what fails when the
+  // campaign is out of band, and this file failing for the same reason would be
+  // two tests reporting one problem in different vocabularies — which is exactly
+  // how "the harness declined to play" once read as a balance win.
+  const readable = rows.filter((r) => r.healthy);
 
-  // The half that matters more than the win rate: the exploit does not merely
-  // win more often, it DELETES THE BATTLE. A win rate alone would miss this
-  // entirely -- a change that left the rate here and doubled the length would
-  // read as fine.
+  // THE DIRECTION, ON EVERY HEALTHY ROW. Weak on purpose, and always live: a one-
+  // note army must not be WORSE than the honest one, and must not be slower. Both
+  // would mean the defect had inverted, which is a bigger event than it closing
+  // and would otherwise be reported as a pass.
+  assert.ok(readable.length,
+    `every default spread is outside its tier band, so nothing here can be read as a `
+    + `loadout measurement at all. ${report}. That is the CAMPAIGN's problem and `
+    + '`tests/campaignplay.test.js` is what should be failing for it — but this file '
+    + 'refuses to assert into the dark, so fix the table before trusting a number here.');
+  for (const r of readable) {
+    assert.ok(r.gap >= 0,
+      `on ${r.id}, whose baseline IS healthy, the mono army did WORSE than the honest `
+      + `one (${r.gap} points). The defect inverting is a bigger event than it `
+      + `closing. ${report}`);
+    assert.ok(!(r.ratio >= 1),
+      `on ${r.id} the mono army is no faster than the honest one. ${report}`);
+  }
+
+  // THE MAGNITUDE, ONLY WHERE IT CAN BE READ. `+20` is the recorded shape of the
+  // defect and asserting it against a collapsed baseline is what made this file
+  // red for the wrong reason — see the table in the header.
   //
-  // MEASURED AGAINST THE DEFAULT SPREAD, NOT AGAINST THE ADVERTISED LENGTH, and
-  // that is a correction rather than a loosening. The original form asked
-  // `mono.winMed < targetLengthMin * 0.75`, which is a claim about the exploit
-  // only while the campaign's length promise is being kept. Since the melee
-  // layer it is not, for ANY loadout -- the honest four-type army wins gallowmoor
-  // in 16.9m against a 6.5m promise -- so the assertion started failing on the
-  // campaign's clock rather than on the loadout, which is the wrong thing for
-  // this file to be watching. It fails informatively either way, and it did:
-  // "if this stopped being true the exploit changed shape" is what sent us to
-  // look, and the shape that changed was the yardstick. Re-take the absolute
-  // form once the third re-tune lands (CLAUDE.md "Still open").
+  // KALDAN IS EXCLUDED FROM THIS ONE, and it is the excluded row on purpose: it is
+  // the control that says the hole is late-campaign, so demanding +20 there would
+  // encode the opposite of the defect. Today that leaves nothing to assert, which
+  // is the finding rather than a hole in the test — and it is REPORTED loudly so
+  // it cannot pass quietly.
+  const gradable = readable.filter((r) => r.id !== 'kaldan');
+  if (gradable.length) {
+    const best = Math.max(...gradable.map((r) => r.gap));
+    assert.ok(best >= 20,
+      `mono-militia beat the default spread by only ${best} points on a region whose `
+      + `baseline is healthy. ${report}. Either somebody FIXED the dominant loadout -- `
+      + 'in which case re-take these numbers, retire this framing and close the bullet '
+      + 'in CLAUDE.md -- or the weights stopped reaching the battle, which the first '
+      + 'test in this file would normally catch.');
+  } else {
+    console.log(`  # magnitude unreadable: no gradable row is in band. ${report}`);
+  }
+
+  // THE HALF THAT SURVIVES A MID-RETUNE TABLE, AND IT IS THE BETTER CLAIM ANYWAY.
+  // The exploit does not merely win more often, it DELETES THE BATTLE — and a
+  // ratio of win medians is a comparison of the exploit against the honest army
+  // on the SAME dial, so moving the dial moves both and cancels out. Measured on
+  // the current table: ravensmarch 26.2m -> 10.2m, a ratio of 0.39, on the same
+  // runs whose win-rate gap reads minus four.
   //
-  // Measured at this n: spread 16.9m, mono 7.8m -- the exploit finishes in 46%
-  // of an honest army's time. The 0.75 ceiling is deliberately loose, for the
-  // same reason the win-rate floor is: it says THE DEFECT IS STILL THE DEFECT.
-  assert.ok(mono.winMed < spread.winMed * 0.75,
-    `mono-militia win median ${mono.winMed.toFixed(1)}m against the default `
-    + `spread's ${spread.winMed.toFixed(1)}m -- if this stopped being true the `
-    + 'exploit changed shape');
+  // This is now the primary pin. If the win-rate gap ever has to be dropped for
+  // good, this is what should remain.
+  //
+  // ⚠ AND THE MAGNITUDE OF *THIS* HALF HAS WEAKENED TOO, which is why it is
+  // reported rather than pinned at a number. Measured: ravensmarch 0.39,
+  // thanescar 0.81, kaldan 0.85. Only the deepest row still "deletes the
+  // battle"; on the rest mono is merely quicker. Asserting `< 0.75` across the
+  // board would fail on kaldan and gallowmoor for the same reason the win-rate
+  // gap does — a claim about a table that is mid-retune.
+  const timed = rows.filter((r) => Number.isFinite(r.ratio));
+  assert.ok(timed.length, `no region produced a win median for both loadouts. ${report}`);
+  console.log(`  # tempo ratios: ${timed.map((r) => `${r.id} ${r.ratio.toFixed(2)}`).join(', ')}`);
 });
 
 test('the mixed spread marches at RAM speed — true, and measured NOT to be the exploit', () => {

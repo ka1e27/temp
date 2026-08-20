@@ -22,6 +22,7 @@ import { DEFAULT_COMPOSITION_WEIGHTS } from '../src/content/upgrades.data.js';
 import { TICK_HZ } from '../src/core/loop.js';
 import { runLadder } from './simladder.js';
 import { runFrontier } from './simfrontier.js';
+import { WIN_BAND } from './winband.js';
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')).map(([k, v]) => [k, v ?? true]),
@@ -86,27 +87,9 @@ function sightedFlags(spec) {
 }
 const SIGHTED = sightedFlags(args.sighted);
 
-/**
- * The win-rate band each TIER is aiming at, as [floor, ceiling] percentages.
- *
- * This was a single global floor of 55%, which stopped being usable the moment
- * the campaign was meant to end in a genuine wall: an endgame region designed to
- * take two or three attempts reads as TOO HARD against a number chosen when
- * every region was supposed to be a probable win.
- *
- * A CEILING matters as much as a floor, and there never was one. Most of this
- * project's real mis-tunes were regions that were too EASY — a walkover reports
- * "ok" against a floor and looks healthy right up until someone plays it.
- *
- * You are raiding regions the enemy owns outright, so the campaign descends:
- * the opening teaches, the endgame is meant to cost you attempts.
- */
-// Tier 6's floor is 18 and NOT lower, and the constraint is a sample size rather
-// than taste: tests/campaignplay.test.js proves each region is winnable by
-// playing fixed seeds, and at an 18% true rate a 24-seed sample comes up empty
-// 1% of the time. A band that floors at 12 would need 40 seeds a region to tell
-// "hard" from "broken", which is the distinction that assertion exists to make.
-const WIN_BAND = [[78, 92], [66, 84], [50, 72], [34, 56], [22, 42], [18, 36]];
+// The per-tier band moved to tools/winband.js so tests can read it without
+// importing this file, which runs its CLI on import. See there for the reasoning
+// the band itself encodes.
 
 // `--incursion=1-12` measures the ENDLESS LADDER instead of the campaign: rungs
 // rather than regions, and a shape rather than a per-tier band. tools/simladder.js

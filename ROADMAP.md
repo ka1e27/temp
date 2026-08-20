@@ -91,9 +91,32 @@ its own box exists here.
       control, so this is a late-campaign hole, not a global one"*. Pinning the exploit
       to the region that documents its absence would encode the opposite of the defect.
 
-      The second region has to be a LATE one, which is exactly where the re-tune is in
-      flight — so this is blocked on that pass, or on measuring one late row and
-      accepting it will need re-taking. Evidence in the tactical-depth section below.
+      **AND MEASURING THE LATE ROWS SHOWED THE INSTRUMENT'S REAL DEFECT, WHICH IS NOT
+      THE REGION COUNT — DONE.** n=24, matched seeds, on the mid-retune table:
+
+      ```
+      region        band     default   mono   gap    medians          tempo ratio
+      kaldan       66-84       73%      81%    +8    9.7m -> 8.2m        0.85
+      gallowmoor   50-72       38%      38%     0   24.6m -> 13.7m       0.56
+      thanescar    34-56       29%      33%    +4   17.3m -> 14.0m       0.81
+      ravensmarch  22-42       17%      13%    -4   26.2m -> 10.2m       0.39
+      ```
+
+      Every mid and late DEFAULT is below its own floor, so **not one of those gaps is
+      readable** — a gap is a difference between two numbers and says nothing when one
+      of them is broken. Adding a second region would have added a second unreadable
+      number.
+
+      The test now measures kaldan (the only in-band row, and the control) plus
+      gallowmoor (the historical one), asserts DIRECTION on every in-band row — mono
+      must not be worse and must not be slower, since an inversion is a bigger event
+      than a fix — and asserts MAGNITUDE only where a baseline is healthy AND is not the
+      control. Today that leaves the magnitude claim with nowhere to live, and it logs
+      that loudly rather than passing quietly. The tempo half is reported rather than
+      pinned because it varies by row: ravensmarch 0.39 and gallowmoor 0.56 still delete
+      the battle, thanescar 0.81 and kaldan 0.91 do not.
+      `WIN_BAND` moved to `tools/winband.js` so a test can read it without importing
+      `simrunner.js`, which runs its CLI on import.
 
 - [x] ~~**RE-RUN THE FOUR CRITICS THAT NEVER REPORTED: game feel, hours 2-10, board
       readability, input and accessibility.**~~ **DONE, plus two more lenses.** Kept

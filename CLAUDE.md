@@ -4100,8 +4100,47 @@ gate the deploy.
   a stale "still open" entry is worse than no list: it sends the next reader to build
   something twice. **If you close an item, close it here in the same commit.**
 - **The loadout has a dominant answer, and after the battle redesign the biggest half
-  of it is simply LEAVING THE RAMS AT HOME.** Re-measured against the finished layer
-  and the closed re-tune, n=48, matched seeds:
+  of it is simply LEAVING THE RAMS AT HOME.**
+
+  **⚠ READ THIS FIRST: THE EXPLOIT CANNOT CURRENTLY BE MEASURED, AND THE REASON IS THE
+  CAMPAIGN RATHER THAN THE LOADOUT.** Re-taken on the mid-retune table (n=24, matched
+  seeds; kaldan also at n=48):
+
+  ```
+  region        band     default   mono   gap    medians          tempo ratio
+  kaldan       66-84       73%      81%    +8    9.7m -> 8.2m        0.85
+  gallowmoor   50-72       38%      38%     0   24.6m -> 13.7m       0.56
+  thanescar    34-56       29%      33%    +4   17.3m -> 14.0m       0.81
+  ravensmarch  22-42       17%      13%    -4   26.2m -> 10.2m       0.39
+  ```
+
+  **A GAP IS A DIFFERENCE BETWEEN TWO NUMBERS AND SAYS NOTHING WHEN ONE OF THEM IS
+  BROKEN.** Every mid and late row's DEFAULT spread is below its own tier floor, so not
+  one of those gaps is readable — the mono army did not get worse, the honest army fell
+  to where a mono army cannot beat it by much, because both are losing. Gallowmoor's
+  zero and ravensmarch's MINUS FOUR are the campaign's dial reporting itself in the
+  vocabulary of a loadout bug, which is the same shape as "the harness declined to play
+  and it read as a balance win".
+
+  **Kaldan is the only in-band row, and it is the CONTROL, not the pin.** A critic
+  proposed pinning the exploit to it at a reported +25; it reads +12 at n=24 and **+8 at
+  n=48**, landing exactly on the `+0 / +8` this section already records for it. That
+  agreement is the strongest available evidence that kaldan is behaving as it always
+  has — and that pinning the exploit there would encode the opposite of the defect.
+
+  **The TEMPO half has weakened too**, which is new and is why `tests/loadoutdominance
+  .test.js` no longer asserts it at a number: ravensmarch and gallowmoor still "delete
+  the battle" (0.39 and 0.56 of the honest army's time) while thanescar and kaldan read
+  0.81 and 0.91, where mono is merely quicker. A single threshold across those four
+  would fail on the campaign's dial rather than on the loadout. That test now asserts DIRECTION on every in-band row
+  (mono must not be worse, and must not be slower — an inversion is a bigger event than
+  a fix) and MAGNITUDE only where a baseline is healthy and is not the control. Today
+  that leaves the magnitude claim with nowhere to live, and it says so loudly rather
+  than passing quietly.
+
+  **So: re-take this whole section after the campaign re-tune, and do not read any
+  number below as current.** What follows is the last measurement taken on a table that
+  was in band. n=48, matched seeds:
 
   ```
   region        default   no rams   mono militia    no-rams gap   was
