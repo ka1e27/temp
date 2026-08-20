@@ -84,8 +84,18 @@ which is the safe direction.
 
 **WHAT THE NEXT SESSION MUST DO, in order.**
 
-0. **TAKE THE OUTCOME SIGNATURE BEFORE TOUCHING A DIAL. NEW, AND IT REORDERS THE LIST
-   BELOW.** thanescar at n=32: dial 4.60 reads 19 win / 13 timeout / **0 loss**, dial
+0. **⚠ THE GATE THE WHOLE RE-TUNE IS AIMED AT IS MEASURING THE WRONG THING. 93% OF
+   EVERY NON-WIN IN THE CAMPAIGN IS A TIMEOUT, NOT A DEFEAT.** Counted off the full
+   24-region sweep this pass already took (n=24 a row, 576 battles): **401 wins, 12
+   defeats, 163 timeouts** — and 102 of those timeouts end AHEAD on territory. Eleven of
+   the twenty-four rows record zero defeats. So `WIN_BAND` is not a difficulty gate, it
+   is a DURATION gate wearing one's clothes, and "tune this row to 45%" currently means
+   "make 45% of attempts finish before the clock". Being beaten and running out of time
+   are not the same promise to a player, and this file already records the second one
+   reading as the game being broken. **Answer this before another dial moves:** should a
+   region be able to beat the player at all, and if so, what does it? Full write-up and
+   the two honest caveats in CLAUDE.md.
+0b. **TAKE THE OUTCOME SIGNATURE BEFORE TOUCHING A DIAL.** thanescar at n=32: dial 4.60 reads 19 win / 13 timeout / **0 loss**, dial
    5.20 reads 14 / 17 / **1 loss** — thirty-one non-wins across two settings and one of
    them is a defeat, with every timeout pinned to the cap. The enemy does not beat this
    bot at any dial in the band; a stronger enemy only makes it slower until it stops

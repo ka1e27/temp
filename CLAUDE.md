@@ -1232,6 +1232,41 @@ is not the lever, whatever the win rate says. The candidates for a clock-bound r
 `targetLengthMin` (which derives `hardCapMs`), the throne stalemate itself, and the bot's
 own conversion rate — not enemy strength.
 
+**AND IT IS NOT ONE ROW — IT IS THE WHOLE CAMPAIGN. 93% OF EVERY NON-WIN IS A TIMEOUT.**
+Read straight off the full 24-region sweep (n=24 a row, 576 battles) by counting the
+outcome breakdown the runner already prints and nobody had ever totalled:
+
+```
+                    battles    wins   DEFEATS   timeouts   ...of which AHEAD
+whole campaign          576     401        12        163               102
+                                          6.9%      93.1%             63% of timeouts
+```
+
+**Twelve defeats in five hundred and seventy-six battles.** Every row in the campaign is
+in single figures, and eleven of the twenty-four are at zero. So `WIN_BAND` — the gate
+every difficulty decision in this project is made against — is not measuring "what
+fraction of attempts are WON". It is measuring **"what fraction FINISH before the
+clock"**, campaign-wide, and the two are not the same promise to a player: being beaten
+and running out of time feel completely different, and the second one reads as the game
+being broken rather than as losing. This file already records exactly that reaction for
+passive play — *"a twenty-minute stall that ends on copy reading as a clock problem
+rather than as 'you never attacked', which is worse for a confused new player than a
+quick defeat"* — and the sweep says it is the DOMINANT failure mode of the whole game,
+not an edge case.
+
+**Two honest caveats, neither of which rescues the number.** It is the bot, and a human
+may well lose more; and the table was mid-retune and too easy when this was taken, so
+the defeat count is depressed. But the shape does not depend on either: riverfen sits
+inside its band at 79% and still reads 0 defeats against 5 timeouts, and thanescar at a
+punishing dial 5.20 reads 1 defeat in 32.
+
+**What this changes is what a re-tune is FOR.** Moving a dial until a row reads 45%
+currently means "make 45% of attempts finish in time" — so the campaign's difficulty
+curve is a curve of battle DURATION wearing a difficulty curve's clothes, and that is
+the same finding as the S-curve above arriving from the outside. The question worth
+answering before another dial moves is whether a region SHOULD be able to beat the
+player at all, and if so, what does.
+
 **AND THE DOMINANT LOADOUT CHANGED SHAPE ON THE SAME CHANGE.** `slowestSpeed` is a MIN
 over the stack, so the default spread marches at the pace of its rams, and doubling the
 march doubled that penalty in absolute seconds:
