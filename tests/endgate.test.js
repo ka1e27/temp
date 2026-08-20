@@ -76,8 +76,8 @@ test('EVERY locked string in ENDGAME reaches a screen', () => {
   // `tests/offlinenotice.test.js` applies to `IDLE` for the same reason: a
   // string with no reader goes stale silently and nobody finds out, because
   // nothing fails.
-  const tree = ['worldmap.js', 'mainmenu.js', 'endgate.js', 'incursion.js',
-    'mainmenu-legacy.js', 'prebattle.js'].map(src).join('\n');
+  const tree = ['worldmap.js', 'worldmap-header.js', 'mainmenu.js', 'endgate.js',
+    'incursion.js', 'mainmenu-legacy.js', 'prebattle.js'].map(src).join('\n');
   for (const key of Object.keys(ENDGAME)) {
     if (!/Locked$/.test(key)) continue;
     assert.match(tree, new RegExp(`ENDGAME\\.${key}\\b`), `ENDGAME.${key} has no reader`);
@@ -89,17 +89,23 @@ test('neither entry is built conditionally any more', () => {
   // behavioural: the old code read `canAbdicate(meta()) ? build : nothing`, and
   // a test that only drove the unlocked path would have passed against it
   // forever. Reverting to a conditional mount is what this catches.
-  assert.doesNotMatch(src('worldmap.js'), /incursionView\([^)]*\)\.open\s*\?/,
+  // THE WORLD MAP IS TWO FILES, and naming one of them is how this test broke
+  // once already: the header moved to `worldmap-header.js` at the line cap and
+  // every assertion here started failing on a file path rather than on the
+  // property it cares about. The screen is the unit, so the screen is what is
+  // read — same reason the string-coverage test above joins a list.
+  const map = src('worldmap.js') + src('worldmap-header.js');
+  assert.doesNotMatch(map, /incursionView\([^)]*\)\.open\s*\?/,
     'the incursion button must not be built conditionally');
   assert.doesNotMatch(src('mainmenu.js'), /if\s*\(canAbdicate\([^)]*\)\)\s*\{/,
     'the abdicate button must not be built conditionally');
-  assert.doesNotMatch(src('worldmap.js'), /frontierOpen\([^)]*\)\s*\?/,
+  assert.doesNotMatch(map, /frontierOpen\([^)]*\)\s*\?/,
     'the frontier button must not be built conditionally');
-  // The world map reaches `endgameEntry` through the two named wrappers rather
-  // than calling it itself, so assert on what it actually builds — pinning the
-  // inner name would have failed the moment the wrappers shipped, which is a
-  // test asserting a call graph rather than the property it cares about.
-  assert.match(src('worldmap.js'), /incursionEntry\(/);
-  assert.match(src('worldmap.js'), /frontierEntry\(/);
+  // It reaches `endgameEntry` through the two named wrappers rather than calling
+  // it itself, so assert on what it actually builds — pinning the inner name
+  // would have failed the moment the wrappers shipped, which is a test asserting
+  // a call graph rather than the property it cares about.
+  assert.match(map, /incursionEntry\(/);
+  assert.match(map, /frontierEntry\(/);
   assert.match(src('mainmenu.js'), /endgameEntry\(/);
 });
