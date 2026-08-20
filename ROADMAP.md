@@ -80,10 +80,20 @@ its own box exists here.
 - [ ] **THE INSTRUMENT FOR THE #1 PROBLEM IS ANCHORED TO A REGION THAT IS MID-RETUNE.**
       `tests/loadoutdominance.test.js` measures gallowmoor alone and currently reports a
       0-point gap, which reads as "somebody fixed the dominant loadout" and is not that:
-      the DEFAULT spread collapsed to gallowmoor's out-of-band win rate. Pin it to a
-      second region the re-tune has not touched — kaldan reproduces the historical
-      pattern cleanly at default 58% -> mono 83%. Evidence and the full argument in the
-      tactical-depth section below.
+      the DEFAULT spread collapsed to gallowmoor's out-of-band win rate.
+
+      **⚠ AND THE SECOND REGION THE CRITIC PROPOSED IS THE WRONG ONE — corrected here
+      before anyone spends a session on it.** They reported kaldan reproducing the
+      exploit at default 58% -> mono 83%, +25. Re-measured with the harness's own seeds:
+      **+12 at n=24 and +8 at n=48** (73% -> 81%). That +8 is not a weak reproduction of
+      the exploit, it is kaldan's RECORDED VALUE AS THE CONTROL — the dominant-loadout
+      table in this file already lists kaldan at `+0 / +8` with the note *"kaldan is the
+      control, so this is a late-campaign hole, not a global one"*. Pinning the exploit
+      to the region that documents its absence would encode the opposite of the defect.
+
+      The second region has to be a LATE one, which is exactly where the re-tune is in
+      flight — so this is blocked on that pass, or on measuring one late row and
+      accepting it will need re-taking. Evidence in the tactical-depth section below.
 
 - [x] ~~**RE-RUN THE FOUR CRITICS THAT NEVER REPORTED: game feel, hours 2-10, board
       readability, input and accessibility.**~~ **DONE, plus two more lenses.** Kept
@@ -771,6 +781,16 @@ exactly the failure mode that test's own message warns about, and exactly the sh
 underlying phenomenon reproduces cleanly on a region the re-tune has NOT touched: kaldan,
 default 58% -> mono 83%, **+25**, matching the historical pattern. **The exploit is real
 and the instrument is anchored to the wrong region.**
+
+**⚠ THE KALDAN NUMBER IS WRONG AND THE CONCLUSION DRAWN FROM IT IS BACKWARDS.**
+Re-measured with the harness's own matched seeds: **+12 at n=24, +8 at n=48** (73% ->
+81%), not +25. And +8 is not a weak reproduction — it is kaldan's recorded value as the
+CONTROL, which the dominant-loadout table further down this file already lists as
+`+0 / +8` beside the note that kaldan is what says this is a late-campaign hole rather
+than a global one. So the critic's structural point stands (one region is not enough to
+carry the project's #1 problem) and their proposed fix would have pinned the exploit to
+the row that documents its absence. The n=48 figure landing exactly on the recorded one
+is the strongest evidence available that kaldan is behaving as it always has.
 
 **What already works, from this lens:** the four-invariant discipline is real and rare —
 `projectMarchLosses`/`projectGarrison` genuinely match the sim, so "the preview is a

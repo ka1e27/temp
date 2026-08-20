@@ -3001,6 +3001,165 @@ illegible. Both are children of `#hud` with no z-index, so which one won was con
 order. `.hud-selection` carries `z-index: 2` now, and the rule is worth stating plainly:
 **advice never covers a control.**
 
+## The first twenty minutes, and the four things that went wrong in them
+
+A critic drove the shipped game cold through CDP against a genuinely wiped save.
+Everything below is MEASURED. Two of their findings turned out to be false and are kept
+here as struck, because a false finding that reads plausibly will be refiled by the next
+critic otherwise.
+
+**WIPING THE SAVE NEEDS `Storage.clearDataForOrigin`, NOT `localStorage.clear()`.** A
+save-on-unload handler re-persists the in-memory state, so the second one is silently
+undone. Every "fresh save" script in this repo should be checked against that.
+
+### The tutorial abandoned a player who did exactly what it asked
+
+`COACH.drag` instructs a march across the map. **Marching causes no siege and no
+capture**, and every remaining beat waits on one or the other — so a player who followed
+the only instruction on screen was taught one thing and then left in silence for the rest
+of the battle. `mine` stays at 3 sites for the whole minute in the probe.
+
+**The hole opened when that line was rewritten.** It used to say *"Drag from your camp to
+the grey farm"* and led straight into the field-then-siege beat; hiding unscouted neutrals
+left nothing to point at, so it became a lesson about the GROUND — the better lesson, and
+also the end of the script. `COACH.tookGround` is the rung that was never replaced, and it
+holds until they attack something rather than on a timer, for the reason `drag` does: it
+is an instruction, not a statement.
+
+**Pinned as a PROPERTY, not as a beat list** — the beat after a march must name a target
+and must not expire on a clock — so a rewrite with different copy cannot reopen it.
+
+### ...and "the coach mark never advances" was a probe artefact, twice over
+
+The advance works: measured on a fresh save in a real browser, the strip retires within
+**two seconds** of a legal march. What the critic sampled was a hidden element still
+holding its old attributes — `hide()` cleared neither `data-beat` nor `textContent`, and
+the strip fades by class. Same shape as the site panel reporting `display: flex` at
+opacity 0.00016, which this file already records. `data-beat` is cleared now; the text
+stays, because it is mid-fade and clearing it would blank the line rather than fade it.
+
+**AND A REFUSED ORDER LOOKS IDENTICAL TO A BROKEN TUTORIAL.** My own probe reproduced the
+"never advances" reading twice before I noticed, both times because the march never
+happened: once on an off-grid destination (`grid` is an OFFSET rectangle — the documented
+gotcha, tripped over anyway) and once on a gesture that was swallowed. **A probe that does
+not assert its own order landed is measuring nothing.** The coach is correctly still
+asking for a march that was refused.
+
+### Nothing marked which glyph is your camp
+
+The opening line names the camp, the camp is the lose condition, and the three starting
+buildings are similar 20-30px glyphs — a camp and a training ground differ by a small
+pennant. The critic dragged from the FARM on their first attempt, going off the picture.
+
+`render/coachmark.js` floats a chevron over the building the current coach line names. A
+beat carries a KIND (`mark: 'camp'`) and `screens/battle.js` resolves the site off the live
+battle, so the sentence and the mark cannot name different buildings — the rule
+`battle-alert.js alarmSite` already follows for the danger mark. A kind rather than an id
+because `coach.data.js` is pure data that has never seen a battle.
+
+**Two decisions a SCREENSHOT made and no test would have.** A wedge rather than a ring or
+brackets: the board already draws four rings, and `alarm.js` has taken corner brackets to
+mean "this one is in trouble", in the danger colour — sharing that mark with the
+friendliest moment in the game would be worse than no mark. And it is the coach strip's own
+accent blue rather than the player's green: the first cut used `owner.player`, and the camp
+is green, standing on green territory under a green flood, so the mark was a shape you had
+to hunt for. `RISE` came down 2.9 → 2.35 on the same look — the first value floated it
+95-105 screen pixels above the glyph centre, three times the glyph's own height.
+
+### The loadout screen hid part of the player's own army
+
+**`.pb-body` has always been a scroll container, so the rows were reachable the whole
+time.** The platform draws an OVERLAY scrollbar, measured at **0px wide**, so there was no
+scrollbar, no fade and no cue of any kind. Measured at a nine-unit roster:
+
+```
+viewport      innerHeight   last row bottom   hidden
+1440 x 900        761             753           0     (8px of margin)
+1440 x 800        661             753         210     (two rows past the edge)
+1440 x 720        581             753         290     (four rows)
+```
+
+It fits at exactly one window size and clips at anything shorter, silently, on the one
+screen whose entire job is "review what you are walking in with".
+
+`.pb-body.has-more` masks the bottom edge, toggled on paint, scroll AND resize — resize on
+its own, because the panel fits at 900 and clips at 800, so a window the player drags
+crosses the boundary with nothing re-rendering. `moreBelow()` is the rule as a pure
+function rather than three lines of DOM arithmetic inline, because both ways of getting it
+wrong are silent: a fade that never appears, and one that never clears on a panel whose
+content height is fractional. **Its negative control is the important half** — a fade on a
+panel that fits claims there is more when there is not.
+
+### The anti-turtle ladder did a great deal and told nobody
+
+`attritionPhase` has cut farm income, wall repair, garrison size and training throughput
+after 150/210/270 seconds without a capture ANYWHERE on the board for this feature's whole
+life. **The only mention of it outside `battle/` and `content/` was a comment** in
+`battle-econ.js` noting that the HUD's income figure includes the ladder — true, and not
+the same as telling anyone. `EVENTS.ATTRITION_STAGE` had been pushed since the phase was
+written and had never had a consumer.
+
+That is the "sold and did nothing" shape this project has refunded four upgrades for,
+inverted: a mechanic that does a great deal and is invisible. The third rung — half income,
+no repair at all, training at double price and half rate — reads as the game breaking
+rather than as a rule.
+
+`RESULTS.attrition` is one line per rung, each naming what THAT rung does and each saying
+it applies to both sides, which is what makes pressing the answer and waiting not. **Stage
+0 is silence on purpose**: the ladder retiring means ground just changed hands, and "the
+country has recovered" is a message nobody needs while they are busy taking the thing that
+recovered it.
+
+**Not fog-gated, and the event carries neither a site nor a hex so it cannot be.** Attrition
+is a rule of the whole board rather than a claim about a place; gating it the way a capture
+is gated would silence it outright. Measured headlessly on riverfen seed 1000 (rung 1 at
+321s, rung 2 at 381s, mods matching the announced stage) and in a real browser at 4x with
+nobody giving orders (259s and 323s, correct text, danger tone).
+
+**The harness half is still open**: `tools/` never reacts to attrition either, so the bot
+plays through a ladder it cannot see any more than the player could.
+
+### "Away cap" is a heading, not an explanation
+
+No `title` anywhere up its DOM ancestor chain, while on the SAME screen the locked
+Incursions button correctly explains itself on hover — so the pattern existed and had not
+been applied to the figure the entire idle half rests on. `UI.offlineCapHint` titles both
+halves of the pair (a player hovers whichever their pointer is over, so a title on one of
+two is a coin flip) and names the Treasury line, because wanting the number to be bigger is
+the whole reason to explain it. No `aria-label`: the label precedes the value in DOM order,
+so a screen reader already reads "Away cap, 8h".
+
+### The withdraw confirm could not outlast its own warning
+
+`holdMs` was 4,000ms against a 95-character hint, which is about three and a half seconds
+of reading before the player has even decided — so the window could close while they were
+reading the thing it asked them to read. **8,000ms now, and the test pins it against the
+LENGTH OF ITS OWN COPY** rather than as a constant, so growing the sentence without growing
+the window fails.
+
+The critic filed this as the confirm expiring *silently*, and that half is false: `sync(0)`
+puts the label back to "Withdraw" and closes the hint, both visible.
+
+### Two findings struck as false, with the evidence
+
+- **"An empty booster gives no feedback at all."** Reproduced on a fresh save: the first
+  rail booster is `booster is-empty`, a real pointer press hit-tests to it, and the alert
+  strip reads **`RALLY: You did not bring that booster.`** immediately — the
+  `boosterBlocker` fix already recorded above. One true residual, left alone because it is
+  worth almost nothing: the control does not shake, because the shake rides
+  `battle:command-rejected` and this refusal happens before a command is issued.
+- **"The coach mark never advances."** See above.
+
+### What was NOT fixed, and why it is a product decision rather than a bug
+
+**A brand-new visitor is dropped into a live, already-ticking battle.** Wiped twice
+independently, with and without `?dev=1`: `document.body.dataset.scene` is `battle` on
+load, gold already draining from tick 1, no title screen and no New Game. The title screen
+exists only behind a Menu tab on the world map, reachable after the first battle is
+finished or abandoned. That is `worldmap.js bootRoute` working exactly as designed and
+documented — *"it owns the boot decision (menu, or straight into region 1 on a clean
+save)"*. The design is the finding, so it is recorded rather than changed.
+
 ## What the results screen may claim, and the empire line beside the objective
 
 **Three things the game said that were not true**, all found by playing it rather than
