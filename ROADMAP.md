@@ -84,6 +84,16 @@ which is the safe direction.
 
 **WHAT THE NEXT SESSION MUST DO, in order.**
 
+0. **TAKE THE OUTCOME SIGNATURE BEFORE TOUCHING A DIAL. NEW, AND IT REORDERS THE LIST
+   BELOW.** thanescar at n=32: dial 4.60 reads 19 win / 13 timeout / **0 loss**, dial
+   5.20 reads 14 / 17 / **1 loss** — thirty-one non-wins across two settings and one of
+   them is a defeat, with every timeout pinned to the cap. The enemy does not beat this
+   bot at any dial in the band; a stronger enemy only makes it slower until it stops
+   finishing. So `enemyMult` here is a CLOCK knob wearing a difficulty knob's clothes,
+   and the win rate being tuned is measuring "what fraction FINISH" rather than "what
+   fraction are won". `losses=0` means the dial is not the lever whatever the win rate
+   says — the candidates are `targetLengthMin`, the Marshal'd-throne stalemate already
+   diagnosed under item #70, and the bot's conversion rate.
 1. **Do not size another dial move at n=24.** This is now demonstrated twice, and CLAUDE.md
    carries the demonstration. n≥96 for a tune, n=240 near a band edge.
 2. ~~**Get a real slope first.**~~ **DONE, AND THERE IS NO SUCH NUMBER — the response is an
@@ -271,8 +281,19 @@ screenshot, and the report separates measured from reasoned throughout.
       Provably inert on balance: nothing in `battle/` or `tools/` reads
       `state.events` at all except the clear at the top of `step`.
 
-- [ ] **A WRONG-WAY SEND COSTS A FULL ROUND TRIP, NOT A REDIRECT, AND THERE IS NO ORDER
-      THAT FIXES IT.** Source-confirmed and then measured: `MOVE_SQUAD` refuses any squad
+- [x] ~~**A WRONG-WAY SEND COSTS A FULL ROUND TRIP, NOT A REDIRECT, AND THERE IS NO ORDER
+      THAT FIXES IT.**~~ **DONE.** `MOVE_SQUAD` re-tasks a column in flight now, and the
+      decision the item asked for went the forgiving way because the cost of not doing it
+      was measured and the cost of doing it was zero: nothing in `tools/` or
+      `battle/ai*.js` issues `MOVE_SQUAD` at all, and 16 matched runs are byte-identical
+      against the parent commit. **The interesting part is what it took to land: ONE RULE
+      LIVED IN THREE PLACES**, and with only the sim and the hit-test relaxed the gesture
+      evaporated silently in `issueMove` one layer above the simulation — pressed,
+      dragged, previewed, released, `resolveDrag` returning true, and nothing pushed. Two
+      unit suites and a source read all said it worked; a real browser found it. Full
+      write-up in CLAUDE.md.
+
+      *The original item, kept for its evidence:* Source-confirmed and then measured: `MOVE_SQUAD` refuses any squad
       that is not `camped` (`'squad-in-transit'`), and `RETREAT_SQUAD` takes no
       destination — it only ever aims at the nearest friendly site. So correcting a
       mistaken march is structurally three legs (out, back, then a fresh send) with no

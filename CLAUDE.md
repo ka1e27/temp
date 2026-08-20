@@ -356,6 +356,59 @@ withholds its outcome too when the target is unscouted (`kind: 'unscouted'`). Sa
 silence, different reason — fog rather than arithmetic. `tests/multisend.test.js` pins
 both, and its negative control is that an ordinary one-source drag is untouched.
 
+### A column in flight can be re-aimed, and one rule lived in three places
+
+**Measured on the shipped game before anything changed: a squad corrected 2.7s into a
+6.7s wrong-way march was back at its start tile at 5.9s having accomplished nothing,
+with a FOURTH action still needed to go where it was meant to.** `cmdMoveSquad` refused
+anything not `camped` and `RETREAT_SQUAD` takes no destination — it only ever aims at
+the nearest friendly site — so correcting a mistaken march was structurally three legs
+with no way to cut across. In a game whose design centre is free movement and cheap
+sends, a misdirected column is a byproduct of playing as intended rather than a rare
+misclick.
+
+**NOTHING ABOUT THE SIMULATION HAD TO CHANGE TO ALLOW IT**, which is what says the
+refusal was an artefact rather than a rule. `retreat.js marchCamped` already reads the
+squad's position with `squadHexOf` and re-anchors `spawnTick` to now — exactly the
+re-anchoring `reverseSquad` does, and exactly what stops the march booster's teleport,
+since position is `(tick - spawnTick) / (arriveTick - spawnTick)` and moving the arrival
+alone makes a column JUMP.
+
+**ONE RULE LIVED IN THREE PLACES, AND THE THIRD IS WHY RELAXING THE FIRST TWO CHANGED
+NOTHING.** `cmdMoveSquad` refused a column in flight, `battle-drag.js campedAt` refused
+to grab one, and `battle-orders.js issueMove` carried its own `!squad.camped` copy. With
+only the first two relaxed, a marching column could be pressed, dragged, previewed and
+released, `resolveDrag` returned true and `clearDrag` tidied up, and **nothing was
+pushed** — no rejection, no event, no error. The gesture evaporated one layer above the
+simulation. Two unit suites and a source read all said the feature worked; **a real
+browser is what found it**, and the sequence of probes that got there is the lesson:
+`view.dragFromSquad` lives on `__game.__ui` and not `__game.__view`; `squadAt`
+hit-tests on the BOWED drawn arc rather than the raw path hex; and a canvas-wide sweep
+of presses is useless against a moving target, because the column walks out from under
+the probe (freeze with `setSpeed(0)` to find the press point, then unfreeze, because
+commands drain at the top of a tick).
+
+**THE REMAINDER OF A SPLIT KEEPS ITS OWN SCHEDULE.** Splitting a marching column leaves
+the rest of it on the `path`, `spawnTick` and `arriveTick` it set out with, even though
+dropping the slow units would in principle let it speed up: recomputing `arriveTick`
+without re-anchoring `spawnTick` is the teleport above, and re-anchoring means rebuilding
+the remaining path for a gain nobody asked for.
+
+**A column dragged back onto ITSELF is a cancel, not a halt** — `backAtSquad` reads the
+position through `squadHexOf` rather than off `sq.hex`, which is null for anything in
+flight, so a `sq.hex`-only test would have answered "no" for every marching column and
+made the abort gesture split it instead. Halting one is a drag to the tile beside it.
+
+**Provably balance-neutral, verified rather than argued.** `MOVE_SQUAD` is issued by
+`screens/battle-orders.js` and by tests, and by nothing in `tools/` or `battle/ai*.js`
+at all — and 16 matched runs across riverfen and gallowmoor are byte-identical against
+the parent commit. A squad in a melee is off `state.squads` and still answers
+`unknown-squad`: troops already fighting are pulled out with RETREAT, not re-aimed.
+
+Confirmed in real Chrome: a 5-body column marching to the castle, grabbed mid-flight at
+40% of its route, split 3/2 at the default send strength — three marching to the drawn
+tile as their own column, two carrying on to the castle.
+
 ### Troops on a tile behave like troops in a building
 
 **`MOVE_SQUAD` was in the engine, documented in four places as the way a camped army
@@ -1151,10 +1204,33 @@ region, the same sample size, and the same afternoon.
    consecutive nudges inside a plateau read as five noisy zeroes and cost the same as
    one honest bracket.
 
-**And the plateau HEIGHT is a fact about the region, not about the dial.** 65% is
-where thanescar stops improving however cheap the enemy gets, so whatever is capping
-it is not enemy strength — read the outcome signature before reaching for the dial at
-all.
+**AND THE PLATEAU IS THE CLOCK, NOT THE ENEMY — the signature says so outright.**
+The same runs, split by outcome (n=32, thanescar):
+
+```
+dial 4.60    19 win   13 timeout    0 loss     every timeout AT the 30.4m cap
+dial 5.20    14 win   17 timeout    1 loss     every timeout AT the 30.4m cap
+```
+
+**Thirty-one non-wins across two dial settings and ONE of them is a defeat.** The enemy
+does not beat this bot on thanescar at any dial in the band; a stronger enemy only makes
+it slower, and past a point it stops finishing inside the cap. So `enemyMult` on this row
+is a CLOCK knob wearing a difficulty knob's clothes, and the win rate it is being tuned
+against is measuring "what fraction of attempts FINISH", not "what fraction are won" —
+two very different things to promise a player, and only one of them is what `WIN_BAND`
+is for.
+
+That is also the mechanism behind the shoulder. Below ~4.9 the enemy is already too weak
+to threaten the camp, so making it weaker still cannot convert a timeout into a win; what
+would is more time, or a bot that closes faster. It lines up exactly with the Marshal'd
+-throne diagnosis recorded under the re-tune: the castle trains against zero attrition
+because nothing ever attacks it, the bot never reaches `ATTACK_MARGIN`, and the siege is
+never opened — so the battle ends on the clock with the throne untouched.
+
+**So before spending a dial on any row, take the signature.** `losses=0` means the dial
+is not the lever, whatever the win rate says. The candidates for a clock-bound row are
+`targetLengthMin` (which derives `hardCapMs`), the throne stalemate itself, and the bot's
+own conversion rate — not enemy strength.
 
 **AND THE DOMINANT LOADOUT CHANGED SHAPE ON THE SAME CHANGE.** `slowestSpeed` is a MIN
 over the stack, so the default spread marches at the pace of its rams, and doubling the
