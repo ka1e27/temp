@@ -1165,6 +1165,32 @@ median would have forced every tier-5 region to advertise five minutes — short
 length gate steps aside entirely and lets the win-rate verdict speak. The same fix is in
 `tests/campaignplay.test.js`.
 
+**⚠ AND n=24 IS TOO NOISY TO TUNE ON EITHER — DEMONSTRATED, NOT ARGUED.** A full
+24-region sweep was taken, nineteen dials were moved, and the campaign was re-swept at the
+same n. Six rows moved the WRONG WAY, and the slope each row implied ranged from **+4.25
+to −2.00 points per 0.01**:
+
+```
+region        dial+   before  after   implied slope
+riverfen      +0.04     96      79        4.25
+kaldan        +0.04     88      96       -2.00
+greywater     +0.05     75      83       -1.60
+thornmoor     +0.11     92      79        1.18
+obsidian      +0.18     71      79       -0.44
+gravenreach   +0.28     67      50        0.61
+```
+
+That is not a slope, it is noise: at n=24 the standard error on a win rate near 50% is
+**about 10 points**, so a +0.05 move predicting −5 is invisible and even a +0.28 move is
+under 3 SEM. Confirmed directly on the next measurement — thanescar re-taken at n=48 on an
+UNCHANGED dial read 65% against the 58% the n=24 sweep had just reported for it.
+
+**So a per-row dial correction sized off an n=24 sweep is a random walk**, and two sessions
+of this re-tune have now spent themselves on one. What n=24 CAN carry is a claim about the
+whole table — nineteen of twenty-four rows landing on the same side of their bands is far
+beyond what noise produces, and that is what justified the direction of the pass above. It
+cannot carry the size of any individual move.
+
 **`n=12` (the CLI default) is far too noisy to tune on, and has hidden real mis-tunes three
 separate times.** Kaldan's long-standing "58% ok" was an n=12 artefact; one build measured
 52% at n=120 and 57% at n=240; `ironcrown` read 54% at n=48 and 57% at n=240. Tune at
