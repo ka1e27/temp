@@ -31,6 +31,32 @@
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--s-3); align-items: start;
 }
+/* THIS PANEL SILENTLY TRUNCATED THE PLAYER'S OWN ARMY, and nothing said so.
+   `.pb-body` has always scrolled — but the platform draws an OVERLAY scrollbar,
+   measured at 0px wide, so at a nine-unit roster on a 1440x800 laptop there were
+   210 pixels of army below the fold with no scrollbar, no fade and no cue of any
+   kind. This is the one screen whose whole job is "review what you are walking in
+   with", and two troop rows plus the free Marshal were simply not on it.
+
+   A MASK rather than an overlaid element, because a mask is positioned against
+   the border box and therefore stays pinned to the bottom edge while the content
+   scrolls under it — an absolutely-positioned gradient would need a wrapper this
+   layout does not have. The class is toggled from prebattle.js so the fade is
+   absent when everything fits and disappears again at the end of the scroll:
+   a permanent fade would be a lie in the common case. */
+.pb-body.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent);
+}
+/* ...and a visible rail, for the same reason. `scrollbar-width: thin` is honoured
+   where overlay scrollbars are not, and the gutter is stable so the columns do
+   not jump by a scrollbar's width the moment a ninth troop is unlocked. */
+.pb-body { scrollbar-width: thin; scrollbar-gutter: stable; }
+.pb-body::-webkit-scrollbar { width: 8px; }
+.pb-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-line) 80%, transparent);
+  border-radius: var(--r-pill);
+}
 .pb-brief, .pb-army, .pb-boosters { padding: var(--s-4); }
 .pb-body h2 {
   margin: 0 0 var(--s-1);

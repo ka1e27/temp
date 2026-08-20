@@ -797,13 +797,21 @@ is silently undone by a save-on-unload handler re-persisting the in-memory state
       exists only behind a Menu tab on the world map, reachable only *after* the first
       battle is finished or abandoned. This is `worldmap.js bootRoute` working exactly as
       designed — the design is the finding.
-- [ ] **The loadout screen hides part of the player's own army, with no cue.** At a
-      realistic 9-unit roster on a stock 1440x900 desktop viewport, the EXPEDITION panel
-      renders 7 of 9 troop rows and simply stops: no scrollbar, no fade, no "more below".
-      Confirmed by DOM inspection that the army's own `aria-label` reads "…8 Raiders, 5
-      Rams…" while Rams and the free Marshal are absent from the rendered screen; scrolling
-      the page 110px reveals them. This is the one screen whose entire job is "review your
-      army before committing".
+- [x] ~~**The loadout screen hides part of the player's own army, with no cue.**~~
+      **DONE, and the mechanism is not the one filed.** `.pb-body` has always been a
+      scroll container (`overflow-y: auto`), so the rows are reachable — but the platform
+      draws an OVERLAY scrollbar, measured at **0px wide**, so nothing whatsoever
+      indicated them. Re-measured across three viewports at a nine-unit roster: at
+      1440x900 (`innerHeight` 761) the last row's bottom is 753, eight pixels of margin;
+      at 1440x800 two rows are past the edge and at 1440x720 four are, with **210 pixels
+      of expedition hidden** in the 800 case.
+
+      `.pb-body.has-more` masks the bottom edge, toggled from `prebattle.js` on paint,
+      scroll and resize — resize because the panel fits at 900 and clips at 800, so a
+      window a player drags crosses the boundary with nothing re-rendering. Plus a stable
+      gutter and a styled thin rail. `moreBelow()` is the rule as a pure function so the
+      off-by-one is pinned rather than eyeballed, and the negative control is the one
+      that matters: a fade on a panel that fits says there is more when there is not.
 - [x] ~~**The one coach mark does not advance even when followed correctly.**~~
       **HALF FALSE, HALF WORSE — DONE.** The advance itself works: measured on a fresh
       save in a real browser, the strip retires within two seconds of a legal march. The

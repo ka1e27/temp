@@ -16,7 +16,7 @@
 // The model and the two strips live in prebattle-brief.js / prebattle-army.js;
 // this file is the scene, the frame around them, and the transitions.
 
-import { h, mount } from '../ui/dom.js';
+import { h, mount, moreBelow } from '../ui/dom.js';
 import { UI, WORLD } from '../content/strings.js';
 import { nudgeComposition } from '../meta/composition.js';
 import { unlockedUnits } from '../meta/upgrades.js';
@@ -121,8 +121,17 @@ export function createPreBattleScene(ctx) {
       const offs = ['meta:booster-purchased', 'meta:upgrade-purchased']
         .map((ev) => ctx.bus.on(ev, () => rebuild(false)));
 
+      // The fade has to follow the scroll and the viewport, not just the paint:
+      // the panel fits at 1440x900 and clips at 1440x800, so a window a player
+      // resizes crosses the boundary without anything being re-rendered.
+      const body = root.querySelector('.pb-body');
+      body?.addEventListener('scroll', markScroll, { passive: true });
+      window.addEventListener('resize', markScroll);
+
       return [
         () => document.removeEventListener('keydown', onKey),
+        () => body?.removeEventListener('scroll', markScroll),
+        () => window.removeEventListener('resize', markScroll),
         ...offs,
         () => root?.remove(),
       ];
@@ -246,6 +255,22 @@ export function createPreBattleScene(ctx) {
       onToggle: (id, on) => { if (on) carried.add(id); else carried.delete(id); },
     });
     gate();
+    markScroll();
+  }
+
+  /**
+   * IS THERE MORE ARMY BELOW THE FOLD? `.pb-body` has always scrolled and the
+   * platform draws an overlay scrollbar — measured at 0px wide — so at a
+   * nine-unit roster on a 1440x800 laptop 210 pixels of the player's own
+   * expedition sat below the edge with nothing whatsoever indicating it.
+   *
+   * Toggled rather than always on, because a fade at the bottom of a panel that
+   * fits says there is more when there is not, which is the same class of lie.
+   */
+  function markScroll() {
+    const body = root?.querySelector('.pb-body');
+    if (!body) return;
+    body.classList.toggle('has-more', moreBelow(body));
   }
 
   /** An over-budget army can never be launched. The controls cannot build one,

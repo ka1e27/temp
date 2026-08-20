@@ -143,3 +143,20 @@ export function createDisposer() {
   };
   return add;
 }
+
+/**
+ * IS THERE MORE BELOW THE FOLD OF A SCROLL CONTAINER?
+ *
+ * Takes the three METRICS rather than the element, so it is a pure function
+ * with no document in it and the off-by-one can be pinned in a test — the
+ * failure it exists to prevent is a fade that never appears (`>= 0` misread as
+ * "fits") or one that never goes away (fractional layout heights leaving a
+ * sub-pixel remainder at the very bottom of the scroll).
+ *
+ * The 4px slack is that second case: a scroll container whose content is a
+ * fractional number of pixels tall reports `scrollTop + clientHeight` a hair
+ * under `scrollHeight` even when the user is at the end of it.
+ */
+export function moreBelow({ scrollHeight = 0, clientHeight = 0, scrollTop = 0 } = {}) {
+  return scrollHeight - clientHeight - scrollTop > 4;
+}
