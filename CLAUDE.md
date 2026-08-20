@@ -2345,6 +2345,37 @@ win-med  2.8  3.4  4.8  7.2 15.2    —
 — close to the target, and "a real wall again" in the source's own words. Depth 55 was
 not part of that sample; do not assume it still reads 0%.
 
+**⚠ THE LADDER HAS REGRESSED AND ITS OWN TABLE IS STALE — MEASURED, AND THE CAUSE IS
+THE CAMPAIGN RE-TUNE LEAKING INTO THE ARENA.** `--incursion=1,2,3,4,5 --n=16`:
+
+```
+depth   dial   mutators        win%   win-med
+    1   4.42   —                38%    14.6m
+    2   4.48   —                31%    11.3m
+    3   4.54   Sealed Throne    25%    26.8m
+```
+
+Depth 1 is a 38% fight where the table above says 96%. **A rung overrides `enemyMult`
+(the plan) and `develop` (only when a mutator asks) and inherits EVERYTHING ELSE from
+widowsgate's own campaign row** — `siteCounts`, the 21x16 board, `castleGateFrac`, and
+`targetLengthMin`, which derives the hard cap. The mid-flight re-tune moved several of
+those; widowsgate now reads `develop` 2.32 and `targetLengthMin` 18 against the tier-6
+figures the ladder was last calibrated against.
+
+This is the accident recorded two paragraphs above happening a SECOND time, and nothing
+noticed because no test walks the ladder. Do not re-author `baseDial` until the campaign
+is back in band — the arena is a campaign region and its row is mid-search, so a dial
+authored now is authored against a moving target. When it is re-based, the design
+question worth asking is whether a rung should inherit its arena's row at all: a ladder
+whose difficulty silently tracks a campaign region it is not otherwise part of is the
+same class of coupling as the `REGION_BY_ID` trap.
+
+**AND THE FIRST RUNGS ARE NOT "DIAL-ONLY RERUNS OF ONE MAP", which was the standing
+proposal to pull `mutatorsAt` forward.** The DEPTH is part of the map seed
+(`meta/modifiers.js`), so consecutive rungs are different boards at different dials —
+and at 38% and 31% they are not formalities anybody needs a mutator to make interesting.
+Struck rather than done; see ROADMAP.
+
 **...and the same player after ten hours of idling — the only table that justifies the
 word "endless" — has NOT been re-measured against the rebuilt dial**, and the source says
 so explicitly: re-take with `node tools/simrunner.js --incursion=40,55 --idle=600 --n=16`

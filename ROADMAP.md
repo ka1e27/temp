@@ -1955,12 +1955,48 @@ three regions), while `open` and `choke` sat near zero. `branchTrunk` 0.50 → 0
 the branch regions. **`split` has no `SQUEEZE` knob at all**, so its −6 is currently an
 open observation. Either give it one or write down why it should not have one.
 
-**4. Pull the incursion mutator onset forward — but check it is worth it first.**
-`mutatorsAt: [3, 9, 18]` means depths 1–2 draw none, so the first rungs of the endless
-ladder are dial-only reruns of one map. Cheap to change (`content/incursion.data.js` is
-pure data and fully harness-playable via `--incursion=`), and cheap to measure. Ranked
-low deliberately: it is two rungs out of an infinite ladder, and the player is past them
-in five minutes. Measure the payoff before spending the re-sweep.
+**4. ~~Pull the incursion mutator onset forward~~ — MEASURED, AND THE ANSWER IS NO.
+What the measurement found instead is that THE LADDER HAS REGRESSED, and that is a
+bigger item than the one it was checking.**
+
+The proposal was that `mutatorsAt: [3, 9, 18]` leaves depths 1–2 as "dial-only reruns of
+one map". Two things are wrong with that premise, and the second one matters.
+
+**The layouts already differ.** The DEPTH is part of the map seed (`meta/modifiers.js`,
+whose own comment says "the rung after it is a different map on the same ground"), so
+depths 1 and 2 are different boards at different dials. What they lack is a mutator, not
+variety.
+
+**And they are not formalities.** Measured, `--incursion=1,2,3,4,5 --n=16`:
+
+```
+depth   dial   mutators        win%   win-med
+    1   4.42   —                38%    14.6m
+    2   4.48   —                31%    11.3m
+    3   4.54   Sealed Throne    25%    26.8m
+```
+
+against the table recorded in `content/incursion.data.js` itself, `96 / … / 81 at depth
+5`. **Depth 1 is a 38% fight where its own file says 96%.** Adding a mutator at depth 2
+would make an already-far-too-hard opening worse, so the item is struck rather than done.
+
+**⚠ AND THE CAUSE IS THE CAMPAIGN RE-TUNE LEAKING INTO THE ARENA — FOR THE SECOND
+TIME.** `meta/incursion.js incursionRegionInputs` overrides `develop` only, and only when
+a mutator asks; the plan overrides `enemyMult`. **Everything else the rung is fought with
+comes straight off widowsgate's own campaign row** — `siteCounts`, the 21×16 board,
+`castleGateFrac`, and `targetLengthMin`, which derives the hard cap. The mid-flight
+re-tune moved several of those (widowsgate now reads `develop` 2.32 and
+`targetLengthMin` 18 against the tier-6 figures the ladder was last calibrated on). This
+is the exact accident CLAUDE.md already records once — *"the widowsgate arena's own dial
+shifted underneath it during the campaign re-tune (a shared-tree accident, since rebuilt)
+— so `baseDial` was moved 3.65 → 4.38 to restore this shape"* — happening again, and
+nothing noticed because no test walks the ladder.
+
+**So the ladder is now downstream of item 1** and must be re-based after the campaign is
+back in band, not before. Two things worth doing when it is: re-take the whole shape at
+n≥48 and re-author `baseDial` from it, and consider whether a rung should inherit its
+arena's row at all — a ladder whose difficulty silently tracks a campaign region it is
+not otherwise part of is the same class of coupling as the `REGION_BY_ID` trap.
 
 ---
 
