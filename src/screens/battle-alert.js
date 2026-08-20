@@ -16,6 +16,56 @@ import { rejectionText } from './battle-upgrade.js';
 import { siteOf } from './battle-preview.js';
 
 /**
+ * HAS THIS BATTLE STOPPED BEING A BATTLE? A pure fold over the site tally, so
+ * the rule is testable without a DOM and there is exactly one of it.
+ *
+ * `Withdraw` is always on screen and withdrawing is genuinely FREE — a retreat
+ * does not increment `stats.losses` and leaves the region untouched — so the
+ * tool to cut a dead battle short already exists. Nothing ever told the player
+ * they were in one. Measured on real battles: **widowsgate locks at 7 sites v
+ * 48 by minute 9 and does not move a single site for the remaining 25 minutes**,
+ * 74% of a 34-minute cap; gallowmoor locks at minute 26 and sits for 12 more.
+ * A timeout is not an early exit the sim takes when nothing is happening —
+ * `endPhase` only assigns it at `hardCapTicks` — so every one of those minutes
+ * is paid in full, by a player watching a board that has stopped changing.
+ *
+ * IT WARNS, IT DOES NOT ACT. Withdrawing is the player's call and a frozen
+ * tally is not proof of a lost battle (duskfell, measured, was genuinely
+ * contested to the wire and decided in the last 5% of its clock). So this is a
+ * nudge toward a button that is already there, not an auto-resign.
+ *
+ * `memo` is the caller's own scratch — presentation state, not sim state, so it
+ * neither replays nor crosses the contract. It is mutated in place rather than
+ * returned so the per-frame path allocates nothing.
+ *
+ * @param {{tally:string, tick:number, hz:number}} now
+ * @param {{tally:?string, since:number, warnedAt:number}} memo
+ * @returns {boolean} true when the caller should raise the warning THIS frame
+ */
+export function stalemateCheck(now, memo, opts = {}) {
+  const quietSec = opts.quietSec ?? 180;      // three minutes of a still board
+  const repeatSec = opts.repeatSec ?? 120;    // and no more than one nag every two
+  const minTick = opts.minTick ?? (now.hz * 120);
+  if (memo.tally !== now.tally) {             // the board moved: reset and say nothing
+    memo.tally = now.tally;
+    memo.since = now.tick;
+    return false;
+  }
+  // Too early to call it: an opening where nothing has changed hands yet is not
+  // a stalemate, it is an opening.
+  if (now.tick < minTick) return false;
+  const stillFor = (now.tick - memo.since) / now.hz;
+  if (stillFor < quietSec) return false;
+  if (memo.warnedAt && (now.tick - memo.warnedAt) / now.hz < repeatSec) return false;
+  memo.warnedAt = now.tick;
+  return true;
+}
+
+// The strip itself — see ./battle-alertstrip.js. This file decides WHAT is worth
+// saying; that one is the single line every decision has to fit through.
+export { createAlert } from './battle-alertstrip.js';
+
+/**
  * Withdraw. Confirm-style rather than a plain button: ending a run on one
  * stray click is the kind of thing you only regret once, which is also why
  * battle-input.js keeps it off every key.
@@ -194,96 +244,6 @@ export function alarmSite(tone, siteId) {
  * for. Empty text renders nothing at all, so it costs no space when silent.
  * @param {{ttlMs?:number}} [o]
  */
-/**
- * HAS THIS BATTLE STOPPED BEING A BATTLE? A pure fold over the site tally, so
- * the rule is testable without a DOM and there is exactly one of it.
- *
- * `Withdraw` is always on screen and withdrawing is genuinely FREE — a retreat
- * does not increment `stats.losses` and leaves the region untouched — so the
- * tool to cut a dead battle short already exists. Nothing ever told the player
- * they were in one. Measured on real battles: **widowsgate locks at 7 sites v
- * 48 by minute 9 and does not move a single site for the remaining 25 minutes**,
- * 74% of a 34-minute cap; gallowmoor locks at minute 26 and sits for 12 more.
- * A timeout is not an early exit the sim takes when nothing is happening —
- * `endPhase` only assigns it at `hardCapTicks` — so every one of those minutes
- * is paid in full, by a player watching a board that has stopped changing.
- *
- * IT WARNS, IT DOES NOT ACT. Withdrawing is the player's call and a frozen
- * tally is not proof of a lost battle (duskfell, measured, was genuinely
- * contested to the wire and decided in the last 5% of its clock). So this is a
- * nudge toward a button that is already there, not an auto-resign.
- *
- * `memo` is the caller's own scratch — presentation state, not sim state, so it
- * neither replays nor crosses the contract. It is mutated in place rather than
- * returned so the per-frame path allocates nothing.
- *
- * @param {{tally:string, tick:number, hz:number}} now
- * @param {{tally:?string, since:number, warnedAt:number}} memo
- * @returns {boolean} true when the caller should raise the warning THIS frame
- */
-export function stalemateCheck(now, memo, opts = {}) {
-  const quietSec = opts.quietSec ?? 180;      // three minutes of a still board
-  const repeatSec = opts.repeatSec ?? 120;    // and no more than one nag every two
-  const minTick = opts.minTick ?? (now.hz * 120);
-  if (memo.tally !== now.tally) {             // the board moved: reset and say nothing
-    memo.tally = now.tally;
-    memo.since = now.tick;
-    return false;
-  }
-  // Too early to call it: an opening where nothing has changed hands yet is not
-  // a stalemate, it is an opening.
-  if (now.tick < minTick) return false;
-  const stillFor = (now.tick - memo.since) / now.hz;
-  if (stillFor < quietSec) return false;
-  if (memo.warnedAt && (now.tick - memo.warnedAt) / now.hz < repeatSec) return false;
-  memo.warnedAt = now.tick;
-  return true;
-}
-
-export function createAlert(o = {}) {
-  const ttl = o.ttlMs ?? 2600;
-  const el = h('div.hud-alert', { role: 'status', 'aria-live': 'polite', text: '' });
-  const set = {
-    text: bindText(el, ''),
-    open: bindClass(el, 'is-open'),
-    danger: bindClass(el, 'is-danger'),
-    good: bindClass(el, 'is-good'),
-  };
-  let until = 0;
-  let sticky = '';
-
-  return {
-    el,
-    /**
-     * Transient message; replaces whatever is showing.
-     *
-     * `tone` exists because this line now carries losing a stronghold as well
-     * as a rejected click, and those must not look the same. A threat also
-     * holds twice as long: the whole point is that it reaches a player who is
-     * looking at another part of the map.
-     * @param {'info'|'danger'|'good'} [tone]
-     */
-    show(text, now, tone = 'info') {
-      until = now + (tone === 'danger' ? ttl * 1.6 : ttl);
-      set.text(text);
-      set.danger(tone === 'danger');
-      set.good(tone === 'good');
-      set.open(true);
-    },
-    /** Persistent message (armed booster). Restored when a flash expires. */
-    hold(text) {
-      sticky = text || '';
-      if (!until) { set.text(sticky); set.open(!!sticky); }
-    },
-    update(now) {
-      if (until && now >= until) {
-        until = 0;
-        set.text(sticky);
-        set.open(!!sticky);
-      }
-    },
-  };
-}
 
 /**
  * Wire the bus to the alert strip: everything the HUD SAYS when the simulation
