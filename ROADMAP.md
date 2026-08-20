@@ -906,8 +906,28 @@ is silently undone by a save-on-unload handler re-persisting the in-memory state
       control itself does not shake. The shake rides `battle:command-rejected`, and this
       refusal happens in `boosterBlocker` BEFORE a command is issued, so the message
       appears and the button the player pressed does not acknowledge.
-- [ ] **The unit tooltips are genuinely good and 100% hover-gated**, with no affordance
-      suggesting they exist and no path to them on touch at all.
+- [x] ~~**The unit tooltips are genuinely good and 100% hover-gated**, with no affordance
+      suggesting they exist and no path to them on touch at all.~~ **STRUCK — the touch
+      half is FALSE, and the real residual is a different bug.** Driven at 390x844 with
+      `Emulation.setTouchEmulationEnabled` and a real `Input.dispatchTouchEvent`: the card
+      opens on `touchStart` and is still open after `touchEnd`, carrying the full
+      description. `attach` binds `pointerenter` and `click` as well as `focus`, and
+      pointer events fire for touch.
+
+      **What IS true and was not filed: tapping a chip to read it also flips the filter**
+      (`militia: true -> false`, `chip is-on -> is-off`). On desktop hover reads and click
+      acts, two gestures; on touch there is one gesture doing both. Recoverable in one tap
+      and the card stays up, so it is minor — left alone rather than answered with a
+      long-press, which would be a new gesture needing its own tests to save a state
+      change the player can undo by repeating what they just did.
+
+      The affordance half stands: nothing suggests the cards exist. Note the chips already
+      carry a short version as their accessible name (`aria-label` reads "Militia — Cheap
+      line infantry."), so a screen-reader user is not in the dark; a sighted one is.
+
+      **A probe note that cost two runs:** the dock scrolls HORIZONTALLY at phone width, so
+      the first `.chip` reported a centre at x=636 on a 390-wide viewport and every touch
+      landed on nothing. Scroll it into view before hit-testing anything in that rail.
 - [x] ~~**The Withdraw confirmation silently expires**~~ **HALF FALSE, HALF REAL —
       DONE.** It does not expire silently: `sync(0)` puts the label back to "Withdraw" and
       closes the hint, both visible. What was real is the WINDOW. `holdMs` was 4,000ms
