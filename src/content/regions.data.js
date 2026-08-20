@@ -66,10 +66,10 @@ import { frontierRegion } from './endless.data.js';
 export const REGIONS = Object.freeze([
   // --- Tier 1 (4) -- the vertical slice. These five rows are balance-frozen. ---
   T('riverfen', 'Riverfen', 1, [0, 0], ['ashford', 'ironwood'],
-    1.82, 11, 9, [[1, 1, 2], 3, 3], 1, 0, 1, 9.5,
+    1.86, 11, 9, [[1, 1, 2], 3, 3], 1, 0, 1, 9.5,
     'Flooded lowlands: two neutral farms sit in the open and the enemy is slow to claim them.'),
   T('ashford', 'Ashford Downs', 1, [1, 0], ['riverfen', 'ironwood', 'saltmere', 'kaldan', 'highmarch'],
-    2.66, 12, 9, [[1, 1, 3], 3, 3], 1, 0, 1.2, 10,
+    2.70, 12, 9, [[1, 1, 3], 3, 3], 1, 0, 1.2, 10,
     'Open chalk downs with almost no cover — a fast raid arrives before the wall does.'),
   T('ironwood', 'Ironwood', 1, [0, 1], ['riverfen', 'ashford', 'saltmere', 'emberholt'],
     3.19, 13, 10, [[1, 2, 3], 5, 3], 1, 0, 1.5, 9.5,
@@ -90,23 +90,23 @@ export const REGIONS = Object.freeze([
   // layer pass). Full reasoning: ./regions.provenance.js, "TIER 2".
   T('kaldan', 'Kaldan Reach', 2, [2, 0],
     ['ashford', 'saltmere', 'highmarch', 'greywater', 'vaelstrand', 'sunder'],
-    3.19, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 8.5,
+    3.23, 15, 11, [[1, 3, 4], 5, 4], 1, 0, 4, 8.5,
     'The enemy opens with twelve sites and a real economy. Come with an army or come back later.'),
   T('highmarch', 'Highmarch', 2, [2, -1], ['ashford', 'kaldan', 'sunder'],
-    3.32, 15, 12, [[1, 3, 5], 5, 4], 1.2, 0.15, 5.5, 9,
+    3.39, 15, 12, [[1, 3, 5], 5, 4], 1.2, 0.15, 5.5, 9,
     'Terraced highland: the castle sits behind two stronghold gates and nothing flanks it.',
     'choke'),
   T('greywater', 'Greywater Fen', 2, [2, 1],
     ['saltmere', 'kaldan', 'thornmoor', 'karrowmere', 'duskfell', 'vaelstrand'],
-    3.34, 15, 12, [[1, 3, 5], 6, 4], 1.2, 0.2, 6.6, 8,
+    3.39, 15, 12, [[1, 3, 5], 6, 4], 1.2, 0.2, 6.6, 8,
     'Marsh crossings everywhere and walls nowhere — the widest front line in the campaign.'),
   T('thornmoor', 'Thornmoor', 2, [1, 2],
     ['saltmere', 'greywater', 'emberholt', 'karrowmere', 'gallowmoor'],
-    3.45, 15, 12, [[2, 3, 4], 7, 4], 1.25, 0.25, 7.9, 6.5,
+    3.56, 15, 12, [[2, 3, 4], 7, 4], 1.25, 0.25, 7.9, 6.5,
     'Bramble country: five neutral farms make the opening land grab the whole battle.',
     'branch'),
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
-    3.60, 16, 12, [[2, 3, 5], 7, 4], 1.7, 0.3, 9.5, 8,
+    3.67, 16, 12, [[2, 3, 5], 7, 4], 1.7, 0.3, 9.5, 8,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
 
   // --- Tier 3 (5) -- 16x12 to 17x13. Sieges are the conversation.
@@ -118,7 +118,7 @@ export const REGIONS = Object.freeze([
   // stale pre-melee-layer 6-8.5m promise — full reasoning and the numbers
   // behind every claim in this paragraph: ./regions.provenance.js, "TIER 3".
   T('gallowmoor', 'Gallowmoor', 3, [0, 3], ['emberholt', 'thornmoor'],
-    3.95, 16, 12, [[2, 3, 6], 12, 4], 1.8, 0.55, 11.4, 20,
+    4.01, 16, 12, [[2, 3, 6], 12, 4], 1.8, 0.55, 11.4, 20,
     'A dead-end moor: one approach, three strongholds stacked along it, no way around.',
     'narrow'),
   T('sunder', 'The Sunder', 3, [3, -1], ['highmarch', 'kaldan', 'vaelstrand', 'blackspire'],
@@ -135,7 +135,7 @@ export const REGIONS = Object.freeze([
     'The enemy counter-trains here for the first time. Whatever you spam, it answers within a minute.',
     'branch'),
   T('karrowmere', 'Karrowmere', 3, [2, 2], ['thornmoor', 'greywater', 'duskfell', 'thanescar'],
-    4.48, 17, 13, [[2, 4, 7], 14, 4], 2.08, 0.59, 23.6, 19,
+    4.58, 17, 13, [[2, 4, 7], 14, 4], 2.08, 0.59, 23.6, 19,
     'Ringed hill fort: every enemy stronghold is upgraded, so token forces bounce off the walls.',
     'choke'),
 
@@ -148,21 +148,21 @@ export const REGIONS = Object.freeze([
   // same dial and mix) is a deliberate difficulty knob, not a stray number.
   // Full reasoning: ./regions.provenance.js, "TIER 4".
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
-    4.55, 17, 13, [[2, 4, 7], 15, 4], 2.10, 0.6, 28.4, 16,
+    4.60, 17, 13, [[2, 4, 7], 15, 4], 2.10, 0.6, 28.4, 16,
     'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.',
     'branch'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
-    4.55, 17, 13, [[2, 4, 7], 15, 4], 2.12, 0.6, 34, 16,
+    4.73, 17, 13, [[2, 4, 7], 15, 4], 2.12, 0.6, 34, 16,
     'A vertical fortress region: rams are not optional, and the enemy brings its own.',
     'choke'),
   T('ironcrown', 'Ironcrown', 4, [4, 0],
     ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
-    4.60, 17, 13, [[2, 4, 7], 19, 4], 2.14, 0.6, 40.8, 16,
+    4.73, 17, 13, [[2, 4, 7], 19, 4], 2.14, 0.6, 40.8, 16,
     'A Marshal holds the throne: the castle guard fights 25% harder and trains 40% faster.',
     'choke'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1],
     ['ironcrown', 'duskfell', 'thanescar', 'gravenreach', 'nightharrow'],
-    4.60, 17, 13, [[2, 4, 7], 20, 4], 2.16, 0.6, 49, 16,
+    4.78, 17, 13, [[2, 4, 7], 20, 4], 2.16, 0.6, 49, 16,
     'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. Their capital.',
     'branch'),
 
@@ -175,16 +175,16 @@ export const REGIONS = Object.freeze([
   // both deliberate, cross-checked lever choices, not stray numbers — full
   // reasoning: ./regions.provenance.js, "TIER 5".
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach', 'stormhalt'],
-    4.65, 18, 13, [[2, 5, 8], 18, 4], 2.19, 0.6, 61, 16,
+    4.80, 18, 13, [[2, 5, 8], 18, 4], 2.19, 0.6, 61, 16,
     'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.',
     'branch'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],
     ['ironcrown', 'obsidian', 'ravensmarch', 'nightharrow', 'stormhalt', 'cinderwatch'],
-    4.65, 18, 14, [[2, 5, 8], 22, 4], 2.20, 0.6, 76, 17,
+    4.93, 18, 14, [[2, 5, 8], 22, 4], 2.20, 0.6, 76, 17,
     'Every wall here is built and manned. Half the enemy yards retrain to answer whatever you brought.',
     'split'),
   T('nightharrow', 'Nightharrow', 5, [5, 1], ['obsidian', 'gravenreach', 'cinderwatch', 'widowsgate'],
-    4.75, 19, 15, [[2, 5, 8], 27, 5], 2.25, 0.6, 95, 18,
+    4.94, 19, 15, [[2, 5, 8], 27, 5], 2.25, 0.6, 95, 18,
     'The last of them, behind level-four walls with a Marshal on the gate. Bring engines and bring time.',
     'choke'),
 
@@ -198,14 +198,14 @@ export const REGIONS = Object.freeze([
   // attempts. Full reasoning and the current numbers: ./regions.provenance.js,
   // "TIER 6", and CLAUDE.md ("Still open" -> the campaign re-tune, third pass).
   T('stormhalt', 'Stormhalt', 6, [6, -1], ['ravensmarch', 'gravenreach', 'cinderwatch'],
-    4.78, 20, 15, [[2, 5, 9], 28, 5], 2.28, 0.6, 118, 16,
+    4.94, 20, 15, [[2, 5, 9], 28, 5], 2.28, 0.6, 118, 16,
     'A storm coast fortress fed from the sea. Five attacks at once, and every one of them means it.'),
   T('cinderwatch', 'Cinderwatch', 6, [6, 0],
     ['gravenreach', 'nightharrow', 'stormhalt', 'widowsgate'],
-    4.85, 20, 15, [[2, 5, 9], 30, 5], 2.30, 0.6, 147, 17,
+    5.06, 20, 15, [[2, 5, 9], 30, 5], 2.30, 0.6, 147, 17,
     'They burned their own farms rather than leave them standing. Take the ashes and hold them.'),
   T('widowsgate', 'The Widow’s Gate', 6, [6, 1], ['nightharrow', 'cinderwatch'],
-    4.90, 21, 16, [[3, 5, 9], 32, 5], 2.32, 0.6, 183, 18,
+    5.07, 21, 16, [[3, 5, 9], 32, 5], 2.32, 0.6, 183, 18,
     'The last gate, two banners behind it, and no throne left to retreat to. Finish it.'),
 ]);
 

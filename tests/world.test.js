@@ -152,11 +152,30 @@ test('the vertical slice matches the tuned balance table', () => {
     // this row wants an n=96/240 confirm before it is trusted at the edge.
     // SALTMERE had to follow ironwood's dial up to stay non-decreasing (3.19),
     // which read 79% — inside the floor but tight, also wanting confirmation.
-    ['riverfen', 1, 1.82, 11, 9, 5, 3, 3, 1.0, 9.5],
-    ['ashford', 1, 2.66, 12, 9, 6, 3, 3, 1.2, 10],
+    //
+    // RE-TAKEN A THIRD TIME, against a bot that can spend its own money.
+    // `--richyards` (simbuild.js rule 4) flipped ON after measuring +29 to +46
+    // across tiers 3-6, and the whole campaign moved with it: a full n=24 sweep
+    // read NINETEEN OF TWENTY-FOUR ROWS TOO EASY and not one below its floor,
+    // where the previous sweep had eleven of fifteen below. So every dial here
+    // rose, sized off the measured overshoot at ~1.8 points per 0.01 on these
+    // small boards (CLAUDE.md, Tuning).
+    //
+    // IRONWOOD IS THE ONE ROW LEFT KNOWINGLY OUT OF BAND, at 96% against a 92%
+    // ceiling, and the reason is a constraint rather than an oversight. It is
+    // near-immune to `enemyMult` in this range (the note above), so the lever
+    // that works on it is neutral — measured on this very region at 4 -> 5 for
+    // 98% -> 90%. But it shares its dial with saltmere, which sits at 79%
+    // against a 78% floor and cannot absorb a rise, and raising ironwood's
+    // neutral alone takes its total site count past saltmere's and breaks the
+    // non-decreasing invariant in tests/campaign.test.js. Four points is not
+    // worth breaking an invariant for; it needs saltmere moved first, or a
+    // column that is not the dial and not the site count.
+    ['riverfen', 1, 1.86, 11, 9, 5, 3, 3, 1.0, 9.5],
+    ['ashford', 1, 2.70, 12, 9, 6, 3, 3, 1.2, 10],
     ['ironwood', 1, 3.19, 13, 10, 7, 5, 3, 1.5, 9.5],
     ['saltmere', 1, 3.19, 13, 10, 8, 3, 4, 1.8, 7.5],
-    ['kaldan', 2, 3.19, 15, 11, 9, 5, 4, 4.0, 8.5],
+    ['kaldan', 2, 3.23, 15, 11, 9, 5, 4, 4.0, 8.5],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;
