@@ -7,6 +7,11 @@
 import {
   DEVELOP_CLAMP, GATE_CLAMP, HARD_CAP_MIN_BY_TIER, HARD_CAP_RATIO,
 } from './regions.rules.js';
+// Clamped rather than indexed: `HARD_CAP_MIN_BY_TIER[tier - 1]` on a tier the
+// table has no row for is `undefined`, and `Math.max(undefined, x)` is NaN — a
+// cap of NaN minutes that reads downstream as an ordinary refusal rather than
+// as a missing table row. See content/tiers.js.
+import { atTier } from './tiers.js';
 
 /**
  * THE ROW BUILDER. Every line of it is a statement about EVERY region — the
@@ -59,7 +64,7 @@ export const T = (id, name, tier, hex, adjacentTo, enemyMult, cols, rows, siteCo
     castleGateFrac: GATE_CLAMP(castleGateFrac),
     rewardPerSec, targetLengthMin, flavour, shape,
     hardCapMs: Math.round(
-      Math.max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
+      Math.max(atTier(HARD_CAP_MIN_BY_TIER, tier), targetLengthMin * HARD_CAP_RATIO) * 60 * 1000,
     ),
     startsUnlocked: false,
   };

@@ -38,6 +38,7 @@ import {
   compositionSlots, compositionTotal, overBudget, slotCost, typeCount, canAddType,
   battleRoster,
 } from './composition.js';
+import { atTier } from '../content/tiers.js';
 import { metaOf } from '../core/store.js';
 import { createRng, deriveSeed } from '../core/rng.js';
 import {
@@ -230,8 +231,7 @@ export function enemyMods(region, mult) {
     // number silently capped tier 5 at the tier-4 roster the moment a fifth
     // tier shipped — the same class of bug as `knobsFor` in battle/aicore.js,
     // which clamps to `AI_TIERS.length - 1` and is why that one was fine.
-    unlockedUnits: [...ENEMY_UNITS_BY_TIER[
-      Math.min(ENEMY_UNITS_BY_TIER.length, Math.max(1, region.tier)) - 1]],
+    unlockedUnits: [...atTier(ENEMY_UNITS_BY_TIER, region.tier)],
   });
 }
 
@@ -328,7 +328,7 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
     : enemyMods(region, mult);
   const gen = callMapGen(mapGen, { region: genRegion, seed, mult, isRaid });
   const sites = withEnemyMarshal(normalizeSites(gen.sites, mult), enemy.unlockedUnits,
-    ENEMY_MARSHALS_BY_TIER[Math.max(1, region.tier) - 1] ?? 1);
+    atTier(ENEMY_MARSHALS_BY_TIER, region.tier) ?? 1);
   const ids = new Set(sites.map((s) => s.id));
   const blockedOnSites = new Set(sites.map((s) => `${s.hex[0]},${s.hex[1]}`));
 

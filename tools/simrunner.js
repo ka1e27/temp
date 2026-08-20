@@ -16,6 +16,7 @@
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
+import { atTier } from '../src/content/tiers.js';
 import { REGIONS, REGION_BY_ID, REGION_IDS } from '../src/content/regions.data.js';
 import { DEFAULT_COMPOSITION_WEIGHTS } from '../src/content/upgrades.data.js';
 import { TICK_HZ } from '../src/core/loop.js';
@@ -213,7 +214,10 @@ for (const id of regionIds) {
   const MIN_WINS_FOR_LENGTH = 5;
   const gradeLength = wins.length >= MIN_WINS_FOR_LENGTH;
   const lengthOk = !gradeLength || (winMed >= target * 0.5 && winMed <= target * 1.6);
-  const [lo, hi] = WIN_BAND[region.tier - 1];
+  // Clamped: a bare index on a tier the band has no row for is `undefined`,
+  // and this destructures it — so `npm run sim` would throw on a new tier and
+  // nowhere else. See src/content/tiers.js.
+  const [lo, hi] = atTier(WIN_BAND, region.tier);
   const verdict = gradeLength && winMed > target * 1.6 ? 'TOO SLOW'
     : winPct < lo ? 'TOO HARD'
       : winPct > hi ? 'TOO EASY'
