@@ -10,6 +10,65 @@ or explicitly flagged as an opinion.
 
 ---
 
+## ⇒ THE RE-TUNE: two levers measured, one confirmed and one killed
+
+**STATE for item #70.** This is the resume point for the campaign re-tune; the detailed
+history is further down under "Do this first".
+
+**`siteCounts.neutral` IS NOT THE LEVER, AND THE CORRELATION THAT SAID IT WAS IS
+CONFOUNDED.** Reading the tier 3-6 rows against the last sweep's win rates shows a clean
+monotonic pattern at tier 4 — same mix, same board, and the neutral pool tracking the win
+rate even against a HIGHER dial:
+
+```
+region        dial  develop  neutral  total   win%
+thanescar     4.55    2.10      15      33     29
+blackspire    4.55    2.12      15      33     29
+ironcrown     4.60    2.14      19      37     38
+obsidian      4.60    2.16      20      38     42
+```
+
+and the same shape at tier 5 (ravensmarch 18 → 17%, gravenreach 22 → 42%, on an identical
+dial). That is a ~6-points-per-site slope, which would have been the cheapest lever in the
+table.
+
+**Measured directly on thanescar, in a detached worktree, n=16 matched seeds:**
+
+```
+neutral   15    19    23
+win%      25    25    19
+```
+
+Flat, then worse. **So whatever makes ironcrown and obsidian easier than thanescar, it is
+not their neutral pool** — and a correlation across four rows that differ in five columns
+is not a lever. Verified the change reaches the board rather than trusting the edit (15 →
+15 neutral sites, 23 → 23), because "the weights stopped reaching the battle" is this
+project's signature failure and would look exactly like a flat result.
+
+Two things follow. The tier-4 split recorded as an open question is still open — the cause
+is one of the other columns, or noise at n=24. And **`siteCounts.neutral` should be struck
+from the recommended lever list** for tiers 3-6; the previous session's "reach for
+`siteCounts.neutral`" advice is now measured and wrong at this end of the campaign. (It is
+a real lever at tier 2, where `regions.provenance.js` records greywater moving 66% → 54%
+on 7 → 9 neutral. The sign genuinely differs by tier, which is worth knowing and is not
+what either note assumed.)
+
+**`--richyards` IS THE LEVER, and it is a BOT FIX rather than a dial.** Re-measured at
+n=24 (the recorded figure was n=8 and overstated it, exactly as this project's own
+sample-size rule predicts):
+
+```
+region        off    richyards   delta   all-median
+gallowmoor    38%       75%       +37    38.0m -> 13.0m
+```
+
+That is larger than every dial move the re-tune has made put together, and it is the
+ROADMAP's own standing recommendation: the campaign is currently being tuned to compensate
+for a bot that holds six figures of gold against an 11.7/s training bill and builds farms
+with it. **Re-base with it ON before spending another dial.** The rest of the sweep
+(thanescar, ravensmarch, widowsgate) was still running when this was written — finish it,
+then flip the default and re-take the table.
+
 ## ⇒ START HERE: the fun pass, live work list
 
 **This section is the one piece of this file that carries STATE, and it exists so a
