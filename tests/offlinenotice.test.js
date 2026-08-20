@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { offlineNotice } from '../src/meta/idle.js';
 import { OFFLINE } from '../src/content/upgrades.data.js';
-import { IDLE } from '../src/content/strings.js';
+import { IDLE, UI } from '../src/content/strings.js';
 
 const HOUR = 3600_000;
 const summary = (o) => ({
@@ -102,4 +102,25 @@ test('...and the copy names an upgrade that exists', () => {
   assert.match(line, /Treasury/, 'the cap line must name the line that raises the cap');
   assert.doesNotMatch(line, /Granary/);
   assert.match(line, /8h/, 'and it must state the cap it hit');
+});
+
+test('the away cap explains itself before it bites, not only after', () => {
+  // `IDLE.awayCapped` tells the player what happened AFTER a capped absence.
+  // Nothing said what the number was BEFORE, and "Away cap" is a heading rather
+  // than an explanation — measured by a first-session critic, there was no
+  // `title` anywhere up its DOM ancestor chain, while on the same screen the
+  // locked Incursions button correctly explains itself on hover.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const screens = join(here, '..', 'src', 'screens');
+  const header = readFileSync(join(screens, 'worldmap-header.js'), 'utf8');
+  assert.ok(UI.offlineCapHint, 'the hint copy does not exist');
+  assert.ok(header.includes('UI.offlineCapHint'), 'the hint is written and never rendered');
+  // BOTH halves of the pair, because a player hovers whichever one their pointer
+  // happens to be over and a title on one of two is a coin flip.
+  const titled = header.match(/UI\.offlineCapHint/g) ?? [];
+  assert.ok(titled.length >= 2,
+    `the hint titles ${titled.length} element(s); the label and the value both need it`);
+  // Same rule as `awayCapped`: it must name the line that actually raises it.
+  assert.match(UI.offlineCapHint, /Treasury/);
+  assert.doesNotMatch(UI.offlineCapHint, /Granary/);
 });

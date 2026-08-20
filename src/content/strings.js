@@ -23,6 +23,15 @@ export const UI = Object.freeze({
   // forever — measured at roughly 55 million crowns discarded on one missed day
   // at full conquest.
   offlineCap: 'Away cap',
+  // ...AND WHAT THAT LABEL MEANS, WHICH IT NEVER SAID. Two words is a heading,
+  // not an explanation, and this is the number the entire idle half of the game
+  // rests on. Measured by a first-session critic: no `title` anywhere up its DOM
+  // ancestor chain, while on the SAME screen the locked Incursions button
+  // correctly explains itself on hover — so the pattern existed and had not been
+  // applied to the one figure that most needs it. It names the upgrade, because
+  // that is the whole reason a player would want the number to be bigger.
+  offlineCapHint: 'How long your empire keeps earning after you close the tab.'
+    + ' Treasury in Upgrades adds 2h a level, from 8h up to a 24h ceiling.',
   relics: 'Relics',
   worldMap: 'World Map',
   shop: 'Upgrades',

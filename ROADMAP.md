@@ -857,10 +857,17 @@ is silently undone by a save-on-unload handler re-persisting the in-memory state
       to hunt for. `RISE` came down 2.9 → 2.35 for the same reason: measured, the first
       value put it 95-105 screen pixels above the glyph centre, about three times the
       glyph's own height, reading as something floating nearby rather than a mark on it.
-- [ ] **"Away cap" — the number the entire idle pitch rests on — is explained nowhere.**
-      No `title` anywhere up its DOM ancestor chain, while on the same screen the locked
-      Incursions tab correctly explains itself on hover. The pattern exists and was not
-      applied to the one number that most needs it.
+- [x] ~~**"Away cap" — the number the entire idle pitch rests on — is explained
+      nowhere.**~~ **DONE.** `UI.offlineCapHint` titles both halves of the pair (a player
+      hovers whichever their pointer is over, so a title on one of two is a coin flip)
+      and names the Treasury line, because wanting the number to be bigger is the whole
+      reason to explain it. No `aria-label`: the label precedes the value in DOM order,
+      so a screen reader already reads "Away cap, 8h".
+
+      `IDLE.awayCapped` was already saying what happened AFTER a capped absence; this is
+      the same claim before it bites, and it is guarded by the same test that guards that
+      one. `worldmap.js` hit the line cap on the way, so the header — four figures, four
+      ways off the screen — moved to `worldmap-header.js`.
 - [ ] **Passive play ends on undefined developer jargon.** The "Time expired" screen is
       legible, correctly styled and carries accurate stats, but never states the
       actionable lesson, and "hard cap" appears on both it and the loadout screen with no

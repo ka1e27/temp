@@ -17,17 +17,15 @@ import { compact, rate, duration } from '../ui/format.js';
 import { UI, WORLD, IDLE } from '../content/strings.js';
 import {
   worldView, regionById, isAttackable, raidCooldownRemaining, modeOf,
-  campaignGap, CAMPAIGN_GAP_WARN, regionsConquered,
+  campaignGap, CAMPAIGN_GAP_WARN,
 } from '../meta/world.js';
-import { incursionView } from '../meta/incursion.js';
-import { frontierEntry, incursionEntry } from './endgate.js';
-import { FRONTIER_ID, frontierOpen } from '../content/endless.data.js';
 import { incomePerSec, offlineNotice } from '../meta/idle.js';
 import { offlineCapMs } from '../meta/upgrades.js';
 import { OFFLINE } from '../content/upgrades.data.js';
 import { previewReward } from '../meta/rewards.js';
 import { createAutoResolveUI } from './worldmap-autobattle.js';
 import { createDetailRenderer } from './worldmap-detail.js';
+import { createWorldHeader } from './worldmap-header.js';
 import { bootRoute, launchFirstRegion } from './mainmenu.js';
 import { HEX, layoutHexes, createMapPanner } from './worldmap-pan.js';
 
@@ -86,70 +84,11 @@ export function createWorldMapScene(ctx) {
           : () => ctx.scenes.push(ctx.screens.mainmenu, params);
       }
 
-      const crowns = h('span.num.crowns');
-      const relics = h('span.num.relics');
-      const income = h('span.num.income');
-      // The fourth figure, and the only one that is a LIMIT rather than a
-      // balance — see UI.offlineCap. `is-floor` when the player has bought
-      // nothing that raises it, which is the state the finding is about.
-      const away = h('span.num.away');
-      const setCrowns = bindText(crowns);
-      const setRelics = bindText(relics);
-      const setIncome = bindText(income);
-      const setAway = bindText(away);
-      const setAwayFloor = bindClass(away, 'is-floor');
-      // Hoisted rather than built inline: while a raid auto-resolves in the
-      // background these three are the only things that could carry the
-      // player off this screen while the results of that resolve still need
-      // ctx.scenes.replace(...results...) to land HERE (see
-      // beginAutoResolve) — so each is disabled for the duration rather than
-      // guarded ad hoc in a handler that could be added later and forget to.
-      // Shown LOCKED rather than absent — see screens/endgate.js for why that
-      // reversed, and for the shop's own precedent.
-      const incursionBtn = incursionEntry({
-        open: incursionView(meta()).open,
-        onOpen: () => ctx.scenes.push(ctx.screens.incursion),
-      });
-      // `.wm-shop` on the control itself, not "the first button in the
-      // header": tools/smoke.mjs used to select `.wm-actions button`, and the
-      // moment a second button joined that row the smoke test would have been
-      // hit-testing whichever one came first in the DOM while still reporting
-      // that it had checked the shop.
-      const shopBtn = h('button.btn.wm-shop', {
-        text: UI.shop, type: 'button',
-        'aria-label': 'Open the upgrade shop',
-        on: { click: () => ctx.scenes.push(ctx.screens.shop) },
-      });
-      const menuBtn = h('button.btn.ghost.wm-menu', {
-        text: 'Menu', type: 'button',
-        'aria-label': 'Open the main menu',
-        on: { click: () => ctx.scenes.push(ctx.screens.mainmenu) },
-      });
-      // THE FRONTIER — endless mode, shown locked before it opens so a player
-      // four regions away knows it is there. It launches through the ordinary
-      // pre-battle screen because it IS an ordinary battle (battle/frontier.js).
-      const frontierBtn = frontierEntry({
-        open: frontierOpen(regionsConquered(meta())),
-        onOpen: () => ctx.scenes.replace(ctx.screens.prebattle, { regionId: FRONTIER_ID }),
-      });
-      navButtons = [frontierBtn, incursionBtn, shopBtn, menuBtn].filter(Boolean);
-      const header = h('div.wm-header.panel', {},
-        // NOT a live region. It was `polite` and refreshes every 250ms, and
-        // `compact` renders values under 1000 as whole numbers — measured at
-        // 3.0 announcements a second in the early game, which is a polite queue
-        // that never drains and a screen reader that says nothing else about
-        // this screen ever again. The countdown twelve elements below already
-        // learned this ("a countdown announced once a second is a denial of
-        // service"); the treasury had not.
-        h('div.wm-treasury', { 'aria-live': 'off' },
-          h('span.label', { text: UI.treasury }), crowns,
-          h('span.label', { text: UI.relics }), relics,
-          h('span.label', { text: UI.income }), income,
-          h('span.label', { text: UI.offlineCap }), away),
-        // The endless ladder, built here rather than in the detail panel
-        // because a rung has no hex of its own — it is fought on ground the
-        // player already holds.
-        h('div.wm-actions', {}, ...navButtons));
+      const head = createWorldHeader({ meta, scenes: ctx.scenes, screens: ctx.screens });
+      navButtons = head.navButtons;
+      const header = head.el;
+      const { crowns: setCrowns, relics: setRelics, income: setIncome,
+        away: setAway, awayFloor: setAwayFloor } = head.set;
 
       // The window and the world. `map` clips and hears the gesture; `board` is
       // the one layer that moves, so panning costs a single composited
