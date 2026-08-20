@@ -1,5 +1,5 @@
 // IF YOU CANNOT SPEND YOUR INCOME, WHAT YOU ARE SHORT OF IS SOMEWHERE TO SPEND
-// IT — the bot's fourth build rule, and why it is opt-in.
+// IT — the bot's fourth build rule.
 //
 // `WANT_YARDS` is flat at 3, so past its third yard the bot builds farms
 // forever. Measured on thanescar at minute fifteen: 41 farms, 8 yards, nine
@@ -8,10 +8,20 @@
 // with fifteen minutes left on its cap. That is the same shape CLAUDE.md
 // already records for `PRIORITY` at 17,000 gold, an order of magnitude larger.
 //
-// It ships OFF. The flag exists so the delta stays re-takeable, because this
-// CHANGES an existing policy rather than adding a new capability, and every
-// number in `regions.data.js` was measured without it while the campaign
-// re-tune is mid-binary-search.
+// IT SHIPS ON, and `--norichyards` reverts it. It shipped OFF at first, not out
+// of doubt but because the effect was too big to land mid-search. Re-measured at
+// n=24 with matched seeds across four rows spanning tiers 3-6:
+//
+//     region        band     off    on     delta
+//     gallowmoor   50-72     38%    75%     +37
+//     thanescar    34-56     29%    58%     +29
+//     ravensmarch  22-42     17%    54%     +37
+//     widowsgate   18-36      4%    50%     +46
+//
+// Unanimous, and it changes the SHAPE of the re-tune rather than its level:
+// those rows go from 5-14 points below their floors to 2-14 above their
+// ceilings. The flag survives so every number older than that pass stays
+// re-takeable.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -129,16 +139,20 @@ function turn(state, opts) {
   return state.commands.filter((c) => c.t === 'BUILD');
 }
 
-test('a rich bot with three yards builds a FARM when the flag is off', () => {
-  // The behaviour every measured number in regions.data.js was taken against:
-  // past `WANT_YARDS`, the kind is a farm however large the treasury.
-  const built = turn(purse(118_303, 3), {});
+test('a rich bot with three yards builds a FARM under --norichyards', () => {
+  // The behaviour every measured number OLDER than the flip was taken against:
+  // past `WANT_YARDS`, the kind is a farm however large the treasury. Kept so
+  // that delta stays re-takeable rather than remembered.
+  const built = turn(purse(118_303, 3), { richYards: false });
   assert.equal(built.length, 1, 'it should still build something');
   assert.equal(built[0].kind, 'farm');
 });
 
-test('...and a TRAINING GROUND when the flag is on', () => {
-  const built = turn(purse(118_303, 3), { richYards: true });
+test('...and a TRAINING GROUND by default, which is the shipped bot', () => {
+  // Asserted with NO opts, because the default is the thing under test: a flip
+  // back to opt-in would silently move every row in regions.data.js by 29-46
+  // points, and this is what catches it.
+  const built = turn(purse(118_303, 3), {});
   assert.equal(built.length, 1);
   assert.equal(built[0].kind, 'trainingGround',
     'the whole point: money it cannot spend buys somewhere to spend it');
@@ -147,7 +161,7 @@ test('...and a TRAINING GROUND when the flag is on', () => {
 test('the flag changes NOTHING for a bot that is not rich', () => {
   // The negative control. A working economy must build exactly what it always
   // built, or this stops being a correction and becomes a policy change.
-  for (const opts of [{}, { richYards: true }]) {
+  for (const opts of [{}, { richYards: true }, { richYards: false }]) {
     const built = turn(purse(600, 3), opts);
     assert.equal(built.length, 1, `opts ${JSON.stringify(opts)}`);
     assert.equal(built[0].kind, 'farm', `opts ${JSON.stringify(opts)}`);

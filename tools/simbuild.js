@@ -190,13 +190,39 @@ export function upgradeTurn(state, front) {
  */
 const WANT_YARDS = 3;
 
-/** RULE 4: three yards is a beachhead's answer and the bot keeps playing it with
- *  fifty sites. Measured on thanescar at minute fifteen — 41 farms, 8 yards,
- *  nine places to turn gold into a body, 118,303 unspent gold against an 11.7/s
- *  bill. What rule 1 implies and then caps: if you cannot spend your income,
- *  what you are short of is somewhere to spend it. `RICH_SEC` is generous on
- *  purpose; at one minute this is a strategy, not a correction. Evidence in
- *  CLAUDE.md, "the conversion half". */
+/**
+ * RULE 4: three yards is a beachhead's answer and the bot kept playing it with
+ * fifty sites. Measured on thanescar at minute fifteen — 41 farms, 8 yards, nine
+ * places in the world to turn gold into a body, and 118,303 unspent gold against
+ * an 11.7/s training bill, which is 2.8 HOURS of training banked in a battle
+ * with fifteen minutes left on its cap. What rule 1 implies and then caps: if
+ * you cannot spend your income, what you are short of is somewhere to spend it.
+ * `RICH_SEC` is generous on purpose; at one minute this is a strategy, not a
+ * correction.
+ *
+ * **IT SHIPS ON, AND `--norichyards` REVERTS IT.** It shipped OFF at first, not
+ * out of doubt but because the effect was too big to land mid-search: every
+ * number in `regions.data.js` was measured without it. Re-measured at n=24 with
+ * matched seeds across four rows spanning tiers 3-6 (the recorded figure was n=8
+ * and overstated it, exactly as this project's sample-size rule predicts):
+ *
+ *     region        band     off    on     delta
+ *     gallowmoor   50-72     38%    75%     +37
+ *     thanescar    34-56     29%    58%     +29
+ *     ravensmarch  22-42     17%    54%     +37
+ *     widowsgate   18-36      4%    50%     +46
+ *
+ * Unanimous, large, and it CHANGES THE SHAPE OF THE PROBLEM rather than the
+ * level: those four rows go from 5-14 points BELOW their floors to 2-14 above
+ * their ceilings. A campaign tuned against the old default was tuned to
+ * compensate for a bot that could not spend its own money, which is exactly the
+ * work CLAUDE.md warns about — "a session would have been spent moving dials to
+ * compensate for defenders silently dropping half the orders given to them, and
+ * then spent again undoing it".
+ *
+ * Correcting downward from a competent bot is a dial job. Correcting upward from
+ * an incompetent one was the structural search the re-tune had been stuck in.
+ */
 export const RICH_SEC = 120;
 export const cannotSpendIt = (state) => {
   const gold = goldOf(state.factions.player) / CENTIGOLD;
@@ -273,11 +299,11 @@ export function constructTurn(state, front, hexes, opts = {}) {
 
   const mine = state.sites.filter((s) => s.owner === 'player');
   const yards = mine.filter((s) => SITES[s.kind].train > 0).length;
-  // Opt-in (`--richyards`): this CHANGES an existing policy rather than adding
-  // a new one, and every number in regions.data.js was taken without it while
-  // the re-tune is mid-search. The flag is what keeps the delta re-takeable.
+  // Rule 4, ON by default since it was measured at +29 to +46 across tiers 3-6.
+  // `--norichyards` reverts to the bot every number older than that pass was
+  // taken with, so the delta stays re-takeable rather than remembered.
   const wantYard = yards < WANT_YARDS
-    || (opts.richYards === true && cannotSpendIt(state));
+    || (opts.richYards !== false && cannotSpendIt(state));
   // RULE 5, OPT-IN AND OFF BY DEFAULT — measured at -25 and -12 points, see the
   // docblock above for the mechanism. It outranks the farm but NOT the yard: a
   // bot with no way to make troops has a worse problem than a bot being shot at.

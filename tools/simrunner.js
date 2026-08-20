@@ -12,7 +12,7 @@
 //   node tools/simrunner.js --all --nomicrosend   # ...one held to the blanket 5-body floor
 //   node tools/simrunner.js --all --nothrone      # ...one that will not commit to the last gate
 //   node tools/simrunner.js --all --pool          # ...one that CAN mass several sites at once
-//   node tools/simrunner.js --all --richyards     # ...one that builds YARDS when it cannot spend
+//   node tools/simrunner.js --all --norichyards   # ...one that could not spend its own money
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -108,7 +108,7 @@ if (args.incursion) {
 if (args.frontier) {
   runFrontier(args.conquered, {
     n: N, idleMin: Number(args.idle ?? 30), weights: WEIGHTS, upgrades: !args.noupgrades,
-    construct: !args.noconstruct, richYards: !!args.richyards,
+    construct: !args.noconstruct, richYards: !args.norichyards,
   });
   process.exit(0);
 }
@@ -147,6 +147,10 @@ for (const id of regionIds) {
   // `--relics=40` measures a player who has been paid for the ground they took
   // and spent it on troop lines — the one lever the harness cannot earn on its
   // own, and therefore the one the measured table says nothing about.
+  // `--norichyards` reverts rule 4 (simbuild.js): the bot stops turning an
+  // unspendable treasury into somewhere to spend it. It ships ON, measured at
+  // +37/+29/+37/+46 on gallowmoor/thanescar/ravensmarch/widowsgate at n=24 —
+  // every number older than that pass was taken with it OFF.
   // `--wall` OPTS IN to the bot building a stronghold under pressure
   // (simbuild.js rule 5). It ships off because it was MEASURED at -25 on
   // gallowmoor and -12 on thanescar — the rule and its mechanism are written up
@@ -159,7 +163,7 @@ for (const id of regionIds) {
   const opts = {
     upgrades: !args.noupgrades, construct: !args.noconstruct, scout: !args.noscout,
     reinforce: !args.noreinforce, microsend: !args.nomicrosend,
-    throne: !args.nothrone, pool: !!args.pool, richYards: !!args.richyards,
+    throne: !args.nothrone, pool: !!args.pool, richYards: !args.norichyards,
     walls: !!args.wall,
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
