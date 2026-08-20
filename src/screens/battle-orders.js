@@ -189,9 +189,23 @@ export function createOrders(o) {
    * NOTHING in the game could issue one. The only caller in the whole tree was
    * a test. So the rule "stop on open ground and you keep your options" was
    * true of the simulation and false of the game.
+   *
+   * THE `camped` TEST THAT USED TO SIT HERE WAS THE THIRD COPY OF ONE RULE, and
+   * it is why relaxing the other two changed nothing in the shipped game.
+   * `cmdMoveSquad` refused a column in flight, `campedAt` refused to grab one,
+   * and this line refused to issue the order — so a marching column could be
+   * pressed, dragged, previewed and released, `resolveDrag` would return true
+   * and `clearDrag` would tidy up, and NOTHING WOULD BE PUSHED. No rejection,
+   * no event, no error: the gesture simply evaporated one layer above the
+   * simulation. Two unit-test suites and a source read all said the feature
+   * worked; a real browser is what found it.
+   *
+   * Ownership and a destination are the whole of the check now. Whether the
+   * troops are standing or marching is `cmdMoveSquad`'s question, and asking it
+   * twice is what created the hole.
    */
   function issueMove(squad, to, opts = {}) {
-    if (!squad || !squad.camped) return false;
+    if (!squad) return false;
     if (!to && !opts.toHex) return false;
     push(cmd.moveSquad(squad.id, to ? to.id : null,
       view.fraction, filterList(view.filter), opts));

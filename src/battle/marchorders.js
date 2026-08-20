@@ -180,7 +180,28 @@ export function cmdMoveSquad(state, cmd, by) {
   const squad = state.squads.find((s) => s.id === cmd.squadId);
   if (!squad) return 'unknown-squad';
   if (squad.owner !== by) return 'not-your-squad';
-  if (!squad.camped) return 'squad-in-transit';
+  // A MARCHING COLUMN IS RE-TASKABLE, and the refusal that used to sit here was
+  // an implementation artefact rather than a rule. Measured on the shipped game
+  // before it went: a squad corrected 2.7s into a 6.7s wrong-way march was back
+  // at its start tile at 5.9s having accomplished nothing, with a FOURTH action
+  // still needed to go where it was meant to — because the only correction
+  // available was `RETREAT_SQUAD`, which takes no destination and only ever aims
+  // at the nearest friendly site. Three legs for a misclick, in a game whose
+  // design centre is free movement and cheap sends, where misdirected columns
+  // are a byproduct of playing as intended.
+  //
+  // Nothing about the sim had to change to allow it: `marchCamped` below reads
+  // the squad's position with `squadHexOf` and sets `spawnTick` to now, which is
+  // exactly the re-anchoring `reverseSquad` already does and exactly what stops
+  // the march booster's teleport (shortening `arriveTick` alone makes a column
+  // JUMP, because position is `(tick - spawnTick) / (arriveTick - spawnTick)`).
+  //
+  // PROVABLY BALANCE-NEUTRAL: `MOVE_SQUAD` is issued by screens/battle-orders.js
+  // and by tests, and by nothing in `tools/` or `battle/ai*.js` at all — so no
+  // measured number can move, and the shipped game gets materially more
+  // forgiving. A squad in a melee is off `state.squads` entirely and still
+  // answers `unknown-squad`: troops already fighting are pulled out with
+  // RETREAT, not re-aimed.
 
   const to = cmd.to != null ? siteById(state, cmd.to) : null;
   const toHex = cmd.toHex ? asHex(cmd.toHex) : null;
@@ -234,6 +255,13 @@ export function cmdMoveSquad(state, cmd, by) {
   ];
   if (!pathThrough(state, stops, by)) return 'no-route';
 
+  // THE REMAINDER KEEPS ITS OWN SCHEDULE. Splitting a marching column leaves the
+  // rest of it on the `path`, `spawnTick` and `arriveTick` it set out with, even
+  // though dropping the slow units off would in principle let it speed up:
+  // recomputing `arriveTick` without re-anchoring `spawnTick` is precisely the
+  // teleport above, and re-anchoring means rebuilding the remaining path for a
+  // gain nobody asked for. A column that detaches part of itself marches on at
+  // the pace it set.
   squad.comp = stay;
   const moved = spawnSquad(state, {
     owner: by,

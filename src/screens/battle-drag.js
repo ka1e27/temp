@@ -16,14 +16,23 @@
 //
 // PRESENTATION ONLY: every branch here ends in an `ord.*` call, and every one
 // of those ends in a command object. Nothing below touches sim state.
+import { squadHexOf } from '../battle/movement.js';
 
-/** The player's own CAMPED force at a world point, or null. Built on the same
- *  `squadAt` the tap path already uses — ONE hit-test, so an army you can
- *  select is an army you can drag, and both stay fog-gated for free rather
- *  than through a second scan that agrees today. */
-export function campedAt(ord, state, wx, wy) {
+/** The player's own force at a world point, camped or MARCHING, or null. Built
+ *  on the same `squadAt` the tap path already uses — ONE hit-test, so an army
+ *  you can select is an army you can drag, and both stay fog-gated for free
+ *  rather than through a second scan that agrees today.
+ *
+ *  It filtered on `camped` until `cmdMoveSquad` learned to re-task a column in
+ *  flight, and keeping the filter would have left that verb reachable from
+ *  nothing — the exact "built, documented as working, unreachable" shape that
+ *  left `MOVE_SQUAD` itself with no caller but a test fixture for a release.
+ *  `squadAt` already walks every perceived squad at its DRAWN position, so a
+ *  marching column has always been selectable; only this line stopped it being
+ *  draggable. */
+export function ownSquadAt(ord, state, wx, wy) {
   const sq = ord.squadAt(state, wx, wy);
-  return sq && sq.camped && sq.owner === 'player' ? sq : null;
+  return sq && sq.owner === 'player' ? sq : null;
 }
 
 /**
@@ -69,17 +78,25 @@ function backAt(view, q, r) {
 const backAtSource = (view, from) => !!from && backAt(view, from.hex[0], from.hex[1]);
 
 /**
- * The camped form, and it is the same bug one verb along. A camped force
- * dragged back onto its own tile fell into `issueMove(sq, null, {toHex})`,
- * and `cmdMoveSquad` takes a FRACTION — so instead of marching nowhere it
- * SPLIT, leaving two camped squads stacked on one hex. `sq.hex` may be either
- * shape, so it is read the way `movement.js squadHexOf` reads it.
+ * The army form, and it is the same bug one verb along. A camped force dragged
+ * back onto its own tile fell into `issueMove(sq, null, {toHex})`, and
+ * `cmdMoveSquad` takes a FRACTION — so instead of marching nowhere it SPLIT,
+ * leaving two camped squads stacked on one hex.
+ *
+ * It reads the position through `squadHexOf` rather than off `sq.hex`, which is
+ * null for anything in flight — so once a marching column became draggable, a
+ * `sq.hex`-only test would have answered "no" for every one of them and made
+ * the abort gesture split the column instead. Same derivation every other
+ * consumer uses, for the reason battle-input.js already gives: two copies of it
+ * disagree about which tick a column is on.
+ *
+ * A column dragged back onto ITSELF is therefore a cancel, not a halt. Halting
+ * one is a drag to the tile it is standing next to, which is the shortest legal
+ * order in the game and is deliberately not the same gesture as a fumble.
  */
-function backAtSquad(view, sq) {
-  if (!sq?.camped || !sq.hex) return false;
-  const q = Array.isArray(sq.hex) ? sq.hex[0] : sq.hex.q;
-  const r = Array.isArray(sq.hex) ? sq.hex[1] : sq.hex.r;
-  return backAt(view, q, r);
+function backAtSquad(view, state, sq) {
+  const at = sq && squadHexOf(state, sq);
+  return !!at && backAt(view, at.q, at.r);
 }
 
 export function resolveDrag(ord, view, state) {
@@ -95,7 +112,7 @@ export function resolveDrag(ord, view, state) {
     const waypoints = drawn ? ord.trimWaypoints(view.dragTrail) : [];
     if (sq && to) {
       ord.issueMove(sq, to, { waypoints });
-    } else if (sq && !backAtSquad(view, sq)) {
+    } else if (sq && !backAtSquad(view, state, sq)) {
       const at = view.dragTrail[view.dragTrail.length - 1];
       if (at) ord.issueMove(sq, null, { toHex: at, waypoints });
     }

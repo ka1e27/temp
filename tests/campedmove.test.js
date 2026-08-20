@@ -21,11 +21,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBattleState } from '../src/battle/state.js';
 import { drainCommands } from '../src/battle/commands.js';
-import { spawnSquad, clearPathCache } from '../src/battle/movement.js';
+import { spawnSquad, clearPathCache, squadHexOf } from '../src/battle/movement.js';
 import { marchCamped } from '../src/battle/retreat.js';
 import { emptyComp, total } from '../src/battle/combat.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
-import { resolveDrag, campedAt } from '../src/screens/battle-drag.js';
+import { resolveDrag, ownSquadAt } from '../src/screens/battle-drag.js';
 
 const comp = (o) => ({ ...emptyComp(), ...o });
 let n = 0;
@@ -135,17 +135,53 @@ test('a fraction that rounds to nobody is refused, not silently obeyed', () => {
   assert.equal(total(s.squads[0].comp), 1, 'and has not lost anybody');
 });
 
-test('an army in TRANSIT still refuses the order', () => {
+// THIS TEST USED TO ASSERT THE OPPOSITE and is rewritten rather than deleted,
+// because the refusal it pinned was an implementation artefact and the whole
+// point of removing it is that correcting a wrong-way march used to cost three
+// legs. See marchorders.js `cmdMoveSquad` for the measurement.
+test('an army in TRANSIT can be re-aimed, and does not teleport doing it', () => {
   const s = board();
   const sq = spawnSquad(s, {
     owner: 'player', from: 'camp', to: 'farm', comp: comp({ militia: 10 }),
   });
-  const to = sq.to;
+  // Let it get properly under way, so "where is it now" is not "where it began".
+  s.tick += 3;
+  const wasAt = squadHexOf(s, sq);
 
-  move(s, { squadId: sq.id, to: 'farm', fraction: 0.5 });
+  move(s, { squadId: sq.id, toHex: [4, 0], fraction: 1 });
 
-  assert.equal(s.squads.length, 1, 'no split mid-march');
-  assert.equal(s.squads[0].to, to);
+  assert.equal(s.squads.length, 1, 'the whole force re-tasks in place');
+  const re = s.squads[0];
+  assert.equal(re.to, null, 'and is now bound for bare ground');
+  // THE ANCHOR, which is the half that silently breaks: position is
+  // (tick - spawnTick) / (arriveTick - spawnTick) along `path`, so a re-task
+  // that moved `arriveTick` without re-anchoring `spawnTick` would make the
+  // column JUMP — the march booster's own bug. It must still be where it was.
+  assert.equal(re.spawnTick, s.tick, 'the schedule is re-anchored to now');
+  const nowAt = squadHexOf(s, re);
+  assert.deepEqual({ q: nowAt.q, r: nowAt.r }, { q: wasAt.q, r: wasAt.r },
+    'the re-task must not move the army');
+  assert.ok(re.arriveTick > s.tick, 'and it has somewhere still to go');
+});
+
+test('a marching column can be SPLIT, and the remainder keeps its own orders', () => {
+  const s = board();
+  const sq = spawnSquad(s, {
+    owner: 'player', from: 'camp', to: 'farm', comp: comp({ militia: 10 }),
+  });
+  s.tick += 3;
+  const { to, arriveTick } = sq;
+
+  move(s, { squadId: sq.id, toHex: [4, 0], fraction: 0.5 });
+
+  assert.equal(s.squads.length, 2, 'the detachment is its own column');
+  const rest = s.squads.find((x) => x.id === sq.id);
+  assert.equal(total(rest.comp), 5);
+  assert.equal(rest.to, to, 'the remainder is still going where it was going');
+  assert.equal(rest.arriveTick, arriveTick, 'on the schedule it set out with');
+  const off = s.squads.find((x) => x.id !== sq.id);
+  assert.equal(total(off.comp), 5);
+  assert.equal(off.to, null);
 });
 
 test('a split validates its route BEFORE it takes anybody out of the camp', () => {
@@ -230,19 +266,24 @@ test('a drag from nothing resolves nothing, so the caller can box-select', () =>
   assert.equal(ord.issued.length, 0);
 });
 
-test('campedAt refuses a column in transit and one that is not yours', () => {
+// This test used to assert that a column IN TRANSIT was refused as a drag
+// source, which was the rule until `cmdMoveSquad` learned to re-task one in
+// flight. Rewritten rather than relaxed: the in-transit case flipped and is
+// now the interesting half, and ownership is the filter that remains.
+test('ownSquadAt takes your own force, marching or standing, and no one else', () => {
   const s = board();
   const marching = spawnSquad(s, {
     owner: 'player', from: 'camp', to: 'farm', comp: comp({ militia: 5 }),
   });
-  assert.equal(campedAt(fakeOrders(s, marching), s, 0, 0), null, 'in transit');
+  assert.equal(ownSquadAt(fakeOrders(s, marching), s, 0, 0), marching,
+    'a column in flight must be draggable, or MOVE_SQUAD has no caller again');
 
   const theirs = camped(s, { militia: 5 });
   theirs.owner = 'enemy';
-  assert.equal(campedAt(fakeOrders(s, theirs), s, 0, 0), null, 'not yours');
+  assert.equal(ownSquadAt(fakeOrders(s, theirs), s, 0, 0), null, 'not yours');
 
   const mine = camped(s, { militia: 5 });
-  assert.equal(campedAt(fakeOrders(s, mine), s, 0, 0), mine, 'yours, and standing');
+  assert.equal(ownSquadAt(fakeOrders(s, mine), s, 0, 0), mine, 'yours, and standing');
 });
 
 test('marchCamped is still the whole-force path it always was', () => {

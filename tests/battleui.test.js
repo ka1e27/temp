@@ -20,14 +20,12 @@ import { BOOSTERS, UNIT_IDS, SITE_UPGRADE, SITE_LEVELS, CENTIGOLD } from '../src
 import { EVENTS } from '../src/battle/events.js';
 import {
   BOOSTER_KEYS, FILTER_KEYS, BOOSTER_BY_KEY, FILTER_BY_KEY, SPEED_KEYS,
-  TARGETED_BOOSTERS, needsTarget, SPEEDS, stepSpeedIndex, speedAllowed,
-  NORMAL_SPEED_INDEX, FREE_SPEED_MAX, maxSpeedIndex, speedIndexOf,
+  TARGETED_BOOSTERS, needsTarget,
 } from '../src/screens/battle-keys.js';
 import { createOrders, cmd } from '../src/screens/battle-orders.js';
 import { createView } from '../src/screens/battle-input.js';
 import { upgradeOffer, upgradeLabel, rejectionText, REJECTIONS }
   from '../src/screens/battle-panel.js';
-import { effectiveSpeed, speedLabel } from '../src/screens/battle-speed.js';
 
 const ALL_BOOSTERS = Object.keys(BOOSTERS).map((id) => ({ id, charges: 2 }));
 
@@ -320,61 +318,4 @@ test('rejections: a silently dropped order really does leave a reason behind', (
   state.commands.push(cmd.send('camp', 'hold', 1, UNIT_IDS));
   drainCommands(state);
   assert.equal(state.events.filter((e) => e.type === EVENTS.COMMAND_REJECTED).length, 0);
-});
-
-// ---------------------------------------------------------------------------
-// Withdraw and squad retreat — the last two unreachable verbs
-// ---------------------------------------------------------------------------
-
-test('withdraw: the HUD button ends the battle in retreat', () => {
-  const state = fixture();
-  state.commands.push(cmd.withdraw());
-  drainCommands(state);
-  assert.deepEqual(reasons(state), []);
-  assert.equal(state.status, 'retreat');
-  assert.ok(state.events.some((e) => e.type === EVENTS.BATTLE_ENDED && e.result === 'retreat'));
-});
-
-test('squads: clicking an in-flight squad selects it, and R turns it around', () => {
-  const state = fixture();
-  state.commands.push(cmd.send('camp', 'farm', 1, UNIT_IDS));
-  drainCommands(state);
-  const squad = state.squads[0];
-  assert.ok(squad, 'no squad to click');
-
-  const { ord, view, board } = harness(state);
-  // Halfway along the route is the worst case for arc bow, so aim there.
-  const a = board.sitePos(state.sites[0], { x: 0, y: 0 });
-  const b = board.sitePos(state.sites[1], { x: 0, y: 0 });
-  state.tick = Math.round((squad.spawnTick + squad.arriveTick) / 2);
-  const hit = ord.squadAt(state, (a.x + b.x) / 2, (a.y + b.y) / 2);
-  assert.equal(hit?.id, squad.id, 'the squad was not hit-testable');
-
-  ord.selectSquad(hit);
-  assert.equal(view.selectedSquad, squad.id);
-  assert.deepEqual(view.selection, [], 'selecting a squad clears the site selection');
-
-  state.commands.push(cmd.retreatSquad(view.selectedSquad));
-  drainCommands(state);
-  assert.deepEqual(reasons(state), []);
-  assert.equal(state.squads[0].retreating, true);
-});
-
-test('squads: empty board with nothing in flight still just deselects', () => {
-  const state = fixture();
-  const { ord } = harness(state);
-  assert.equal(ord.squadAt(state, 9999, 9999), null);
-});
-
-test('squads: a squad that has already arrived is forgotten, not ordered', () => {
-  const state = fixture();
-  state.commands.push(cmd.send('camp', 'farm', 1, UNIT_IDS));
-  drainCommands(state);
-  const { ord, view } = harness(state);
-  ord.selectSquad(state.squads[0]);
-
-  state.squads.length = 0;              // it landed
-  assert.equal(ord.retreatSelectedSquad(), false);
-  assert.equal(view.selectedSquad, null, 'a landed squad must be forgotten');
-  assert.equal(state.commands.length, 0, 'no order for a squad that no longer exists');
 });

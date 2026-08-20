@@ -17,12 +17,12 @@ import { createOrders, cmd } from './battle-orders.js';
 // preview itself — one path for an ordinary drag, one per source for a
 // concentrated one — is computed there too, by `updateDragPreview`.
 import { updateDragPreview, dragSourcesFor } from './battle-waypoints.js';
-// A camped force's position, read the same way every other consumer reads it:
+// A force's position, camped or marching, read as every consumer reads it:
 // squads store no coordinate, so `squadHexOf` derives one from the path and the
 // tick. Two copies of that derivation disagree about exactly which tick a
 // column appears on, which is a bug nobody can reproduce from a report.
 import { squadHexOf } from '../battle/movement.js';
-import { resolveDrag, campedAt } from './battle-drag.js';
+import { resolveDrag, ownSquadAt } from './battle-drag.js';
 
 export { cmd, filterList } from './battle-orders.js';
 export { createView } from './battle-view.js';
@@ -129,10 +129,10 @@ export function createBattleInput(o) {
     // at all: the farm would swallow the press and issue a SEND. Reasoned, not
     // observed — the smoke failure that prompted the look turned out to be a
     // flaky fixture, and the board had no site near the army at all.
-    const camped = campedAt(ord, getState(), w.x, w.y);
-    const onBuilding = camped ? board.siteAt(getState(), w.x, w.y, 1) : null;
-    if (camped && !onBuilding) {
-      view.dragFromSquad = camped.id;
+    const army = ownSquadAt(ord, getState(), w.x, w.y);
+    const onBuilding = army ? board.siteAt(getState(), w.x, w.y, 1) : null;
+    if (army && !onBuilding) {
+      view.dragFromSquad = army.id;
       view.dragTo = null;
       canvas.classList.add('is-dragging');
     } else if (hit && hit.owner === 'player') {
