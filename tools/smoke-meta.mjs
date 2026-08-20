@@ -223,4 +223,52 @@ async function runEndgame(page, h, step, note, OUT) {
   await h.hitPoint('.menu-record-close', 'the Record close button');
   step(`record: ${rec.groups} groups, ${rec.rows} rows, win rate ${rec.winRate}`);
   await page.screenshot(`${OUT}/07-record.png`);
+
+  // THE INSTALL ROW. Chrome only fires `beforeinstallprompt` over https with a
+  // registered worker, and the dev server is plain http on purpose (see
+  // index.html), so the event is dispatched by hand — which is the only way to
+  // exercise the real listener at all, and enough, because everything the step
+  // asserts happens downstream of it.
+  //
+  // Worth a step of its own rather than a unit test: the first version of this
+  // row was an arrow function declared AFTER `createMainMenuScene`'s `return`,
+  // so it sat permanently in its own temporal dead zone and `renderActions`
+  // threw on it — taking the Abdicate button below it down too, in a menu that
+  // otherwise looked entirely healthy. Every unit test passed. Only a live
+  // browser found it.
+  const before = await page.eval(() => !!document.querySelector('.menu-install'));
+  if (before) throw new Error('the install row was offered with no prompt to give');
+  await page.eval(() => {
+    const ev = new Event('beforeinstallprompt');
+    ev.preventDefault = () => { window.__installPrevented = true; };
+    ev.prompt = () => { window.__installPrompted = true; return Promise.resolve(); };
+    ev.userChoice = Promise.resolve({ outcome: 'accepted' });
+    window.dispatchEvent(ev);
+  });
+  await page.sleep(200);
+  const inst = await page.eval(() => {
+    const el = document.querySelector('.menu-install');
+    return {
+      shown: !!el,
+      prevented: !!window.__installPrevented,
+      abdicate: !!document.querySelector('.menu-abdicate'),
+    };
+  });
+  if (!inst.shown) throw new Error('the install row did not appear after beforeinstallprompt');
+  if (!inst.prevented) throw new Error('the browser mini-infobar was not suppressed');
+  // The tell that caught the dead-zone bug: the row below it vanished too.
+  if (!inst.abdicate) throw new Error('rendering the install row destroyed the rest of the menu');
+  await h.click('.btn.menu-install', 'the Install button');
+  await page.sleep(300);
+  const after = await page.eval(() => ({
+    prompted: !!window.__installPrompted,
+    gone: !document.querySelector('.menu-install'),
+    abdicate: !!document.querySelector('.menu-abdicate'),
+  }));
+  if (!after.prompted) throw new Error('pressing Install never reached the browser prompt');
+  // The event is spent either way, so a row still on screen is a button that
+  // throws `prompt() called twice` the next time it is pressed.
+  if (!after.gone) throw new Error('the install row survived a spent prompt');
+  if (!after.abdicate) throw new Error('retiring the install row destroyed the rest of the menu');
+  step('install: absent unprompted, offered on the event, prompts and retires');
 }

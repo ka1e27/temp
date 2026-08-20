@@ -11,6 +11,12 @@ import { tickOrCatchUp as tickIdle } from './meta/idle.js';
 import { loadBattle } from './meta/resume.js';
 import { createScreens } from './screens/index.js';
 import { qs } from './ui/dom.js';
+import { watchInstall } from './ui/install.js';
+
+// BEFORE anything else that can await. `beforeinstallprompt` fires once, early,
+// and is not replayable — a listener installed when the main menu mounts is a
+// listener that has already missed it. See ui/install.js.
+watchInstall(window);
 
 const bus = createBus();
 const storage = createStorageAdapter(window.localStorage);

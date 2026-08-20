@@ -24,80 +24,18 @@ import { renderRecord } from './mainmenu-record.js';
 import { renderRefusal } from './mainmenu-recovery.js';
 import { renderExport, renderImport } from './mainmenu-io.js';
 import { canAbdicate, legacyPoints } from '../meta/legacy.js';
-import { createMeta, markDirty, metaOf } from '../core/store.js';
-import { clearBattle } from '../meta/resume.js';
-import { incomePerSec, recalcIncome } from '../meta/idle.js';
-import { REGION_IDS, regionsConquered, refreshUnlocks, isAttackable } from '../meta/world.js';
-import { defaultSelection } from '../meta/boosters.js';
+import { createMeta } from '../core/store.js';
+import { incomePerSec } from '../meta/idle.js';
+import { REGION_IDS, regionsConquered } from '../meta/world.js';
+import { isFreshCampaign, launchFirstRegion, adoptCampaign } from './mainmenu-boot.js';
 
-/** A campaign nobody has touched: nothing fought, held, bought or banked. */
-export function isFreshCampaign(x) {
-  const meta = metaOf(x);
-  if (!meta?.regions) return true;
-  if ((meta.stats?.battles ?? 0) > 0) return false;
-  if (regionsConquered(meta) > 0) return false;
-  if (Object.keys(meta.upgrades ?? {}).length > 0) return false;
-  if (Object.values(meta.boosters ?? {}).some((n) => n > 0)) return false;
-  return !((meta.crowns ?? 0) > 0);
-}
-
-/** 'new-game' skips the menu entirely; 'menu' has something to continue. */
-export const bootRoute = (x) => (isFreshCampaign(x) ? 'new-game' : 'menu');
-
-/** The first region you are allowed to attack — Riverfen on a clean save. */
-export function firstRegionId(x) {
-  const meta = metaOf(x);
-  return REGION_IDS.find((id) => isAttackable(meta, id)) ?? REGION_IDS[0];
-}
-
-/** Straight into region 1: no menu, no world map, no loadout. */
-export function launchFirstRegion(ctx) {
-  const meta = ctx.state.meta;
-  ctx.scenes.replace(ctx.screens.battle, {
-    regionId: firstRegionId(meta),
-    boosters: defaultSelection(meta),
-  });
-}
-
-/**
- * Graft a loaded/blank meta onto the LIVE root. Everything main.js holds a
- * reference to (`state`, `state.session`) survives; only the persisted slice
- * is replaced, then the derived fields are healed.
- */
-export function adoptCampaign(ctx, next, now) {
-  const state = ctx.state;
-  // PREFERENCES OUTLIVE THE CAMPAIGN. `meta` is replaced wholesale here — by a
-  // new campaign or an imported save — and settings ride inside it, so without
-  // this a player who wanted their rally hold-back at zero would have to say so
-  // again after every reset, and importing a friend's save would silently adopt
-  // their pace too. They are the player's, not the save's.
-  const keptSettings = state.meta?.settings;
-  state.saveVersion = next.saveVersion ?? state.saveVersion;
-  state.seed = next.seed ?? state.seed;
-  state.createdAt = next.createdAt ?? now;
-  state.lastSeenAt = now;
-  state.meta = next.meta;
-  if (keptSettings) state.meta.settings = keptSettings;
-  state.battle = null;
-  // AND THE ONE ON DISK, TOO. Clearing `state.battle` only drops the battle this
-  // session was holding; the resume blob lives in its own storage key and would
-  // survive to the next reload, where `loadBattle` runs before any screen does.
-  // The reasoning is ./mainmenu-legacy.js's, verbatim, and it applies to every
-  // campaign swap and not just to abdication: a mid-battle blob outlives the
-  // empire it belongs to, its config names a region this save no longer holds,
-  // and meta/resume.js validates the CONTRACT rather than the campaign — so it
-  // would happily drop the player back into a battle for ground that is not
-  // theirs. New Campaign, Import Save and a backup restore are all exactly that
-  // swap. Optional, like the autosaver hook below: `ctx.storage` is only present
-  // once main.js has handed it over, and `clearBattle` tolerates its absence.
-  clearBattle(ctx.storage);
-  refreshUnlocks(state.meta, ctx.bus);
-  recalcIncome(state.meta, ctx.bus);
-  markDirty(state);
-  // Optional hooks: present only once main.js hands them to ctx.
-  ctx.autosaver?.flush?.(state, now);
-  return state;
-}
+// Re-exported so worldmap.js and four tests keep importing them from here. Safe
+// in this direction only: mainmenu-boot.js imports nothing back, so there is no
+// cycle and no temporal dead zone.
+export {
+  isFreshCampaign, bootRoute, firstRegionId, launchFirstRegion, adoptCampaign,
+} from './mainmenu-boot.js';
+import { installOffer, promptInstall, onInstallChange } from '../ui/install.js';
 
 export function createMainMenuScene(ctx) {
   let root = null;
@@ -178,6 +116,12 @@ export function createMainMenuScene(ctx) {
         });
       }
 
+      // The offer can arrive AFTER the menu is on screen — `beforeinstallprompt`
+      // is fired by the browser on its own schedule — so the row is subscribed
+      // rather than rendered once. It also has to retire itself the moment the
+      // prompt is spent, or the button throws on a second press.
+      const offInstall = onInstallChange(() => { if (actions) renderActions(); });
+
       const onKey = (e) => {
         if (e.key === 'Escape' && overlay) { e.preventDefault(); close(); }
       };
@@ -185,6 +129,7 @@ export function createMainMenuScene(ctx) {
       timer = setInterval(() => stats.update(), 1000);
 
       return [
+        offInstall,
         () => clearInterval(timer),
         () => document.removeEventListener('keydown', onKey),
         () => root?.remove(),
@@ -241,6 +186,19 @@ export function createMainMenuScene(ctx) {
 
   // --- actions -------------------------------------------------------------
 
+  // A FUNCTION DECLARATION, NOT A CONST, and that is load-bearing: everything
+  // below here sits after `return {...}`, so a `const` is never initialized and
+  // every call sees it in its own temporal dead zone. Written as an arrow first,
+  // and `renderActions` threw on the install row — taking the Abdicate button
+  // that follows it down too, silently, in a menu that otherwise looked fine.
+  // Only a live browser found it.
+  //
+  // Re-renders either way: accepted retires the row for good, dismissed retires
+  // it too, because the event is spent and cannot be prompted twice.
+  function doInstall() {
+    promptInstall().then(() => { if (actions) renderActions(); });
+  }
+
   function renderActions() {
     clear(actions);
     clear(drawer);
@@ -274,6 +232,18 @@ export function createMainMenuScene(ctx) {
     // `ENDGAME.abdicateLocked` had no reader anywhere. The drawer still handles
     // the locked case independently, because a menu left open across a battle
     // is a stale menu.
+    // INSTALL. Offered only when the browser has actually handed over a prompt,
+    // which is the one thing that distinguishes "installable here" from "the
+    // manifest exists". Absent rather than disabled: unlike abdication, there is
+    // nothing to teach a player who cannot act on it — the game is already
+    // running, and on a browser with no prompt to give there is no route to
+    // explain. See ui/install.js.
+    const inst = installOffer();
+    if (inst.shown) {
+      mount(actions, h('button.btn.ghost.menu-install', {
+        type: 'button', text: inst.label, title: inst.hint, on: { click: doInstall },
+      }));
+    }
     mount(actions, endgameEntry({
       cls: 'menu-abdicate', text: ENDGAME.abdicateTitle,
       open: canAbdicate(meta()), why: ENDGAME.abdicateLocked,
