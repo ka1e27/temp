@@ -720,16 +720,24 @@ that a balance number taken off a dirty tree is somebody else's in-flight probe.
       one caller in the whole tree (a test fixture) until this session's own camped-drag
       pass.
 
-- [ ] **`ATTRITION` changes real numbers with no on-screen cause.** The anti-turtle
-      ladder in `battle/sim.js attritionPhase` applies income, regen, garrison-bleed and
-      training penalties after 150/210/270s without a capture anywhere on the board.
-      Verified: the only mention of it outside `battle/` and `content/` is a COMMENT in
-      `screens/battle-econ.js` explaining that the HUD reads `factionGoldPerSec()` so the
-      ladder is *included* in the number — which is right, and is not the same as telling
-      anyone. Nothing names it, and `tools/` never reacts to it either, so the harness is
-      not measuring it any more than the player is seeing it. Either surface it or delete
-      it; an invisible penalty that fires four and a half minutes into a stall reads as
-      the game breaking.
+- [x] ~~**`ATTRITION` changes real numbers with no on-screen cause.**~~ **DONE —
+      surfaced, not deleted.** The finding held with one correction: the only mention
+      outside `battle/` and `content/` was a COMMENT in `battle-econ.js` (the critic said
+      zero), and that comment is right about the HUD including the ladder in its income
+      figure — which is not the same as telling anyone. `EVENTS.ATTRITION_STAGE` had been
+      pushed since the phase was written and had never had a consumer.
+
+      `RESULTS.attrition` is one line per rung, each naming what THAT rung does rather
+      than warning in the abstract, and each saying it applies to both sides — which is
+      what makes pressing the answer and waiting not. Stage 0 is silence on purpose: the
+      ladder retiring means ground just changed hands, and "the country has recovered" is
+      a message nobody needs while they are busy taking the thing that recovered it.
+      Confirmed live at 4x with nobody giving orders: rung 1 at 259s, rung 2 at 323s,
+      correct text, danger tone.
+
+      **The harness half of the finding is still open** and is the more interesting one:
+      `tools/` never reacts to attrition either, so the bot plays through a ladder it
+      cannot see any more than the player could.
 
 - [ ] **The bot never builds a defensive structure, and `TRAIN` never reads the enemy.**
       Both confirmed still true in current code. `constructTurn` is a binary

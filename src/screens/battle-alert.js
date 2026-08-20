@@ -11,6 +11,7 @@
 // the board does.
 import { h, bindText, bindClass } from '../ui/dom.js';
 import { spaceCase } from '../ui/format.js';
+import { RESULTS } from '../content/strings.js';
 import { rejectionText } from './battle-upgrade.js';
 import { siteOf } from './battle-preview.js';
 
@@ -325,6 +326,26 @@ export function wireAlerts(o) {
       say(`UNDER SIEGE — ${kindOf(ev)}`, 'danger', ev.siteId);
     }
   }));
+  // THE ANTI-TURTLE LADDER, ANNOUNCED. `battle/sim.js attritionPhase` has cut
+  // farm income, wall repair, garrison size and training throughput after
+  // 150/210/270 seconds without a capture anywhere on the board for this
+  // feature's whole life, and the only mention of it outside `battle/` and
+  // `content/` was a COMMENT. So the numbers moved and nothing on screen said
+  // why — and the third rung (half income, no repair at all, double-price
+  // training) reads as the game breaking rather than as a rule.
+  //
+  // The event has existed since the phase was written and had no consumer. It
+  // is NOT fog-gated: attrition is a rule of the whole board rather than a
+  // positional claim, it names no site, and it applies to both sides.
+  //
+  // Stage 0 is silence, deliberately — the ladder RETIRES when ground changes
+  // hands, and "the country has recovered" is a message nobody needs while they
+  // are busy taking the thing that recovered it.
+  off(bus.on('battle:attrition-stage', (ev) => {
+    const line = RESULTS.attrition[(ev?.stage ?? 0) - 1];
+    if (line) alert.show(line, now(), 'danger');
+  }));
+
   // A FIGHT NOW HAS A MIDDLE, and nothing said so — see `fightAlert` above for
   // why this speaks for two outcomes out of the hundreds a battle fires.
   off(bus.on('battle:field-battle', (ev) => {
