@@ -2353,7 +2353,13 @@ depth   dial   mutators        win%   win-med
     1   4.42   —                38%    14.6m
     2   4.48   —                31%    11.3m
     3   4.54   Sealed Throne    25%    26.8m
+    4   4.60   Entrenched       13%    11.5m
+    5   4.66   War Host         19%    17.5m
 ```
+
+`simladder.js`'s own summary line reads **"coin-flip at depth 1, wall at depth > 5"** —
+its two design facts are that a player should clear the opening rungs and should
+eventually be stopped, and on this table both happen at once, on rung one.
 
 Depth 1 is a 38% fight where the table above says 96%. **A rung overrides `enemyMult`
 (the plan) and `develop` (only when a mutator asks) and inherits EVERYTHING ELSE from
