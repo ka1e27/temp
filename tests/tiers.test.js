@@ -39,10 +39,14 @@ test('every tier-indexed table has a row for every tier', () => {
 });
 
 test('...including the one that lives outside src/', () => {
-  // `WIN_BAND` is the harness's verdict gate, and it is not importable from
-  // here without dragging a CLI into the build — so it is read as SOURCE, which
-  // is ugly and is still worth it, because it is exactly the row a tier author
-  // forgets and the only one nothing else would check.
+  // `WIN_BAND` is the harness's verdict gate. It used to be read as SOURCE out of
+  // `tools/simrunner.js`, because that file RUNS ITS CLI ON IMPORT and so cannot
+  // be imported for a constant — and this test is how the move was caught: the
+  // band now lives in `tools/winband.js`, which is importable, so the grep found
+  // nothing and said so rather than passing on an empty match. The path is still
+  // read as source rather than imported, for the one reason that matters here:
+  // a grep fails LOUDLY when the table moves again, and an import would quietly
+  // follow it and stop asserting the table is where a tier author will look.
   //
   // `MAX_OPENING_RATIO` was on this list while drafting and is NOT a tier table
   // any more: the beachhead pass split it into a floor and a ceiling and
@@ -63,8 +67,8 @@ test('...including the one that lives outside src/', () => {
     // A trailing comma at depth 0 over-counts by one.
     return /,\s*$/.test(m[1].trim()) ? n - 1 : n;
   };
-  assert.equal(count('tools/simrunner.js', 'WIN_BAND'), TIER_COUNT,
-    'tools/simrunner.js WIN_BAND is short a tier');
+  assert.equal(count('tools/winband.js', 'WIN_BAND'), TIER_COUNT,
+    'tools/winband.js WIN_BAND is short a tier');
 });
 
 test('every shipped region names a tier the tables cover', () => {

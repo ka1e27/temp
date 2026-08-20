@@ -18,7 +18,8 @@
 // instead of rebuilding it. `--wall` opts in.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { constructTurn, buildHexes } from '../tools/simbuild.js';
+import { constructTurn, buildHexes, cannotSpendIt, RICH_SEC } from '../tools/simbuild.js';
+import { factionTrainCostPerSec } from '../src/battle/training.js';
 import { CENTIGOLD } from '../src/content/balance.js';
 import { createBattleState } from '../src/battle/state.js';
 import { makeMods, CONTRACT_VERSION } from '../src/battle/contract.js';
@@ -37,7 +38,22 @@ let n = 0;
  * `factionTrainCostPerSec`, and a hand-built object thin enough to look
  * sufficient throws inside one of them.
  */
-function board({ threat = false, walls = 0, yards = 3, gold = 4000 } = {}) {
+/**
+ * `rich` is what this fixture used to be by ACCIDENT, and the accident is worth
+ * recording: it hardcoded 4,000 gold, and when `--richyards` was flipped on by
+ * default (`cannotSpendIt` — past `RICH_SEC` seconds of the empire's own
+ * training bill, build a YARD however many you already hold) that number turned
+ * out to be well over the threshold. Seven of these eight tests went red at
+ * once, all of them reading `trainingGround` where they expected a farm or a
+ * wall, because the fixture had been quietly asserting against the OTHER build
+ * rule the whole time.
+ *
+ * So the treasury is now derived from the sim's own bill rather than picked,
+ * and which side of the line it sits is a named argument. Poor by default: the
+ * wall rule is what these tests are about, and it has to be measured with
+ * nothing else firing.
+ */
+function board({ threat = false, walls = 0, yards = 3, gold = null, rich = false } = {}) {
   const sites = [
     // Two ranks, so `rearOf` has a gradient to work with: the front site borders
     // the enemy and the rear one does not.
@@ -68,7 +84,13 @@ function board({ threat = false, walls = 0, yards = 3, gold = 4000 } = {}) {
     rules: { victory: 'capture-castle', hardCapMs: 600000, aiTier: 1 },
   });
   recomputeInfluence(state);
-  state.factions.player.goldCg = Math.round(gold * CENTIGOLD);
+  // Enough to afford the most expensive thing on the menu, and either side of
+  // the rich line by construction rather than by a number that happened to work.
+  const bill = factionTrainCostPerSec(state, 'player');
+  const line = bill * RICH_SEC;
+  state.factions.player.goldCg = Math.round(
+    (gold ?? (rich ? Math.max(4000, line * 2) : Math.max(700, line * 0.5))) * CENTIGOLD,
+  );
   // THE SIEGE GOES ON AFTER, and that is the documented gotcha rather than a
   // style choice: `createBattleState` rebuilds every site from a FIXED FIELD
   // LIST, so a `siege` set on the config's site list is silently dropped and the
@@ -180,4 +202,31 @@ test('the wall goes BEHIND THE THREAT, not toward the throne', () => {
   assert.ok(dist(wall.hex, [6, 2]) <= dist(farm.hex, [6, 2]),
     `the wall landed ${dist(wall.hex, [6, 2])} hexes from the site under siege and the `
     + `farm ${dist(farm.hex, [6, 2])} — the wall must be the one that is closer`);
+});
+
+// THE ENTANGLEMENT THAT MADE SEVEN OF THESE GO RED AT ONCE, stated as a rule
+// rather than left as a property of a hardcoded number.
+//
+// `--richyards` (rule 4) and the wall rule (rule 5) both answer "what kind", and
+// this fixture's treasury decides which one gets asked. When the flag was
+// flipped on by default the fixture's 4,000 gold turned out to be over the rich
+// line, so every assertion here silently started measuring the other rule. The
+// treasury is derived now — these two pin the derivation.
+test('a POOR quiet board builds a farm; a RICH one builds a yard', () => {
+  assert.equal(cannotSpendIt(board({ threat: false })), false,
+    'the default fixture must be poor, or every test above measures rule 4');
+  assert.equal(builds(board({ threat: false })).kind, 'farm');
+
+  const flush = board({ threat: false, rich: true });
+  assert.equal(cannotSpendIt(flush), true, 'premise: this one is over the line');
+  assert.equal(builds(flush).kind, 'trainingGround',
+    'past RICH_SEC of its own training bill the bot buys production, not farmland');
+});
+
+test('...and rule 4 outranks the wall even under pressure', () => {
+  // Which way round they resolve is a real decision and is worth a test of its
+  // own: a bot sitting on hours of unspendable gold has a conversion problem
+  // before it has a defence problem, and that was the +29 to +46 measurement.
+  const flush = board({ threat: true, rich: true });
+  assert.equal(builds(flush, { walls: true }).kind, 'trainingGround');
 });
