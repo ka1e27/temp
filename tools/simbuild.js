@@ -8,12 +8,11 @@
 import { goldOf } from '../src/battle/economy.js';
 import { factionTrainCostPerSec } from '../src/battle/training.js';
 import {
-  SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS, VISION_RADIUS,
+  SITE_UPGRADE, CENTIGOLD, SITES, BUILD_COSTS,
 } from '../src/content/balance.js';
 import { distance as hexDistance } from '../src/core/hex.js';
 import { buildBlocker } from '../src/battle/commands.js';
 import { gridHexes } from '../src/battle/mapgen.js';
-import { canSee } from '../src/battle/vision.js';
 
 /**
  * Candidate hexes for a build, cached per battle.
@@ -205,6 +204,69 @@ export const cannotSpendIt = (state) => {
   return bill <= 0 ? gold > RESERVE_FLOOR : gold > bill * RICH_SEC;   // no bill: purest case
 };
 
+/**
+ * RULE 5: UNDER PRESSURE YOU BUILD A WALL, NOT A FARM — BUILT, MEASURED, AND
+ * REFUTED. It ships OFF (`--wall` opts in) and the code stays so the delta is
+ * re-takeable rather than remembered.
+ *
+ * Rule 1 says the bot never builds a stronghold, on the argument that levelling
+ * ground you already hold is cheaper per point of defence than raising one from
+ * nothing. That was an assertion; this is what happened when it was tested.
+ * Measured on obsidian, a run the bot LOST: seven farms raised and seven razed
+ * while its army collapsed, which reads exactly like a player who should have
+ * put up a wall. So the rule was written and measured, n=16, matched seeds:
+ *
+ *     region        --wall off   on     delta
+ *     gallowmoor        50%      25%     -25
+ *     thanescar         25%      13%     -12
+ *
+ * **AND THE MECHANISM IS THE INTERESTING PART, because it is not "walls are
+ * bad".** Instrumented over a whole gallowmoor battle: `underPressure` is true
+ * on **57% of thinks** (654 of 1,140). It is not an emergency signal, it is the
+ * NORMAL STATE of a mid-campaign battle — CLAUDE.md's own census records the
+ * enemy launching ~106 columns a minute and about one field battle a second, so
+ * "something of mine is being attacked right now" is nearly always true.
+ *
+ * The rule does not spam walls — `WANT_WALLS` caps it, and the same battle
+ * issued 2 strongholds against 56 farms. What it does is spend the OPENING on
+ * them: pressure arrives early, a stronghold is 500g/50s against a farm's
+ * 200g/25s, and `constructTurn` builds one thing at a time. So the first two
+ * builds of the battle cost 2.5x the gold and 2x the slot time and produce
+ * nothing, in the window where construction compounds hardest. That is the
+ * whole -18 average, from two buildings.
+ *
+ * WHAT WOULD MAKE IT CORRECT, if anyone tries again: a signal that separates
+ * "being poked" from "being overrun". The observation that motivated this rule
+ * was a bot that was LOSING, and losing needs a memory of ground lost that the
+ * harness does not keep. Do not re-spend the version below.
+ *
+ * PRESSURE HERE IS "SOMETHING OF MINE IS BEING ATTACKED RIGHT NOW": a siege on
+ * my ground, a melee at one of my sites, or an enemy column inbound to one.
+ *
+ * A CAMPED enemy column is deliberately NOT pressure. It is exactly the
+ * "parked next door and threatening nothing" case `aihome.js encroachment`
+ * exists to catch for the AI, and reading it as an attack here would make the
+ * rule fire on ground nobody has moved against — a wall raised at 1 HP against
+ * a force that never comes is worse than the farm it replaced.
+ */
+const underPressure = (state) => {
+  for (const s of state.sites) {
+    if (s.owner !== 'player') continue;
+    if (s.siege?.owner === 'enemy' || s.melee) return true;
+  }
+  for (const sq of state.squads) {
+    if (sq.owner !== 'enemy' || sq.camped || !sq.to) continue;
+    const target = state.sites.find((s) => s.id === sq.to);
+    if (target?.owner === 'player') return true;
+  }
+  return false;
+};
+
+/** How many walls an ordinary player raises before deciding the answer is
+ *  troops rather than masonry. Two, because a third is a builder's answer to a
+ *  problem that is plainly not being solved by building. */
+const WANT_WALLS = 2;
+
 export function constructTurn(state, front, hexes, opts = {}) {
   if (state.sites.some((s) => s.owner === 'player'
     && (s.buildTicksLeft > 0 || s.upgradeTicksLeft > 0))) return;
@@ -216,7 +278,13 @@ export function constructTurn(state, front, hexes, opts = {}) {
   // the re-tune is mid-search. The flag is what keeps the delta re-takeable.
   const wantYard = yards < WANT_YARDS
     || (opts.richYards === true && cannotSpendIt(state));
-  const kind = wantYard ? 'trainingGround' : 'farm';
+  // RULE 5, OPT-IN AND OFF BY DEFAULT — measured at -25 and -12 points, see the
+  // docblock above for the mechanism. It outranks the farm but NOT the yard: a
+  // bot with no way to make troops has a worse problem than a bot being shot at.
+  const walls = mine.filter((s) => s.kind === 'stronghold').length;
+  const wantWall = !wantYard && opts.walls === true
+    && walls < WANT_WALLS && underPressure(state);
+  const kind = wantWall ? 'stronghold' : wantYard ? 'trainingGround' : 'farm';
   const spec = BUILD_COSTS[kind];
 
   const gold = goldOf(state.factions.player) / CENTIGOLD;
@@ -238,7 +306,12 @@ export function constructTurn(state, front, hexes, opts = {}) {
     // safety the hex actually inherits.
     const anchor = nearestMine(mine, h);
     if (!anchor || !isRear(anchor.id)) continue;
-    const score = nearestAdvance(state, h);
+    // A FARM GROWS TOWARD THE WAR AND A WALL STANDS BEHIND THE THREAT, which is
+    // rule 4 and rule 5 wanting opposite things from the same scan. Scoring a
+    // wall by distance to the throne would put it at the far end of the country
+    // from whatever is being attacked — legal, useless, and exactly the shape of
+    // "it built something while it was losing" this rule exists to fix.
+    const score = wantWall ? nearestThreat(state, h) : nearestAdvance(state, h);
     if (score < bestScore) { bestScore = score; best = h; }
   }
   if (best) state.commands.push({ t: 'BUILD', kind, hex: [best.q, best.r] });
@@ -257,142 +330,28 @@ function nearestMine(mine, h) {
   return best;
 }
 
+/**
+ * Hexes from this hex to the nearest site of mine that is actually under
+ * attack — rule 5's "behind the threat". Falls back to the throne so a wall
+ * always has somewhere to go if the pressure lifts between the kind choice and
+ * the scan; `Infinity` there would refuse every hex and silently build nothing.
+ */
+function nearestThreat(state, h) {
+  let best = Infinity;
+  for (const s of state.sites) {
+    if (s.owner !== 'player' || !(s.siege?.owner === 'enemy' || s.melee)) continue;
+    const d = hexDist(s, h);
+    if (d < best) best = d;
+  }
+  return Number.isFinite(best) ? best : nearestAdvance(state, h);
+}
+
 /** Hexes from this hex to the enemy throne — rule 4's "toward the war". */
 function nearestAdvance(state, h) {
   const goal = state.sites.find((s) => s.kind === 'castle' && s.owner !== 'player');
   return goal ? hexDistance({ q: goal.hex[0], r: goal.hex[1] }, h) : 0;
 }
 
-/**
- * SIGHT OF THE OBJECTIVE, WHEN THE BOT HAS NONE OF ITS OWN.
- *
- * CLAUDE.md's most-repeated lesson, applied to fog: a mechanic the harness
- * cannot play is a mechanic nobody has measured. `beliefFor` can hand the bot
- * an accurate throne OWNER now (belief.js), but everything else about that
- * castle — garrison, level, hp — stays a presumption for as long as nothing
- * of the player's ever sees it, and a presumption is not a plan. The
- * watchtower is the game's own answer to "I cannot see the throne and need
- * to" — `BUILD_COSTS` prices it as the cheapest thing on the menu FOR this
- * reason ("an ordinary player has to be able to afford it on a whim rather
- * than save for it") — so this is that whim, scripted.
- *
- * THE RULE IS THE SMALLEST ONE THAT IS STILL HONEST PLAY: no vision of the
- * castle, nothing already being built or upgraded (the same one-at-a-time
- * convention `upgradeTurn`/`constructTurn` already keep), afford 120 gold
- * outright, raise a tower at the legal hex nearest the castle that would
- * actually reveal it. Nothing more elaborate, and nothing that nudges any
- * other decision this file makes — a real player who cannot see the throne
- * reaches for the cheapest fix, not a scouting doctrine.
- *
- * DOES NOT SHARE `upgradeTurn`'s reserve, ON PURPOSE. 120 gold is a rounding
- * error against a battle treasury (300 starting, 10-80/s), so gating this
- * behind the same `RESERVE_SEC`-scaled reserve the upgrade ladder protects
- * would make the one thing that answers fog compete for budget with a
- * mechanic that has nothing to do with it. "Can afford it outright" is the
- * whole gate, and it is why this is checked ahead of `upgradeTurn` below
- * rather than after: seeing the win condition is not one more spending
- * decision to queue behind the ladder.
- *
- * CHECKED AGAINST CURRENT VISION ONLY (`canSee`), not `state.seen`'s
- * last-known memory — a stale sighting answers "have I ever", and the
- * question this function exists to ask is "can I RIGHT NOW".
- *
- * PICKS THE SAFEST LEGAL HEX, NOT THE NEAREST ONE — and conflating those two
- * was a real, measured bug, not a style choice. `VISION_RADIUS.watchtower` is
- * a flat 4; any legal hex inside it sees the castle exactly as well as any
- * other, so "nearest to the castle" bought nothing and cost everything: on a
- * region where the enemy's remaining holdouts ring their own throne (mapgen's
- * `holdBandFrac`), the nearest legal hex is reliably the most exposed one on
- * the board. `construct.js` prices that fragility on purpose — 1 HP, no
- * regen, `razedByCapture` — for a farm behind the line that is a real risk; at
- * the front it is a certainty. Measured on nightharrow: the same hex razed
- * and rebuilt every 20-60 ticks for a THOUSAND-PLUS TICKS STRAIGHT, never
- * once surviving its own 150-tick build timer, `canSee` never once true. Zero
- * of those builds is a `site-built` event — the scaffolding never survives
- * long enough to fire it — so `--noscout`'s own guard test could not have
- * caught this: it counts completions, and there were none to miscount either
- * way. Maximise distance from the nearest non-player site instead, among the
- * hexes already legal and in range — the same notion of exposure
- * `frontDistance` uses elsewhere in this file, aimed at a hex instead of a
- * site because nothing is owned yet.
- */
-function distToNearestFoe(state, h) {
-  let best = Infinity;
-  for (const s of state.sites) {
-    if (s.owner === 'player') continue;
-    const d = hexDistance({ q: s.hex[0], r: s.hex[1] }, h);
-    if (d < best) best = d;
-  }
-  return best;
-}
-
-// On the map this measured against, the SAFEST legal hex was still reachable
-// by the enemy's own nearby holdings inside the 15-second build window — the
-// razing recurred every 20-90 ticks regardless of which of the five-to-seven
-// candidates got picked, because a fresh scaffold has 1 HP and no garrison of
-// its own (see the file header) and nothing short of vision-of-the-approach
-// (the very thing missing) can tell a genuinely quiet hex from a contested
-// one in advance. So this cannot be fixed by choosing better; it can only be
-// fixed by not repeating a purchase the last attempt already answered — an
-// ordinary player who watches a scout post fall does not rebuild it two
-// seconds later, at the same spot, forever.
-//
-// TWO SEPARATE THROTTLES were tried and only one survived measurement.
-// Reusing `upgradeTurn`/`constructTurn`'s shared "anything in flight" gate
-// starves this on exactly the boards where it matters most: a mature,
-// thirty-plus-site empire has SOMETHING mid-upgrade almost continuously, so
-// the shared gate was closed on 4 of 6 sampled thinks even mid-battle, before
-// a single razing had happened. A per-tick modulo window measured worse
-// still — closed by that same shared gate often enough that the eligible
-// window could be missed for the length of a whole battle. Neither belongs
-// here: they answer "is the CONSTRUCTION LADDER busy", and a burned scout
-// post has nothing to do with a farm upgrading three sites away.
-//
-// So the cooldown is scoped to watchtowers alone (never blocked by an
-// unrelated upgrade) and timed from the harness's OWN last attempt, not from
-// the tick clock. `lastScoutAttempt` is a WeakMap keyed by `state.grid` —
-// the SAME key `HEX_CACHE` above uses, and for the same reason spelled out
-// there: `state` here is `beliefFor`'s OUTPUT, a fresh object built new on
-// every single think, so keying on it directly would never see its own
-// previous entry — every think would find the map empty and the cooldown
-// would silently do nothing (measured: this was the actual first cut, and it
-// did not throttle a single retry). `grid` is the one sub-object `beliefFor`
-// passes through BY REFERENCE rather than rebuilding, so it is the same
-// object every time for one battle and a different one for the next. This
-// is the harness DRIVER's own scratch memory, never part of a save file or a
-// resumed battle (only `state.ai` is, because only the enemy's memory has to
-// survive one), so it needs no JSON shape and cannot desynchronise a
-// replay — the same seed reaches the same tick with the same board and
-// makes the same decision every time, which is all determinism ever
-// required.
-const lastScoutAttempt = new WeakMap();
-const SCOUT_RETRY_TICKS = 300; // roughly a real player's "try again later"
-
-const watchtowerBuilding = (state) => state.sites
-  .some((s) => s.owner === 'player' && s.kind === 'watchtower' && s.buildTicksLeft > 0);
-
-export function scoutTurn(state, hexes) {
-  if (watchtowerBuilding(state)) return;
-  if (state.tick - (lastScoutAttempt.get(state.grid) ?? -Infinity) < SCOUT_RETRY_TICKS) return;
-
-  const castle = state.sites.find((s) => s.kind === 'castle');
-  if (!castle) return;
-  const at = { q: castle.hex[0], r: castle.hex[1] };
-  if (canSee(state, 'player', at.q, at.r)) return; // already answered
-
-  const gold = goldOf(state.factions.player) / CENTIGOLD;
-  if (gold < BUILD_COSTS.watchtower.gold) return;
-
-  let best = null;
-  let bestSafety = -Infinity;
-  for (const h of hexes) {
-    if (hexDistance(h, at) > VISION_RADIUS.watchtower) continue; // must actually SEE it
-    if (buildBlocker(state, 'player', h)) continue;
-    const safety = distToNearestFoe(state, h);
-    if (safety > bestSafety) { bestSafety = safety; best = h; }
-  }
-  if (best) {
-    state.commands.push({ t: 'BUILD', kind: 'watchtower', hex: [best.q, best.r] });
-    lastScoutAttempt.set(state.grid, state.tick);
-  }
-}
+// The watchtower answer to fog lives in tools/simscout.js — see the note at the
+// top of that file. Re-exported so existing imports keep working.
+export { scoutTurn } from './simscout.js';

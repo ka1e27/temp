@@ -98,9 +98,32 @@ const checked = [...pureFiles, ...await reachedFromPure(pureFiles)];
   for (const file of checked) {
     const rel = file.slice(ROOT.length).replace(/\\/g, '/');
     const src = await readFile(file, 'utf8');
+    // BLOCK COMMENTS SPAN LINES, and for a long time this loop pretended they
+    // did not. It stripped `//` and a `/* */` pair that opened and closed on the
+    // same line, so the CONTINUATION lines of a `/** ... */` docblock were
+    // scanned as code — and this repo's files are mostly docblock. The rule the
+    // comment below states ("banned words are fine in prose explaining the
+    // rule") was therefore false for exactly the comments most likely to need
+    // them: a paragraph explaining why something must not touch `window` failed
+    // the gate for containing the word "window".
+    //
+    // Caught by that happening. It cost an accurate sentence, and the next one
+    // would have been reworded too, silently making the prose worse to satisfy a
+    // check that was not looking at code.
+    let inBlock = false;
     src.split('\n').forEach((line, i) => {
       // Skip comments — banned words are fine in prose explaining the rule.
-      const code = line.replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '');
+      let code = line;
+      if (inBlock) {
+        const end = code.indexOf('*/');
+        if (end === -1) return;
+        code = code.slice(end + 2);
+        inBlock = false;
+      }
+      code = code.replace(/\/\*[\s\S]*?\*\//g, '');
+      const open = code.indexOf('/*');
+      if (open !== -1) { inBlock = true; code = code.slice(0, open); }
+      code = code.replace(/\/\/.*$/, '');
       if (!code.trim()) return;
       for (const [re, label] of BANNED) {
         if (re.test(code)) {

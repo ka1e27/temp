@@ -147,6 +147,10 @@ for (const id of regionIds) {
   // `--relics=40` measures a player who has been paid for the ground they took
   // and spent it on troop lines — the one lever the harness cannot earn on its
   // own, and therefore the one the measured table says nothing about.
+  // `--wall` OPTS IN to the bot building a stronghold under pressure
+  // (simbuild.js rule 5). It ships off because it was MEASURED at -25 on
+  // gallowmoor and -12 on thanescar — the rule and its mechanism are written up
+  // at that function, and the code stays so the delta is re-takeable.
   // `--pool` OPTS IN to tools/simpool.js, and the opt-in direction is
   // deliberate — see that file's header. Massing measured as a wash with a
   // defect (its target scan is not throne-weighted, so it competes with
@@ -156,6 +160,7 @@ for (const id of regionIds) {
     upgrades: !args.noupgrades, construct: !args.noconstruct, scout: !args.noscout,
     reinforce: !args.noreinforce, microsend: !args.nomicrosend,
     throne: !args.nothrone, pool: !!args.pool, richYards: !!args.richyards,
+    walls: !!args.wall,
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
     sightedAi: SIGHTED.ai, sightedBot: SIGHTED.bot,
