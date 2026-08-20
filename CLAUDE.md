@@ -1260,6 +1260,21 @@ the defeat count is depressed. But the shape does not depend on either: riverfen
 inside its band at 79% and still reads 0 defeats against 5 timeouts, and thanescar at a
 punishing dial 5.20 reads 1 defeat in 32.
 
+**AND THE SECOND CAVEAT WAS TESTED RATHER THAN ASSUMED — the bot CAN be beaten, at
+roughly twice the shipped dial.** thanescar, n=32, same probe:
+
+```
+dial   4.60    19 win   13 timeout    0 loss     <- SHIPPED
+dial   5.20    14 win   17 timeout    1 loss
+dial   8.50     4 win   17 timeout   11 loss
+```
+
+So defeat is available; the campaign simply does not use it anywhere near where it is
+tuned. Between 4.60 and 5.20 — the whole plausible band for that row — the enemy kills
+the camp 0 to 1 time in 32, and it takes **8.50** before a third of attempts end in
+being beaten rather than timed out. That is the sharper version of the finding: this is
+a choice the dial makes, not a limit of the engine, and it is being made by accident.
+
 **What this changes is what a re-tune is FOR.** Moving a dial until a row reads 45%
 currently means "make 45% of attempts finish in time" — so the campaign's difficulty
 curve is a curve of battle DURATION wearing a difficulty curve's clothes, and that is
