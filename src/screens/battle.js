@@ -58,6 +58,18 @@ export function createBattleScene(ctx) {
           bus: ctx.bus,
           getState,
           getMeta: () => ctx.state.meta,
+          // POINT AT THE BUILDING THE LINE NAMES. A beat carries a KIND; the
+          // site is resolved here, off the live battle, so the sentence and the
+          // mark on the board cannot name different buildings — the same rule
+          // `battle-alert.js alarmSite` follows for the danger mark.
+          onBeat: (beat) => {
+            if (!view) return;
+            const kind = beat?.mark ?? null;
+            const site = kind
+              ? getState()?.sites.find((x) => x.owner === 'player' && x.kind === kind)
+              : null;
+            view.coachMark = site?.id ?? null;
+          },
         });
       })
       .catch(() => { /* no coach module yet — play on */ });

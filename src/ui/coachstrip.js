@@ -80,6 +80,10 @@ export function createCoach(o = {}) {
     el.dataset.beat = beat.id;
     el.classList.add('is-on');
     hideAt = t + (beat.hold ?? HOLD.normal);
+    // The board's half of the beat. Published rather than resolved here: this
+    // file knows about an element and a clock, and which building is "the
+    // player's camp" is a question about the live battle.
+    o.onBeat?.(beat);
   }
 
   function hide(t) {
@@ -94,6 +98,7 @@ export function createCoach(o = {}) {
     // 0.00016. The TEXT stays: it is mid-fade, and clearing it would blank the
     // line rather than fade it. Nothing in the stylesheet reads `data-beat`.
     delete el.dataset.beat;
+    o.onBeat?.(null);
     readyAt = t + GAP_MS;
   }
 

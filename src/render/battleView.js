@@ -25,6 +25,7 @@ import { siteHeadYAt } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
 import { drawBuildTargets } from './buildTargets.js';
 import { drawAlarm } from './alarm.js';
+import { drawCoachMark } from './coachmark.js';
 import {
   drawSquads, drawDragArc, drawBox, drawSquadRoutes,
 } from './routes.js';
@@ -355,6 +356,9 @@ export function createBattleView(opts) {
     // LAST, so the one site that needs attention is not drawn over by a
     // selection halo the player set several seconds ago.
     drawAlarm(ctx, view, byId, sitePos, _a, hexSize, p, px, pulse);
+    // ...and above everything, because it is an instruction rather than a state
+    // of the board: it floats clear of the site's own rings and brackets.
+    drawCoachMark(ctx, view, byId, sitePos, _a, hexSize, p, px, pulse);
   }
 
   /** A stack that is AT a site rather than marching to one — besieging it, or

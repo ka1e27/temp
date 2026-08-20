@@ -32,6 +32,15 @@ export const BEATS = Object.freeze([
     id: 'drag',
     text: COACH.drag,
     hold: HOLD.normal,
+    // ...AND POINT AT THE BUILDING THE SENTENCE NAMES. A KIND rather than a
+    // site id, because this table is pure data and has never seen a battle;
+    // `screens/battle.js` resolves "the player's camp" off the live state, the
+    // same way it resolves everything else the board needs. Measured by a
+    // first-session critic: they dragged from the FARM on their first attempt,
+    // going off the picture alone, because at 20-30px a camp and a training
+    // ground differ by a small pennant — and the camp is also the lose
+    // condition.
+    mark: 'camp',
     when: (s) => s.started,
     until: (s) => s.sentSquad,
   },

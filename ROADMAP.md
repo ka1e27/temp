@@ -827,11 +827,20 @@ is silently undone by a save-on-unload handler re-persisting the in-memory state
       correctly still asking for it, and a probe that does not check reports that as
       "the coach never advances". Mine did exactly that twice — once on an off-grid
       destination (`grid` is an OFFSET rectangle) and once on a swallowed gesture.
-- [ ] **Nothing marks which glyph is your camp.** The opening line is "Drag from your camp
-      across the map" and the three starting buildings are similar ~20-30px glyphs — camp
-      and training ground differ only by a small pennant. The critic dragged from the farm
-      on the first attempt going off the picture alone. The camp is named in the
-      objective AND is the lose condition; it should be findable without searching.
+- [x] ~~**Nothing marks which glyph is your camp.**~~ **DONE.** `render/coachmark.js`
+      floats a chevron over the building the coach line names, for as long as that line
+      is up. A beat carries a KIND (`mark: 'camp'`); `screens/battle.js` resolves the site
+      off the live battle, so the sentence and the mark cannot name different buildings —
+      the rule `battle-alert.js alarmSite` already follows for the danger mark.
+
+      **Two decisions a screenshot made, neither of which a test would have.** A wedge
+      rather than a ring or brackets: the board already draws four rings and `alarm.js`
+      has taken corner brackets to mean "in trouble", in the danger colour. And it is the
+      COACH's accent blue, not the player's green — the first cut used `owner.player` and
+      the camp is green, on green territory, under a green flood, so the mark was a shape
+      to hunt for. `RISE` came down 2.9 → 2.35 for the same reason: measured, the first
+      value put it 95-105 screen pixels above the glyph centre, about three times the
+      glyph's own height, reading as something floating nearby rather than a mark on it.
 - [ ] **"Away cap" — the number the entire idle pitch rests on — is explained nowhere.**
       No `title` anywhere up its DOM ancestor chain, while on the same screen the locked
       Incursions tab correctly explains itself on hover. The pattern exists and was not

@@ -101,6 +101,13 @@ export function createView(init = {}) {
      * whatever is currently in here.
      */
     alarms: {},
+    /**
+     * The site the tutorial is pointing at right now, or null — written by
+     * `screens/battle.js` from the beat currently on screen and drawn by
+     * `render/coachmark.js`. One id rather than a map, because exactly one
+     * coach line is ever up at a time (the strip never stacks beats).
+     */
+    coachMark: null,
     box: null,
     trainPickerFor: null,
     lastCommand: null,
