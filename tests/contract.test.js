@@ -124,6 +124,39 @@ test('rejects an unknown unit in the expedition', () => {
   })), /unknown unit "militai"/);
 });
 
+// A SITE'S GARRISON IS AN ARMY AND WAS VALIDATED LIKE A LABEL — the same hole
+// as `expedition` above, one field over, and it survived the pass that closed
+// that one. `battle/state.js` seeds a site as `{...emptyComp(), ...s.garrison}`,
+// so a bad value does not merge with the zero, it REPLACES it.
+//
+// The fixture is FROZEN, so these mutate the config it hands back rather than
+// growing it a second parameter.
+const withGarrison = (g) => {
+  const c = sampleBattleConfig();
+  if (g === undefined) delete c.sites[0].garrison;
+  else c.sites[0].garrison = g;
+  return c;
+};
+
+test('rejects a non-numeric garrison count on a site', () => {
+  assert.throws(() => assertBattleConfig(withGarrison({ militia: 'lots' })),
+    /garrison\.militia/);
+});
+
+test('rejects a negative, fractional or unknown garrison entry', () => {
+  for (const bad of [{ militia: -3 }, { militia: 1.5 }, { militai: 3 }]) {
+    assert.throws(() => assertBattleConfig(withGarrison(bad)), /garrison/,
+      `accepted ${JSON.stringify(bad)}`);
+  }
+});
+
+test('a well-formed garrison is still accepted, present or absent', () => {
+  // The negative control. A validator that refused every garrison would pass
+  // all three tests above and break every real config in the game.
+  assert.doesNotThrow(() => assertBattleConfig(withGarrison({ militia: 4, spearmen: 2 })));
+  assert.doesNotThrow(() => assertBattleConfig(withGarrison(undefined)));
+});
+
 test('rejects a hardCapMs that is not finite', () => {
   // `Infinity > 0` is true, so the one rule guaranteeing a battle ENDS was
   // satisfied by the value that means it never does.

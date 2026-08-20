@@ -16,7 +16,7 @@ import { SITE_KINDS as SITE_KIND_LIST } from '../content/balance.js';
 // budget — nothing else in this file needed to move, since neither was ever
 // exported (only `assertBattleConfig` called them).
 import {
-  checkMods, checkRivers, checkGrid, checkSiteLevel,
+  checkMods, checkRivers, checkGrid, checkSiteLevel, checkComposition,
 } from './checks.js';
 
 // v2: FactionMods gained `features` (shop unlocks that change battle or HUD
@@ -292,6 +292,13 @@ export function assertBattleConfig(c) {
       e.push(`sites[${s.id}].hex: [${s.hex}] is outside the ${c.grid?.cols}x${c.grid?.rows} grid`);
     }
     if (!(s.hp > 0) || !(s.hpMax > 0)) e.push(`sites[${s.id}]: hp and hpMax must be > 0`);
+    // A GARRISON IS AN ARMY AND WAS VALIDATED LIKE A LABEL. `expedition` was
+    // tightened once already and this is the same hole one field over:
+    // state.js seeds a site as `{...emptyComp(), ...(s.garrison ?? {})}`, so a
+    // hand-edited blob saying `{militia: 'lots'}` overwrites the zero with the
+    // STRING and every sum downstream concatenates or goes NaN. Optional,
+    // because most fixtures omit it — an absent garrison is an empty one.
+    if (s.garrison !== undefined) checkComposition(s.garrison, `sites[${s.id}].garrison`, e);
   }
 
   checkRivers(c, e);
