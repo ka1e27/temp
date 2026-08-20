@@ -86,10 +86,29 @@ which is the safe direction.
 
 1. **Do not size another dial move at n=24.** This is now demonstrated twice, and CLAUDE.md
    carries the demonstration. n≥96 for a tune, n=240 near a band edge.
-2. **Get a real slope first.** One row, three dial values spanning ~0.6, n≥48 each. Nobody
-   has had a slope number for this bot, which is why two sessions have thrashed. A
-   measurement of exactly this shape was in flight when this was written (thanescar at
-   4.60/4.90/5.20) — read it off the scratchpad or re-take it.
+2. ~~**Get a real slope first.**~~ **DONE, AND THERE IS NO SUCH NUMBER — the response is an
+   S-CURVE.** thanescar, n=48 a point, each point run twice from identical seeds with
+   byte-identical results:
+
+   ```
+   dial    4.60    4.90    5.20    6.80
+   win%     65%     65%     40%      6%
+   slope        0.00    0.83    0.21     pts per 0.01, per segment
+   ```
+
+   A flat shoulder, a cliff, then a long tail. **`enemyMult` moved +0.30 and thanescar did
+   not move at all**, and the next +0.30 was worth twenty-five points. So the recorded
+   "~1 pt/0.01 campaign-wide" is an average over twenty-four rows on twenty-four different
+   curves, locally wrong by more than 4×, and it is the real mechanism behind "six rows
+   moved the WRONG way" above — not only noise, but six rows on six different parts of six
+   different curves. Full write-up in CLAUDE.md under Tuning.
+
+   **The method that follows is BISECTION, not slope-scaling.** Bracket wide enough to
+   contain a real change (±0.6 on thanescar, not ±0.05), measure the midpoint, halve —
+   four or five n=48 points a row, every one a measurement. A row on its shoulder cannot
+   be tuned by a small step at ANY sample size, because no n rescues a derivative of zero.
+   This retires the standing "steps of ≤0.05 late and re-measure" advice for any row that
+   is sitting on a plateau.
 3. **Then re-size the corrections from that number and re-sweep at n≥96.**
 4. **IRONWOOD is knowingly out of band** at 96% against a 92% ceiling, and it is blocked
    rather than forgotten: near-immune to `enemyMult` in this range, its working lever is
