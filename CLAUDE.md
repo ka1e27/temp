@@ -1112,6 +1112,50 @@ five sweeps: riverfen and kaldan both run ~1.8 pts/0.01 (11×9 and 15×11), whil
 correction at tier 1. This supersedes the older per-region figures further down, which
 were taken before free movement.
 
+**⚠ AND THAT NUMBER IS AN AVERAGE OVER AN S-CURVE, WHICH IS WORSE THAN NOISE — IT IS
+LOCALLY WRONG BY MORE THAN 4×, AND USING IT TO SIZE A MOVE IS WHY TWO SESSIONS HAVE
+THRASHED.** Measured on ONE row over a deliberately wide range, n=48 a point, each
+point run twice from identical seeds with byte-identical results:
+
+```
+thanescar   dial    win%     local slope over the segment below it
+            4.60     65%
+                              0.00 pts/0.01     <- the SHOULDER
+            4.90     65%
+                              0.83 pts/0.01     <- the cliff
+            5.20     40%
+                              0.21 pts/0.01     <- the tail
+            6.80      6%
+```
+
+The response is a sigmoid, not a line: a flat shoulder at the top, a cliff, then a
+long flattening tail. `enemyMult` moved **+0.30 and thanescar did not move at all**,
+and then the next +0.30 was worth twenty-five points. Both of those are the same
+region, the same sample size, and the same afternoon.
+
+**THREE CONSEQUENCES, and the third is the one that costs sessions.**
+
+1. **A campaign-wide slope constant cannot size a per-row move.** The regions in a
+   sweep sit at different points on their own curves, so averaging them produces a
+   number that is right for nobody. This is the mechanism behind the already-recorded
+   "six rows moved the WRONG way, implied slopes +4.25 to −2.00" — that was not only
+   noise, it was six rows on six different parts of six different curves.
+2. **A row on its shoulder cannot be tuned by a small step, at any sample size.** No
+   n rescues a measurement of a derivative that is zero. Confirming a flat reading by
+   re-running it just buys the same flat reading.
+3. **So the method is BISECTION, not slope-scaling.** Bracket the row wide enough to
+   contain a real change (on thanescar that was ±0.6, not ±0.05), measure the
+   midpoint, halve. Four or five points at n=48 per row, and every one of them is a
+   measurement rather than an extrapolation. The standing "move it in steps of ≤0.05
+   late and re-measure" advice further down is what a shoulder makes useless: five
+   consecutive nudges inside a plateau read as five noisy zeroes and cost the same as
+   one honest bracket.
+
+**And the plateau HEIGHT is a fact about the region, not about the dial.** 65% is
+where thanescar stops improving however cheap the enemy gets, so whatever is capping
+it is not enemy strength — read the outcome signature before reaching for the dial at
+all.
+
 **AND THE DOMINANT LOADOUT CHANGED SHAPE ON THE SAME CHANGE.** `slowestSpeed` is a MIN
 over the stack, so the default spread marches at the pace of its rams, and doubling the
 march doubled that penalty in absolute seconds:
