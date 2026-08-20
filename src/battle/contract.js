@@ -10,13 +10,12 @@
 // ============================================================================
 // PURE.
 import { fnv1a, stableStringify } from '../core/hash.js';
-import { inGrid } from '../core/hex.js';
 import { SITE_KINDS as SITE_KIND_LIST } from '../content/balance.js';
 // The two field-level validators split out to ./checks.js for the line
 // budget — nothing else in this file needed to move, since neither was ever
 // exported (only `assertBattleConfig` called them).
 import {
-  checkMods, checkRivers, checkGrid, checkSiteLevel, checkComposition,
+  checkMods, checkRivers, checkGrid, checkSites,
 } from './checks.js';
 
 // v2: FactionMods gained `features` (shop unlocks that change battle or HUD
@@ -266,55 +265,9 @@ export function assertBattleConfig(c) {
   // and `inGrid` reads it without a guard — see ./checks.js `checkGrid`.
   const gridOk = checkGrid(c, e);
 
-  const sites = c.sites ?? [];
-  const ids = new Set();
-  if (sites.length < 2) e.push('sites: need at least 2');
-  for (const s of sites) {
-    if (ids.has(s.id)) e.push(`sites: duplicate id "${s.id}"`);
-    ids.add(s.id);
-    if (!SITE_KINDS.includes(s.kind)) e.push(`sites[${s.id}].kind: unknown "${s.kind}"`);
-    if (!FACTIONS.includes(s.owner)) e.push(`sites[${s.id}].owner: unknown "${s.owner}"`);
-    checkSiteLevel(s, e);
-    if (!Array.isArray(s.hex) || s.hex.length !== 2) {
-      e.push(`sites[${s.id}].hex: expected [q,r]`);
-    } else if (gridOk && !inGrid(c.grid, { q: s.hex[0], r: s.hex[1] })) {
-      // A SITE OFF THE MAP, which used to be survivable and is not any more.
-      //
-      // `grid` is an OFFSET rectangle — `axialFromOffset(col,row) = {q: col -
-      // floor(row/2), r: row}` — so a 9x9 grid holds no negative `r` at all and
-      // only a little negative `q`, and four hand-built fixtures in this repo
-      // sat outside their own. Every one passed: a send was legal on an
-      // AUTHORED EDGE and `travelTicks` fell back to raw hex distance when
-      // pathing failed, so an off-map site behaved like any other. Free
-      // movement has no edges to lie with. There is no path to a hex that is
-      // not on the board, so the site is simply unreachable forever, and the
-      // failure surfaces as a region that cannot be won rather than as an error.
-      e.push(`sites[${s.id}].hex: [${s.hex}] is outside the ${c.grid?.cols}x${c.grid?.rows} grid`);
-    }
-    if (!(s.hp > 0) || !(s.hpMax > 0)) e.push(`sites[${s.id}]: hp and hpMax must be > 0`);
-    // A GARRISON IS AN ARMY AND WAS VALIDATED LIKE A LABEL. `expedition` was
-    // tightened once already and this is the same hole one field over:
-    // state.js seeds a site as `{...emptyComp(), ...(s.garrison ?? {})}`, so a
-    // hand-edited blob saying `{militia: 'lots'}` overwrites the zero with the
-    // STRING and every sum downstream concatenates or goes NaN. Optional,
-    // because most fixtures omit it — an absent garrison is an empty one.
-    if (s.garrison !== undefined) checkComposition(s.garrison, `sites[${s.id}].garrison`, e);
-  }
+  checkSites(c, e, gridOk, SITE_KINDS, FACTIONS);
 
   checkRivers(c, e);
-
-  for (const pair of c.adjacency ?? []) {
-    const [a, b] = pair;
-    if (!ids.has(a) || !ids.has(b)) e.push(`adjacency: dangling edge ${a}->${b}`);
-    if (a === b) e.push(`adjacency: self-loop on ${a}`);
-  }
-
-  if (!sites.some((s) => s.kind === 'camp' && s.owner === 'player')) {
-    e.push('sites: player needs a starting camp');
-  }
-  if (!sites.some((s) => s.kind === 'castle' && s.owner === 'enemy')) {
-    e.push('sites: enemy needs a starting castle');
-  }
 
   checkMods(c.player, 'player', e, NUMERIC_MODS, FEATURE_IDS);
   checkMods(c.enemy, 'enemy', e, NUMERIC_MODS, FEATURE_IDS);
