@@ -37,3 +37,40 @@ test('alerts: a fight speaks only when the player would act on it', async () => 
     'a hex clash between two other forces must not speak');
   assert.equal(fightAlert(null, mine), null);
 });
+
+test('the withdraw confirm outlasts the sentence it puts on screen', async () => {
+  // A first-session critic clicked Withdraw, read the hint, clicked again, and
+  // nothing happened — filed as the confirm expiring silently. Half of that is
+  // false: it reverts VISIBLY, the label goes back to "Withdraw" and the hint
+  // closes. The real fault was the window, which was 4,000ms against a 95-
+  // character sentence — about three and a half seconds of reading before the
+  // player has even decided — so it could close while they were reading the
+  // thing it asked them to read.
+  // The shared fake document, imported for its SIDE EFFECT: `ui/dom.js` reads
+  // `document` at call time, so the shim has to be installed before
+  // battle-alert.js is evaluated. `panelDom.js` does both in one module for
+  // exactly that ordering reason — see its header.
+  await import('./fixtures/panelDom.js');
+  const { createWithdraw } = await import('../src/screens/battle-alert.js');
+  let withdrew = 0;
+  const w = createWithdraw({ input: { withdraw: () => { withdrew++; } } });
+
+  const hint = () => w.hint.textContent;
+  w.el.fire('click');
+  assert.equal(w.isArmed, true);
+  assert.ok(hint().length > 60, 'the confirm should explain itself');
+  // Long enough to read that sentence at an unhurried pace and still act.
+  const readMs = hint().length * 60;    // ~200 words a minute
+  w.update(Date.now() + readMs);
+  assert.equal(w.isArmed, true,
+    `the confirm expired after ${readMs}ms, before its own ${hint().length}-character hint could be read`);
+  assert.equal(withdrew, 0, 'nothing may be given up without the second click');
+
+  // ...and it still disarms, which is the half that must not be traded away: a
+  // confirm that stays armed turns a forgotten click into a withdrawal minutes
+  // later.
+  w.update(Date.now() + 60_000);
+  assert.equal(w.isArmed, false);
+  assert.equal(w.el.textContent, 'Withdraw', 'a disarmed button must not still say Confirm');
+  assert.equal(hint(), '', 'and the hint must go with it');
+});

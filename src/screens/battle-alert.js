@@ -36,7 +36,20 @@ import { siteOf } from './battle-preview.js';
  * @param {{input:object, holdMs?:number}} o
  */
 export function createWithdraw(o) {
-  const { input, holdMs = 4000 } = o;
+  // HOW LONG THE CONFIRM STAYS ARMED, and four seconds was too short to read
+  // the sentence it puts on screen. The hint is 95 characters — "This gives up
+  // the region. Just closing the tab keeps it — the battle resumes." — which is
+  // about three and a half seconds of reading before a player has even decided,
+  // so the window could close while they were reading the thing it asked them to
+  // read. A first-session critic hit exactly that and filed it as the confirm
+  // expiring silently; it does revert visibly (the label goes back to
+  // "Withdraw" and the hint closes), it simply reverted faster than the copy
+  // could be consumed.
+  //
+  // It still disarms, and that is not negotiable: a confirm that stays armed
+  // turns a forgotten click into a withdrawal minutes later, which is the one
+  // outcome worse than having to click twice.
+  const { input, holdMs = 8000 } = o;
   let armedAt = 0;
   const el = h('button.btn.ghost.hud-withdraw', {
     'data-interactive': true,

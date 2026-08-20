@@ -874,14 +874,30 @@ is silently undone by a save-on-unload handler re-persisting the in-memory state
       tooltip anywhere. (This corroborates the already-recorded finding that a passive
       first battle is a twenty-minute stall ending on copy that reads as a clock problem
       rather than as "you never attacked".)
-- [ ] **An empty booster gives no feedback at all** — no message, no shake — where the
-      BUILD buttons in the same rail at least say "Not enough gold". All five start at 0
-      charges on a fresh save.
+- [x] ~~**An empty booster gives no feedback at all** — no message, no shake — where the
+      BUILD buttons in the same rail at least say "Not enough gold".~~ **STRUCK — FALSE
+      against current code.** Reproduced on a fresh save in a real browser: the first
+      booster in the rail is `booster is-empty`, a real pointer press hit-tests to it, and
+      the alert strip reads **`RALLY: You did not bring that booster.`** immediately. That
+      is the `boosterBlocker` fix CLAUDE.md already records; the critic's reading predates
+      it or missed the strip.
+
+      One true residual, recorded rather than fixed because it is worth almost nothing: the
+      control itself does not shake. The shake rides `battle:command-rejected`, and this
+      refusal happens in `boosterBlocker` BEFORE a command is issued, so the message
+      appears and the button the player pressed does not acknowledge.
 - [ ] **The unit tooltips are genuinely good and 100% hover-gated**, with no affordance
       suggesting they exist and no path to them on touch at all.
-- [ ] **The Withdraw confirmation silently expires** if the second click lands more than
-      ~1s after the first (750ms worked; several seconds did not), with nothing indicating
-      it reverted.
+- [x] ~~**The Withdraw confirmation silently expires**~~ **HALF FALSE, HALF REAL —
+      DONE.** It does not expire silently: `sync(0)` puts the label back to "Withdraw" and
+      closes the hint, both visible. What was real is the WINDOW. `holdMs` was 4,000ms
+      against a 95-character hint — "This gives up the region. Just closing the tab keeps
+      it — the battle resumes." — which is about three and a half seconds of reading before
+      the player has even decided, so the confirm could close while they were reading the
+      thing it asked them to read. 8,000ms now, pinned against the length of its own copy
+      rather than as a constant, with the disarm itself pinned as the half that must not
+      be traded away: a confirm that stays armed turns a forgotten click into a withdrawal
+      minutes later.
 
 **What already works, from this lens:** the failure screens are well designed — amber for
 a neutral Withdraw, red for Defeat, and the Defeat copy re-teaches the lose rule at the
