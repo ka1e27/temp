@@ -36,6 +36,24 @@ export const BEATS = Object.freeze([
     until: (s) => s.sentSquad,
   },
   {
+    // ...AND THE ONE AFTER IT, because `drag` retires on `sentSquad` and every
+    // other beat in this table waits on a siege or a capture. So the player who
+    // followed the instruction exactly — march across the map — was taught one
+    // thing and then left in silence, which is the same quit point the `until`
+    // rewrite was added to close, one rung further along.
+    //
+    // It holds until they attack something rather than on a timer, for the
+    // reason `drag` does: it is an instruction, not a statement. A player whose
+    // first drag lands ON a building sees it only for the seconds their column
+    // is in the air, which is right — it names what is about to happen.
+    id: 'tookGround',
+    text: COACH.tookGround,
+    hold: HOLD.teaching,
+    after: 'drag',
+    when: (s) => s.sentSquad,
+    until: (s) => !!(s.siegeBegun || s.captured),
+  },
+  {
     // The two-stage field-then-siege capture is the core mechanic and nothing
     // else in the game explains it. This is the beat that earns the feature.
     id: 'fieldWon',

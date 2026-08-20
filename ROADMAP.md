@@ -804,11 +804,29 @@ is silently undone by a save-on-unload handler re-persisting the in-memory state
       Rams…" while Rams and the free Marshal are absent from the rendered screen; scrolling
       the page 110px reveals them. This is the one screen whose entire job is "review your
       army before committing".
-- [ ] **The one coach mark does not advance even when followed correctly.** Confirmed
-      twice in independent sessions: dragging from the actual camp (verified
-      `squads[0].from === 'camp'`), arriving, camping, waiting 4+ minutes — `data-beat`
-      stayed `drag` and the text never changed. A player who does exactly what is asked
-      can finish the whole battle having been taught one thing.
+- [x] ~~**The one coach mark does not advance even when followed correctly.**~~
+      **HALF FALSE, HALF WORSE — DONE.** The advance itself works: measured on a fresh
+      save in a real browser, the strip retires within two seconds of a legal march. The
+      critic was reading `data-beat` and `textContent`, and `hide()` cleared neither, so
+      a hidden element still named the last beat SHOWN — the same probe artefact
+      CLAUDE.md already records for the site panel reporting `display: flex` at opacity
+      0.00016. `hide()` clears `data-beat` now.
+
+      **The substantive complaint was real and bigger than filed.** After `drag` retires,
+      every remaining beat waits on a siege or a capture — and `COACH.drag` instructs a
+      march across the map, which causes neither. So a player who did exactly what they
+      were told was taught one thing and then left in silence for the rest of the
+      battle. That is the same quit point the `until` rewrite was added to close, one
+      rung further along, and it opened when `drag` was rewritten to teach the GROUND
+      after unscouted neutrals stopped being visible to point at. `COACH.tookGround`
+      is the missing rung; it holds until they attack something rather than on a timer.
+      Pinned as a property (the beat after a march must name a target and must not
+      expire on a clock), not as a beat list, so a future rewrite cannot reopen it.
+
+      **A probe warning worth keeping:** a drag that is refused leaves the coach
+      correctly still asking for it, and a probe that does not check reports that as
+      "the coach never advances". Mine did exactly that twice — once on an off-grid
+      destination (`grid` is an OFFSET rectangle) and once on a swallowed gesture.
 - [ ] **Nothing marks which glyph is your camp.** The opening line is "Drag from your camp
       across the map" and the three starting buildings are similar ~20-30px glyphs — camp
       and training ground differ only by a small pennant. The critic dragged from the farm

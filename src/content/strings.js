@@ -313,6 +313,9 @@ export const SAVE = Object.freeze({
 
 export const COACH = Object.freeze({
   drag: 'Drag from your camp across the map. Your troops march the road you draw.',
+  // The rung that was missing; coach.data.js says what went wrong without it.
+  tookGround: "Marching holds ground — it doesn't claim it. Drag onto a building"
+    + ' to take one.',
   fieldWon: "You've beaten the defenders — now hold position while your troops break the walls.",
   captured: 'Farms fund your army.',
   gold100: 'Strongholds turn gold into soldiers, and take more troops to crack.',

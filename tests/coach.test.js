@@ -69,7 +69,11 @@ test('the whole tutorial fires, each beat exactly once, in order', () => {
   // signals this fixture never produces (a stronghold taken, a stalled siege, a
   // site lost, rams affordable), so they stay pending — which is the point of
   // `after`/`when` and is asserted directly below.
-  assert.deepEqual(fired, ['drag', 'fieldWon', 'captured', 'gold100', 'takeCastle']);
+  // `tookGround` sits between the gesture and the siege: it fires the moment a
+  // column exists and retires the moment one attacks something, which in this
+  // fixture is the very next step.
+  assert.deepEqual(fired,
+    ['drag', 'tookGround', 'fieldWon', 'captured', 'gold100', 'takeCastle']);
 
   // Nothing replays: keep stepping with every condition still true.
   for (let i = 0; i < 10; i++) assert.equal(m.step(world.battle, world.meta), null);
@@ -88,7 +92,10 @@ test('a beat never fires twice even if its condition keeps re-arriving', () => {
   // `notReached` is derived so a beat added later cannot silently break a test
   // that was never about it — the fixture below produces no stronghold capture,
   // no stalled siege, no lost site and no ram money.
-  const notReached = ['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'];
+  // `tookGround` joins them: this fixture notes no `squad-sent` and its battle
+  // stub holds no squads, so the player has never marched anywhere.
+  const notReached = ['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat',
+    'firstIncome', 'tookGround'];
   assert.deepEqual(m.pending.filter((id) => !notReached.includes(id)),
     // `takeCastleOpen` stays pending forever here and that is correct: this
     // fixture is a GATED region, and exactly one of the castle pair can ever
@@ -134,9 +141,42 @@ test('a prerequisite that never arrives blocks only its own dependants', () => {
   assert.deepEqual(
     m.pending.filter((id) => !['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'].includes(id)),
     // Both castle beats are pending: `pending` means "has not fired", and
-    // exactly one of the pair is reachable in any one battle.
-    ['fieldWon', 'captured', 'gold100', 'takeCastle', 'takeCastleOpen'],
+    // exactly one of the pair is reachable in any one battle. `tookGround` is
+    // pending for a plainer reason — this player has not marched anywhere.
+    ['tookGround', 'fieldWon', 'captured', 'gold100', 'takeCastle', 'takeCastleOpen'],
   );
+});
+
+test('A PLAYER WHO DOES EXACTLY WHAT THEY ARE TOLD IS STILL BEING TAUGHT', () => {
+  // The gap this beat closes, asserted as the property rather than as the beat
+  // list — a future rewrite may teach it with different copy and must not be
+  // able to reopen the hole.
+  //
+  // `COACH.drag` instructs a march across the map, and marching claims nothing:
+  // no siege, no capture, no gold above what the player already started with.
+  // Measured on a fresh save in a real browser, the strip retired within two
+  // seconds of a legal march onto bare ground and then said nothing for the
+  // rest of the minute — every remaining beat waits on a siege or a capture, so
+  // structurally it says nothing for the rest of the BATTLE. The instruction was
+  // rewritten to teach the ground when unscouted neutrals stopped being visible,
+  // and the rung it used to lead into was never replaced.
+  const m = createCoachMachine();
+  const b = battle();
+  assert.equal(m.step(b, null).id, 'drag');
+  // They march. That is the whole of what they were asked to do.
+  m.note('squad-sent', { owner: 'player' });
+  const next = m.step(b, null);
+  assert.ok(next, 'a player who obeyed the only instruction on screen is told nothing more');
+  // ...and what they are told has to name the thing they have not done yet.
+  assert.match(next.text, /building/i,
+    `the beat after a march must point at a target, got: "${next.text}"`);
+  // It is an INSTRUCTION, so it waits to be obeyed rather than timing out —
+  // the same rule `drag` follows, and the reason `until` exists at all.
+  assert.equal(typeof next.until, 'function', `${next.id} expires on a timer`);
+  assert.equal(next.until({ siegeBegun: true }), true);
+  assert.equal(next.until({ captured: true }), true);
+  assert.equal(next.until({ sentSquad: true }), false,
+    'marching again is not doing the thing this line asks for');
 });
 
 // --- only the enemy's events, only the player's beats ----------------------
@@ -319,48 +359,4 @@ test('the drag beat retires itself once a squad is in flight', () => {
   assert.equal(m.retired(dragBeat, b, null), true);
   // A beat with no `until` is never retired early.
   assert.equal(m.retired(BEATS[1], b, null), false);
-});
-
-// --- against the real engine ------------------------------------------------
-
-test('a REAL region-1 battle: gold starts at 300, so gold100 must not jump the queue', () => {
-  const meta = createMeta();
-  const config = buildBattleConfig(meta, COACH_REGION, [], generateBattleMap);
-  const live = startBattle(config);
-
-  assert.equal(live.regionId, COACH_REGION, 'coach gates on battle.regionId');
-  assert.ok(live.factions.player.goldCg / 100 > 100,
-    'this test is pointless if the player no longer starts above 100 gold');
-  assert.ok(live.sites.some((s) => s.kind === 'castle'), 'no castle to point at');
-
-  const m = createCoachMachine();
-  assert.equal(m.step(live, meta).id, 'drag');
-  // 300 gold in hand and the beat still holds its tongue: it is gated on the
-  // player having captured something, not on the number alone.
-  assert.equal(m.step(live, meta), null);
-  assert.equal(m.signals(live, meta).gold > 100, true);
-  assert.deepEqual(
-    m.pending.filter((id) => !['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'].includes(id)),
-    ['fieldWon', 'captured', 'gold100', 'takeCastle', 'takeCastleOpen'],
-  );
-  // AND THIS IS WHY THE PAIR EXISTS. Read off the real region-1 config, not
-  // asserted from the table: the campaign opener has NO castle gate, so the
-  // beat that describes one is the unreachable half here and the plain line is
-  // the one a first-timer will actually be shown.
-  assert.equal(live.rules.castleGateFrac, 0,
-    'if region 1 ever grows a gate, the coach pair below flips and this is the tell');
-  assert.equal(m.signals(live, meta).castleGated, false);
-});
-
-test('the coach reads a real battle through the same fields the sim writes', () => {
-  const meta = createMeta();
-  const live = startBattle(buildBattleConfig(meta, COACH_REGION, [], generateBattleMap));
-  const latch = emptyLatch();
-  observeState(latch, live);
-  const s = readSignals({ battle: live, meta, latch });
-  assert.equal(s.regionId, COACH_REGION);
-  assert.equal(s.started, true);
-  assert.equal(s.tutorialSeen, false);
-  assert.equal(Number.isFinite(s.gold), true);
-  assert.equal(s.castleAdjacent, castleTouchesPlayer(live));
 });

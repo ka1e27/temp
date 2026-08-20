@@ -42,7 +42,7 @@ export function createBattleScene(ctx) {
   let lastResumeAt = 0;
 
   /**
-   * Coach marks are optional: the game must run whether or not ui/coach.js
+   * Coach marks are optional: the game must run whether or not the coach
    * exists yet, so this loads it lazily and never lets a missing tutorial stop
    * a battle. Onboarding is additive, never load-bearing.
    */
@@ -50,7 +50,7 @@ export function createBattleScene(ctx) {
     if (ctx.state.meta.tutorialSeen) return null;
     let live = null;
     let disposed = false;
-    import('../ui/coach.js')
+    import('../ui/coachstrip.js')
       .then((m) => {
         if (disposed || !m.createCoach) return;
         live = m.createCoach({
