@@ -66,18 +66,40 @@ its own box exists here.
       table, it invalidates it the other way. **The re-tune should re-base with it ON
       before spending another dial** — see CLAUDE.md for the numbers and the argument.
 
-- [ ] **RE-RUN THE FOUR CRITICS THAT NEVER REPORTED: game feel, hours 2-10, board
-      readability, input and accessibility.** Those four lenses are still completely
-      unexamined. Each brief was: drive the REAL game through `tools/cdp.js` at
+- [x] ~~**Add an endless mode, and lay the groundwork for more stages.**~~ **DONE.**
+      `The Frontier` — one 40x32 board of 1,280 hexes, difficulty measured in rings out
+      from your own camp, no end but the one you choose. It is a `mapGen` swap and
+      nothing else: `battle/frontier.js` supplies a `plan` that `mapgen.js` accepts in
+      place of `planSites`, and every line below that hook is the campaign's own. No
+      contract field moved. It resolves through `REGION_BY_ID` and is absent from
+      `REGIONS`, so it appears in none of the campaign's invariants or sweeps.
+      `content/tiers.js` is the stage groundwork — the five per-tier tables now index
+      through one clamped accessor, so adding a seventh tier is a bounded job rather
+      than a hunt. Numbers, and the gate correction the measurement forced, in CLAUDE.md.
+
+- [ ] **THE INSTRUMENT FOR THE #1 PROBLEM IS ANCHORED TO A REGION THAT IS MID-RETUNE.**
+      `tests/loadoutdominance.test.js` measures gallowmoor alone and currently reports a
+      0-point gap, which reads as "somebody fixed the dominant loadout" and is not that:
+      the DEFAULT spread collapsed to gallowmoor's out-of-band win rate. Pin it to a
+      second region the re-tune has not touched — kaldan reproduces the historical
+      pattern cleanly at default 58% -> mono 83%. Evidence and the full argument in the
+      tactical-depth section below.
+
+- [x] ~~**RE-RUN THE FOUR CRITICS THAT NEVER REPORTED: game feel, hours 2-10, board
+      readability, input and accessibility.**~~ **DONE, plus two more lenses.** Kept
+      rather than deleted because the BRIEF is the reusable part, and because four of
+      these died to a session limit having written nothing the first time round: drive
+      the REAL game through `tools/cdp.js` at
       `localhost:8080/?dev=1`, reproduce every finding with a probe or a screenshot,
       distinguish measured from reasoned, rank by cost to a real player, include a "what
       already works" section, stay READ-ONLY on the repo, and write to
       `scratchpad/crit-<lens>.md`. **Transcribe each into this list the moment it lands** —
       the scratchpad does not survive a session, which is exactly how these four were lost.
 
-      **TWO OF THE FOUR HAVE NOW LANDED — game feel and board readability — and their
-      findings are transcribed below.** Retention (hours 2-10) and input/accessibility
-      are still completely unexamined and are what remains of this item.
+      **ALL FOUR HAVE NOW LANDED and are transcribed below**, and two further lenses
+      were run on top of them — **tactical depth** and **the first session** — whose
+      sections sit at the end of the transcribed run. This item is closed as intake;
+      what is left of it is the unticked findings themselves.
 
 ### From the game-feel critic
 
@@ -669,6 +691,159 @@ The idle half is a well-made finite game; "endless" lives entirely in the RTS ha
       of the tedium. Low cost; listed for completeness.
 
 <!-- MORE FINDINGS GO HERE as the four unreported lenses are re-run. -->
+
+### From the tactical-depth critic
+
+**The lens: is there a real game of decisions in the battle layer, or is it "bring more
+troops and click"?** Driven from a clean detached worktree (`git worktree add --detach`)
+because this tree is edited by concurrent sessions — worth copying, and worth knowing
+that a balance number taken off a dirty tree is somebody else's in-flight probe.
+
+- [ ] **THE HARNESS ISSUES 4 OF THE ENGINE'S 12 VERBS, and eight have never been through
+      this project's own stated test of legitimacy.** Verified by grep, both directions:
+      `HANDLERS` in `src/battle/commands.js` binds `SEND MOVE_SQUAD TRAIN RECRUIT UPGRADE
+      BUILD RALLY RALLY_KEEP BOOSTER RETREAT RETREAT_SQUAD WITHDRAW`, and every
+      `t: '…'` literal anywhere under `tools/` is one of exactly four: `SEND`, `TRAIN`,
+      `UPGRADE`, `BUILD`. So `MOVE_SQUAD`, `RECRUIT`, `RALLY`, `RALLY_KEEP`, `BOOSTER`,
+      `RETREAT`, `RETREAT_SQUAD` and `WITHDRAW` are measured by nothing at all — against
+      a rule this file and CLAUDE.md both state about six times over ("a mechanic the
+      harness cannot play is a mechanic nobody has measured"). **This is the finding to
+      act on before the other four**, because it is the one that makes the others
+      checkable.
+
+      Two of the eight are known to matter and are known to be unmeasured for opposite
+      reasons: `RETREAT` mid-melee is the one genuinely two-sided dilemma in the battle
+      layer (`melee.js meleeStep` interpolates linearly toward a known outcome, so
+      breaking off provably keeps proportionally more troops the earlier you do it) and
+      the bot's 1.5x `ATTACK_MARGIN` keeps it out of every situation that would pose the
+      question; and `MOVE_SQUAD` was shipped, documented in four places, and had exactly
+      one caller in the whole tree (a test fixture) until this session's own camped-drag
+      pass.
+
+- [ ] **`ATTRITION` changes real numbers with no on-screen cause.** The anti-turtle
+      ladder in `battle/sim.js attritionPhase` applies income, regen, garrison-bleed and
+      training penalties after 150/210/270s without a capture anywhere on the board.
+      Verified: the only mention of it outside `battle/` and `content/` is a COMMENT in
+      `screens/battle-econ.js` explaining that the HUD reads `factionGoldPerSec()` so the
+      ladder is *included* in the number — which is right, and is not the same as telling
+      anyone. Nothing names it, and `tools/` never reacts to it either, so the harness is
+      not measuring it any more than the player is seeing it. Either surface it or delete
+      it; an invisible penalty that fires four and a half minutes into a stall reads as
+      the game breaking.
+
+- [ ] **The bot never builds a defensive structure, and `TRAIN` never reads the enemy.**
+      Both confirmed still true in current code. `constructTurn` is a binary
+      yard-or-farm branch that cannot produce a stronghold at any pressure; `TRAIN` is a
+      binary rams-or-militia branch that never consults the enemy's composition, in a
+      game that ships a full counters table for exactly that read-and-react loop. The
+      first half is already an open item below; the second is new. Until both exist, no
+      measured number can tell real depth from unused scaffolding.
+
+- [ ] **Tower fire is paid-for complexity with almost no reachable audience.** `findPath`
+      has no danger weighting, and neither the enemy AI nor the harness has ever issued a
+      waypoint-routed order — zero hits for "waypoint" anywhere in `battle/ai*.js` or
+      `tools/`. So the only actor who can ever answer "route around the wall" is a human
+      who independently discovered a gesture no `COACH` line mentions. Teach it or cut
+      it.
+
+- [ ] **Don't anchor the project's #1 problem to a single region's test.** See the
+      warning immediately below — the canonical regression test for the dominant loadout
+      is pinned to gallowmoor alone, and gallowmoor is mid-retune. Pin it to two.
+
+**⚠ AND THE HEADLINE IS A WARNING ABOUT A TEST, NOT A FIX.** The critic found
+`tests/loadoutdominance.test.js` FAILING on a clean HEAD worktree — `mono-militia beat
+the default spread by only 0 points (38% -> 38%)` at n=24 on gallowmoor — and its own
+independent n=12 probe read default 42% / mono 25%, i.e. mono *worse*. Both contradict the
+`+27 to +44` this file and CLAUDE.md carry.
+
+**Do not read that as the exploit being fixed.** The gap closed because the DEFAULT SPREAD
+collapsed to gallowmoor's out-of-band 17-38%, not because mono got weaker — which is
+exactly the failure mode that test's own message warns about, and exactly the shape of
+"the harness declining to play read as a balance win" this project has hit twice. The
+underlying phenomenon reproduces cleanly on a region the re-tune has NOT touched: kaldan,
+default 58% -> mono 83%, **+25**, matching the historical pattern. **The exploit is real
+and the instrument is anchored to the wrong region.**
+
+**What already works, from this lens:** the four-invariant discipline is real and rare —
+`projectMarchLosses`/`projectGarrison` genuinely match the sim, so "the preview is a
+guarantee" is a guarantee. The base five-unit RPS plus slot pricing is internally coherent
+and independently verified (`tests/units.test.js`, 11/11, confirms each specialist is the
+objectively correct narrow answer to a narrow problem — sappers make a garrisoned wall
+arithmetically unbreachable against a force that cracks the same wall without them). The
+siege frontage is clean, sharp, well-tested design. The melee retreat maths is exactly
+right on paper.
+
+**A methodology note the critic flagged against itself, worth copying:** passing
+`{weights: {halberds: 0.3}}` straight to `playOne` BYPASSES `meta/composition.js
+fitComposition`'s merge with `DEFAULT_COMPOSITION_WEIGHTS`, which `tools/simrunner.js
+--weights=` performs — so a probe written that way measures a near-MONO specialist army
+and reports it as "the default spread plus halberds". A near-mono-sapper army (atk 3, the
+lowest offence in the game) collapsed to 0% wins in 21 seconds, which is a vivid
+confirmation that sappers cannot carry an attack and no evidence at all about the
+question that was asked.
+
+### From the first-session critic
+
+**The lens: the first twenty minutes, played cold.** Driven through CDP against a
+genuinely wiped save. **The wipe itself is a finding worth keeping:** `localStorage.clear()`
+is silently undone by a save-on-unload handler re-persisting the in-memory state, so a
+"fresh save" probe has to go through browser-level `Storage.clearDataForOrigin`. Every
+"fresh save" script in this repo should be checked against that.
+
+- [ ] **A brand-new visitor is dropped into a live, already-ticking battle.** Wiped twice
+      independently, with and without `?dev=1`: `document.body.dataset.scene` is `battle`
+      on load, gold already draining at -1.0/s from tick 1. No title screen, no New Game,
+      no settings. The actual title screen ("HEX DOMINION" / "Two clocks, one empire.")
+      exists only behind a Menu tab on the world map, reachable only *after* the first
+      battle is finished or abandoned. This is `worldmap.js bootRoute` working exactly as
+      designed — the design is the finding.
+- [ ] **The loadout screen hides part of the player's own army, with no cue.** At a
+      realistic 9-unit roster on a stock 1440x900 desktop viewport, the EXPEDITION panel
+      renders 7 of 9 troop rows and simply stops: no scrollbar, no fade, no "more below".
+      Confirmed by DOM inspection that the army's own `aria-label` reads "…8 Raiders, 5
+      Rams…" while Rams and the free Marshal are absent from the rendered screen; scrolling
+      the page 110px reveals them. This is the one screen whose entire job is "review your
+      army before committing".
+- [ ] **The one coach mark does not advance even when followed correctly.** Confirmed
+      twice in independent sessions: dragging from the actual camp (verified
+      `squads[0].from === 'camp'`), arriving, camping, waiting 4+ minutes — `data-beat`
+      stayed `drag` and the text never changed. A player who does exactly what is asked
+      can finish the whole battle having been taught one thing.
+- [ ] **Nothing marks which glyph is your camp.** The opening line is "Drag from your camp
+      across the map" and the three starting buildings are similar ~20-30px glyphs — camp
+      and training ground differ only by a small pennant. The critic dragged from the farm
+      on the first attempt going off the picture alone. The camp is named in the
+      objective AND is the lose condition; it should be findable without searching.
+- [ ] **"Away cap" — the number the entire idle pitch rests on — is explained nowhere.**
+      No `title` anywhere up its DOM ancestor chain, while on the same screen the locked
+      Incursions tab correctly explains itself on hover. The pattern exists and was not
+      applied to the one number that most needs it.
+- [ ] **Passive play ends on undefined developer jargon.** The "Time expired" screen is
+      legible, correctly styled and carries accurate stats, but never states the
+      actionable lesson, and "hard cap" appears on both it and the loadout screen with no
+      tooltip anywhere. (This corroborates the already-recorded finding that a passive
+      first battle is a twenty-minute stall ending on copy that reads as a clock problem
+      rather than as "you never attacked".)
+- [ ] **An empty booster gives no feedback at all** — no message, no shake — where the
+      BUILD buttons in the same rail at least say "Not enough gold". All five start at 0
+      charges on a fresh save.
+- [ ] **The unit tooltips are genuinely good and 100% hover-gated**, with no affordance
+      suggesting they exist and no path to them on touch at all.
+- [ ] **The Withdraw confirmation silently expires** if the second click lands more than
+      ~1s after the first (750ms worked; several seconds did not), with nothing indicating
+      it reverted.
+
+**What already works, from this lens:** the failure screens are well designed — amber for
+a neutral Withdraw, red for Defeat, and the Defeat copy re-teaches the lose rule at the
+moment it matters ("Your camp fell. Hold it: losing it ends the region however well the
+rest is going."). The Withdraw confirmation pre-empts a real fear ("Just closing the tab
+keeps it — the battle resumes."). The loadout screen is good at low unit counts, and its
+booster panel explains *why* a booster is unusable better than the in-battle HUD does for
+the identical state. The shop is clear, with a "Buy this next — cheapest first beats
+saving up" recommendation. The alert strip names real threats promptly. Fog is honestly
+rendered, and the always-visible terrain is what keeps an 85-90% dark opener from reading
+as broken.
+
 
 ### Blocking — the deploy is red until this is done
 

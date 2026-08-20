@@ -8,10 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 conquest. You take hex regions one at a time; conquered regions pay crowns per second
 whether or not you are playing; crowns buy upgrades that crack the next, harder region.
 
-Twenty-four regions in six tiers, and then three endgame loops that do not end: an
-**incursion ladder** (one battle per rung, escalating forever), the **Crown** shop tier
-that pays for it, and **abdication**, which trades a finished empire for a permanent
-multiplier and starts the campaign again.
+Twenty-four regions in six tiers, and then four endgame loops that do not end: an
+**incursion ladder** (one battle per rung, escalating forever), **the Frontier** (one
+1,280-hex map that gets harder the further out you walk — push for the deep country or
+bank what you hold), the **Crown** shop tier that pays for both, and **abdication**,
+which trades a finished empire for a permanent multiplier and starts the campaign again.
+
+The Frontier opens after the first tier rather than after the campaign, so it is the one
+endgame loop most players will actually see.
 
 **Zero dependencies, no build step, no `node_modules`.** Vanilla ES modules served
 straight to the browser. Adding a dependency breaks the core promise of the project —
@@ -42,6 +46,9 @@ under time pressure after that. If you already know the shape of your change:
   the Gotchas entries on `h(tag, props, ...children)` and the doubled unit-colour table.
 - **The meta layer** (shop, idle, save, prestige, relics) → Abdication, Relics, The
   Crown tier, and the Gotchas entries on `state.rules` and the two `localStorage` keys.
+- **The endless mode** (`content/endless.data.js`, `battle/frontier.js`,
+  `meta/endless.js`) → The Frontier, then the Gotchas entry on `REGION_BY_ID` — the one
+  thing that reliably breaks around it is code that treats that map as the campaign.
 - **Tooling or CI** → Commands, then Deployment.
 - **This file itself** → read "Gotchas" first, then verify a claim against the code or
   a fresh measurement before repeating it — a claim here has gone stale silently more
@@ -66,6 +73,8 @@ node tools/simrunner.js --all --n=96 --noupgrades   # the pre-upgrade-ladder bot
 node tools/simrunner.js --all --n=96 --noconstruct  # ...and the one that could not build
 node tools/simrunner.js --region=gallowmoor --weights=halberds:0.3   # field a specialist
 node tools/simrunner.js --incursion=1-14 --n=32     # the endless ladder, by rung
+node tools/simrunner.js --frontier --n=8            # the endless MAP, by how far out
+node tools/simrunner.js --frontier --conquered=4,24 # ...for two sizes of empire
 node tools/simrunner.js --incursion=40,55 --idle=600  # ...for a player who has idled
 node tools/simrunner.js --all --n=32 --legacy=27    # the campaign on a SECOND run
 node tools/simrunner.js --region=gallowmoor --relics=14   # ...spending its relics on troops
@@ -102,8 +111,8 @@ home, so an import never has to know: `balance.js`←`ai.data.js`, `regions.data
 `battle-panel.js`←`battle-actions.js`/`battle-upgrade.js`/`battle-status.js`,
 `battle-input.js`←`battle-drag.js`, `battle-orders.js`←`battle-select.js`, `mainmenu.js`←
 `mainmenu-settings.js`/`mainmenu-legacy.js`, `modifiers.js`←`marshals.js`,
-`simrunner.js`←`simladder.js`, `simplayer.js`←`simshop.js`/`simbuild.js`,
-`sim.js`←`arrivals.js`, `store.js`←`refund.js`, `ai.js`←`aicore.js`/`aihome.js`/
+`simrunner.js`←`simladder.js`/`simfrontier.js`, `simplayer.js`←`simshop.js`/`simbuild.js`,
+`sim.js`←`arrivals.js`, `store.js`←`refund.js`/`sanitize.js`, `ai.js`←`aicore.js`/`aihome.js`/
 `aiadapt.js`, `regions.rules.js`←`regions.fallback.js`, `movement.js`←`retreat.js`,
 `smoke.mjs`←`smoke-helpers`/`-battle`/`-orders`/`-checks`/`-meta`, `core/hex.js`→`mapgen.js`
 (the offset↔axial arithmetic lives in core and mapgen re-exports it, because
@@ -135,8 +144,9 @@ header when tier 6 needed the budget, and they belong there: both are claims abo
 every row.
 
 The endgame layer is `content/incursion.data.js` + `meta/incursion.js` (the ladder),
-`content/legacy.data.js` + `meta/legacy.js` (abdication), and `screens/incursion.js` +
-`screens/mainmenu-legacy.js` for the two surfaces.
+`content/legacy.data.js` + `meta/legacy.js` (abdication), `content/endless.data.js` +
+`battle/frontier.js` + `meta/endless.js` (the Frontier), and `screens/incursion.js` +
+`screens/mainmenu-legacy.js` + `screens/endgate.js` for the surfaces.
 
 ### The four invariants
 
@@ -2142,6 +2152,149 @@ both, or neither) for comparing the four-way table by hand; **omitted, both side
 blind, which is the shipped behaviour and what every balance number in this file is
 measured against.**
 
+## The Frontier: one enormous map, and no end but the one you choose
+
+`content/endless.data.js` + `battle/frontier.js` (the board) + `meta/endless.js` (the run
+and what it pays). A 40x32 board — **1,280 hexes against a campaign board's 336** — with
+a camp in one corner, and country that gets harder the further out you walk.
+
+**IT IS A `mapGen` SWAP AND NOTHING ELSE, and that is what made it affordable.**
+`buildBattleConfig` already takes the generator as an argument, so `screens/battle.js` and
+`tools/simplayer.js` each choose one on the region id and every rule below that line is
+the campaign's own. `mapgen.js` grew exactly one line — `spec.plan ?? planSites(spec)` —
+because `planSites` is shaped entirely around a throne (camp at one edge, walls ringing
+the castle at the other) which is right for a raid and wrong for a frontier. Everything
+after the plan is shared: terrain, rivers, massifs, `repairConnectivity`, the shape mask,
+`verifyReachable`. **No CONTRACT field moved and CONTRACT_VERSION stays at 12.** No
+shipped region carries a `plan`, so the hook is provably inert for the campaign.
+
+**IT RESOLVES THROUGH `REGION_BY_ID` AND IS ABSENT FROM `REGIONS`**, and that separation
+is the whole of how it stays outside every measured number. `REGIONS` is what the world
+map draws, what `tests/campaign.test.js` walks for its non-decreasing invariants, what
+`regionsConquered` counts and what `npm run sim --all` sweeps. The frontier is in none of
+them. **The one thing that broke on it is the lesson**: `tests/idle.test.js` walked
+`Object.keys(REGION_BY_ID)` as a stand-in for the campaign, which is no longer what that
+map is — a fresh save has no `meta.regions.frontier` record at all, so the test threw. If
+you mean the campaign, the list is `REGION_IDS`.
+
+### Difficulty is a distance, not a dial
+
+`ringOf(hex)` is axial distance from the player's own corner divided by
+`FRONTIER.ringHexes`, and `scaleFrontier` compounds garrison by ring and steps level every
+`ringsPerLevel`. Measured on seed 1000, median garrison by ring:
+
+```
+ring      0    1    2    3    4    5    6    7     8
+sites     2    5   11   16   21   16   17   10     6
+median    5    7   17   24   26   51   74  108   156
+```
+
+Garrison and level are kept on **separate** curves for the reason the campaign keeps
+`enemyMult` and `develop` apart: bodies are produced during the battle and walls are not,
+so scaling both together makes the deep rings unapproachable rather than expensive. The
+player's own sites and ring 0 are never scaled, so a run opens at roughly tier-1
+difficulty however deep the map goes.
+
+**SPACING x `maxRing` MUST LAND ON THE DIAGONAL, and getting it wrong flattens rather than
+fails.** On the 60x48 board this was first sized against, the far corner is 83 hexes out;
+at 6 hexes a ring the clamp bit at 54 and the whole outer THIRD was one flat ring —
+measured, 34 of 104 sites in ring 9, and the bot "reached the deepest ring" two-thirds of
+the way out. The shipped board's diagonal is 55 (offset `(39,31)` is axial `{q:24, r:31}`)
+against `6 x 9 = 54`, so the clamp bites at the far corner itself. `maxRing` is therefore
+**inert on the shipped board and that is what a safety clamp should be** — ring 9 is one
+corner hex and no site is ever placed there.
+
+### The throne is gated behind the whole map, and the measurement is why
+
+**It shipped at `castleGateFrac: 0` and the comment beside it was confidently wrong.** It
+claimed the castle "sits at ring 9 behind the whole map, which is a far steeper
+precondition than any territory fraction". Measured on the real pipeline: the throne lands
+at **ring 7** of a board whose deepest occupied ring is 8, and a player with the whole
+campaign behind them took it in **9,658 and 11,357 ticks — two runs of three WON the
+endless mode in about sixteen minutes**, ending the exploration two thirds of the way
+through its own clock. An infinite map that ends is not one.
+
+At **0.85** every run goes the full thirty minutes, reaching ring 7-8 with 57-77% of the
+country held — so the throne is reachable and is never routine.
+
+**THIS IS THE DELIBERATE INVERSION OF THE CAMPAIGN'S OWN GATE FINDING.** `GATE_CLAMP` caps
+every region at 0.60 because a high gate made the throne a formality and the battle a
+scrape for the last few percent of countryside — a defect when a region PROMISES a fight
+at a castle. The frontier promises the opposite, so a throne that can be rushed is the
+thing that breaks it. `tests/frontier.test.js` pins the gate as a FLOOR (what matters is
+that it requires owning the frontier, not that it is exactly 0.85) with a negative control
+that no campaign region exceeds 0.60.
+
+### What a run pays, and the exploit that was closed
+
+Crowns are summed over the sites held AT THE END, weighted by the ring each sits in, so
+the deep country is worth pushing for and the doorstep cannot be farmed. Relics are paid
+**only for beating your own record**, which makes the hard currency non-farmable by
+construction rather than by a cooldown. **Losing your camp pays nothing at all** — the
+mode is push-your-luck or it is nothing.
+
+**A SITE YOU BUILT DOES NOT COUNT TOWARD THE RECORD.** Measured on the first cut: the bot
+reached the outermost ring by minute ten not by fighting but by laying a chain of
+200-gold farms toward the throne, because `simbuild.js` scores a build hex by its distance
+to the castle. `deepestRing` excludes anything whose id starts `b` (`nextBuildId`'s
+prefix); `heldRings` — which the payout uses — counts everything, because holding forward
+ground is worth something, it is simply not what "how far did you get" means.
+
+A new map every run, keyed on the run COUNT rather than a stored seed, so nothing about
+the board is persisted and a reload mid-run regenerates the identical country. The run
+counter advances on a LOSS too — retrying the identical country is the one thing a
+push-your-luck mode must not offer.
+
+### The harness plays it, and its first readout was wrong in the informative direction
+
+`tools/simfrontier.js`, `node tools/simrunner.js --frontier --conquered=4,8,16,24`. A
+frontier run has no win rate on purpose: there is no throne to take, so every run ends on
+the clock and a win% would read 0% forever while saying nothing.
+
+**The first column it reported was `deepest ring`, and it was measuring a scouting
+column.** A max over a BOUNDED board is set by one farm grabbed at the edge — it read
+**8.0 for every empire size** and printed "the gradient DOES NOT HOLD" while `sites held`
+was climbing 79 -> 90 -> 87 -> 112 on the same runs. The column is the **median ring over
+sites HELD** now, which is what the payout weights by and what cannot be set by one lucky
+column:
+
+```
+regions   n   deepest ring   core   sites held   minutes
+      4   4    2..8 of 9      5.0           79      30.0m
+      8   4    7..8 of 9      6.0           90      30.0m
+     16   4    7..8 of 9      5.0           87      30.0m
+     24   4    7..8 of 9      6.0          112      30.0m
+```
+
+`playOne` grew an optional `opts.observe(battle)` for this rather than a wider return —
+depth is a fact about a finished frontier and means nothing on a campaign map, so the
+column is read at the call site instead of every region growing one. Absent, nothing is
+called and it is the same function every measured number was taken with.
+
+**THE BOARD SIZE IS AN FPS NUMBER, NOT A DESIGN ONE.** Measured on the real renderer:
+60x48 = 2,880 hexes ran **34.5 fps** (21.5 at 4x speed), 44x34 = 42.7, **40x32 = 53.2 and
+44.0 at 4x — shipped** — 36x28 = 55. A bigger frontier is available the moment the
+renderer clips its background repaint to the viewport; see the note at `bgcache.js DUTY`.
+
+### ...and it made the background repaint gate a duty cycle
+
+`GATE_MS` 125 was a claim about how much a repaint COSTS, and that is a property of the
+board. Measured: one repaint costs **54ms on a campaign board and 168ms on a frontier**,
+so 8/s asked for 1,344ms of work per second — **60.1 fps with the sim PAUSED against
+28-43 fps running**, which is the tell that the per-frame layer is entirely fine at that
+size and the background one is not.
+
+The gate is `max(GATE_MS, lastCost * DUTY)` now, `DUTY` 2.3. That constant is chosen so
+`54 * 2.3` is 124ms, just under the floor — **every campaign board is byte-identical** and
+only a board expensive enough to saturate the gate is slowed. `bgCache.spent(ms)` is
+separate from `painted()` because that one has to run BEFORE any pixel is drawn (it clears
+the CSS slide transform) and this one can only be known after.
+
+**It is a self-limiting mitigation and not the real fix.** `computeOwners`, `computeVeil`,
+the flood, the plates, the rock and the grid lines all walk the WHOLE board regardless of
+what the camera can see, which on a map you are meant to explore zoomed in is mostly
+wasted. That is a six-function change to the renderer's hot path and wants its own pass.
+
 ## The endless ladder: incursions
 
 `content/incursion.data.js` + `meta/incursion.js`. One battle per **rung**: a fixed
@@ -3073,6 +3226,24 @@ campaign has nothing new to acquire.
   the gate is real. It is a pair now, split on one signal. `tests/coachcastle.test.js`
   asserts region 1's gate is 0 off the real config, so growing one is a failing test
   rather than a second wrong line.
+
+- **`REGION_BY_ID` IS NOT THE CAMPAIGN, AND `REGIONS`/`REGION_IDS` ARE.** The Frontier
+  resolves by id and is absent from the list, deliberately — `buildBattleConfig` looks a
+  region up by id, so the map is the one place it has to exist. Anything that means "the
+  campaign" and reaches for `Object.keys(REGION_BY_ID)` now includes a row with no
+  `meta.regions` record at all: `tests/idle.test.js` did exactly that and threw
+  `Cannot set properties of undefined`. The production consumers were all fine, which is
+  the point — `idle.js` sums `conqueredIds`, `world.js` reads `startsUnlocked` through
+  optional chaining, `devoverlay.js` lists `REGION_IDS` and looks up by id — so nothing
+  told you until a test that had used the wrong list as a proxy fell over.
+- **INJECTING A STRINGS OBJECT SILENTLY DISABLES THE GUARD THAT PROVES COPY IS READ.**
+  `tests/endgate.test.js` and `tests/offlinenotice.test.js` both work by grepping the
+  screen tree for `ENDGAME.<key>` / `IDLE.<key>`, because the failure they exist to catch
+  is dead copy going stale with nothing failing. A helper taking `{strings}` and reading
+  `strings.frontierLocked` is invisible to that — the Frontier's three strings shipped
+  with nothing able to prove they were read, in the same commit that added a section about
+  dead copy. The parameter also bought nothing: no caller ever varied it. **Name the key
+  literally at the point of use.**
 
 - **`grid` is an OFFSET rectangle, not an axial one.** `axialFromOffset(col,row) =
   {q: col - floor(row/2), r: row}`, so a 9×9 grid holds **no negative `r` at all** and
