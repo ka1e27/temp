@@ -155,6 +155,11 @@ export const WORLD = Object.freeze({
  * copy says what is kept and what is lost rather than dressing it up as a story.
  */
 export const ENDGAME = Object.freeze({
+  frontierTitle: 'The Frontier',
+  frontierLocked: 'Take four regions to open the frontier.',
+  frontierHint: 'One enormous map, and no end to it but the one you choose. The'
+    + ' country gets harder the further out you walk — push on for the deep'
+    + ' ground, or withdraw and bank what you hold.',
   incursionTitle: 'Incursions',
   incursionLocked: 'Take every region to open the endless ladder.',
   incursionHint: 'One battle per rung, on ground you already hold. Win and the next'

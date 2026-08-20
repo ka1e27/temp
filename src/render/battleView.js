@@ -193,6 +193,10 @@ export function createBattleView(opts) {
 
   function redrawBg(state) {
     const ctx = bg.ctx;
+    // The repaint TIMES ITSELF, and the number sizes the next gate — see
+    // bgcache.js, where the fixed 8/s was a claim about a 54ms repaint that a
+    // 2880-hex board turns into 168ms.
+    const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
     bgCache.painted();
     bg.fill(p.bg);
     board.cols = state.grid.cols;
@@ -247,6 +251,7 @@ export function createBattleView(opts) {
     // ~90% of a late board translucent 60x/s was most of a throttled frame.
     drawVeil(ctx, veil, board.cols, board.rows, hexSize, p);
     drawAssaultWash(ctx, state, viewFaction, board.cols, board.rows, hexSize, p); // over the veil, see fog.js
+    bgCache.spent((typeof performance !== 'undefined' ? performance : Date).now() - t0);
   }
 
   // THE LINK GRAPH IS GONE, and deleting it was the point. It drew one line per

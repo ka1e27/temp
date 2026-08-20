@@ -59,6 +59,8 @@ export {
 // room neither this file nor regions.rules.js could spare. The column order,
 // and what changed about `siteCounts`, is documented at `T`.
 import { T } from './regions.rowbuilder.js';
+// The endless mode's own region — resolvable by id, absent from `REGIONS`.
+import { frontierRegion } from './endless.data.js';
 
 /** @type {ReadonlyArray<object>} */
 export const REGIONS = Object.freeze([
@@ -211,9 +213,19 @@ export const REGIONS = Object.freeze([
 REGIONS[0].startsUnlocked = true;
 for (const r of REGIONS) Object.freeze(r);
 
-/** @type {Record<string, object>} */
+/**
+ * @type {Record<string, object>}
+ *
+ * THE FRONTIER IS RESOLVABLE HERE AND IS NOT IN `REGIONS`, and that separation
+ * is the whole of how the endless mode stays outside every measured number.
+ * `REGIONS` is what the world map draws, what `tests/campaign.test.js` walks
+ * for its non-decreasing invariants, what `regionsConquered` counts and what
+ * `npm run sim --all` sweeps; the frontier belongs in none of those and appears
+ * in none of them. `buildBattleConfig` looks a region up by id, so this map is
+ * the one place it has to exist — see meta/endless.js.
+ */
 export const REGION_BY_ID = Object.freeze(
-  Object.fromEntries(REGIONS.map((r) => [r.id, r])),
+  Object.fromEntries([...REGIONS, frontierRegion()].map((r) => [r.id, r])),
 );
 
 export const REGION_IDS = Object.freeze(REGIONS.map((r) => r.id));

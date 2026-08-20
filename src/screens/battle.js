@@ -10,6 +10,8 @@ import { toOutcome } from '../battle/outcome.js';
 import { drainEvents } from '../battle/events.js';
 import { buildBattleConfig } from '../meta/modifiers.js';
 import { generateBattleMap } from '../battle/mapgen.js';
+import { generateFrontierMap } from '../battle/frontier.js';
+import { FRONTIER_ID } from '../content/endless.data.js';
 import { createBattleView } from '../render/battleView.js';
 import { setRiverLayer } from '../render/hexRenderer.js';
 import { createFx, fxFromEvent } from '../render/fx.js';
@@ -114,8 +116,14 @@ export function createBattleScene(ctx) {
         // No balance number moves: `tools/simplayer.js` passes `seed` explicitly
         // in `options`, so the harness always generated from a real seed and the
         // whole table was measured on correctly-varied maps.
+        // THE FRONTIER IS A DIFFERENT GENERATOR, NOT A DIFFERENT SCENE. The
+        // endless mode is one enormous board whose difficulty rises with
+        // distance from the camp (battle/frontier.js), and every rule this
+        // screen plays by is unchanged — so it arrives as a `mapGen` swap and
+        // nothing else, the same way the harness takes it.
         config = buildBattleConfig(
-          ctx.state, regionId, boosters, generateBattleMap,
+          ctx.state, regionId, boosters,
+          regionId === FRONTIER_ID ? generateFrontierMap : generateBattleMap,
           { ...(composition ? { composition } : {}), ...(incursion ? { incursion } : {}) },
         );
         assertBattleConfig(config);

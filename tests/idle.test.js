@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 import { createState, toPersisted, fromPersisted } from '../src/core/store.js';
 import { OFFLINE } from '../src/content/upgrades.data.js';
-import { REGION_BY_ID, REGIONS, fullConquestIncome } from '../src/content/regions.data.js';
+import { REGION_IDS, REGIONS, fullConquestIncome } from '../src/content/regions.data.js';
 import {
   incomePerSec, baseIncomePerSec, recalcIncome, accrue, tick,
   applyOfflineProgress, offlineCapMs, timeToAfford, projectCrowns,
@@ -184,8 +184,12 @@ test('the region table hits its full-conquest income target', () => {
   // of asserting the seam still carries it. What is actually worth checking is
   // that meta/idle.js `incomePerSec` agrees with the content table — a region
   // whose reward never reaches the economy is the failure this catches.
-  const all = Object.keys(REGION_BY_ID);
-  const s = world(all);
+  // `REGION_IDS`, not `Object.keys(REGION_BY_ID)`, and the difference is the
+  // point: since the frontier shipped, that map resolves one id that is NOT a
+  // campaign region and has no record in `meta.regions` at all. The claim here
+  // is about the CAMPAIGN table reaching the economy, which is exactly the list
+  // `REGION_IDS` is.
+  const s = world([...REGION_IDS]);
   assert.ok(Math.abs(incomePerSec(s) - fullConquestIncome()) < 1e-9,
     `idle pays ${incomePerSec(s)}/s at full conquest; the table says ${fullConquestIncome()}/s`);
   // ...and the shape claim that number encodes: 21 regions of a compounding

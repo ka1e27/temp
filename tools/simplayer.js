@@ -6,6 +6,8 @@
 // is measured with — not against a hand-built fixture.
 import { startBattle, step } from '../src/battle/sim.js';
 import { generateBattleMap } from '../src/battle/mapgen.js';
+import { generateFrontierMap } from '../src/battle/frontier.js';
+import { FRONTIER_ID } from '../src/content/endless.data.js';
 // The between-battles shopping moved to ./simshop.js for the line budget and is
 // re-exported here, so this file stays the harness's one front door.
 import { spendCrowns, fieldedUnits } from './simshop.js';
@@ -322,7 +324,14 @@ export function metaFor(conquered, idleMinutes = 0, seed = 1, fielded = null, le
 export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
   const state = metaFor(conquered, idleMinutes, seed, fieldedUnits(opts.weights),
     opts.legacy ?? 0, opts.relics ?? 0);
-  const config = buildBattleConfig(state.meta, regionId, [], generateBattleMap, {
+  // THE FRONTIER IS A DIFFERENT GENERATOR, NOT A DIFFERENT BOT. The endless
+  // mode is one enormous board whose difficulty rises with distance from the
+  // camp (battle/frontier.js) — and every rule the bot plays by is unchanged,
+  // so it arrives as a `mapGen` swap and nothing else. Same lesson as the
+  // incursion ladder one flag along: a mechanic the harness cannot play is a
+  // mechanic nobody has measured.
+  const gen = regionId === FRONTIER_ID ? generateFrontierMap : generateBattleMap;
+  const config = buildBattleConfig(state.meta, regionId, [], gen, {
     seed,
     composition: opts.weights ?? null,
     // `opts.incursion` is a DEPTH on the endless ladder, and the bot plays a rung
@@ -352,5 +361,11 @@ export function playOne(regionId, seed, conquered, idleMinutes = 0, opts = {}) {
   // exercised rather than trust that it was — the whole reason this bot's
   // balance numbers were wrong for so long is that nobody could.
   const topLevel = Math.max(0, ...mine.map((x) => x.level));
+  // A HOOK RATHER THAN A WIDER RETURN. The frontier is scored by how far OUT
+  // the bot got, which is a fact about the finished board and means nothing on
+  // a campaign map — so `tools/simfrontier.js` reads it here instead of this
+  // function growing a column no region has. Absent, nothing is called and this
+  // is the same function every measured number was taken with.
+  opts.observe?.(battle);
   return { status: battle.status, ticks: battle.tick, cap, mineN: mine.length, foeN, topLevel };
 }

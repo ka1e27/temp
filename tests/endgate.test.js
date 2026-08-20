@@ -93,6 +93,13 @@ test('neither entry is built conditionally any more', () => {
     'the incursion button must not be built conditionally');
   assert.doesNotMatch(src('mainmenu.js'), /if\s*\(canAbdicate\([^)]*\)\)\s*\{/,
     'the abdicate button must not be built conditionally');
-  assert.match(src('worldmap.js'), /endgameEntry\(/);
+  assert.doesNotMatch(src('worldmap.js'), /frontierOpen\([^)]*\)\s*\?/,
+    'the frontier button must not be built conditionally');
+  // The world map reaches `endgameEntry` through the two named wrappers rather
+  // than calling it itself, so assert on what it actually builds — pinning the
+  // inner name would have failed the moment the wrappers shipped, which is a
+  // test asserting a call graph rather than the property it cares about.
+  assert.match(src('worldmap.js'), /incursionEntry\(/);
+  assert.match(src('worldmap.js'), /frontierEntry\(/);
   assert.match(src('mainmenu.js'), /endgameEntry\(/);
 });

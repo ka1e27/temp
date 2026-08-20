@@ -159,7 +159,14 @@ export function generateBattleMap(regionSpec, seed) {
   // to it.
   const outside = shapeMask(spec.shape ?? spec.region?.shape, cols, rows, seed >>> 0);
 
-  const plan = planSites(spec);
+  // A SUPPLIED PLAN, or the campaign's own. `planSites` is shaped entirely
+  // around a throne — camp at one edge, walls ringing the castle at the other,
+  // farms sweeping out from the walls — which is right for a raid and wrong for
+  // a frontier you walk out into. `battle/frontier.js` supplies the other
+  // shape and reuses everything below this line: terrain, rivers, massifs,
+  // connectivity repair, the shape mask. No shipped region carries a `plan`,
+  // so this is provably inert for the campaign.
+  const plan = spec.plan ?? planSites(spec);
   const levels = developLevels(plan, develop);
   const wide = bandCandidates(grid, [0, 1], outside);
   const placed = [];

@@ -249,7 +249,16 @@ export async function runCampedDrag(page, step, note) {
       + `hex=${why.hex} pathEnd=${why.pathEnd} pathLen=${why.pathLen} miss=${why.miss}`);
   }
 
-  await page.drag(at, onward.pt);
+  // ...AND PROVE THE PRESS TOO, not only the click. The retry above guards
+  // `tap`, and the drag's own `pointerdown` is a SECOND, independently flaky
+  // hit-test that nothing was checking: observed once in CI, the click selected
+  // the army and the drag that followed reported `SEND` — which is the exact
+  // signature this step's header describes for a press that found nothing at
+  // all, because `lastCommand` is still holding the march that set the step up.
+  // `page.drag` is decomposed here so the press can be inspected before the
+  // gesture is committed to; `view.dragFromSquad` is the one field that says
+  // which of `onDown`'s four branches ran.
+  await dragFromArmy(page, camped.id, at, onward.pt);
   await page.sleep(700);
 
   const after = await page.eval((id) => {
@@ -277,4 +286,43 @@ export async function runCampedDrag(page, step, note) {
   }
   step(`camped drag: ${camped.n} at [${camped.q},${camped.r}] -> `
     + `${after.source.n} held, ${camped.n - after.source.n} marched to [${next.q},${next.r}]`);
+}
+
+/**
+ * A drag that starts on a camped army, with the PRESS asserted rather than
+ * assumed. Mirrors `cdp.js drag` step for step; the only addition is reading
+ * `view.dragFromSquad` between the press and the move, and starting over once
+ * if `onDown` took some other branch.
+ *
+ * Releasing before the retry matters: a press left down would make the second
+ * attempt a continuation of the first gesture rather than a new one, and a box
+ * select already under way swallows it.
+ */
+async function dragFromArmy(page, squadId, from, to, steps = 12) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await page.mouse('mouseMoved', from.x, from.y, 'none', 0);
+    await page.mouse('mousePressed', from.x, from.y);
+    const took = await page.eval(() => window.__game.__ui?.dragFromSquad ?? null);
+    if (took !== squadId) {
+      await page.mouse('mouseReleased', from.x, from.y);
+      await page.eval(() => {
+        const v = window.__game.__ui;
+        if (v) { v.box = null; v.dragFrom = null; v.dragFromSquad = null; }
+      });
+      await page.sleep(150);
+      if (attempt === 2) {
+        throw new Error(`pressing the camped force began ${took === null ? 'no squad drag' : `a drag off ${took}`}`
+          + ' — the press found something other than the army the click just selected');
+      }
+      continue;
+    }
+    for (let i = 1; i <= steps; i++) {
+      await page.mouse('mouseMoved',
+        from.x + ((to.x - from.x) * i) / steps,
+        from.y + ((to.y - from.y) * i) / steps, 'left', 1);
+      await page.sleep(12);
+    }
+    await page.mouse('mouseReleased', to.x, to.y, 'left', 0);
+    return;
+  }
 }

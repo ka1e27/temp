@@ -21,6 +21,7 @@ import { REGIONS, REGION_BY_ID, REGION_IDS } from '../src/content/regions.data.j
 import { DEFAULT_COMPOSITION_WEIGHTS } from '../src/content/upgrades.data.js';
 import { TICK_HZ } from '../src/core/loop.js';
 import { runLadder } from './simladder.js';
+import { runFrontier } from './simfrontier.js';
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')).map(([k, v]) => [k, v ?? true]),
@@ -114,6 +115,17 @@ if (args.incursion) {
   runLadder(args.incursion, {
     n: N, idleMin: Number(args.idle ?? 30), weights: WEIGHTS, upgrades: !args.noupgrades,
     construct: !args.noconstruct,
+  });
+  process.exit(0);
+}
+
+// `--frontier` measures the ENDLESS MAP: one board, no throne, and a row per
+// empire size rather than per region. tools/simfrontier.js says why a frontier
+// run has no win rate. `--conquered=6,12,24` walks the empire back.
+if (args.frontier) {
+  runFrontier(args.conquered, {
+    n: N, idleMin: Number(args.idle ?? 30), weights: WEIGHTS, upgrades: !args.noupgrades,
+    construct: !args.noconstruct, richYards: !!args.richyards,
   });
   process.exit(0);
 }

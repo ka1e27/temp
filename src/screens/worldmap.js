@@ -14,13 +14,14 @@
 // and it is the only route to the loadout, the shop and the menu.
 import { h, clear, mount, bindText, bindClass } from '../ui/dom.js';
 import { compact, rate, duration } from '../ui/format.js';
-import { UI, WORLD, ENDGAME, IDLE } from '../content/strings.js';
+import { UI, WORLD, IDLE } from '../content/strings.js';
 import {
   worldView, regionById, isAttackable, raidCooldownRemaining, modeOf,
-  campaignGap, CAMPAIGN_GAP_WARN,
+  campaignGap, CAMPAIGN_GAP_WARN, regionsConquered,
 } from '../meta/world.js';
 import { incursionView } from '../meta/incursion.js';
-import { endgameEntry } from './endgate.js';
+import { frontierEntry, incursionEntry } from './endgate.js';
+import { FRONTIER_ID, frontierOpen } from '../content/endless.data.js';
 import { incomePerSec, offlineNotice } from '../meta/idle.js';
 import { offlineCapMs } from '../meta/upgrades.js';
 import { OFFLINE } from '../content/upgrades.data.js';
@@ -105,10 +106,8 @@ export function createWorldMapScene(ctx) {
       // guarded ad hoc in a handler that could be added later and forget to.
       // Shown LOCKED rather than absent — see screens/endgate.js for why that
       // reversed, and for the shop's own precedent.
-      const incursionBtn = endgameEntry({
-        cls: 'wm-incursion', text: ENDGAME.incursionTitle,
-        open: incursionView(meta()).open, why: ENDGAME.incursionLocked,
-        label: 'Open the incursion briefing',
+      const incursionBtn = incursionEntry({
+        open: incursionView(meta()).open,
         onOpen: () => ctx.scenes.push(ctx.screens.incursion),
       });
       // `.wm-shop` on the control itself, not "the first button in the
@@ -126,7 +125,14 @@ export function createWorldMapScene(ctx) {
         'aria-label': 'Open the main menu',
         on: { click: () => ctx.scenes.push(ctx.screens.mainmenu) },
       });
-      navButtons = [incursionBtn, shopBtn, menuBtn].filter(Boolean);
+      // THE FRONTIER — endless mode, shown locked before it opens so a player
+      // four regions away knows it is there. It launches through the ordinary
+      // pre-battle screen because it IS an ordinary battle (battle/frontier.js).
+      const frontierBtn = frontierEntry({
+        open: frontierOpen(regionsConquered(meta())),
+        onOpen: () => ctx.scenes.replace(ctx.screens.prebattle, { regionId: FRONTIER_ID }),
+      });
+      navButtons = [frontierBtn, incursionBtn, shopBtn, menuBtn].filter(Boolean);
       const header = h('div.wm-header.panel', {},
         // NOT a live region. It was `polite` and refreshes every 250ms, and
         // `compact` renders values under 1000 as whole numbers — measured at
