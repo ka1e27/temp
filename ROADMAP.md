@@ -53,21 +53,50 @@ a real lever at tier 2, where `regions.provenance.js` records greywater moving 6
 on 7 → 9 neutral. The sign genuinely differs by tier, which is worth knowing and is not
 what either note assumed.)
 
-**`--richyards` IS THE LEVER, and it is a BOT FIX rather than a dial.** Re-measured at
-n=24 (the recorded figure was n=8 and overstated it, exactly as this project's own
-sample-size rule predicts):
+**`--richyards` WAS THE LEVER, IT IS FLIPPED ON, AND THE CAMPAIGN INVERTED.** Measured at
+n=24 across four rows spanning tiers 3-6 (the recorded figure was n=8 and overstated it at
++62, exactly as this project's own sample-size rule predicts):
 
 ```
-region        off    richyards   delta   all-median
-gallowmoor    38%       75%       +37    38.0m -> 13.0m
+region        band     off    on     delta
+gallowmoor   50-72     38%    75%     +37
+thanescar    34-56     29%    58%     +29
+ravensmarch  22-42     17%    54%     +37
+widowsgate   18-36      4%    50%     +46
 ```
 
-That is larger than every dial move the re-tune has made put together, and it is the
-ROADMAP's own standing recommendation: the campaign is currently being tuned to compensate
-for a bot that holds six figures of gold against an 11.7/s training bill and builds farms
-with it. **Re-base with it ON before spending another dial.** The rest of the sweep
-(thanescar, ravensmarch, widowsgate) was still running when this was written — finish it,
-then flip the default and re-take the table.
+Flipped ON. A full 24-region sweep then read **nineteen of twenty-four rows TOO EASY and
+not one below its floor**, where the previous sweep had eleven of fifteen below. Nineteen
+dials were raised against that, sized off each row's overshoot and made non-decreasing by
+running maximum.
+
+**⚠ AND THE CONFIRMING SWEEP IS WHERE THIS PASS STOPS BEING TRUSTWORTHY, WHICH IS THE
+MOST IMPORTANT THING ON THIS PAGE.** Re-swept at the same n=24, six rows moved the WRONG
+WAY and the implied slopes ranged from +4.25 to −2.00 points per 0.01. That is noise: the
+standard error at n=24 near 50% is ~10 points, so a +0.05 move predicting −5 is invisible.
+Confirmed directly — thanescar re-taken at **n=48 on an unchanged dial read 65% against
+the 58% the n=24 sweep had just reported**.
+
+So: **the direction of the dial pass is sound and every individual size in it is a
+guess.** Nineteen of twenty-four rows on one side of their bands is far beyond noise; no
+single row's correction is. The table is still too easy, so the error is an undershoot,
+which is the safe direction.
+
+**WHAT THE NEXT SESSION MUST DO, in order.**
+
+1. **Do not size another dial move at n=24.** This is now demonstrated twice, and CLAUDE.md
+   carries the demonstration. n≥96 for a tune, n=240 near a band edge.
+2. **Get a real slope first.** One row, three dial values spanning ~0.6, n≥48 each. Nobody
+   has had a slope number for this bot, which is why two sessions have thrashed. A
+   measurement of exactly this shape was in flight when this was written (thanescar at
+   4.60/4.90/5.20) — read it off the scratchpad or re-take it.
+3. **Then re-size the corrections from that number and re-sweep at n≥96.**
+4. **IRONWOOD is knowingly out of band** at 96% against a 92% ceiling, and it is blocked
+   rather than forgotten: near-immune to `enemyMult` in this range, its working lever is
+   `neutral`, and raising that breaks the non-decreasing total-sites invariant against
+   saltmere, which is itself at 79% against a 78% floor. It needs saltmere moved first or a
+   third column.
+5. **The incursion ladder is downstream of all of this** — see item 4 below.
 
 ## ⇒ START HERE: the fun pass, live work list
 
