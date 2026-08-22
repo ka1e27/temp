@@ -4974,14 +4974,24 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   **A stale "still open" entry is worse than no list**, because it sends the next reader
   to build something twice — and this one had a task already marked done against it. When
   reading this section, spend the thirty seconds to check the claim against the code
-  before acting on it. **Three of them had gone stale silently** — this one, the install
-  affordance below, and (earlier, and recorded as its own scar) fog of war.
-- **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
-  rule — a yard while it holds fewer than three, a farm after that — and never a
-  stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
-  razed, while its army collapsed. An ordinary player under that much pressure builds a
-  wall or nothing. The fix is a pressure term in the kind choice, and it wants a
-  measurement rather than an opinion — `--noconstruct` is what keeps that re-takeable.
+  before acting on it. **FOUR of roughly fifteen entries in this section were stale when
+  audited** — this one, the install affordance, the bot's farm-building, and (earlier,
+  and recorded as its own scar) fog of war. That is a quarter of the list wrong, in a
+  document whose whole value is that it is right, so the audit is worth repeating
+  whenever this section is used to pick work.
+- ~~**The bot builds farms while it is losing.**~~ **ATTEMPTED, MEASURED, REJECTED —
+  the fourth stale entry, and the most useful of them, because it records a lever
+  nobody should re-spend.** The pressure term was written (`--wall`, `underPressure`,
+  `WANT_WALLS` 2) and it COSTS: gallowmoor 50% → 25%, thanescar 25% → 13% at n=16 on
+  matched seeds. The mechanism is the finding, not the sign: `underPressure` is true on
+  **57% of thinks** (654 of 1,140 on gallowmoor), so it is not an emergency signal, it
+  is the normal state of a mid-campaign battle — which lines up exactly with the census
+  of ~106 enemy columns a minute recorded above. It does not spam (2 strongholds against
+  56 farms in that battle); what it does is spend the OPENING on them, 2.5× the gold and
+  2× the slot time in the window where construction compounds hardest. **What would make
+  it correct is a signal separating "being poked" from "being overrun"**, and the
+  observation that motivated it was a bot that was LOSING — which needs a memory of
+  ground lost that the harness does not keep.
 - **Nothing weighs a build against an upgrade.** `upgradeTurn` simply runs first and
   construction gets the leftovers, never in the same turn. That is defensible as
   ORDINARY play — a cheap upgrade already on the panel is what a player reaches for —
