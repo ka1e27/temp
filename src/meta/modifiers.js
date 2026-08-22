@@ -41,6 +41,8 @@ import {
 import { atTier } from '../content/tiers.js';
 import { metaOf } from '../core/store.js';
 import { createRng, deriveSeed } from '../core/rng.js';
+import { stack } from './stacking.js';
+import { enemyMods } from './enemymods.js';
 import {
   offsetToAxial, fallbackMapGen, callMapGen, normalizeSites,
 } from './fallbackMap.js';
@@ -64,22 +66,13 @@ export {
   compositionSlots, compositionTotal, overBudget, slotCost, typeCount, canAddType,
 };
 
-/** The one true order. Asserted in tests; never reorder without a test change. */
-export const STACKING_ORDER = Object.freeze([
-  'base', 'additive', 'multiplicative', 'boosters', 'tier',
-]);
-
-/**
- * @param {number} base  content baseline + flat upgrade additions
- * @param {{additive?:number, multiplicative?:number, boosters?:number, tier?:number}} [s]
- */
-export function stack(base, s = {}) {
-  const additive = s.additive ?? 0;
-  const multiplicative = s.multiplicative ?? 1;
-  const boosters = s.boosters ?? 1;
-  const tier = s.tier ?? 1;
-  return base * (1 + additive) * multiplicative * boosters * tier;
-}
+// The stacking order and `enemyMods` are the two blocks this file shed at the
+// 400-line cap, both re-exported so the seam keeps one front door. `stack` had
+// to become its own file rather than travel with either half: both mods
+// builders need it and this file imports enemymods.js, so leaving it here
+// would have closed a cycle. Same fix as battle/fightaid.js.
+export { STACKING_ORDER, stack } from './stacking.js';
+export { enemyMods };
 
 const zeroComp = zeroComposition;
 
@@ -195,44 +188,6 @@ export function playerMods(metaState, expedition) {
     // player could buy Tactician, Field Manual, Scout Report and Standing
     // Orders and none of them would cross the seam or do anything at all.
     features: Object.keys(fx.features).sort(),
-  });
-}
-
-/**
- * The enemy's single difficulty dial, `enemyMult`, spread across its mods by
- * the ENEMY_SCALING exponents. Per-AI-tier knobs ride the `multiplicative`
- * bucket; the region's dial rides `tier`, which is applied last.
- */
-export function enemyMods(region, mult) {
-  const t = (exp) => mult ** exp;
-  return makeMods({
-    startGold: stack(BATTLE_START.enemyGold, { tier: t(ENEMY_SCALING.gold) }),
-    expedition: zeroComp(), // the enemy's head start is LAND, not a free army
-    // `AI_TIERS[].economyMult` is DELIBERATELY ABSENT from these two.
-    //
-    // battle/economy.js `siteGoldPerSec` already multiplies every enemy site by
-    // `economyMultFor(state, faction)`, which is the same AI_TIERS number. It
-    // used to ride here as well — on goldRateMult AND on farmYieldMult — so an
-    // enemy farm, which is multiplied by both, felt the handicap THREE times and
-    // an enemy castle twice. At tier 4 that turned an advertised x1.35 into
-    // x2.46 and the endgame enemy earned eighteen times what the player did
-    // (obsidian, measured: 537 gold/s against 30). Two files each thought they
-    // owned the knob. economy.js applies it; this file does not.
-    goldRateMult: stack(1, { tier: t(ENEMY_SCALING.gold) }),
-    trainSpeedMult: stack(1, { tier: t(ENEMY_SCALING.train) }),
-    trainCostMult: stack(1),
-    unitAtkMult: stack(1, { tier: t(ENEMY_SCALING.atk) }),
-    unitDefMult: stack(1, { tier: t(ENEMY_SCALING.def) }),
-    marchSpeedMult: stack(1),
-    farmYieldMult: stack(1, { tier: t(ENEMY_SCALING.gold) }),
-    garrisonCapBonus: stack(0),
-    siegeDmgMult: stack(1, { tier: t(ENEMY_SCALING.atk) }),
-    structureRegenMult: stack(1, { tier: t(ENEMY_SCALING.def) }),
-    // Clamped to the LENGTH of the table, not to a literal 4. The hardcoded
-    // number silently capped tier 5 at the tier-4 roster the moment a fifth
-    // tier shipped — the same class of bug as `knobsFor` in battle/aicore.js,
-    // which clamps to `AI_TIERS.length - 1` and is why that one was fine.
-    unlockedUnits: [...atTier(ENEMY_UNITS_BY_TIER, region.tier)],
   });
 }
 
