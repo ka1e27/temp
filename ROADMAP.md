@@ -41,6 +41,15 @@ That last row is the one to be careful of: `--notwist` was wired only into the
 taken since C1 shipped ran with the twists on whatever the flag said.** It works now, so
 a `--notwist` reading taken after this session is not comparable to one taken before it.
 
+**VERIFICATION, STATED HONESTLY.** 135/135 test files ran. `battlelength` is the
+inherited tier-3-advertises-20-minutes failure the re-tune owns. **`scout` now PASSES
+3/3** where CLAUDE.md records it red, most likely the same `--richyards` flip. The other
+four long harness files — `tactics`, `loadoutdominance`, `harness`, `campaignplay` — are
+**INDETERMINATE, not red**: at load ~20 from other tenants each printed `TAP version 13`
+and nothing else before being killed at 900 seconds apiece, run one at a time. None
+completed a single test. Browser smoke PASSED including the new doctrine step, and the
+phone audit is clean except one unexplained finding recorded above.
+
 **Neither C5 nor C6 can move a win rate.** C5 pays a timeout that was led and leaves
 `result` alone, and every measured number is `status === 'win'`; C6 changed no code.
 

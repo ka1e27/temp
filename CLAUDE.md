@@ -3878,6 +3878,22 @@ campaign has nothing new to acquire.
   **grep the test tree for the file you touched and for any constant you changed**
   (`grep -rln "battle-preview\|CONTRACT_VERSION" tests/`) before believing a green run,
   because the adjacent-suite habit is what makes a full-suite run feel redundant.
+- **THE FIVE LONG HARNESS FILES MAY BE UNRUNNABLE ON A BUSY BOX AT ANY TIMEOUT, and
+  "no result" is not "red".** Measured: at load average ~20 — from other tenants, with
+  nothing of this session's own running — `tactics`, `loadoutdominance`, `harness` and
+  `campaignplay` each printed `TAP version 13` and nothing else before being killed at
+  **900 seconds apiece, run one at a time**. Not one completed a single test. They fight
+  dozens of real battles, so their cost scales with whatever else is on the machine, and
+  the standing "≥180s each" figure is a floor for an idle box rather than a budget.
+  Check `uptime` before reading a result, and record "indeterminate" rather than
+  "failing" when the output is a bare TAP header — the two are indistinguishable in a
+  CI summary and only one of them is a defect.
+
+  Worth knowing alongside it: **`scout` now PASSES 3/3** where this file records it red
+  ("never completed a single watchtower across twelve tier-5/6 battles"). It is the one
+  of the five that is short enough to finish here, and the likeliest cause is the same
+  `--richyards` default flip that moved the campaign — a richer bot builds its towers.
+  The other four are untested against that flip.
 - **`node --test` AND `smoke.mjs` BOTH REPORT A LOADED BOX AS A BROKEN GAME, and the
   two failures look nothing alike.** This file already records that `npm test` exits 0
   having printed a truncated TAP stream when several sessions share the machine. The
