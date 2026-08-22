@@ -36,6 +36,29 @@ function playOnce(i, seed) {
   return battle;
 }
 
+/**
+ * Plays seeds until one is WON, and stops there.
+ *
+ * The floor below is `wins > 0`, so every seed after the first win is a battle
+ * whose result cannot change the outcome — and playing them anyway is what made
+ * this file unrunnable rather than merely slow. Measured on an IDLE box (load
+ * 0.19), one battle costs 0.4s on riverfen, 2.1s on duskfell and **132.8s on
+ * widowsgate**, which goes the full 20,520-tick cap at 6.5ms a tick. At 24 seeds
+ * a region, unconditionally, that priced test 1 at 576 battles and most of a
+ * working day, nearly all of it re-confirming regions that were won on seed one.
+ *
+ * Stopping early is EXACTLY equivalent for the assertion — each `playOnce` is
+ * independent, built fresh from its own seed — and it prices the file the right
+ * way round: cheap on a healthy region, expensive only where it is about to
+ * report a real failure.
+ */
+function wonWithin(i, seedAt, count, from = 0) {
+  for (let k = 0; k < count; k++) {
+    if (playOnce(i, seedAt(from + k)).status === 'win') return true;
+  }
+  return false;
+}
+
 const median = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
 
 /** Monotone helper that names the offender instead of just failing. */
@@ -85,14 +108,12 @@ test('campaign: every region is winnable by an ordinary player, at every tier', 
   for (let i = 0; i < REGIONS.length; i++) {
     const seedAt = (k) => 1000 + (k + 1) * 7919;
     let attempted = SEEDS;
-    let wins = Array.from({ length: SEEDS }, (_, k) => playOnce(i, seedAt(k)))
-      .filter((b) => b.status === 'win').length;
-    if (wins === 0) {
-      wins = Array.from({ length: ESCALATED_SEEDS }, (_, k) => playOnce(i, seedAt(SEEDS + k)))
-        .filter((b) => b.status === 'win').length;
+    let won = wonWithin(i, seedAt, SEEDS);
+    if (!won) {
+      won = wonWithin(i, seedAt, ESCALATED_SEEDS, SEEDS);
       attempted += ESCALATED_SEEDS;
     }
-    assert.ok(wins > 0,
+    assert.ok(won,
       `${REGIONS[i].id} was not won once in ${attempted} attempts — it is not a hard region,`
       + ' it is a broken one');
   }
@@ -128,9 +149,17 @@ test('campaign: no region advertises a length it cannot deliver', { timeout: 900
   const MIN_WINS = 6;
   for (let i = 0; i < REGIONS.length; i++) {
     const r = REGIONS[i];
-    const wins = Array.from({ length: SEEDS }, (_, k) => playOnce(i, 1000 + (k + 1) * 7919))
-      .filter((b) => b.status === 'win')
-      .map((b) => b.tick / 600);
+    const wins = [];
+    for (let k = 0; k < SEEDS; k++) {
+      const b = playOnce(i, 1000 + (k + 1) * 7919);
+      if (b.status === 'win') wins.push(b.tick / 600);
+      // OUT OF REACH: once the seeds left cannot carry the sample to MIN_WINS,
+      // this region steps aside below whatever they do, so playing them buys
+      // nothing. Exactly equivalent, and it pays on the LATE tiers, which are
+      // also the expensive ones — widowsgate wins about one seed in twenty and
+      // costs ~133s a battle, so it is the row that most needs to stop early.
+      if (wins.length + (SEEDS - 1 - k) < MIN_WINS) break;
+    }
     if (wins.length < MIN_WINS) continue;
     const med = median(wins);
     assert.ok(med >= r.targetLengthMin * 0.35 && med <= r.targetLengthMin * 2.5,

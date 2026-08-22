@@ -3939,6 +3939,56 @@ campaign has nothing new to acquire.
   of the five that is short enough to finish here, and the likeliest cause is the same
   `--richyards` default flip that moved the campaign — a richer bot builds its towers.
   The other four are untested against that flip.
+- **A DECLARED `{ timeout: N }` DOES NOTHING ON A SYNCHRONOUS TEST BODY, AND ALL FIVE OF
+  THIS REPO'S ARE ON ONE.** Node's per-test timeout is a timer, and a synchronous
+  callback owns the event loop until it returns, so the timer cannot fire. Proven rather
+  than recalled — a test declaring `{ timeout: 100 }` that spins for two seconds
+  **passes**, while the same timeout on an `async` body that awaits two seconds fails:
+
+  ```
+  ok 1 - sync body, timeout 100ms, spins for 2s
+  not ok 2 - async body, timeout 100ms, awaits 2s
+  ```
+
+  `campaignplay` (x2), `influence` (x2) and `loadoutdominance` declare the only five in
+  `tests/`, and every one is `() => {` rather than `async () => {`. So those numbers are
+  **decorative documentation of an intended budget, not a bound** — the only thing that
+  can actually stop these files is an OS-level `timeout`. Do not read a declared timeout
+  as a guarantee the suite cannot hang, and do not "fix" a hanging file by raising one.
+- **`campaignplay` WAS NOT SLOW, IT WAS QUADRATIC IN THE WRONG PLACE — 1,056 BATTLES WITH
+  NO SHORT-CIRCUIT.** This file records it as never completing here; that was read as
+  load, and it is not. Measured on an IDLE box (load 0.19), one battle end to end through
+  the file's own `playOnce`:
+
+  ```
+  riverfen      win       3,283 /10,830 ticks     0.4s    0.109 ms/tick
+  duskfell      win       4,706 /21,660 ticks     2.1s    0.443 ms/tick
+  widowsgate    timeout  20,520 /20,520 ticks   132.8s    6.471 ms/tick
+  ```
+
+  **Two minutes and thirteen seconds for ONE late battle**, and test 1 played 24 seeds a
+  region unconditionally (576 battles) with test 2 adding 480 more. The cost is real and
+  it is mostly waste: test 1's assertion is a FLOOR (`wins > 0`), so every seed after the
+  first win is a battle whose result cannot change the outcome. `wonWithin` stops there.
+  Exactly equivalent — each `playOnce` builds a fresh battle from its own seed, so the
+  calls are independent — and it prices the file the right way round: **cheap on a healthy
+  region, expensive only where it is about to report a real failure.** Test 2 needs its
+  full sample (a median is biased by stopping early) and gets the one sound cut instead:
+  abandon a region the moment the seeds remaining cannot carry it to `MIN_WINS`, since it
+  is skipped below either way.
+
+  **Equivalence was PROVEN rather than argued, because "I reasoned it through" is how a
+  test quietly stops testing.** Both control flows were replayed side by side over 200,000
+  synthetic win/loss patterns at every win rate from 0% to 100%, asserting the same verdict
+  AND the same `attempted` count in the failure message: **zero mismatches, 81.8% of test
+  1's battles saved.** That sweep is also what says the saving is not a tier-1 artefact —
+  it is 96% at a healthy win rate and 0% on a region that is genuinely never won, which is
+  the price curve the change is for.
+
+  **The general lesson is that a FLOOR should be measured like a floor.** `Array.from({
+  length: SEEDS }, ...)` reads as the natural way to take a sample and is the wrong shape
+  for an assertion that only needs one success; the same mistake is worth grepping for
+  anywhere a test plays a batch and then asks `.filter(...).length > 0`.
 - **`node --test` AND `smoke.mjs` BOTH REPORT A LOADED BOX AS A BROKEN GAME, and the
   two failures look nothing alike.** This file already records that `npm test` exits 0
   having printed a truncated TAP stream when several sessions share the machine. The
