@@ -3955,8 +3955,8 @@ campaign has nothing new to acquire.
   **decorative documentation of an intended budget, not a bound** — the only thing that
   can actually stop these files is an OS-level `timeout`. Do not read a declared timeout
   as a guarantee the suite cannot hang, and do not "fix" a hanging file by raising one.
-- **`campaignplay` WAS NOT SLOW, IT WAS QUADRATIC IN THE WRONG PLACE — 1,056 BATTLES WITH
-  NO SHORT-CIRCUIT.** This file records it as never completing here; that was read as
+- **`campaignplay` WAS NOT SLOW, IT WAS PAYING FULL PRICE FOR AN ANSWER IT HAD ALREADY
+  GOT — 1,056 BATTLES WITH NO SHORT-CIRCUIT.** This file records it as never completing here; that was read as
   load, and it is not. Measured on an IDLE box (load 0.19), one battle end to end through
   the file's own `playOnce`:
 
@@ -3981,14 +3981,28 @@ campaign has nothing new to acquire.
   test quietly stops testing.** Both control flows were replayed side by side over 200,000
   synthetic win/loss patterns at every win rate from 0% to 100%, asserting the same verdict
   AND the same `attempted` count in the failure message: **zero mismatches, 81.8% of test
-  1's battles saved.** That sweep is also what says the saving is not a tier-1 artefact —
-  it is 96% at a healthy win rate and 0% on a region that is genuinely never won, which is
-  the price curve the change is for.
+  1's battles saved.**
+
+  **And the saving is a CURVE, which is the property that makes it safe.** Battles played
+  per region, by the region's true win rate:
+
+  ```
+  win rate   100%   80%   50%   30%   20%   10%    5%    2%    0%
+  new         1.0   1.3   2.0   3.3   5.0   9.7  16.7  28.6  48.0
+  old        24.0  24.0  24.0  24.0  24.1  25.8  30.0  37.4  48.0
+  saved       96%   95%   92%   86%   79%   63%   44%   23%    0%
+  ```
+
+  A region that is never won pays **exactly** what it always did, so the change cannot
+  hide a broken region by sampling it less; what it stops paying for is the twenty-three
+  rows that were never in question.
 
   **The general lesson is that a FLOOR should be measured like a floor.** `Array.from({
   length: SEEDS }, ...)` reads as the natural way to take a sample and is the wrong shape
   for an assertion that only needs one success; the same mistake is worth grepping for
-  anywhere a test plays a batch and then asks `.filter(...).length > 0`.
+  anywhere a test plays a batch and then asks `.filter(...).length > 0`. **That grep has
+  been run and this was the only instance** — every other `Array.from({ length: … })` in
+  `tests/` builds a fixture rather than a sample.
 - **`node --test` AND `smoke.mjs` BOTH REPORT A LOADED BOX AS A BROKEN GAME, and the
   two failures look nothing alike.** This file already records that `npm test` exits 0
   having printed a truncated TAP stream when several sessions share the machine. The
