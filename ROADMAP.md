@@ -115,6 +115,53 @@ spend its own gold, and `--richyards` unmasked it. It is the reason the back hal
 uniformly easy instead of row by row, and it says the lever is the expedition curve or
 the enemy's scaling, not fifteen separate `enemyMult` edits.
 
+### The method for the remaining rows, and the commands in flight
+
+**BRACKET, THEN BISECT — never slope-scale.** Every unfixed row sits at 82-95% on the
+sigmoid's HIGH SHOULDER, which is exactly where CLAUDE.md records `enemyMult` moving
++0.30 and thanescar not moving at all. A per-row correction sized off a campaign-wide
+slope constant is what ate two earlier sessions.
+
+Probing is done in a **detached worktree**, never against the live table, because four
+sweeps run in parallel here and a balance-sensitive job started after an edit would
+measure somebody's in-flight probe:
+
+```bash
+git worktree add --detach /tmp/probe HEAD
+# patch one region's enemyMult in /tmp/probe/src/content/regions.data.js, then:
+(cd /tmp/probe && node tools/simrunner.js --region=kaldan --n=96)
+```
+
+The control point must reproduce the main tree before any probe reading is trusted —
+kaldan at its shipped 3.23 read 92% in both, which is what licensed the rest.
+
+**IN FLIGHT AS OF THIS WRITING** (re-run any that did not land):
+
+```bash
+node tools/simrunner.js --region=gallowmoor,sunder,vaelstrand,duskfell,karrowmere --n=96
+node tools/simrunner.js --region=thanescar,blackspire,ironcrown,obsidian --n=48
+node --test tests/campaignplay.test.js          # first run since the short-circuit
+# kaldan bracket at n=96, dials 3.23 (control) / 3.60 / 4.10 / 4.70
+```
+
+**STILL UNTAKEN:** tiers 5 and 6. At ~100-133s a battle, n=96 is ~3.5 HOURS PER ROW and
+is not affordable here; take them at n=24-48 and label them a screen. They already read
+50-58% at n=12 against ceilings of 36-42, which is >2 SEM even at n=24, so the direction
+is not in doubt — what is missing is the step size, and that wants a bracket on ONE row
+(stormhalt) rather than a sweep of all six.
+
+**THE PLANNED MOVES, all feasible within the non-decreasing constraint** — sizes pending
+the bracket, and note that three rows must NOT move because they are already in band:
+
+```
+ashford   2.70 -> ?   (-3)        ironwood 3.19, saltmere 3.19  HOLD
+kaldan    3.23 -> ?   (-8)        highmarch 3.39                HOLD (at its ceiling)
+greywater 3.39 -> ?   (-2)        thornmoor 3.56                HOLD
+emberholt 3.67 -> ?   (-6)        gallowmoor 4.01 sits above it
+```
+
+---
+
 **A STALENESS AUDIT OF CLAUDE.md's "Still open" FOUND THREE IN EIGHT WRONG** — the
 garrison seam (validated all along), the install affordance (built, wired, smoke-tested)
 and the bot's farm-building (attempted, measured at -25 and -12, rejected with the
