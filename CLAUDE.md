@@ -1277,6 +1277,32 @@ is not the lever, whatever the win rate says. The candidates for a clock-bound r
 `targetLengthMin` (which derives `hardCapMs`), the throne stalemate itself, and the bot's
 own conversion rate — not enemy strength.
 
+**⚠ RE-CONFIRMED ON THE POST-`--richyards` TABLE, AND THE MECHANISM IS NOW VISIBLE IN THE
+OUTCOME BREAKDOWN.** thanescar bracketed at n=48 on today's engine:
+
+```
+dial      4.60    5.00    5.20    5.50
+win%        63      44      40      48
+wins        30      21      19      23
+timeouts     -      23      22      17
+losses       -       4       7       8
+all-med      -   28.1m   27.5m   22.4m
+```
+
+Between 5.00 and 5.50 the win rate is FLAT within noise (7.2 points of SEM at this n),
+and what actually moves is the FAILURE MODE: timeouts fall 23 → 17 while losses rise
+4 → 8. **`enemyMult` on this row converts "ran out of clock" into "was beaten", not
+"won" into "lost".** The all-run median falling from 28.1 to 22.4 minutes as the enemy
+gets STRONGER is the same fact from the other side — a harder enemy makes the bot stop
+grinding and resolve sooner, which is the "a harder region made the bot win more"
+finding recorded for C1, arriving a fourth time.
+
+Two consequences. **A row can be tuned INTO its band while nothing about it improves** —
+40% and 48% both read `ok` here, and the 48% version is the one where twice as many
+players are beaten rather than timed out, which is a completely different experience
+behind an identical verdict. And **the win rate alone cannot tell you which you bought**,
+so the outcome breakdown is not optional on any row whose all-median sits near its cap.
+
 **AND IT IS NOT ONE ROW — IT IS THE WHOLE CAMPAIGN. 93% OF EVERY NON-WIN IS A TIMEOUT.**
 Read straight off the full 24-region sweep (n=24 a row, 576 battles) by counting the
 outcome breakdown the runner already prints and nobody had ever totalled:
