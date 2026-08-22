@@ -55,8 +55,14 @@ tier 3  gallowmoor 78  sunder 68  vaelstrand 78  duskfell 79
 tier 4  thanescar 63  blackspire 71  ironcrown 71  obsidian 69
                                                          n=48   ALL FOUR over
 tier 5  ravensmarch 42  gravenreach 33  nightharrow 35   n=48   all ok (see below)
-tier 6  stormhalt 50  ...                                n=24   over; rest in flight
+tier 6  stormhalt 50  cinderwatch 50  widowsgate ?      n=24   over; clock-bound
 ```
+
+**Tier 6 is the same clock story as tier 5**: stormhalt's all-median is 30.1m against a
+30.4m cap and cinderwatch's is 32.3m against 32.3m — both pinned to the wall, cinderwatch
+with **zero losses in 24**. Tier 6 is the one tier free to rise as far as it likes
+(nothing sits above it), so it is the easiest to move and the least informative to move,
+for the same reason: the dial there buys failure mode, not win rate.
 
 **THE THREE THINGS THAT CONSTRAIN EVERY REMAINING MOVE.**
 
@@ -74,9 +80,13 @@ tier 6  stormhalt 50  ...                                n=24   over; rest in fl
 
 **THE NEXT THREE ACTIONS, in order.**
 
-1. **Measure ravensmarch's slope.** It is the binding constraint on the whole back half
-   and it is the one number nobody has. `--region=ravensmarch --n=24` at 4.80 / 5.20 /
-   5.60. Until it exists, every tier-3/4 candidate is a guess about tier 5.
+1. ~~Measure ravensmarch's slope.~~ **DONE, and it settles the ceiling.** n=24:
+   **4.80 -> 42%, 5.20 -> 21% (TOO HARD, floor 22)** — slope 0.53, the steepest row
+   measured in this pass. ravensmarch therefore cannot exceed about **5.15**, and with
+   n=24's ~10-point SEM the safe working ceiling is **5.05**. Since `enemyMult` is
+   non-decreasing, **that is tier 4's ceiling too**, and at 5.05 ironcrown and obsidian
+   are predicted at 63% and 65% against a 56 ceiling. **Their unfixability by the dial is
+   now measured rather than inferred.**
 2. **Then author tiers 3-4 as one curve** against that ceiling, using the per-row slopes
    already measured (gallowmoor 0.47, sunder 0.26, vaelstrand 0.29, thanescar 0.38,
    blackspire 0.46, ironcrown 0.24, obsidian 0.15). Expect two or three rows to miss and

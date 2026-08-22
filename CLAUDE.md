@@ -4103,6 +4103,14 @@ campaign has nothing new to acquire.
   anywhere a test plays a batch and then asks `.filter(...).length > 0`. **That grep has
   been run and this was the only instance** — every other `Array.from({ length: … })` in
   `tests/` builds a fixture rather than a sample.
+- **`pkill -f` MATCHES ITS OWN COMMAND LINE, so a background job that pkills a pattern
+  containing its own arguments KILLS ITSELF.** Cost a sweep here: a job whose script
+  began `pkill -f "region=ravensmarch --n=24"` died instantly with exit 144 and no
+  output, because the wrapper shell running that pkill has the literal string
+  `region=ravensmarch --n=24` in its own `/proc/self/cmdline`. The tell is that it dies
+  before printing anything at all. Kill by PID (`ps -eo pid,args | grep ...` first), or
+  narrow the pattern so it cannot match the killer — and never put a `pkill -f` in the
+  same command as the work it is clearing the way for.
 - **`node --test` AND `smoke.mjs` BOTH REPORT A LOADED BOX AS A BROKEN GAME, and the
   two failures look nothing alike.** This file already records that `npm test` exits 0
   having printed a truncated TAP stream when several sessions share the machine. The
