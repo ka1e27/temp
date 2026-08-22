@@ -3839,6 +3839,16 @@ campaign has nothing new to acquire.
 
 ## Gotchas that have already cost time
 
+- **RUNNING THE SUITES *ADJACENT* TO A CHANGE IS NOT RUNNING ITS OWN SUITE, and this
+  cost two red files in one session.** C2 changed `screens/battle-preview.js`, and the
+  suites run against it were `previewhonesty`, `multisend`, `battleui`, `towers` and
+  `melee` — every neighbour, and not `tests/preview.test.js`, which pins the preview
+  line as an exact string and went red on the one clause the change adds. The same pass
+  bumped `CONTRACT_VERSION` and updated the pin in `seam.test.js` without noticing the
+  SECOND pin in `progressionbattle.test.js`. Both are cheap to find and free to prevent:
+  **grep the test tree for the file you touched and for any constant you changed**
+  (`grep -rln "battle-preview\|CONTRACT_VERSION" tests/`) before believing a green run,
+  because the adjacent-suite habit is what makes a full-suite run feel redundant.
 - **`node --test` AND `smoke.mjs` BOTH REPORT A LOADED BOX AS A BROKEN GAME, and the
   two failures look nothing alike.** This file already records that `npm test` exits 0
   having printed a truncated TAP stream when several sessions share the machine. The
