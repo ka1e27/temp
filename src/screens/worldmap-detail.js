@@ -43,9 +43,24 @@ export function createDetailRenderer(deps) {
     const reward = previewReward(m, region.id);
     const gateFrac = GATE_CLAMP(region.castleGateFrac ?? 0);
 
+    // `stat` IS LOAD-BEARING, and the row it exists for is why. worldmap.css
+    // styles the reward as the panel's hero figure and pulls it to the top with
+    // `dd:nth-of-type(6)` — correct when this list was six rows long and the
+    // reward was the sixth. `Throne holds until` is CONDITIONAL (omitted where
+    // there is no gate), so on every region that HAS one it takes slot 6 and
+    // inherits the hero treatment: measured on gallowmoor, "you hold 55% of the
+    // map" rendered as a giant gold headline wrapped over three lines while the
+    // income it displaced sat in body text at the bottom. Tiers 1-2 ship no gate,
+    // so the panel looked right exactly where anybody would have checked it.
+    //
+    // The CSS already carried `[data-stat='reward']`/`[data-stat='difficulty']`
+    // as the intended fix and nothing ever emitted the attribute — the same
+    // built-and-unreachable shape this project keeps finding. Positional
+    // selectors over a list that can change length are the defect; naming the
+    // row is the fix.
     const rows = [
       ['Tier', `${region.tier}`],
-      ['Enemy strength', `x${region.enemyMult.toFixed(2)}`],
+      ['Enemy strength', `x${region.enemyMult.toFixed(2)}`, 'difficulty'],
       ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
       ['Enemy sites', `${region.siteCounts.enemy}`],
       ['Typical length', `~${region.targetLengthMin} min`],
@@ -61,7 +76,7 @@ export function createDetailRenderer(deps) {
       // like its size — and it is omitted rather than shown as 0%% where there is
       // no gate, because "0%%" reads as a requirement rather than as its absence.
       ...(gateFrac > 0 ? [['Throne holds until', `you hold ${percent(gateFrac)} of the map`]] : []),
-      ['Income if taken', rate(region.rewardPerSec)],
+      ['Income if taken', rate(region.rewardPerSec), 'reward'],
     ];
 
     // THE HAND THIS REGION CARRIES, on the screen where a region is CHOSEN.
@@ -75,8 +90,9 @@ export function createDetailRenderer(deps) {
     mount(detail,
       h('h2#wm-detail-h', { text: region.name }),
       h('p.wm-flavour', { text: region.flavour ?? '' }),
-      h('dl.wm-stats', {}, ...rows.flatMap(([k, v]) => [
-        h('dt.label', { text: k }), h('dd.num', { text: v }),
+      h('dl.wm-stats', {}, ...rows.flatMap(([k, v, stat]) => [
+        h('dt.label', { text: k, ...(stat ? { 'data-stat': stat } : {}) }),
+        h('dd.num', { text: v, ...(stat ? { 'data-stat': stat } : {}) }),
       ])));
 
     if (hand.length) {

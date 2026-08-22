@@ -254,15 +254,21 @@
   margin: 0; justify-content: flex-end;
   font-family: var(--font-num); font-variant-numeric: tabular-nums;
 }
-.wm-stats dt:nth-of-type(6), .wm-stats dd:nth-of-type(6),
-.wm-stats [data-stat='reward'] { order: -2; border-top: 0; }
-.wm-stats dt:nth-of-type(2), .wm-stats dd:nth-of-type(2),
-.wm-stats [data-stat='difficulty'] { order: -1; }
-.wm-stats dd:nth-of-type(6), .wm-stats dd[data-stat='reward'] {
+/* NAMED, NOT COUNTED. These were `dd:nth-of-type(6)` and `(2)` as well, which
+   was right while the list was a fixed six rows — and the `Throne holds until`
+   row is conditional, so on any region that has a gate it took slot 6 and got
+   the reward's gold headline treatment while the reward lost it. The attribute
+   selectors were already here as the intended fix; nothing emitted the
+   attribute until worldmap-detail.js did. */
+.wm-stats dt[data-stat='reward'], .wm-stats dd[data-stat='reward'] {
+  order: -2; border-top: 0;
+}
+.wm-stats dt[data-stat='difficulty'], .wm-stats dd[data-stat='difficulty'] { order: -1; }
+.wm-stats dd[data-stat='reward'] {
   font: var(--w-bold) var(--t-2xl) / 1 var(--font-num);
   letter-spacing: -0.02em; color: var(--c-gold); padding-top: 0;
 }
-.wm-stats dd:nth-of-type(2), .wm-stats dd[data-stat='difficulty'] {
+.wm-stats dd[data-stat='difficulty'] {
   font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-enemy);
 }
 

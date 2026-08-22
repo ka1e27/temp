@@ -7,6 +7,7 @@
 // could never change, a menu a new player had to read first).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { createState, createMeta } from '../src/core/store.js';
 import { UNIT_IDS } from '../src/content/balance.js';
@@ -139,4 +140,34 @@ test('money rows appear only on a win; charges spent always do', () => {
   assert.equal(map.Crowns, '+240');
   assert.match(map.Income, /→/);
   assert.match(map.Duration, /best yet/);
+});
+
+// ---------------------------------------------------------------------------
+// A CONDITIONAL ROW UNDER A POSITIONAL SELECTOR
+// ---------------------------------------------------------------------------
+
+// worldmap.css styles the reward as the detail panel's hero figure and pulls it
+// to the top. It did that with `.wm-stats dd:nth-of-type(6)` — correct while the
+// list was a fixed six rows — and `Throne holds until` is CONDITIONAL, omitted
+// where a region has no gate. So on every region that HAS one it took slot 6 and
+// inherited the headline treatment: measured on gallowmoor, "you hold 55% of the
+// map" rendered as a giant gold heading wrapped over three lines while the income
+// it displaced sat in body text at the bottom. Tiers 1-2 ship no gate at all, so
+// the panel looked correct exactly where anybody would have checked it.
+//
+// Asserted against SOURCE because that is where the rule lives: a DOM test would
+// pass the moment the attribute was emitted and say nothing about the selector
+// that made it necessary.
+test('worldmap: the stats panel names its special rows instead of counting them', () => {
+  const css = readFileSync(new URL('../src/styles/worldmap.css', import.meta.url), 'utf8');
+  const stats = css.split('.wm-hint')[0];
+  assert.doesNotMatch(stats, /\.wm-stats\s+d[dt]:nth-of-type/,
+    'a positional selector over a list that can change length — name the row instead');
+
+  const js = readFileSync(new URL('../src/screens/worldmap-detail.js', import.meta.url), 'utf8');
+  for (const stat of ['reward', 'difficulty']) {
+    assert.match(css, new RegExp(`\\[data-stat='${stat}'\\]`), `css never styles ${stat}`);
+    assert.match(js, new RegExp(`'${stat}'`), `worldmap-detail.js never emits ${stat}`);
+  }
+  assert.match(js, /'data-stat'/, 'the attribute the CSS selects on is never set');
 });
