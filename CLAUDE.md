@@ -4076,6 +4076,22 @@ campaign has nothing new to acquire.
   hide a broken region by sampling it less; what it stops paying for is the twenty-three
   rows that were never in question.
 
+  **⚠ AND IT IS NOT ENOUGH ON AN OUT-OF-BAND TABLE — MEASURED, ON THIS FIX.** Run end to
+  end after the short-circuit, `campaignplay` was still killed at a **three-hour** timeout
+  without finishing. Test 1 is now cheap; **test 2 is the dominant cost and the
+  short-circuit barely touches it**, because it plays 20 seeds a region for a MEDIAN and a
+  median cannot stop early. At today's win rates that is ~480 battles whose late rows run
+  to a 30-34 minute cap — roughly four hours on its own.
+
+  So the honest scope of the fix is "test 1", not "the file". What actually makes this
+  file cheap is the TABLE: it passed in CI in eleven minutes on a commit titled "24 of 24
+  in band" (see the deploy-gate entry below). **A tuned campaign resolves its battles; an
+  out-of-band one runs every seed to the cap** — so the cost is a symptom of the thing the
+  test exists to detect, and the way to make it fast is to finish the re-tune.
+
+  Worth knowing before re-running it here: it is the ONLY test in the suite that cannot
+  complete in this environment, and `--test-name-pattern="winnable"` runs test 1 alone.
+
   **The general lesson is that a FLOOR should be measured like a floor.** `Array.from({
   length: SEEDS }, ...)` reads as the natural way to take a sample and is the wrong shape
   for an assertion that only needs one success; the same mistake is worth grepping for
