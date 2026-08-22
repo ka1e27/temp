@@ -56,7 +56,19 @@ test('preview: the raid — 4 raiders take a farm but cannot breach it fast', ()
   assert.equal(pv.survivors, 3);
   near(pv.breachSec, 250, 1e-9);
   assert.equal(pv.insufficient, false);
-  assert.equal(previewLine(pv), 'AP 83.2 / DP 15.0 · WIN FIELD · 3 survive · BREACH 4:10 · ETA 4.2s');
+  // `unless +23 arrive` is the reinforcement margin (C2, screens/battle-preview.js
+  // `reinforceMargin`): the smallest relief that would flip this outcome, found
+  // by re-running the SAME resolveField the send itself will make. It rides on
+  // every winning preview, so it belongs in the pinned line rather than being
+  // trimmed out of it — a line assertion that skipped the newest clause would
+  // stop asserting what it names.
+  assert.equal(previewLine(pv),
+    'AP 83.2 / DP 15.0 · WIN FIELD · 3 survive · BREACH 4:10 · unless +23 arrive · ETA 4.2s');
+  assert.equal(pv.margin, 23);
+  // ...and nothing is inbound in this fixture, so it is a warning rather than a
+  // verdict — the CONTESTED branch needs a real column aimed at the target.
+  assert.equal(pv.inboundN, 0);
+  assert.equal(pv.contested, false);
 });
 
 test('preview: the siege two-punch — 12 militia + 1 ram lose the field', () => {

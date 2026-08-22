@@ -197,8 +197,12 @@ test('every CROWN line rides a contract field that already existed', () => {
   // which is exactly what this assertion is here to keep true. v12 is back to
   // the v8 shape a fourth time: a field battle takes `MELEE.seconds`, so a site
   // and a squad each carry a `melee` record, and a v11 blob resumed here is a
-  // board whose fights are not happening — not a CROWN line either.
-  assert.equal(CONTRACT_VERSION, 12);
+  // board whose fights are not happening — not a CROWN line either. v13 is the
+  // v8 shape a FIFTH time: `state.ai` gained `musterTick`, the latch for the
+  // enemy's one set-piece (battle/setpiece.js), so a v12 blob resumed after its
+  // host already landed raises a second one. Not a CROWN line either, which is
+  // the whole point of counting them here.
+  assert.equal(CONTRACT_VERSION, 13);
   const cfg = configWith({ arms: 3, warChest: 3, drill: 3, standingArmy: 2, siegeworks: 3 });
   for (const k of ['unitAtkMult', 'unitDefMult', 'goldRateMult', 'trainCostMult',
     'siegeDmgMult', 'structureRegenMult', 'marchSpeedMult', 'farmYieldMult']) {
