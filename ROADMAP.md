@@ -41,6 +41,88 @@ That last row is the one to be careful of: `--notwist` was wired only into the
 taken since C1 shipped ran with the twists on whatever the flag said.** It works now, so
 a `--notwist` reading taken after this session is not comparable to one taken before it.
 
+## ⇒ THIS SESSION: `campaignplay` DIAGNOSED AND FIXED, TIER 1 CONFIRMED AT n=96
+
+**`campaignplay` was never indeterminate-because-loaded. It was 1,056 battles with no
+short-circuit**, and the entry below calling it INDETERMINATE is superseded. Measured on
+an IDLE box (load 0.19), one battle through its own `playOnce`: riverfen 0.4s, duskfell
+2.1s, **widowsgate 132.8s** — the last going the full 20,520-tick cap at 6.5ms a tick.
+Test 1 played 24 seeds a region unconditionally for an assertion that is a FLOOR
+(`wins > 0`), so every seed after the first win could not change the outcome.
+
+Fixed (`wonWithin`), with equivalence PROVEN over 200,000 synthetic win/loss patterns
+rather than argued — same verdict, same `attempted` count, **zero mismatches, 81.8% of
+test 1's battles saved**. The saving is a curve (96% at a healthy win rate, 0% on a
+region that is never won), so it cannot hide a broken region by sampling it less.
+
+**And a declared `{ timeout: N }` does nothing on a synchronous test body** — proven with
+a test that declares 100ms, spins for two seconds and passes. All five in `tests/` are on
+synchronous bodies, so none of them bounds anything; only an OS-level `timeout` does.
+
+**TIER 1 CONFIRMED AT n=96, and the censoring warning below was right to insist on it:**
+
+```
+region      n=12   n=96   band     verdict
+riverfen      83     80   78-92    ok
+ashford      100     94   78-92    2 over the ceiling
+ironwood     100     92   78-92    ok, exactly ON the ceiling
+saltmere      83     83   78-92    ok
+```
+
+Both censored rows came back at or near band — **n=12 overstated how easy tier 1 is**, so
+a dial moved from that table would have over-corrected. Confirmed at n=240, which agrees
+with n=96 to within 1-3 points on every row (so n=96 is a trustworthy instrument here):
+
+```
+region      n=12   n=96  n=240   band     verdict at n=240
+riverfen      83     80     83   78-92    ok
+ashford      100     94     95   78-92    +3 over  <- the only real miss
+ironwood     100     92     93   78-92    +1 over, inside n=240's own 1.6pt SEM
+saltmere      83     83     82   78-92    ok
+```
+
+**TIER 2 AT n=96 IS THE SHARPER LESSON, because n=12 was wrong in BOTH directions:**
+
+```
+region      n=12   n=96   band     verdict
+kaldan       100     92   66-84    +8 over   (censored, as predicted)
+highmarch     67     84   66-84    ok        <- n=12 was SEVENTEEN POINTS LOW
+greywater     75     86   66-84    +2 over
+thornmoor     67     82   66-84    ok        <- n=12 was FIFTEEN POINTS LOW
+emberholt     92     90   66-84    +6 over
+```
+
+So the n=12 screen was not merely censored at the top — it was noisy throughout, exactly
+as the ±10-point SEM warning says. **Two rows it reported as comfortably in band are
+within 2 points of their ceiling**, and a dial moved to "fix" the 67s would have pushed
+two healthy rows straight through the floor. The whole tier is bunched at 82-92 against a
+66-84 band: it is one uniformly-easy tier, not three bad rows. Battle lengths are healthy
+there (all-median 9.1-9.5m against win-median 8.7-9.3m), so none of tier 2 is clock-bound.
+
+**AND THE BACK HALF'S SHAPE IS STRUCTURAL, not fifteen independent rows.** Read off real
+`buildBattleConfig` output, the player's landing power over the enemy's standing power:
+
+```
+region        0      8      9     14     18     23
+P/E        0.20   0.90   1.59   1.87   1.84   2.42
+```
+
+The player crosses parity at region 9 — where `EXPEDITION.surgeAfter: 8` fires and bodies
+jump 105 → 243 — and by tier 6 lands with **2.4x** the enemy's standing power, on a dial
+that rises only 4.01 → 5.07 across those fifteen regions. This is a STANDING property of
+the table rather than a regression: it was previously masked by a bot that could not
+spend its own gold, and `--richyards` unmasked it. It is the reason the back half reads
+uniformly easy instead of row by row, and it says the lever is the expedition curve or
+the enemy's scaling, not fifteen separate `enemyMult` edits.
+
+**A STALENESS AUDIT OF CLAUDE.md's "Still open" FOUND THREE IN EIGHT WRONG** — the
+garrison seam (validated all along), the install affordance (built, wired, smoke-tested)
+and the bot's farm-building (attempted, measured at -25 and -12, rejected with the
+mechanism recorded). All three are now closed in place. Five others were checked and
+hold. **Check a "still open" claim against the code before spending a session on it.**
+
+---
+
 **VERIFICATION, STATED HONESTLY.** 135/135 test files ran. `battlelength` is the
 inherited tier-3-advertises-20-minutes failure the re-tune owns. **`scout` now PASSES
 3/3** where CLAUDE.md records it red, most likely the same `--richyards` flip. Of the other four,
