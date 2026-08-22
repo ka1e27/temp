@@ -289,9 +289,36 @@ and is deliberately last of the features. The re-tune closes the pass.
       from `(region id, resets)`. Give regions 10+ a hand drawn from `(region id, clears)`
       instead of `null`, one mutator from tier 3, two from tier 5. **This makes fifteen
       identical regions stop being identical for roughly the cost of one function.**
-      Balance caveat, stated up front: it moves every measured win rate on those rows, so
-      it lands with the re-tune, not before it. `sealed` stays excluded for the reason
-      `CAMPAIGN_REPLAY` already excludes it.
+      **THE DESIGN IS DECIDED — the implementation is execution.** Recorded here so a
+      session that dies does not have to re-argue it:
+
+      - **From region 10 (tier 3).** That is exactly where the content stops: the last
+        unlock is region 8 and the enemy roster completes at region 10.
+      - **One mutator at tiers 3-4, two at tiers 5-6.** The COUNT matters less than the
+        DRAW: even one gives each of fifteen regions its own identity, because the hand
+        differs per region. Conservative on purpose — every mutator is a difficulty
+        increase, so this can be raised after a measurement and cannot easily be undone.
+      - **Seeded on `(region id, clears)`, and that pair is the whole trick.** On a first
+        conquest `clears` is 0, so the hand is a pure function of the region — Gallowmoor
+        is always the Iron Wall region, a player can learn it, plan for it and talk about
+        it. On a RAID `clears` is higher, so the hand rotates and the replay is not the
+        same fight. Identity on the way up, variety on the way back.
+      - **`sealed` excluded** — 0.72 exceeds `GATE_CLAMP`'s 0.60 ceiling outright, and
+        that ceiling cost a whole pass to establish.
+      - **Never stamps `rules.incursion`.** A mutated campaign region is a first conquest
+        or a raid and must be paid as one; `meta/rewards.js` branches a whole payout path
+        on that field.
+      - **Computed at config-build time, never stored on the region row**, or the
+        incursion ladder inherits it through `REGION_BY_ID[INCURSION.regionId]` and
+        silently double-mutates. See CLAUDE.md.
+      - **Visible before it is fought**, in both places a region is inspected: the world
+        map detail panel (`worldmap-detail.js`'s `rows` array) and the loadout brief
+        (`prebattle-brief.js`, which already renders `replayMutators`).
+
+      Balance: it does NOT have to be paid for. All eight mutators are difficulty
+      increases and the campaign reads too easy from tier 3 on, so this pushes the way
+      the table already needed to go — which is why it lands BEFORE the re-tune sweep
+      rather than after (protocol rule 6).
 
 - [ ] **C2. MAKE THE PREVIEW SHOW A RANGE WHENEVER THE TARGET CAN BE REINFORCED.**
       Restores the gamble without touching invariant 3, because the uncertainty is
