@@ -2953,6 +2953,57 @@ than a constant `false`.
 An unknown `requires` value is treated as UNMET rather than ignored, so content asking
 for a gate `meta/upgrades.js` does not implement cannot go on sale by default.
 
+## You held the field: the timeout stops being the game giving up
+
+`content/payout.data.js` `HELD_FIELD` + `meta/rewards.js heldFieldPay`. A timeout the
+player LED on territory pays a fraction of what taking that ground would have paid.
+
+**THE ENGINE HAD ALREADY DECIDED AND WAS THROWING THE ANSWER AWAY.** `battle/sim.js
+endPhase` has computed `state.meta.timeoutWinner` from influence plus site count for
+that mechanic's entire life, and a grep finds exactly three references: the write, the
+event field, and one test asserting the value is one of three strings. Nothing read it.
+So the game knew who was ahead when the clock ran out and told the player "Time
+expired" — which, measured, is the DOMINANT thing this game says to anyone who fails
+at it: **93% of every non-win is a timeout and 63% of those end ahead**, against twelve
+outright defeats in five hundred and seventy-six battles.
+
+**IT PAYS, IT DOES NOT WIN, and that one line is why it needed no re-tune.** `result`
+stays `timeout`; nothing is conquered; `clears` does not move; a rung's `cleared` does
+not move; no relics are paid, because a relic is for ground you have BEATEN. Every
+measured number in `regions.data.js` is `status === 'win'`, so this is outside the
+balance table **by construction** rather than by being small. It is not farmable
+either: a timeout costs the FULL hard cap — nineteen to thirty minutes, five to eight
+even at 4× — where a raid pays its whole lump for a win on a ten-minute cooldown.
+
+**Priced off whatever taking the ground would have paid** — the conquest bounty, the
+raid lump, or the rung's own lump — so a rung, a raid and a first conquest each grade
+against their own number and there is no fourth price table to keep in step. Scaled by
+the share actually held, with a floor (`minShare`) so a technical lead announces
+nothing.
+
+**THE VERDICT IS CARRIED, NEVER RE-DERIVED, and a browser probe proved why that
+matters.** `outcome.timeoutWinner` crosses the seam rather than `rewards.js` computing
+a site share off `stats` — and on a board where the player held **10 of 11 sites** the
+sim still read `timeoutWinner: 'enemy'`, because influence had not been recomputed
+after the ownership flip. Two implementations of "who was winning" would disagree on
+exactly the close battles this feature exists for. (That was a defect in the PROBE, not
+the game — but it is the same trap: `state.influence` is a derived map and flipping
+`site.owner` does not rebuild it.) **No contract bump**: the outcome is produced and
+consumed inside one call and is never persisted, so no stale blob can be stepped
+wrongly by it.
+
+**AND THE SCREEN PAID SILENTLY, which only a real browser found.** The headline read
+`You held the field` over a stat block with **no Crowns row**, because that row sat
+inside `if (outcome.result === 'win')` — true right up until a timeout could pay. It is
+gated on `applied.crowns` now, the same rule the headline follows, and `applied.crowns`
+is nonzero only on a win or a held field so it cannot over-report. A payout the screen
+does not mention is the same disagreement as a headline that over-claims, pointing the
+other way.
+
+Confirmed in real Chrome, driven to the actual results screen: `You held the field` /
+*"The throne stood, but the country was yours when the horns sounded."* / `Sites held
+10 / 11` / `Crowns +33`, with the region still unconquered and `clears` still 0.
+
 ## The muster: the one thing the enemy does that you have to answer
 
 `content/setpiece.data.js` + `battle/setpiece.js`, one phase of `think()`, once per

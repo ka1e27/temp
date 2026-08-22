@@ -55,6 +55,14 @@ export function resultCopy(outcome, applied, region) {
     return { title: RESULTS.retreat, body: RESULTS.retreatBody };
   }
   if (outcome.result === 'timeout') {
+    // THE CLOCK RAN OUT ON A BATTLE YOU WERE WINNING is a different thing from
+    // the clock running out, and the game said the same sentence for both. It
+    // branches on what was PAID rather than on the raw verdict, so the headline
+    // and the Crowns row can never disagree — the same rule the loss branch
+    // below follows for a fired booster charge.
+    if (applied?.heldField) {
+      return { title: RESULTS.heldField, body: RESULTS.heldFieldBody };
+    }
     return { title: RESULTS.timeout, body: RESULTS.timeoutBody };
   }
   // A LOSS COSTS TIME *AND* ANY CHARGE YOU FIRED, so the copy has to know which
@@ -137,8 +145,16 @@ export function statRows(outcome, applied, before, after) {
   if (spent.length) {
     rows.push(['Charges spent', spent.map((b) => `${b.count} ${b.id}`).join(', ')]);
   }
+  // THE CROWNS ROW IS GATED ON THE PAYOUT, NOT ON THE RESULT, and that is the
+  // same rule the headline follows. It used to sit inside `result === 'win'`,
+  // which was true right up until a timeout could pay: a battle the player led
+  // credited 33 crowns and the screen said nothing, so the one place the new
+  // rule announces itself was the one place it could not. Driven in a real
+  // browser — the copy read "You held the field" over a stat block with no
+  // Crowns row in it. `applied.crowns` is nonzero only on a win or a held
+  // field, so this cannot over-report.
+  if (applied?.crowns) rows.push(['Crowns', `+${compact(applied.crowns)}`]);
   if (outcome.result === 'win') {
-    if (applied?.crowns) rows.push(['Crowns', `+${compact(applied.crowns)}`]);
     // Only ever on a first conquest or a cleared rung, so its presence is
     // itself the news: a raid on ground you already hold never shows this row.
     if (applied?.relics) rows.push([UI.relics, `+${applied.relics}`]);

@@ -134,59 +134,11 @@ export const HARD_CAP_MIN_BY_TIER = [12, 14, 17, 20, 24, 28];
 /** The cap is a stall backstop, not a race: 2.2x the advertised length. */
 export const HARD_CAP_RATIO = 1.9;
 
-/**
- * Conquered regions re-fight as Raids: a one-time crown lump, never permanent
- * income — one region could otherwise be farmed into an infinite economy.
- *
- * THE RELATIONSHIP, stated here so it can be tested instead of hoped for.
- * Implemented by meta/rewards.js `raidLump`, asserted by tests/raideconomy.test.js:
- *
- *     lump  =  EMPIRE income/sec  x  lumpSeconds  x  effectiveEnemyMult
- *
- * Two properties fall out of that one line, and the test drives both off
- * REGIONS so a nineteenth region cannot ship broken.
- *
- * 1. A RAID IS WORTH THE TIME. The lump is denominated in seconds of THE
- *    EMPIRE'S income, not the region's. The old formula paid
- *    `region.rewardPerSec * 600` — ten minutes of a number that is a rounding
- *    error by the time you are allowed to raid it. Measured at full conquest
- *    (~682/s): riverfen paid 600 crowns, under ONE SECOND of idling, for an
- *    eight-minute battle; obsidian paid 29.4k, 43 seconds, for nine. Every raid
- *    in the game was dominated by leaving the tab open. Anchored to empire
- *    income the payoff is stage-INVARIANT — a raid is worth the same number of
- *    minutes of your own income at region 1 and at region 18 — and that number
- *    is `minPayoffRatio` or better for every region in the table (measured
- *    1.25x on the thinnest, 3.8x on the best). It is paid ON TOP of the idle
- *    income that keeps accruing during the battle (main.js ticks in every
- *    scene), so a raid is a rate multiplier on time spent playing, never a
- *    tax on it.
- *
- * 2. REPEAT RAIDS DO NOT DECAY. Reward is PROPORTIONAL to the difficulty the
- *    player actually faces, so reward-per-difficulty is constant by
- *    construction and cannot drift whatever `harderPerClear` becomes. The old
- *    pair — 0.15 harder against 0.10 richer — made every clear 1.10/1.15 =
- *    0.957x the value of the one before it, permanently: ten clears in, a raid
- *    was 35% worse value than the first and never recovered. `richerPerClear`
- *    is gone because proportionality leaves it nothing to do.
- *
- * WHAT BOUNDS THE LOOP is winnability, not a cap. Difficulty compounds 15% a
- * clear while the shop is finite, so a farmed region walls the player out by
- * itself and they move to the next one — which is the endgame verb the back
- * half of the campaign did not have. `lump ∝ income` is not a feedback loop
- * either: raids pay lumps, only conquest adds income, and the two income
- * multipliers (Tithe, Royal Mint) are level-capped.
- */
-export const RAID = Object.freeze({
-  cooldownMs: 10 * 60 * 1000,
-  harderPerClear: 0.15,   // effectiveEnemyMult = enemyMult x (1 + this) ^ clears
-  lumpSeconds: 600,       // seconds of EMPIRE income a difficulty-1.0 raid pays
-  /** Design floor: a raid pays at least this multiple of what its own
-   *  advertised battle length (`targetLengthMin`) would have idled. */
-  minPayoffRatio: 1.0,
-});
-
-/** One-off crown bounty the first time a region falls, in seconds of its income. */
-export const FIRST_CLEAR_BONUS_SECONDS = 120;
+// What a battle PAYS moved to ./payout.data.js at the 400-line cap and is
+// re-exported here, so `regions.data.js` and every other importer keep one
+// front door. That file is what fighting a region is worth; this one is what a
+// region is.
+export { RAID, FIRST_CLEAR_BONUS_SECONDS, HELD_FIELD } from './payout.data.js';
 
 /** How a region's single `enemyMult` difficulty dial is spread across the
  *  enemy's FactionMods. Exponents, so mult=1 leaves everything at baseline. */

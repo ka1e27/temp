@@ -407,7 +407,50 @@ and is deliberately last of the features. The re-tune closes the pass.
       changes. **This is the cheapest way to make combat worth WATCHING**, which is the
       whole problem with #5.
 
-- [ ] **C5. KILL THE TIMEOUT AS THE FAILURE MODE.** Two candidates, and this needs a
+- [x] ~~**C5. KILL THE TIMEOUT AS THE FAILURE MODE.**~~
+      **SHIPPED as (b), and the decision the item asked for was already half-made in the
+      engine.** `battle/sim.js endPhase` has computed the territorial verdict into
+      `state.meta.timeoutWinner` for that mechanic's entire life, and **nothing has ever
+      read it** — the game decided who was ahead when the clock ran out and threw the
+      answer away. So a player who held most of a map for twenty minutes was told "Time
+      expired", paid nothing, and left with the region no further along. That is the
+      DOMINANT failure message in this game: 93% of non-wins are timeouts and 63% of
+      those end ahead.
+
+      `HELD_FIELD` (content/payout.data.js) + `heldFieldPay` (meta/rewards.js). A timeout
+      the player LED pays a fraction of what taking that ground would have paid — priced
+      off the conquest bounty, the raid lump or the rung's own lump, so there is no fourth
+      price table to drift. Scaled by how much was held, with a floor so a technical lead
+      pays nothing.
+
+      **IT PAYS, IT DOES NOT WIN, and that is what keeps it out of the balance table.**
+      `result` stays `timeout`, nothing is conquered, `clears` does not move, a rung's
+      `cleared` does not move, and no relics are paid — a relic is for ground you have
+      BEATEN. Every measured win rate is `status === 'win'`, so this is provably outside
+      the measured set rather than merely near it. Not farmable either: a timeout costs
+      the FULL hard cap where a raid pays its whole lump for a win on a ten-minute
+      cooldown.
+
+      **The verdict is CARRIED, never re-derived.** `outcome.timeoutWinner` crosses the
+      seam rather than rewards.js computing a site share off `stats` — and a browser probe
+      proved why that matters: a board where the player holds 10 of 11 sites can still
+      read `timeoutWinner: 'enemy'` when influence says otherwise. Two implementations of
+      "who was winning" would disagree on exactly the close battles this feature is for.
+      No contract bump: the outcome is produced and consumed inside one call and is never
+      persisted, so no stale blob can be stepped wrongly by it.
+
+      One defect only the browser found: the headline read **"You held the field"** over a
+      stat block with **no Crowns row**, because that row sat inside `result === 'win'`.
+      It is gated on the payout now — the same rule the headline follows.
+
+      (a) is not taken and is now less pressing: it wanted the last three minutes to be
+      decisive, and the muster (C7) is a forced decisive engagement in the middle of the
+      battle instead. Whether the timeout SHARE has actually moved is a sweep, not an
+      argument.
+
+      Original item text below.
+
+      **C5. KILL THE TIMEOUT AS THE FAILURE MODE.** Two candidates, and this needs a
       decision rather than a patch. (a) Make the last three minutes DECISIVE — the
       attrition ladder already exists, already bites hard, and is currently a slow
       squeeze nobody notices; turn its last rung into a real clock the player can feel.

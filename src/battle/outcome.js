@@ -32,6 +32,25 @@ export function toOutcome(state, config) {
     configHash: hashBattleConfig(config),
     regionId: state.regionId ?? config.region?.id ?? null,
     result,
+    /**
+     * WHO LED ON TERRITORY WHEN THE CLOCK RAN OUT — `'player'`, `'enemy'`,
+     * `'draw'`, or null when the battle did not end on the clock.
+     *
+     * `endPhase` has computed this into `state.meta.timeoutWinner` for this
+     * feature's whole life and NOTHING HAS EVER READ IT: the game decided who
+     * was ahead and threw the answer away, so a player who led for twenty
+     * minutes was told "Time expired" and paid nothing. Carried rather than
+     * re-derived in meta/rewards.js, which could have computed a site share
+     * off `stats` — two implementations of "who was winning" would disagree
+     * the moment influence and site count disagree, which is exactly the case
+     * a close timeout is.
+     *
+     * It is still a FACT rather than a reward: `assertBattleOutcome` refuses an
+     * outcome that sets `rewards`, and this changes nothing about `result`.
+     * No contract bump — the outcome is produced and consumed inside one call
+     * and is never persisted, so no stale blob can be stepped wrongly by it.
+     */
+    timeoutWinner: result === 'timeout' ? (state.meta?.timeoutWinner ?? null) : null,
     durationMs: Math.round(state.tick * TICK_MS),
     ticks: state.tick,
     stats: {

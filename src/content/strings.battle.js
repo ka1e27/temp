@@ -59,6 +59,17 @@ export const RESULTS = Object.freeze({
   lossBodySpent: 'The charges you fired are spent — that is all this cost'
     + ' besides time. Change your expedition and try again.',
   timeoutBody: 'Decided on territory when the hard cap ran out.',
+  /**
+   * ...AND THE SAME CLOCK, WHEN YOU WERE THE ONE AHEAD. Measured: 93% of every
+   * non-win in this game is a timeout and 63% of those end AHEAD on territory,
+   * so `Time expired` was the DOMINANT thing this game said to a losing player
+   * — and it said it to someone who had just held most of a map for twenty
+   * minutes. This is not a consolation line: `HELD_FIELD` pays for that ground,
+   * and the copy names what was actually achieved rather than what was not.
+   */
+  heldField: 'You held the field',
+  heldFieldBody: 'The throne stood, but the country was yours when the horns '
+    + 'sounded. Ground you hold pays, even unfinished.',
   retreatBody: 'You withdrew. The region is unchanged.',
   // THE BOARD HAS STOPPED MOVING. Raised by `battle-alert.js stalemateCheck` —
   // see there for the measurements. It names Withdraw because Withdraw is free

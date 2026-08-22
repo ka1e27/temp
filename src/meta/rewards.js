@@ -13,7 +13,9 @@
 // PURE: `now` is injected. No Date.now, no storage, no DOM.
 
 import { assertBattleOutcome } from '../battle/contract.js';
-import { REGION_BY_ID, FIRST_CLEAR_BONUS_SECONDS, RAID } from '../content/regions.data.js';
+import {
+  REGION_BY_ID, FIRST_CLEAR_BONUS_SECONDS, RAID, HELD_FIELD,
+} from '../content/regions.data.js';
 import { metaOf, markDirty } from '../core/store.js';
 import {
   markConquered, completeRaid, refreshUnlocks, effectiveEnemyMult, record, isConquered, regionsConquered } from './world.js';
@@ -109,6 +111,31 @@ export function incursionLump(metaState, depth) {
 }
 
 /**
+ * What a timeout the player LED on territory is worth.
+ *
+ * Priced off whatever taking this ground would have paid — a first conquest's
+ * bounty, a raid's lump, or a rung's — so it needs no fourth price table and
+ * cannot drift out of step with the three that exist. Returns 0 for a loss, a
+ * draw, an enemy-led timeout, or a lead too thin to be worth announcing.
+ *
+ * SHARE IS SITES, NOT INFLUENCE, and the two are deliberately different
+ * questions. `sim.js endPhase` decides WHO LED on influence plus site count —
+ * that verdict crosses the seam as `outcome.timeoutWinner` and is not
+ * re-derived here. This asks HOW MUCH was held, which is the only number the
+ * outcome carries and the one a player can check against the SITES tally they
+ * watched all battle.
+ */
+export function heldFieldPay(base, outcome) {
+  if (outcome?.result !== 'timeout') return 0;
+  if (outcome.timeoutWinner !== 'player') return 0;
+  const total = outcome.stats?.sitesTotal ?? 0;
+  if (!(total > 0)) return 0;
+  const share = (outcome.stats?.sitesHeld ?? 0) / total;
+  if (share < HELD_FIELD.minShare) return 0;
+  return Math.max(0, base) * HELD_FIELD.frac * share;
+}
+
+/**
  * @param {object} metaState  root state or the meta slice
  * @param {object} config     the BattleConfig this outcome answers
  * @param {object} outcome    BattleOutcome from battle/outcome.js
@@ -174,6 +201,9 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
      *  quiet part out loud on exactly this one — that the region now pays while
      *  you are not playing — because nothing else in the game ever states it. */
     firstConquest: false,
+    /** A timeout the player LED on territory, paid a share of what taking the
+     *  ground would have been worth. Never true on a win — see `heldFieldPay`. */
+    heldField: false,
   };
 
   if (!won) {
@@ -183,6 +213,29 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
     // same rung is waiting, unchanged, when the player comes back with a
     // different army.
     if (depth) completeIncursion(meta, depth, { won: false });
+
+    // ...AND A BATTLE YOU LED BUT DID NOT FINISH IS NOT NOTHING — see
+    // content/payout.data.js `HELD_FIELD`. 93% of every non-win in this game is
+    // a timeout and 63% of those end AHEAD, so "you held most of the map for
+    // twenty minutes, here is nothing" was the game's DOMINANT failure message.
+    //
+    // Priced off whatever taking this ground would have paid, so a rung, a raid
+    // and a first conquest each grade against their own number. It stays a
+    // TIMEOUT throughout: nothing is conquered, `clears` does not move, the
+    // rung's `cleared` does not move and no relics are paid — which is what
+    // keeps it out of the balance table, since every measured win rate is
+    // `status === 'win'`.
+    const base = depth ? incursionLump(meta, depth)
+      : wasConquered ? raidLump(meta, regionId) : firstClearBonus(region);
+    summary.crowns = heldFieldPay(base, outcome);
+    summary.heldField = summary.crowns > 0;
+    if (summary.crowns > 0) {
+      meta.crowns += summary.crowns;
+      stats.crownsEarned += summary.crowns;
+      emit(bus, META_EVENTS.CROWNS_CHANGED, {
+        crowns: meta.crowns, delta: summary.crowns, reason: 'held-field',
+      });
+    }
     markDirty(state ?? metaState);
     emit(bus, META_EVENTS.OUTCOME_APPLIED, { outcome, summary });
     return summary;
