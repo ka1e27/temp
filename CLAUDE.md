@@ -1212,6 +1212,28 @@ region, the same sample size, and the same afternoon.
    consecutive nudges inside a plateau read as five noisy zeroes and cost the same as
    one honest bracket.
 
+**⚠ AND THE CAMPAIGN-WIDE SLOPE CONSTANT IS WRONG BY 3x ON THE ONE ROW IT WAS RE-TAKEN
+ON, IN THE SAFE DIRECTION — IT OVERSTATES.** The figure above ("~1.8 pts/0.01 on the
+small maps") would have sized kaldan's correction at three times what it needs. Bracketed
+at n=96, four points, kaldan (15x11):
+
+```
+dial     3.23      3.60      4.10      4.70
+win%      92        70        30        11
+                0.59      0.80      0.32     <- local slope, pts per 0.01
+```
+
+Two things to carry. **A row at 92% is not automatically on a shoulder** — kaldan
+responds immediately and monotonically, so "it reads high, therefore the dial is dead"
+is not a safe inference; thanescar's plateau was at 65%, and where a row's flat part
+sits is a property of that row. And **the steep part is in the MIDDLE** (0.80 between
+3.60 and 4.10), with the tail flattening again to 0.32, which is the sigmoid the entry
+above describes — measured here on a second row rather than argued from the first.
+
+The practical rule is unchanged and now has a second confirmation: **bracket the row,
+do not scale a constant.** A bracket is four n=96 runs on a tier-1 or tier-2 row, which
+is minutes, and it replaced a number that was wrong threefold.
+
 **AND THE PLATEAU IS THE CLOCK, NOT THE ENEMY — the signature says so outright.**
 The same runs, split by outcome (n=32, thanescar):
 
