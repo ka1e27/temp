@@ -3098,11 +3098,22 @@ reads `state.events` at all, verified rather than assumed.
 Confirmed in real Chrome on a live gallowmoor board, through the real alert strip:
 `THE HOST MARCHES — 190 closing on your camp, 32s out. Their country is thin behind it.`
 
-**⚠ THE BALANCE SCREEN IS NOT YET TAKEN.** It is a real difficulty increase and it landed
-mid-re-tune with the machine saturated. `--nomuster` is the control. Worth knowing before
-reading the number: **93% of this campaign's non-wins are timeouts**, and a forced
-decisive engagement is exactly what a permanent grinder lacks — so it may well read as
-C1's twists did, harder on paper and measurably FASTER in practice.
+**⚠ THE BALANCE SCREEN IS NOT YET TAKEN**, and it landed with the machine saturated.
+`--nomuster` is the control. Two things are worth knowing before reading the number.
+
+**It pushes the RIGHT WAY, and that is a recent reversal.** Most of the tier 3–6 tables
+in this file record those rows as sitting BELOW their floors, and that stopped being
+true when `--richyards` was turned on by default: measured at n=24, gallowmoor 38 → 75,
+thanescar 29 → 58, ravensmarch 17 → 54, widowsgate 4 → 50, taking four rows from 5–14
+points below their floors to **2–14 above their ceilings**. A difficulty increase is now
+what those rows want. **Anything in this file that says tiers 3–6 read too hard is
+older than that flag flip — check the date before acting on it.** Confirmed
+independently here: gallowmoor at n=12 with the muster and doctrines OFF reads **83%,
+TOO EASY**, against the 38% its own re-tune table records.
+
+**And a permanent grinder is what it interrupts**: 93% of this campaign's non-wins are
+timeouts, so a forced decisive engagement may well read as C1's twists did — harder on
+paper and measurably FASTER in practice.
 
 ## A doctrine is the one decision made before the map is seen
 

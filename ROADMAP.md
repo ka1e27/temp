@@ -10,6 +10,42 @@ or explicitly flagged as an opinion.
 
 ---
 
+## ⇒ THE FUN PASS IS CLOSED. THE RE-TUNE IS THE ONLY THING LEFT.
+
+**All eight critic items (C1-C8) are done or struck**, each with its measurement. Six
+shipped, one was already shipped and got the guard it lacked (C4), and one was STRUCK on
+evidence (C6 — its premise was five minutes of income wearing six figures' clothes).
+
+**⚠ READ THIS BEFORE TRUSTING ANY TIER 3-6 NUMBER IN EITHER FILE.** `--richyards` was
+turned ON by default on 2026-08-20, and it moved four rows from 5-14 points BELOW their
+floors to 2-14 ABOVE their ceilings (gallowmoor 38 → 75, thanescar 29 → 58, ravensmarch
+17 → 54, widowsgate 4 → 50, all n=24). Confirmed independently while closing C5:
+gallowmoor at n=12 with this session's two new mechanics switched off reads **83%, TOO
+EASY**, against the 38% its own re-tune table below still records. **Every "tiers 3-6 are
+too hard" statement in this file and in CLAUDE.md predates that flip.** The re-tune's job
+changed shape with it: correcting downward from a competent bot is a dial job, where
+correcting upward from an incompetent one was the structural search that ate two sessions.
+
+**What this session added that the next sweep must account for**, each with its own
+control flag so the delta stays re-takeable rather than remembered:
+
+| Change | Direction | Flag |
+|---|---|---|
+| The muster (C7) — one enemy set-piece per battle | HARDER | `--nomuster` |
+| The bot's answer to it (C7) | easier, and inert without a muster | `--noanswer` |
+| Doctrines (C3) — a player trade, dealt three at a time | measured as a wash, unconfirmed | `--nodoctrine` |
+| `--notwist` reaching the campaign at all | **it never did before** | `--notwist` |
+
+That last row is the one to be careful of: `--notwist` was wired only into the
+`--frontier` branch, where `campaignTwistPlan` returns null regardless, so **every sweep
+taken since C1 shipped ran with the twists on whatever the flag said.** It works now, so
+a `--notwist` reading taken after this session is not comparable to one taken before it.
+
+**Neither C5 nor C6 can move a win rate.** C5 pays a timeout that was led and leaves
+`result` alone, and every measured number is `status === 'win'`; C6 changed no code.
+
+---
+
 ## ⇒ THE RE-TUNE: two levers measured, one confirmed and one killed
 
 **STATE for item #70.** This is the resume point for the campaign re-tune; the detailed
