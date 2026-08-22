@@ -1376,6 +1376,22 @@ separate times.** Kaldan's long-standing "58% ok" was an n=12 artefact; one buil
 `--all` at low n only as a smoke check. Some medians sit on a cliff — kaldan pegs the hard
 cap in ~40% of runs — so a median can jump discontinuously between sample sizes.
 
+**AND A ROW AT 100% IS CENSORED — A PERFECT SCORE AT SMALL n PROVES ALMOST NOTHING.**
+This is the sharp version of the rule above, and it bites hardest exactly where a sweep
+looks most conclusive. Clopper-Pearson 95% lower bounds on a perfect score:
+
+```
+12/12 = 100%  ->  the true rate could be as low as 74%
+24/24 = 100%  ->  ...as low as 86%
+96/96 = 100%  ->  ...as low as 96%
+```
+
+So `12/12` on a tier-1 row does not even establish that it is above its own FLOOR (78),
+let alone over its ceiling (92) — and a row reading 100% carries no information about
+HOW far over it is, because the measurement has run out of room. Two consequences: a
+100% row must be re-taken at n>=96 before a dial moves for it, and the useful signal
+meanwhile is the win MEDIAN against the advertised length, which is not censored.
+
 **AND A SMALLER SAMPLE IS A SEED PREFIX, NOT AN UNBIASED DRAW.** `--n` walks seeds
 `0..n-1`, so n=96 is the *first* 96 of n=240's runs rather than a random subset of them —
 which means a region whose early seeds happen to be kind reads high at every small n, and
