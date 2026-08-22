@@ -3951,6 +3951,43 @@ The other columns say the same thing. `ENEMY_UNITS_BY_TIER` completes at tier 3
 ten regions** — while the board grows 17×13 → 21×16, about 15%. `castleGateFrac` is a
 flat 0.60 for the last ten rows. Ten regions that differ by nothing a player can name.
 
+**EVERY ONE OF THE EIGHT IS A DIFFICULTY INCREASE, and that is what makes C1 cheap
+rather than merely desirable.** Read off `MUTATORS` directly:
+
+```
+ironwall     enemyMult  structureRegenMult  1.60   walls repair 60% faster
+warhost      enemyMult  unitAtkMult         1.12
+bulwark      enemyMult  unitDefMult         1.12
+levies       enemyMult  trainSpeedMult      1.25   yards train 25% faster
+scorched     playerMult farmYieldMult       0.60   the farms YOU take are burnt
+thinned      expedition                     0.82   only 82% of the landing arrives
+entrenched   develop                       +0.50   their country starts a level up
+sealed       gate                           0.72   EXCLUDED — see below
+```
+
+The campaign currently reads too easy from tier 3 on (19 of 24 rows above their bands at
+the last sweep, all of tiers 4-6 among them), so the change that fixes the variety
+problem pushes the balance the way it already needed to go. That is an alignment rather
+than a coincidence worth relying on — but it means C1 does not have to be paid for.
+
+`sealed` is excluded for the reason `CAMPAIGN_REPLAY` already excludes it, one step
+stronger here: 0.72 exceeds `GATE_CLAMP`'s 0.60 ceiling outright, and that ceiling cost a
+whole pass to establish after thirty-seven of thirty-seven timeouts were found sitting
+below the gate.
+
+**AND THE HARNESS MEASURES IT FOR FREE.** `buildBattleConfig` is the ONE path — the game
+(`screens/battle.js`), the harness (`tools/simplayer.js`) and auto-resolve
+(`tools/autoresolve.js`) all build a config through it and nothing else does. So a hand
+resolved inside that function is played by `npm run sim` with no harness change, which is
+the property the specialists, construction and scouting each had to be given by hand.
+
+**BUT THE HAND MUST BE COMPUTED, NEVER STORED ON THE REGION ROW.** `meta/incursion.js`
+resolves the ladder's arena with `REGION_BY_ID[INCURSION.regionId]` — it reads
+widowsgate's campaign row directly — so a mutator parked on that row would be inherited
+by every rung of the incursion ladder and silently double-mutate it. Resolving the hand
+at config-build time, the way `campaignReplayPlan` already does, is what keeps the two
+apart.
+
 **AND EIGHT VARIETY MECHANICS ARE BUILT, TESTED, AND NEVER SHOWN ON A FIRST RUN.**
 `content/incursion.data.js` ships `ironwall, warhost, bulwark, scorched, levies, thinned,
 sealed, entrenched`, each applied through a field that already crosses the seam.
