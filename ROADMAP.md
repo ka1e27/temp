@@ -198,6 +198,42 @@ hold. **Check a "still open" claim against the code before spending a session on
 
 ---
 
+### TIER 3 AT n=96 — and it hands #108 its numbers
+
+```
+region        win%   band     win-med   ADVERTISED
+gallowmoor      78   50-72     14.2m       20m     TOO EASY
+sunder          68   50-72     13.6m       20m     ok
+vaelstrand      78   50-72     12.8m       20m     TOO EASY
+duskfell        79   50-72     12.0m       19m     TOO EASY
+karrowmere      72   50-72     15.5m       19m     ok, exactly at the ceiling
+```
+
+**THE REAL LENGTH RAMP EXISTS AND THE ADVERTISED ONE IS FICTION.** Measured win medians
+by tier, against what each tier promises:
+
+```
+tier    measured win-med    advertised
+  1        8.4 - 8.8         7.5 - 10
+  2        8.8 - 10.2        6.5 - 9
+  3       12.0 - 15.5         19 - 20      <- promises 19-20, plays 12-15.5
+  4       12.6 - 16.7           16
+```
+
+So the game DOES get longer — about 8.6 to 9.4 to 13.6 to 14 minutes — and the promise
+column simply does not track it. Authoring tier 3 at ~14 puts it BELOW tier 4's 16 and
+**fixes the inverted ramp `battlelength.test.js` fails on**, in one column, with no
+difficulty change. It also drops gallowmoor's hard cap from `max(17, 20 x 1.9)` = **38
+minutes** to `max(17, 14 x 1.9)` = 26.6.
+
+**⚠ BUT IT MUST LAND AFTER THE DIALS, NOT BEFORE.** Raising a dial makes a battle
+LONGER, so a length authored from today's medians would be stale the moment tier 3-6
+moves. Order: dials, re-measure, then author `targetLengthMin` from the new win medians,
+then re-confirm — because the column derives `hardCapMs` and so changes the battle it
+describes.
+
+---
+
 ### TIER 4 SCREENED AT n=48 — all four over, and the back half needs a STEEPER RAMP
 
 ```
