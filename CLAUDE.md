@@ -4090,7 +4090,12 @@ campaign has nothing new to acquire.
   test exists to detect, and the way to make it fast is to finish the re-tune.
 
   Worth knowing before re-running it here: it is the ONLY test in the suite that cannot
-  complete in this environment, and `--test-name-pattern="winnable"` runs test 1 alone.
+  complete in this environment, and `--test-name-pattern="winnable"` runs test 1 alone —
+  **which was also killed, at fifty minutes, with four other sweeps sharing the box.** So
+  the short-circuit's WALL-CLOCK effect is unverified here; what is established is its
+  CORRECTNESS and its battle count, both proven over 200,000 synthetic patterns, which is
+  a stronger claim than one timed run would have been. Do not record the fix as "verified
+  end to end" until a run completes somewhere.
 
   **The general lesson is that a FLOOR should be measured like a floor.** `Array.from({
   length: SEEDS }, ...)` reads as the natural way to take a sample and is the wrong shape
