@@ -1223,16 +1223,31 @@ win%      92        70        30        11
                 0.59      0.80      0.32     <- local slope, pts per 0.01
 ```
 
-Two things to carry. **A row at 92% is not automatically on a shoulder** — kaldan
-responds immediately and monotonically, so "it reads high, therefore the dial is dead"
-is not a safe inference; thanescar's plateau was at 65%, and where a row's flat part
-sits is a property of that row. And **the steep part is in the MIDDLE** (0.80 between
-3.60 and 4.10), with the tail flattening again to 0.32, which is the sigmoid the entry
-above describes — measured here on a second row rather than argued from the first.
+**⚠ AND THOSE FOUR POINTS STILL AVERAGED STRAIGHT OVER A SHOULDER, WHICH IS THE
+SHARPER LESSON.** Reading 0.59 off the first interval and applying it, kaldan was moved
++0.21 to 3.44 — predicted 80%, **measured 91%**. The interval hides a plateau, and a
+fifth point exposes it:
 
-The practical rule is unchanged and now has a second confirmation: **bracket the row,
-do not scale a constant.** A bracket is four n=96 runs on a tier-1 or tier-2 row, which
-is minutes, and it replaced a number that was wrong threefold.
+```
+dial     3.23      3.44      3.60      4.10      4.70
+win%      92        91        70        30        11
+              0.05      1.31      0.80      0.32     <- local slope, pts per 0.01
+```
+
+**A 0.21-wide shoulder, then a cliff twenty-six times steeper.** So a four-point bracket
+spanning 1.5 of dial is NOT enough on its own: its endpoints give an AVERAGE, and
+averaging across a shoulder is exactly as misleading as the campaign-wide constant it
+was supposed to replace. What a bracket buys is the interval that CONTAINS the change;
+finding the value still needs the midpoint measured, which is what bisection is.
+
+That also retires the reading that a high win rate means a dead dial. kaldan's plateau
+is at 92% and thanescar's was at 65%, so **where a row's flat part sits is a property of
+the row** and cannot be guessed from its win rate in either direction.
+
+The practical rule, twice confirmed and now with its own failure mode recorded:
+**bracket to find the interval, then bisect inside it — and never ship a value that was
+interpolated rather than measured.** kaldan ships at 3.60 because 3.60 was measured at
+70%, not because a slope said it should be there.
 
 **AND THE PLATEAU IS THE CLOCK, NOT THE ENEMY — the signature says so outright.**
 The same runs, split by outcome (n=32, thanescar):
