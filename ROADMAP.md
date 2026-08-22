@@ -41,6 +41,62 @@ That last row is the one to be careful of: `--notwist` was wired only into the
 taken since C1 shipped ran with the twists on whatever the flag said.** It works now, so
 a `--notwist` reading taken after this session is not comparable to one taken before it.
 
+## ⇒⇒ WHERE TO RESUME THE RE-TUNE — READ THIS FIRST
+
+**Measured state of all 24 rows.** Tiers 1-2 are SHIPPED and confirmed; the rest is
+screened but not moved.
+
+```
+tier 1  riverfen 80  ashford 90  ironwood 92  saltmere 83            SHIPPED  all ok
+tier 2  kaldan 70  highmarch 77  greywater 73  thornmoor 82
+        emberholt 82                                                 SHIPPED  all ok
+tier 3  gallowmoor 78  sunder 68  vaelstrand 78  duskfell 79
+        karrowmere 72                                    n=96   3 rows over ceiling
+tier 4  thanescar 63  blackspire 71  ironcrown 71  obsidian 69
+                                                         n=48   ALL FOUR over
+tier 5  ravensmarch 42  gravenreach 33  nightharrow 35   n=48   all ok (see below)
+tier 6  stormhalt 50  ...                                n=24   over; rest in flight
+```
+
+**THE THREE THINGS THAT CONSTRAIN EVERY REMAINING MOVE.**
+
+1. **Tier 5 is already in band, so it caps how far tiers 3-4 can be pushed.**
+   `enemyMult` is non-decreasing, and tier 5 sits at 4.80-4.94. Any tier-4 value above
+   roughly 5.1-5.2 drags ravensmarch down through its floor. **Aim tiers 3-4 at their
+   CEILING, never mid-band.**
+2. **The slope varies 3x WITHIN a tier** (0.15 on obsidian to 0.47 on gallowmoor), so no
+   constant sizes a move. Bracket the row, bisect, and ship only measured values.
+3. **obsidian and ironcrown cannot be fixed by the dial at all** — at 0.15 and 0.24
+   pts/0.01 they need +1.07 and +0.75, which breaks tier 5 by construction. They need
+   `siteCounts.neutral` (~-4 points a site, measured on ironcrown), and that is bounded
+   by the non-decreasing TOTAL: ironcrown 37, obsidian 38, ravensmarch 38, so obsidian
+   cannot grow until ravensmarch does.
+
+**THE NEXT THREE ACTIONS, in order.**
+
+1. **Measure ravensmarch's slope.** It is the binding constraint on the whole back half
+   and it is the one number nobody has. `--region=ravensmarch --n=24` at 4.80 / 5.20 /
+   5.60. Until it exists, every tier-3/4 candidate is a guess about tier 5.
+2. **Then author tiers 3-4 as one curve** against that ceiling, using the per-row slopes
+   already measured (gallowmoor 0.47, sunder 0.26, vaelstrand 0.29, thanescar 0.38,
+   blackspire 0.46, ironcrown 0.24, obsidian 0.15). Expect two or three rows to miss and
+   need bisecting; expect ironcrown and obsidian to need the neutral lever.
+3. **Then, and only then, re-author `targetLengthMin`** (item #108). It derives
+   `hardCapMs`, so it changes the battle it describes — authoring it before the dials
+   settle guarantees throwing it away. The numbers it wants are already measured: real
+   win medians run ~8.6 / 9.4 / 13.6 / 14 minutes across tiers 1-4 against a promise
+   column of 7.5-10 / 6.5-9 / **19-20** / 16.
+
+**AND ONE THING THAT IS NOT A DIAL PROBLEM AT ALL.** Tier 5 is in band because battles
+run out of CLOCK, not because the enemy wins: every all-median sits exactly on the hard
+cap and **nightharrow takes zero losses in 48 battles**, timing out 31 times with the
+player ahead in 24 of them. stormhalt is the same shape (all-median 30.1m against a
+30.4m cap). Tuning those rows on `enemyMult` moves who-beats-you, not how-often — see
+thanescar's bracket, where 5.00 to 5.50 held the win rate flat while converting six
+timeouts into four losses. **Decide what those rows should DO before tuning them.**
+
+---
+
 ## ⇒ THIS SESSION: `campaignplay` DIAGNOSED AND FIXED, TIER 1 CONFIRMED AT n=96
 
 **`campaignplay` was never indeterminate-because-loaded. It was 1,056 battles with no
