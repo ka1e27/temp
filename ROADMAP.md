@@ -84,6 +84,48 @@ time — a truncated TAP stream, a boot that "could not reach a battle", a bare
 
 ---
 
+## ⇒ THE RE-TUNE'S STARTING STATE, MEASURED: 14 TOO EASY, 10 ok, ZERO too hard
+
+The first complete screen of the campaign since `--richyards` was defaulted on.
+`node tools/simrunner.js --all --n=12`, every row, one run:
+
+```
+tier 1   riverfen    83 ok       ashford    100 EASY   ironwood  100 EASY   saltmere 83 ok
+tier 2   kaldan     100 EASY     highmarch   67 ok     greywater  75 ok
+         thornmoor   67 ok       emberholt   92 EASY
+tier 3   gallowmoor  67 ok       sunder      67 ok     vaelstrand 83 EASY
+         duskfell    83 EASY     karrowmere  83 EASY
+tier 4   thanescar   42 ok       blackspire  75 EASY   ironcrown  75 EASY   obsidian 75 EASY
+tier 5   ravensmarch 25 ok       gravenreach 50 EASY   nightharrow 33 ok
+tier 6   stormhalt   58 EASY     cinderwatch 50 EASY   widowsgate  50 EASY
+```
+
+**This is the complete reversal of the state above**, which recorded eleven of fifteen
+tier 3-6 rows BELOW their floors. Not one row now reads too hard, and none reads TOO
+SLOW either. Everything under this heading that describes tiers 3-6 as too hard is
+provenance, not today's number.
+
+**⚠ THE FOUR ROWS AT 100% ARE CENSORED AND MUST NOT BE TUNED FROM THIS TABLE.** At
+n=12, `12/12` has a 95% lower bound of **74%** — which does not even establish that a
+tier-1 row is above its own FLOOR of 78, let alone over its 92 ceiling. They are
+candidates, not findings. The uncensored rows (83/75/50) carry real signal; the 100s
+carry none beyond "look here". Re-take at n>=96 before a dial moves for them.
+
+**AND TWO "ok" ROWS ARE ok FOR THE WRONG REASON.** `thanescar` reads 42% in band with
+an all-run median of **30.4m against a 16m advertised length**, and `ravensmarch` 25%
+with the same 30.4m; `nightharrow` is 34.2m against 18m, `widowsgate` 34.2m against 18m.
+Those rows are pinned at their hard cap, so the band is measuring what fraction FINISHES
+rather than what fraction is won — which is the finding this file already carries about
+`WIN_BAND` generally, now visible in a single table. A dial will not fix a row whose
+problem is the clock.
+
+**The honest order of work from here**: confirm the censored rows at n>=96; treat the
+uncensored TOO EASY rows as the real dial work; and handle the four clock-bound rows as
+a length question rather than a difficulty one. `enemyMult` is required non-decreasing,
+so any move has to be planned across the whole table rather than row by row.
+
+---
+
 ## ⇒ THE RE-TUNE: two levers measured, one confirmed and one killed
 
 **STATE for item #70.** This is the resume point for the campaign re-tune; the detailed
