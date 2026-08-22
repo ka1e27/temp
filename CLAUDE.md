@@ -4845,7 +4845,33 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   (`git worktree add --detach <dir> HEAD`) if `regions.data.js` is dirty, or they
   measure somebody's in-flight probe.
 
-  **`campaignplay` IS RED, so the Pages deploy is gated until this lands.**
+  **⚠ THE PAGES DEPLOY IS NOT GATED ON `campaignplay`, AND BOTH FILES SAID IT WAS.**
+  Checked against the real workflow runs rather than inferred. The last run on `main`
+  (2026-08-13, `df05b2cd`) reports:
+
+  ```
+  verify   SUCCESS   npm test 10m49s, then npm run check     <- the unit suite PASSES
+  browser  FAILURE   step 6, after 15s:
+                     SMOKE FAILED: build did not land at [7,0]: null
+  deploy   skipped
+  ```
+
+  So the blocker is `tools/smoke.mjs`'s construction step, not the balance suite — and
+  **`campaignplay` PASSED in CI, inside eleven minutes**, on a commit whose message is
+  "24 of 24 in band". That is the same file this environment could never finish, and the
+  reason is the table: a tuned campaign RESOLVES its battles, an out-of-band one runs
+  every seed to the hard cap. **`campaignplay`'s cost and its redness are both functions
+  of how well-tuned the campaign is**, which is exactly what an acceptance test should
+  look like, and it is the strongest argument that the short-circuit above is priced the
+  right way round.
+
+  Two caveats, both important. That smoke failure **does not reproduce on this branch** —
+  driven locally against the current tree, all 24 steps pass and the build step reads
+  `armed Farm, clicked [0,0], buildTicksLeft=242`. And **the workflow only triggers on
+  `main`**, so none of the work on this branch has ever been through CI; the Aug-13 run
+  is a statement about `main` at that commit and nothing more.
+
+  **`campaignplay` is red HERE, on today's out-of-band table, which is its job.**
   `nightharrow` and `stormhalt` are won 0 times in 48 — but every one of those runs is
   a `timeout` at exactly the hard cap with NO defeats and several ending ahead on
   territory, so they are unfinishable rather than unwinnable. Full table and the

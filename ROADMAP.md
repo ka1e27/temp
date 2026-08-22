@@ -170,6 +170,31 @@ hold. **Check a "still open" claim against the code before spending a session on
 
 ---
 
+### The deploy gate was mis-attributed, and the real one is already fixed here
+
+**Checked against the workflow runs, not inferred.** Both files say the Pages deploy is
+gated on `campaignplay` being red. The last run on `main` (2026-08-13, `df05b2cd`) says
+otherwise:
+
+```
+verify   SUCCESS   npm test 10m49s, then npm run check
+browser  FAILURE   SMOKE FAILED: build did not land at [7,0]: null   (15s in)
+deploy   skipped
+```
+
+The unit suite PASSES in CI — `campaignplay` included, inside eleven minutes, on a commit
+titled "24 of 24 in band". So that file's cost AND its redness are both functions of how
+well-tuned the table is: a tuned campaign resolves its battles, an out-of-band one runs
+every seed to the hard cap. It is behaving exactly as an acceptance test should.
+
+**The real blocker was `smoke.mjs`'s build step, and it does not reproduce here** — driven
+against the current tree, all 24 steps pass (`build: armed Farm, clicked [0,0],
+buildTicksLeft=242`). **But the workflow triggers only on `main`, so nothing on this
+branch has ever been through CI.** Before claiming the deploy is unblocked, it has to
+actually run.
+
+---
+
 **VERIFICATION, STATED HONESTLY.** 135/135 test files ran. `battlelength` is the
 inherited tier-3-advertises-20-minutes failure the re-tune owns. **`scout` now PASSES
 3/3** where CLAUDE.md records it red, most likely the same `--richyards` flip. Of the other four,
