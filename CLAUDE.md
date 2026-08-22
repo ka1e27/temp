@@ -3098,6 +3098,35 @@ reads `state.events` at all, verified rather than assumed.
 Confirmed in real Chrome on a live gallowmoor board, through the real alert strip:
 `THE HOST MARCHES — 190 closing on your camp, 32s out. Their country is thin behind it.`
 
+**THE `minBodies` FLOOR DOES A SECOND JOB NOBODY DESIGNED IT FOR: IT SPARES THE
+CAMPAIGN OPENER.** Measured over three full riverfen battles, the muster never fires at
+all — the tier-1 enemy cannot raise twenty-four spare bodies inside the window. The
+floor was written to stop the loudest announcement in the game arriving in front of
+eleven militia, and the region where that would have been worst is the one a
+first-timer plays. Worth knowing before anyone lowers it: the number is also the
+tutorial's protection.
+
+Where it does fire, it scales with the ground rather than with a tier table, because it
+draws from what the enemy actually holds:
+
+```
+board                sites   host   drawn from   the bot's whole army
+riverfen (tier 1)       11     22*      5 sites                   17     *under the floor
+widowsgate (tier 6)     55    174     12 sites                  404
+the Frontier           104    250     12 sites                  277
+```
+
+**THE FRONTIER GETS ONE, AND THAT IS ACCEPTED RATHER THAN OVERLOOKED.** Nothing
+special-cases it: the mode is a `mapGen` swap and every rule below that line is the
+campaign's own, which is exactly why it inherits this. The host is proportionately the
+biggest there (90% of the bot's army against widowsgate's 43%) because `musterSources`
+takes the twelve sites NEAREST the camp and the frontier's near rings are shallow — so
+it is a real threat to a run rather than a formality. That fits the mode's own stated
+tension ("push for the deep country or bank what you hold") and it is the one place
+losing the camp pays nothing at all. **It is unmeasured**; `--nomuster` reverts it, and
+`node tools/simrunner.js --frontier --n=8` against the same with the flag is the
+comparison to take.
+
 **⚠ THE BALANCE SCREEN IS NOT YET TAKEN**, and it landed with the machine saturated.
 `--nomuster` is the control. Two things are worth knowing before reading the number.
 
