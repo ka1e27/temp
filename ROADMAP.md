@@ -60,27 +60,27 @@ phone audit is clean except one unexplained finding recorded above.
 
 ---
 
-## ⇒ OPEN, SMALL: the phone audit's last complaint is unexplained
+## ⇒ CLOSED: the phone audit's last complaint was the box, not the layout
 
-`npm run mobile` step 6 (a site panel open at 390x844) reports
-`button.train-chip "MIL" 26.4x26.4` — two tap targets at 60% of the 44px minimum.
-Two of the three obvious explanations are ruled out and the third does not fit:
+`npm run mobile` step 6 reported `button.train-chip "MIL" 26.4x26.4` — two tap targets
+at 60% of the 44px minimum. **It does not reproduce on an idle machine: the whole audit
+now reports "No layout problems found."** Every part of it was a load artefact, and the
+diagnosis took three passes because two of the three suspects were real bugs in the tool
+that had to be fixed before the third became visible:
 
-- **Not a rounding artefact.** The tool used to print `Math.round`, so a 43.55px button
-  read as "44" under the words "under 44px" and every finding looked like a tool bug.
-  It prints one decimal now, which is what made this one legible.
-- **Not an animation.** The audit emulates `prefers-reduced-motion`, and
-  `styles/tokens.css` collapses every duration to 1ms under it, so nothing measured is
-  mid-transition.
-- **The resting states are both correct**, verified by probe: a closed fan computes
-  `visibility: hidden` (and the chips inherit it, so the audit's hidden-skip catches
-  them), and an open one sets `--sc: 1` for a full 44px. The only way to see 26.4 is
-  visible-and-0.6, which no resting state produces.
+1. The tool printed `Math.round`, so a 43.55px button read as "44" under the words
+   "under 44px" and every finding looked like a tool bug. One decimal now.
+2. The shop step audited straight off the click while every other step slept, catching
+   `hd-rise` mid-flight. It waits now, and the audit emulates `prefers-reduced-motion`.
+3. What was left was the training fan, and a probe of step 6 at the exact audit moment
+   shows the fan OPEN with both chips at `--sc: 1` and a full **44px** — the screenshot
+   the audit takes agrees. So the layout was never wrong; at load ~20 the 500ms wait was
+   not enough for the chips to finish scaling from `--sc: 0.6`.
 
-So either the audit leaves the fan in a state a player never sees, or there is a fourth
-thing going on. **Pre-existing** — nothing in the fun pass touched `.hud-train`,
-`screens.css` or the training picker. Cheap to finish: instrument step 6 to dump the
-fan's class list and computed visibility at the moment it audits, rather than after.
+**The lesson is the session's most repeated one, arriving in a fourth place**: a loaded
+box does not report as slow, it reports as broken, and in a different vocabulary each
+time — a truncated TAP stream, a boot that "could not reach a battle", a bare
+`TAP version 13`, and here a tap target that is the wrong size.
 
 ---
 

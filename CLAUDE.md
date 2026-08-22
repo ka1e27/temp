@@ -3908,6 +3908,16 @@ campaign has nothing new to acquire.
   ceiling artefact at 100% rather than a fix, and it is exactly why the test declines to
   report a gap off an out-of-band baseline.
 
+  **AND THE PHONE AUDIT IS THE SAME STORY IN A FOURTH VOCABULARY.** `npm run mobile`
+  reported two training chips at `26.4x26.4` against a 44px minimum — a layout failure
+  by every appearance. It does not reproduce on an idle box: the whole audit comes back
+  clean. A probe of step 6 at the exact audit moment shows the fan open with both chips
+  at `--sc: 1` and a full 44px, and the screenshot the audit itself takes agrees. Under
+  load the 500ms wait was simply not enough for the chips to finish scaling up from
+  `--sc: 0.6`. **A loaded box does not report as slow — it reports as broken, and in a
+  different vocabulary every time**: a truncated TAP stream, a boot that "could not reach
+  a battle", a bare `TAP version 13`, and a tap target of the wrong size.
+
   Worth knowing alongside it: **`scout` now PASSES 3/3** where this file records it red
   ("never completed a single watchtower across twelve tier-5/6 battles"). It is the one
   of the five that is short enough to finish here, and the likeliest cause is the same
