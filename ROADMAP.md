@@ -198,7 +198,49 @@ hold. **Check a "still open" claim against the code before spending a session on
 
 ---
 
-### ⇒ THE CANDIDATE TABLE FOR TIERS 3-5, AND IT IS COMPUTED RATHER THAN GUESSED
+### ⚠ THE COMPUTED TABLE BELOW IS FALSIFIED: THE SLOPE VARIES 3x WITHIN ONE TIER
+
+Measured, n=48, each row moved from its shipped dial to the candidate:
+
+```
+region        dial          win%      slope     verdict at the candidate
+thanescar   4.60 -> 5.20   63 -> 40    0.38     ok
+blackspire  4.73 -> 5.45   71 -> 38    0.46     ok
+ironcrown   4.73 -> 5.45   71 -> 54    0.24     ok, barely
+obsidian    4.78 -> 5.50   69 -> 58    0.15     STILL TOO EASY
+gallowmoor  4.01 -> 4.39   78 -> 60    0.47     ok
+sunder      4.08 -> 4.39   68 -> 60    0.26     ok
+```
+
+**0.15 to 0.47 — and the two shallowest rows are adjacent to the two steepest.** The
+table below assumed a uniform 0.47 and is therefore wrong for ironcrown and obsidian; do
+not ship it as computed. This is the third independent demonstration in this pass that a
+slope constant cannot size a per-row move (kaldan's plateau and thanescar's flat shoulder
+being the first two), and it is the most decisive, because here the variation is *within
+a single tier measured in a single run*.
+
+**AND IT MAKES OBSIDIAN UNFIXABLE BY THE DIAL, which is a structural finding rather than
+a tuning problem.** At 0.15 pts/0.01 obsidian needs about **+1.07** to reach 53% — dial
+5.85 — and `enemyMult` is non-decreasing, so that forces ravensmarch from 4.80 past 5.85
+and takes a row currently at 42% to somewhere near zero. ironcrown at 0.24 is the same
+problem one step smaller. **Tier 4's last two rows have to be moved by something other
+than the dial**, and the candidate is `siteCounts.neutral`, which CLAUDE.md measured on
+ironcrown itself at roughly -4 points per site (15 -> 19 moved it 58% -> 42%).
+
+The neutral lever is bounded by the non-decreasing TOTAL, and the chain is tight:
+ironcrown is 37 against obsidian's 38, and obsidian's 38 equals ravensmarch's, so
+obsidian cannot grow unless ravensmarch does first. ravensmarch is AT its ceiling (42%
+in a 22-42 band) and more neutral makes a row harder, so growing it is safe — but that
+is three coupled unverified estimates and wants measuring, not assuming.
+
+This is the same shape as the already-recorded tier-2 contradiction: *"the dial tier 2
+needed overtook the dial tier 3 wanted, and enemyMult is required non-decreasing, so that
+is a contradiction rather than a tuning problem."* It was resolved there by a site-count
+change, and that is where this should start too.
+
+---
+
+### ⇒ THE CANDIDATE TABLE FOR TIERS 3-5 (SUPERSEDED — see above; kept for its method)
 
 **The slope is now measured on two rows at two tiers and it agrees: ~0.47 pts/0.01.**
 gallowmoor 4.01 -> 4.39 read 78% -> 60% (0.47); thanescar 4.60 -> 5.00 read 63% -> 44%
