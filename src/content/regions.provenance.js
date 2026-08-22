@@ -17,6 +17,49 @@
 // or balance.js.
 
 // ============================================================================
+// TIERS 1-2 (9) — RE-TUNED AGAINST THE MELEE LAYER, at n>=96. This is the
+// current answer; everything below it in this section is provenance.
+// ============================================================================
+//
+// The screen that opened this pass was n=24/n=12 and was wrong in BOTH
+// directions, which is worth more than the numbers: highmarch read 67% and is
+// 84%, thornmoor read 67% and is 82% — both within two points of their CEILING,
+// where the screen put them comfortably mid-band. Moving a dial to "fix" those
+// 67s would have pushed two healthy rows through the floor.
+//
+//     region     n=12   n=96  n=240   band     dial            measured
+//     riverfen     83     80     83   78-92    1.86  held      80/83
+//     ashford     100     94     95   78-92    2.70 -> 2.76    90
+//     ironwood    100     92     93   78-92    3.19  held      92/93
+//     saltmere     83     83     82   78-92    3.19  held      83/82
+//     kaldan      100     92      -   66-84    3.23 -> 3.60    70
+//     highmarch    67     84      -   66-84    3.39 -> 3.60    77
+//     greywater    75     86      -   66-84    3.39 -> 3.60    73
+//     thornmoor    67     82      -   66-84    3.56 -> 3.77    82
+//     emberholt    92     90      -   66-84    3.67 -> 3.88    82
+//
+// All nine read `ok` on the shipped dials. Two of the moves are NOT justified by
+// a measured gain: thornmoor read 82% at both 3.56 and 3.77, and it rises only
+// because greywater rose to 3.60 and `enemyMult` must be non-decreasing.
+//
+// ⚠ THE SLOPE CONSTANT DOES NOT WORK HERE. CLAUDE.md's "~1.8 points per 0.01 on
+// the small maps" predicted -12 points for kaldan's first +0.21; it bought ONE.
+// Bracketed at n=96 the row has a 0.21-wide plateau and then a cliff:
+//
+//     dial   3.23   3.44   3.60   4.10   4.70
+//     win%     92     91     70     30     11
+//              0.05   1.31   0.80   0.32     <- local slope, pts per 0.01
+//
+// Every shipped value above was MEASURED at that value, never interpolated.
+//
+// Battle lengths are healthy across both tiers and there is NO length ramp in
+// them: all nine win in 8.2-10.2 minutes while advertising 6.5 to 10, so the
+// promise varies by 54% across a real spread of 13%. That is the
+// `targetLengthMin` pass's problem, not the dial's, and it is deliberately NOT
+// fixed here — the column derives `hardCapMs`, so re-authoring it changes the
+// battle and every row above would need re-confirming.
+
+// ============================================================================
 // TIER 2 (5) — the first real wall. Kaldan proves the upgrade layer matters.
 // ============================================================================
 //

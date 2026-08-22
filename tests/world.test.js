@@ -161,21 +161,42 @@ test('the vertical slice matches the tuned balance table', () => {
     // rose, sized off the measured overshoot at ~1.8 points per 0.01 on these
     // small boards (CLAUDE.md, Tuning).
     //
-    // IRONWOOD IS THE ONE ROW LEFT KNOWINGLY OUT OF BAND, at 96% against a 92%
-    // ceiling, and the reason is a constraint rather than an oversight. It is
-    // near-immune to `enemyMult` in this range (the note above), so the lever
-    // that works on it is neutral — measured on this very region at 4 -> 5 for
-    // 98% -> 90%. But it shares its dial with saltmere, which sits at 79%
-    // against a 78% floor and cannot absorb a rise, and raising ironwood's
-    // neutral alone takes its total site count past saltmere's and breaks the
-    // non-decreasing invariant in tests/campaign.test.js. Four points is not
-    // worth breaking an invariant for; it needs saltmere moved first, or a
-    // column that is not the dial and not the site count.
+    // RE-TAKEN A FOURTH TIME, at n=96 AND n=240, and the previous pass's numbers
+    // were an n=24 screen that was wrong in BOTH directions. Every row here is
+    // now measured at n>=96:
+    //
+    //     region     n=12   n=96  n=240   band     shipped verdict
+    //     riverfen     83     80     83   78-92    ok        (dial held)
+    //     ashford     100     94     95   78-92    ok at 2.76, measured 90%
+    //     ironwood    100     92     93   78-92    ok        (dial held)
+    //     saltmere     83     83     82   78-92    ok        (dial held)
+    //     kaldan      100     92      -   66-84    ok at 3.60, measured 70%
+    //
+    // IRONWOOD IS NO LONGER OUT OF BAND, and the note that said so was reading
+    // an n=24 96%. At n=240 it is 93% against a 92% ceiling — one point, inside
+    // that sample's own 1.6-point standard error, so it is indistinguishable
+    // from the ceiling rather than four points over it. Its dial is held, and
+    // the constraint the old note describes (it shares saltmere's dial, and its
+    // neutral cannot rise without breaking the non-decreasing total) still holds
+    // if a future pass does want to move it.
+    //
+    // ⚠ AND THE "~1.8 POINTS PER 0.01 ON THESE SMALL BOARDS" THE PASS ABOVE SIZED
+    // ITS MOVES WITH IS WRONG. Bracketed on kaldan at n=96, five points, the row
+    // has a 0.21-WIDE PLATEAU and then a cliff:
+    //
+    //     dial   3.23   3.44   3.60   4.10   4.70
+    //     win%     92     91     70     30     11
+    //              0.05   1.31   0.80   0.32     <- local slope, pts per 0.01
+    //
+    // So +0.21 bought ONE point on this row where the constant predicted twelve.
+    // kaldan ships at 3.60 because 3.60 was measured, not interpolated. thornmoor
+    // has a plateau too — it read 82% at both 3.56 and 3.77 — which is why its
+    // move is justified by monotonicity against greywater rather than by a gain.
     ['riverfen', 1, 1.86, 11, 9, 5, 3, 3, 1.0, 9.5],
-    ['ashford', 1, 2.70, 12, 9, 6, 3, 3, 1.2, 10],
+    ['ashford', 1, 2.76, 12, 9, 6, 3, 3, 1.2, 10],
     ['ironwood', 1, 3.19, 13, 10, 7, 5, 3, 1.5, 9.5],
     ['saltmere', 1, 3.19, 13, 10, 8, 3, 4, 1.8, 7.5],
-    ['kaldan', 2, 3.23, 15, 11, 9, 5, 4, 4.0, 8.5],
+    ['kaldan', 2, 3.60, 15, 11, 9, 5, 4, 4.0, 8.5],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;
