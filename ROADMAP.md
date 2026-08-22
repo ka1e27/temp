@@ -282,7 +282,7 @@ and is deliberately last of the features. The re-tune closes the pass.
 
 ## ⇒ WHAT WOULD ACTUALLY MAKE IT FUN, ranked by fun per line
 
-- [ ] **C1. PUT THE EIGHT EXISTING MUTATORS ON LATE CAMPAIGN REGIONS.** The single
+- [x] ~~**C1. PUT THE EIGHT EXISTING MUTATORS ON LATE CAMPAIGN REGIONS.**~~ **DONE** — `campaignTwistPlan`, `CAMPAIGN_TWIST`, `--notwist`. Balance delta measuring; see CLAUDE.md. The single
       highest fun-per-line change available in this codebase, and most of it is already
       written. `incursionMods`/`incursionRegionInputs` already apply a hand through
       fields that cross the seam; `campaignReplayPlan` already computes a seeded draw

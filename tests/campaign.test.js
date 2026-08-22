@@ -31,9 +31,12 @@ import { metaFor } from '../tools/simplayer.js';
 const before = (i) => REGION_IDS.slice(0, i);
 
 /** A real config for "the player who has taken every earlier region". */
-function configFor(i, { seed = 4242, idleMin = 10 } = {}) {
+function configFor(i, { seed = 4242, idleMin = 10, noTwist = false } = {}) {
   const meta = metaFor(before(i), idleMin, seed).meta;
-  return { meta, config: buildBattleConfig(meta, REGIONS[i].id, [], generateBattleMap, { seed }) };
+  return {
+    meta,
+    config: buildBattleConfig(meta, REGIONS[i].id, [], generateBattleMap, { seed, noTwist }),
+  };
 }
 
 const enemyTroops = (config) => config.sites
@@ -354,7 +357,13 @@ test('campaign: develop reaches the battle as real levels, HP and training', () 
   const meanFort = [];
   for (let i = 0; i < REGIONS.length; i++) {
     const r = REGIONS[i];
-    const battle = startBattle(configFor(i).config);
+    // `noTwist`, because this is a claim about the develop LADDER — that a row's
+    // `develop` reaches the battle as real levels — and from region 10 a region
+    // may carry `entrenched`, which is a deliberate +0.5 on top. Measured when
+    // it first went red: gravenreach's mean fort level read 2.75 against a row
+    // develop of 2.2, which is `entrenched` working exactly as designed. The
+    // pipeline is what is under test here, so the input has to be the row's.
+    const battle = startBattle(configFor(i, { noTwist: true }).config);
     const forts = battle.sites.filter((s) => s.owner === 'enemy' && s.kind !== 'farm');
     // develop is fractional: a share of the forts sits one level above the
     // floor, so every fort must land on floor(develop) or the step above it and

@@ -370,3 +370,15 @@
 @media (pointer: coarse) {
   .wm-recentre { min-height: var(--hit); }
 }
+
+/* THE HAND A REGION CARRIES — see meta/incursion.js `campaignTwistPlan`. Styled
+   as the loadout screen's own `.pb-mutator` is, because it is the same
+   statement in the other place a region is inspected. */
+.wm-mutators { list-style: none; margin: .6rem 0 0; padding: 0; display: grid; gap: .35rem; }
+.wm-mutator {
+  font-size: .82rem; line-height: 1.35; padding: .4rem .55rem;
+  border-left: 2px solid var(--c-warn, #d9a441);
+  background: color-mix(in oklab, var(--c-warn, #d9a441) 8%, transparent);
+  border-radius: 0 4px 4px 0;
+}
+.wm-mutator strong { color: var(--c-warn, #d9a441); }

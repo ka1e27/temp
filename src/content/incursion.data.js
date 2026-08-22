@@ -319,6 +319,47 @@ export const MUTATOR_BY_ID = Object.freeze(
  * let it exceed 0.60 unmeasured and risk reproducing the one failure mode this
  * project already spent a whole pass fixing. Excluded rather than guessed at.
  */
+/**
+ * THE CAMPAIGN'S OWN HAND — the fix for fifteen regions that are the same fight.
+ *
+ * MEASURED, and this table exists because of the measurement: the last new thing
+ * in the game arrives at region 8 (`unlockMarshal`, 62 minutes in). Regions 9
+ * through 24 are 261 further minutes — 68% of the campaign's running time — with
+ * no new unit, booster or ability. `ENEMY_UNITS_BY_TIER` completes at tier 3, and
+ * from region 15 to 24 the difficulty dial moves 10% while the board grows 15%.
+ * Meanwhile eight mutators sat here fully built, applied through fields that
+ * already cross the seam, and a first-run player saw NONE of them: they reached
+ * the ladder and post-abdication replays and nothing else.
+ *
+ * `fromIndex` is 9 — region 10, gallowmoor — because that is exactly where the
+ * content stops rather than a round number.
+ *
+ * THE COUNT MATTERS LESS THAN THE DRAW. One mutator already gives each of fifteen
+ * regions an identity, because the hand differs per region; the second is
+ * escalation rather than variety. Deliberately conservative: every mutator is a
+ * difficulty INCREASE, so this is easy to raise after a measurement and awkward
+ * to walk back.
+ *
+ * AND THE SEED PAIR IS THE WHOLE TRICK. `(region id, clears)`: on a first
+ * conquest `clears` is 0, so the hand is a pure function of the region and
+ * Gallowmoor is ALWAYS the Iron Wall region — something a player can learn, plan
+ * a loadout for, and be told about before they land. On a RAID `clears` is
+ * higher, so the hand rotates and going back is not the same fight. Identity on
+ * the way up, variety on the way back.
+ *
+ * `sealed` is excluded for exactly `CAMPAIGN_REPLAY`'s reason, one step stronger:
+ * its 0.72 exceeds `GATE_CLAMP`'s 0.60 ceiling outright, and the only code that
+ * raises a gate is `incursionRules`, which a campaign battle must never reach.
+ */
+export const CAMPAIGN_TWIST = Object.freeze({
+  /** Index into `REGIONS`, so region 10 is the first with a hand. */
+  fromIndex: 9,
+  /** How many mutators a tier draws. Tiers below `fromIndex`'s tier never ask. */
+  byTier: Object.freeze({ 3: 1, 4: 1, 5: 2, 6: 2 }),
+  /** Never drawn for a campaign region — see the note above. */
+  excludedMutators: Object.freeze(['sealed']),
+});
+
 export const CAMPAIGN_REPLAY = Object.freeze({
   /** Depth-equivalent points a run of resets is worth. */
   perReset: 2,

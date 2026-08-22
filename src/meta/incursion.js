@@ -19,7 +19,9 @@
 // otherwise. That keeps "what a mutator does" in one file with the table, and
 // keeps a battle with no incursion on exactly the code path it was measured on.
 
-import { INCURSION, MUTATORS, MUTATOR_BY_ID, CAMPAIGN_REPLAY } from '../content/incursion.data.js';
+import {
+  INCURSION, MUTATORS, MUTATOR_BY_ID, CAMPAIGN_REPLAY, CAMPAIGN_TWIST,
+} from '../content/incursion.data.js';
 import { REGIONS, REGION_BY_ID, DEVELOP_CLAMP, GATE_CLAMP } from '../content/regions.data.js';
 import { AI_TIERS } from '../content/balance.js';
 import { metaOf } from '../core/store.js';
@@ -152,6 +154,80 @@ export function campaignReplayPlan(region, resets) {
   if (count <= 0) return null;
   const pool = MUTATORS.filter((m) => !CAMPAIGN_REPLAY.excludedMutators.includes(m.id));
   const mutators = drawMutators(`campaign-replay:${region.id}:${r}`, count, pool);
+  return mutators.length ? { mutators } : null;
+}
+
+/**
+ * THE HAND A CAMPAIGN REGION CARRIES IN ITS OWN RIGHT — see
+ * `content/incursion.data.js` `CAMPAIGN_TWIST` for why this exists at all.
+ *
+ * It is the third source of mutators and the FIRST one an ordinary player will
+ * ever meet: the ladder's hand needs an incursion, and `campaignReplayPlan`'s
+ * needs an abdication, so between them they reached nobody on a first run.
+ *
+ * THREE THINGS ABOUT IT ARE LOAD-BEARING.
+ *
+ * It returns the same bare `{mutators}` shape `campaignReplayPlan` does, so it
+ * feeds the same `incursionMods`/`incursionRegionInputs` and needs no new
+ * plumbing — and, like that one, it must NEVER be passed to `incursionRules`,
+ * which stamps `rules.incursion` and would have `meta/rewards.js` pay a first
+ * conquest as a ladder rung.
+ *
+ * The seed is `(region id, clears)` rather than the region alone, which is what
+ * makes a region have an IDENTITY on the way up and VARIETY on the way back: a
+ * first conquest passes 0, so the hand is a pure function of the region and can
+ * be learned, planned for and named; a raid passes higher and draws again.
+ *
+ * And it is keyed on the region's INDEX in `REGIONS`, not on its tier, because
+ * `fromIndex` is a statement about where the campaign stops delivering content
+ * and tier 3 straddles that line — gallowmoor is region 10 and carries a hand,
+ * and nothing before it does.
+ *
+ * IT ROTATES RATHER THAN DRAWING, AND THAT IS THE ONE PLACE IT DEPARTS FROM THE
+ * LADDER. `drawMutators` is a WEIGHTED draw, which is right for a rung — a rung
+ * is met on its own, so an independent sample is exactly what variety means
+ * there. The campaign is not that: it is a fixed sequence every player walks in
+ * the same order, so independent samples collide in a way the player reads as
+ * sameness. Measured on the first cut, which used `drawMutators`: regions 12, 13
+ * and 14 all came out `warhost`, three consecutive maps whose entire twist was
+ * "+12% enemy attack" — the exact repetition this table exists to end.
+ *
+ * A rotation over one seeded shuffle fixes it by construction and keeps every
+ * property that mattered: the order is deterministic, so a region's hand is
+ * still a pure function of `(region, clears)`; consecutive regions can never
+ * share a first mutator; and across fifteen regions every mutator is used about
+ * evenly instead of the heavy weights crowding out `thinned` and `scorched`.
+ *
+ * @param {object} region a row from `REGIONS`
+ * @param {number} clears how many times this region has been taken (0 = first)
+ * @returns {?{mutators: string[]}} null for every region below `fromIndex`
+ */
+export function campaignTwistPlan(region, clears = 0) {
+  if (!region) return null;
+  const idx = REGIONS.findIndex((r) => r.id === region.id);
+  if (idx < 0 || idx < CAMPAIGN_TWIST.fromIndex) return null;
+  const count = CAMPAIGN_TWIST.byTier[region.tier] ?? 0;
+  if (count <= 0) return null;
+
+  // ONE shuffle for the whole campaign, not one per region — that is what makes
+  // the rotation below a rotation rather than fifteen independent samples.
+  const pool = MUTATORS.filter((m) => !CAMPAIGN_TWIST.excludedMutators.includes(m.id));
+  const order = pool.slice();
+  const rng = createRng(deriveSeed(0x7a71c7, 'campaign-twist'));
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = rng.int(0, i + 1);
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
+  // A raid steps the rotation by a stride COPRIME to the pool size, so repeated
+  // clears walk every hand before repeating one. A stride of 1 would merely
+  // hand a raided region its neighbour's twist, which reads as a mistake.
+  const c = Math.max(0, Math.floor(clears));
+  const start = (idx + c * 3) % order.length;
+  const mutators = [];
+  for (let k = 0; k < count && k < order.length; k++) {
+    mutators.push(order[(start + k) % order.length].id);
+  }
   return mutators.length ? { mutators } : null;
 }
 

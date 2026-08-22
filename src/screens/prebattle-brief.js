@@ -14,7 +14,9 @@ import {
 } from '../meta/modifiers.js';
 import { unlockedUnits } from '../meta/upgrades.js';
 import { regionById, effectiveEnemyMult, isConquered, record } from '../meta/world.js';
-import { planFor, MUTATOR_BY_ID, campaignReplayPlan, incursionRules } from '../meta/incursion.js';
+import {
+  planFor, MUTATOR_BY_ID, campaignReplayPlan, campaignTwistPlan, incursionRules,
+} from '../meta/incursion.js';
 import { legacyResets } from '../meta/legacy.js';
 import { previewReward } from '../meta/rewards.js';
 import { specialistCallouts } from '../meta/specialists.js';
@@ -121,6 +123,13 @@ export function regionBrief(meta, regionId, depth = null) {
   // mid-battle. Null on a first run (`legacyResets` 0) and whenever this is an
   // incursion instead, which carries its own hand under `incursion.mutators`.
   const replay = plan ? null : campaignReplayPlan(region, legacyResets(meta));
+  // ...AND THE HAND THE REGION CARRIES IN ITS OWN RIGHT, which is the one an
+  // ordinary player actually meets — see meta/incursion.js `campaignTwistPlan`.
+  // Resolved with the SAME precedence buildBattleConfig uses (`replay ?? twist`,
+  // never both), because a brief that advertised a different hand from the one
+  // the battle carries is the class of defect invariant 3 exists to prevent, one
+  // screen further out.
+  const twist = plan || replay ? null : campaignTwistPlan(region, clears);
   // THE GATE THE BATTLE WILL ACTUALLY RUN UNDER, not the region's own — an
   // incursion's `sealed` mutator raises it, and quoting the campaign figure at
   // a rung fought under a different one is the same defect as quoting
@@ -140,7 +149,12 @@ export function regionBrief(meta, regionId, depth = null) {
         id, name: MUTATOR_BY_ID[id].name, note: MUTATOR_BY_ID[id].note,
       })),
     } : null,
-    replayMutators: (replay?.mutators ?? []).map((id) => ({
+    // THE HAND THIS REGION CARRIES, whatever put it there — a replayed run's or
+    // its own. Renamed from `replayMutators` when campaign regions grew hands of
+    // their own: one field rather than two means the loadout screen keeps ONE
+    // render block, and a third near-identical copy of that markup is exactly
+    // how a surface drifts out of step with the rule it draws.
+    regionMutators: ((replay ?? twist)?.mutators ?? []).map((id) => ({
       id, name: MUTATOR_BY_ID[id].name, note: MUTATOR_BY_ID[id].note,
     })),
     // A pure derivation off the same region row, so a balance pass moving

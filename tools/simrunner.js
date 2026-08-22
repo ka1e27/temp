@@ -13,6 +13,7 @@
 //   node tools/simrunner.js --all --nothrone      # ...one that will not commit to the last gate
 //   node tools/simrunner.js --all --pool          # ...one that CAN mass several sites at once
 //   node tools/simrunner.js --all --norichyards   # ...one that could not spend its own money
+//   node tools/simrunner.js --all --notwist      # regions 10-24 without their own mutators
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -109,6 +110,7 @@ if (args.frontier) {
   runFrontier(args.conquered, {
     n: N, idleMin: Number(args.idle ?? 30), weights: WEIGHTS, upgrades: !args.noupgrades,
     construct: !args.noconstruct, richYards: !args.norichyards,
+    noTwist: !!args.notwist,
   });
   process.exit(0);
 }

@@ -16,6 +16,9 @@ import { compact, rate, duration, percent } from '../ui/format.js';
 import { modeOf, raidCooldownRemaining, campaignGap, CAMPAIGN_GAP_WARN } from '../meta/world.js';
 import { previewReward } from '../meta/rewards.js';
 import { GATE_CLAMP } from '../content/regions.data.js';
+// The one resolver for "what hand does this region carry", so the world map and
+// the loadout brief cannot disagree about the fight the player is about to take.
+import { regionBrief as brief } from './prebattle-brief.js';
 
 /**
  * @param {{dom:{h,clear,mount,bindText}, meta:()=>object, now:()=>number,
@@ -61,12 +64,26 @@ export function createDetailRenderer(deps) {
       ['Income if taken', rate(region.rewardPerSec)],
     ];
 
+    // THE HAND THIS REGION CARRIES, on the screen where a region is CHOSEN.
+    // The loadout brief shows it too, and both are wanted: the world map is
+    // where a player decides which fight to take, the brief is where they pick
+    // an army for it. Same argument the castle gate row above already makes —
+    // it is a static rule of the region, like its size, and it leaks nothing.
+    // Absent rather than shown empty for regions that carry none.
+    const hand = brief(m, region.id).regionMutators;
+
     mount(detail,
       h('h2#wm-detail-h', { text: region.name }),
       h('p.wm-flavour', { text: region.flavour ?? '' }),
       h('dl.wm-stats', {}, ...rows.flatMap(([k, v]) => [
         h('dt.label', { text: k }), h('dd.num', { text: v }),
       ])));
+
+    if (hand.length) {
+      mount(detail, h('ul.wm-mutators', {}, ...hand.map((x) => h('li.wm-mutator', {
+        'data-mutator': x.id,
+      }, h('strong', { text: x.name }), h('span', { text: ` ${x.note}` })))));
+    }
 
     if (detailMode === 'locked') {
       mount(detail, h('p.wm-hint', { text: `${UI.locked}. ${WORLD.lockedHint}` }));

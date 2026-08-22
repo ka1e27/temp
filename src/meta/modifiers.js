@@ -51,7 +51,8 @@ import { regionsConquered, effectiveEnemyMult, record, isConquered } from './wor
 import { toConfigBoosters } from './boosters.js';
 import { withFreeMarshal, withEnemyMarshal } from './marshals.js';
 import {
-  planFor, incursionRegionInputs, incursionMods, incursionRules, campaignReplayPlan,
+  planFor, incursionRegionInputs, incursionMods, incursionRules,
+  campaignReplayPlan, campaignTwistPlan,
 } from './incursion.js';
 import { legacyResets } from './legacy.js';
 
@@ -281,11 +282,27 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   // `null` on a first run, on any region below its own score threshold, and
   // whenever `plan` is already set — see the note above `campaignReplayPlan`.
   const replay = plan ? null : campaignReplayPlan(region, legacyResets(meta));
-  // Whichever of the two this battle carries, if either — everywhere below
-  // that only cares about a `{mutators}` list, not about which kind it is.
-  const mutation = plan ?? replay;
-
   const rec = record(meta, regionId);
+  // THE THIRD SOURCE, AND THE ONLY ONE AN ORDINARY PLAYER MEETS. A rung needs an
+  // incursion and a replay hand needs an abdication, so between them the eight
+  // mutators reached nobody on a first run — see meta/incursion.js
+  // `campaignTwistPlan` and content/incursion.data.js `CAMPAIGN_TWIST`.
+  //
+  // LAST in the chain deliberately: a replayed run's hand is scored on resets AND
+  // tier and is the stronger statement, so where both exist the replay wins and
+  // every number tests/campaignreplay.test.js pins is untouched.
+  //
+  // `options.noTwist` is the house `--noX` escape hatch (tools/simrunner.js
+  // `--notwist`), and unlike `campaignReplayPlan` — which is inert for the
+  // harness because `metaFor` never abdicates — this one is DELIBERATELY live
+  // for it. That is the whole point: a mechanic the harness cannot play is a
+  // mechanic nobody has measured. It also means every tier 3-6 win rate recorded
+  // before this stops describing what ships, which is why the flag exists.
+  const twist = (plan || options.noTwist)
+    ? null : campaignTwistPlan(region, rec.clears ?? 0);
+  // Whichever of the three this battle carries, if any — everywhere below only
+  // cares about a `{mutators}` list, not about which kind it is.
+  const mutation = plan ?? replay ?? twist;
   const isRaid = isConquered(meta, regionId);
   // THE SEED IS THE ONE FIELD `metaOf` CANNOT RESCUE, and that shipped a bug.
   // Every other read here goes through `metaOf`, which accepts the root state OR

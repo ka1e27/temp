@@ -190,12 +190,16 @@ export function createPreBattleScene(ctx) {
           'data-mutator': m.id,
         }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
         : []),
-      // A REPLAYED RUN'S OWN HAND — meta/incursion.js `campaignReplayPlan`.
-      // Mutually exclusive with the incursion list above, and shown the same
-      // way for the same reason: know before you pick a loadout, not mid-battle.
-      ...(brief.replayMutators?.length
+      // THE HAND THIS REGION CARRIES — its own (meta/incursion.js
+      // `campaignTwistPlan`, which is what an ordinary player meets from region
+      // 10 on) or a replayed run's (`campaignReplayPlan`). ONE block for both,
+      // because they are the same statement to the player and a third copy of
+      // this markup is how a surface drifts out of step with its own rule.
+      // Mutually exclusive with the incursion list above, and shown for the same
+      // reason: know before you pick a loadout, not mid-battle.
+      ...(brief.regionMutators?.length
         ? [h('ul.pb-mutators.pb-replay-mutators', {},
-          ...brief.replayMutators.map((m) => h('li.pb-mutator', {
+          ...brief.regionMutators.map((m) => h('li.pb-mutator', {
             'data-mutator': m.id,
           }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
         : []),

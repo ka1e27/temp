@@ -183,7 +183,13 @@ test('campaign replay: every non-excluded mutator actually changes the config it
   const regionId = 'widowsgate'; // tier 6: the fastest-climbing score
   const region = REGIONS.find((r) => r.id === regionId);
   meta.legacy = { points: 0, resets: 0 };
-  const plain = buildBattleConfig(meta, regionId, [], generateBattleMap, { seed: 1 });
+  // `noTwist`, and the flag earned its keep the moment it existed. Widowsgate is
+  // region 24, so since `campaignTwistPlan` it carries a hand of its OWN at
+  // resets 0 — and that hand contains `bulwark`, so an untouched baseline
+  // already had the mutator applied and this test read "bulwark did not move".
+  // The baseline has to be the un-handed config or it is not a baseline.
+  const plain = buildBattleConfig(meta, regionId, [], generateBattleMap,
+    { seed: 1, noTwist: true });
   const allowed = MUTATORS.filter((m) => !CAMPAIGN_REPLAY.excludedMutators.includes(m.id));
   assert.ok(allowed.length > 0);
 
@@ -273,19 +279,26 @@ test('campaign replay: the pre-battle brief shows the exact hand the battle will
   assert.ok(plan);
 
   const brief = regionBrief(meta, regionId);
-  assert.deepEqual(brief.replayMutators.map((m) => m.id), plan.mutators);
-  for (const m of brief.replayMutators) {
+  assert.deepEqual(brief.regionMutators.map((m) => m.id), plan.mutators);
+  for (const m of brief.regionMutators) {
     assert.equal(m.name, MUTATOR_BY_ID[m.id].name);
     assert.equal(m.note, MUTATOR_BY_ID[m.id].note);
   }
-  // ...and the SAME region on a first run shows none.
+  // THE SAME REGION ON A FIRST RUN NOW SHOWS ITS OWN HAND, not nothing — this
+  // assertion used to read `[]` and is rewritten rather than relaxed, because
+  // the behaviour deliberately changed: thanescar is region 15, so since
+  // `campaignTwistPlan` it carries a twist of its own. What still has to hold is
+  // that the REPLAY hand is the one being shown above, so the two must differ.
   const fresh = metaFor(REGION_IDS.slice(0, 14), 20, 4242).meta;
-  assert.deepEqual(regionBrief(fresh, regionId).replayMutators, []);
-  // ...and an incursion brief never carries a replay hand either, even for a
-  // player who has abdicated many times.
+  const first = regionBrief(fresh, regionId).regionMutators.map((m) => m.id);
+  assert.ok(first.length > 0, 'a late region shows a hand even on a first run');
+  assert.notDeepEqual(first, plan.mutators,
+    'a replayed run must show the REPLAY hand, not the region default');
+  // ...and an incursion brief carries its own hand under `incursion`, never a
+  // region one, even for a player who has abdicated many times.
   const laddered = finished();
   laddered.legacy = { points: 0, resets: 12 };
-  assert.deepEqual(regionBrief(laddered, planFor(9).regionId, 9).replayMutators, []);
+  assert.deepEqual(regionBrief(laddered, planFor(9).regionId, 9).regionMutators, []);
 });
 
 // ===========================================================================

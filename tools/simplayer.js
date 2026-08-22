@@ -340,6 +340,14 @@ export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) 
     // state. Nothing here special-cases them, which is the point: a mechanic the
     // harness cannot play is a mechanic nobody has measured.
     ...(opts.incursion ? { incursion: opts.incursion } : {}),
+    // THE CAMPAIGN'S OWN HAND IS ON BY DEFAULT, and `--notwist` is what keeps
+    // the delta re-takeable rather than remembered — the house pattern
+    // `--noupgrades`/`--noconstruct`/`--noscout` already follow. It is
+    // deliberately NOT inert for the harness the way `campaignReplayPlan` is
+    // (that one is off because `metaFor` never abdicates): a mechanic the
+    // harness cannot play is a mechanic nobody has measured, and regions 10-24
+    // now carry mutators in the shipped game.
+    ...(opts.noTwist ? { noTwist: true } : {}),
   });
   const battle = startBattle(config);
   if (opts.sightedAi) battle.ai.sighted = true;
