@@ -2897,6 +2897,42 @@ a player who does not spend them, and choosing to is worth ~7 points mid-campaig
 by the end of a run. That is the feature working, not a mis-tune — but it is the same
 shape as the `--idle` gap below and belongs beside it.
 
+## Six figures is five minutes, and the Crown tier's price gates nothing
+
+**A correction to this file and to the ROADMAP, taken off the real
+`metaFor`/`shopListing` pipeline.** The standing claim was that a player banks
+~691,000 crowns by region 23 with nothing to buy. They do bank it, and it is not a
+hoard — it is **five minutes of income**:
+
+```
+region        banked   income/s   banked AS income   next empire level
+thanescar      70,304        376         3.1 min           4.7 min
+ravensmarch   254,660        938         4.5 min           5.4 min
+stormhalt     671,208      1,849         6.0 min           6.1 min
+widowsgate    965,526      2,906         5.5 min           6.6 min
+```
+
+Across the last ten regions the treasury runs **0.9–6.0 minutes** of income while the
+next Empire level costs **4.7–7.1** — so the player is permanently about one level
+away, which is the logarithmic curve working as designed rather than a dead economy.
+Income compounds ~1.3× a region and reaches 2,906/s; six figures stopped being a large
+number somewhere around region 20. **A crown total is meaningless without the income
+beside it, and this project has quoted one on its own more than once.**
+
+**AND THE CROWN TIER'S PRICE GATES NOTHING — the flag is doing all of the work.**
+200,000 crowns, the cheapest Crown line, is **0.8 hours of idling at region 9** and
+about six minutes at region 13. So `requires: 'endgame'` is not belt-and-braces on top
+of an endgame price; remove it and a player who leaves the tab open one evening at
+region 9 buys +18 expedition slots, +5% attack, +5% defence and +20% siege at tier 2.
+The section below calls those lines "priced for an incursion economy where one rung
+pays millions" — true against an incursion economy, and pocket change against a
+mid-campaign one. **Both statements have to be read together or the gate looks
+redundant and gets removed.**
+
+What survives as a real question, for the re-tune rather than for a feature pass: the
+shop's most interesting tier is unreachable for the entire campaign, and making it
+reachable is a REPRICING, not a gate change.
+
 ## The Crown tier: four more endless lines, gated
 
 `exchequer`, `grandArmy`, `warCollege`, `citadels` — endless, based at 200–350k, priced

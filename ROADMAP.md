@@ -415,7 +415,46 @@ and is deliberately last of the features. The re-tune closes the pass.
       contested 20-minute battle pays something and reads as a hard-fought draw rather
       than as the game giving up. Either beats 93% of failures being a stopwatch.
 
-- [ ] **C6. GIVE THE PLAYER SOMETHING TO SPEND SIX FIGURES ON DURING THE CAMPAIGN.**
+- [x] ~~**C6. GIVE THE PLAYER SOMETHING TO SPEND SIX FIGURES ON DURING THE CAMPAIGN.**~~
+      **STRUCK — the premise does not survive measurement, and that is worth more than the
+      feature would have been.** Re-taken off the real `metaFor`/`shopListing` pipeline for
+      a player who plays back to back:
+
+      ```
+      region        banked   income/s   banked AS income   next empire level
+      thanescar      70,304        376         3.1 min           4.7 min
+      ravensmarch   254,660        938         4.5 min           5.4 min
+      stormhalt     671,208      1,849         6.0 min           6.1 min
+      widowsgate    965,526      2,906         5.5 min           6.6 min
+      ```
+
+      **The 691,468 this item was written against is FIVE MINUTES OF INCOME.** Over the
+      last ten regions the treasury runs 0.9–6.0 minutes of income while the next Empire
+      level costs 4.7–7.1 — so the player is permanently about one level away, which is
+      the logarithmic curve working exactly as designed rather than a dead economy. Six
+      figures simply stopped being a large number by region 20; income compounds ~1.3x a
+      region and reaches 2,906/s.
+
+      **AND THE REAL FINDING IS THE OPPOSITE OF THE ONE THIS ITEM ASSUMED.** 200,000
+      crowns — the cheapest Crown line — is **0.8 hours of idling at region 9** and about
+      six minutes at region 13. So the Crown tier's PRICE gates nothing whatsoever for
+      anyone who leaves the tab open one evening, and `requires: 'endgame'` is not a
+      belt-and-braces flag on top of an endgame price: **it is the only thing holding the
+      tier back at all.** That corrects CLAUDE.md's own claim that those lines are "priced
+      for an incursion economy where one rung pays millions" — they are, against an
+      incursion economy, and they are pocket change against a mid-campaign one.
+
+      **What that retires, and what it leaves.** Opening the tier mid-campaign was the
+      obvious cheap fix and it is dead: three of the four lines are direct battle power
+      (+18 expedition slots, +5/5/6%, +20% siege), so it hands a player who idled one
+      evening at region 9 an endgame army at tier 2 — the exact exploit the flag exists to
+      stop. What survives is a real design question for the re-tune rather than a feature:
+      **the shop's most interesting tier is unreachable for the whole campaign, and making
+      it reachable is a repricing, not a gate change.**
+
+      Original item text below.
+
+      **C6. GIVE THE PLAYER SOMETHING TO SPEND SIX FIGURES ON DURING THE CAMPAIGN.**
       Measured above: 691,468 crowns banked at region 23 with nothing to buy, because the
       Crown tier is gated on FINISHING. Candidates: a standing garrison you pay to keep
       (a conquered region that keeps paying more, and can be RAIDED BACK), or an offline
