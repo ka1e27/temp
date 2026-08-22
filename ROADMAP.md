@@ -170,6 +170,35 @@ hold. **Check a "still open" claim against the code before spending a session on
 
 ---
 
+### TIER 4 SCREENED AT n=48 — all four over, and the back half needs a STEEPER RAMP
+
+```
+region       n=12   n=48   band     win-med / advertised
+thanescar      42     63   34-56    13.2m / 16m
+blackspire     75     71   34-56    16.7m / 16m
+ironcrown      75     71   34-56    13.2m / 16m
+obsidian       75     69   34-56    12.6m / 16m
+```
+
+Seven to fifteen points over the ceiling, needing roughly **-20 points each** to reach
+mid-band. Two useful cross-checks: today's thanescar reads 63% at dial 4.60 against the
+**65% CLAUDE.md already records at that exact dial**, so the bracket in that file
+(4.60 → 65%, 4.90 → 65% SHOULDER, 5.20 → 40%) is probably still live and says this row
+wants roughly 5.20. And tier 4's advertised 16 minutes is roughly honest against
+12.6-16.7m measured — unlike tier 3's 19-20.
+
+**MONOTONICITY COUPLES THE WHOLE BACK HALF, so these cannot be authored row by row.**
+Tier 4 at ~5.2-5.4 forces tier 5 above it, and tier 5 needs its own ~-20; tier 6 the
+same again. The dial currently spans 4.01 → 5.07 across regions 9-23 (+1.06) and would
+need roughly 4.2 → 6.3 (+2.1) — **doubling the back-half ramp.**
+
+That is the same conclusion the P/E measurement reached from the other direction: the
+player's landing power doubles across those fifteen regions while the dial rises 26%. A
+structural finding and an empirical one agreeing is the strongest signal this pass has
+produced, and it says the back half was never a set of fifteen independent mis-tunes.
+
+---
+
 ### The deploy gate was mis-attributed, and the real one is already fixed here
 
 **Checked against the workflow runs, not inferred.** Both files say the Pages deploy is
