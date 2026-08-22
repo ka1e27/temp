@@ -1343,6 +1343,22 @@ median would have forced every tier-5 region to advertise five minutes — short
 length gate steps aside entirely and lets the win-rate verdict speak. The same fix is in
 `tests/campaignplay.test.js`.
 
+**⚠ AND THE GATE IS ONE-SIDED, WHICH IS HOW THE PROMISE COLUMN DRIFTED WITH NOTHING
+FAILING.** `simrunner.js` grades `winMed > target * 1.6` and nothing else, so a region
+that advertises LONGER than it plays is invisible: gallowmoor promising 20 minutes is
+"ok" unless its win median exceeds **32**. `campaignplay`'s test 2 does bound both ends
+([0.35x, 2.5x]) — but 0.35 of 20 is 7 minutes, so it too accepts almost any overclaim.
+That is the whole mechanism behind the inverted ramp `tests/battlelength.test.js`
+currently fails on: **tier 3 advertises 19-20 minutes against tier 6's 16-18**, so a
+player who just spent twenty minutes on gallowmoor is told the tier-6 opener is shorter.
+`targetLengthMin` also derives `hardCapMs`, so gallowmoor's cap is
+`max(17, 20 x 1.9)` = **38 minutes** for a tier-3 region, against this project's own
+stated premise of a 7-15 minute battle.
+
+Worth knowing before authoring the column: **tiers 1-2 have no length ramp at all.**
+Measured at n=96/240, every one of the nine wins in **8.2-9.3 minutes** while advertising
+6.5 to 10 — so the promise varies by 54% across a tier whose real spread is 13%.
+
 **⚠ AND n=24 IS TOO NOISY TO TUNE ON EITHER — DEMONSTRATED, NOT ARGUED.** A full
 24-region sweep was taken, nineteen dials were moved, and the campaign was re-swept at the
 same n. Six rows moved the WRONG WAY, and the slope each row implied ranged from **+4.25
