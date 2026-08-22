@@ -4974,7 +4974,8 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   **A stale "still open" entry is worse than no list**, because it sends the next reader
   to build something twice — and this one had a task already marked done against it. When
   reading this section, spend the thirty seconds to check the claim against the code
-  before acting on it; two of these have now gone stale silently.
+  before acting on it. **Three of them had gone stale silently** — this one, the install
+  affordance below, and (earlier, and recorded as its own scar) fog of war.
 - **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
   rule — a yard while it holds fewer than three, a farm after that — and never a
   stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
@@ -5271,10 +5272,12 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   income and buy an upgrade. Half of this was built and merely unadvertised and is now
   fixed (the battle autosaves and resumes for twelve hours; Withdraw now says so). The
   other half is open, and it is the least-explored axis in the design.
-- **The service worker has no install affordance.** The manifest, the icons and the
-  worker are all there, so the browser's own install prompt is the only route in;
-  `beforeinstallprompt` is not captured, so there is no button anywhere that says the
-  game can be installed.
+- ~~**The service worker has no install affordance.**~~ **CLOSED, and STALE — the third
+  in this section.** `src/ui/install.js` captures `beforeinstallprompt` at boot (it fires
+  once, early, and is not replayable, so it has to be parked before any screen exists to
+  want it), `installOffer` is the pure decision in the `recruitOffer`/`offlineNotice`
+  shape, and the main menu subscribes through `onInstallChange` because the event can
+  arrive after the menu is already on screen. `tools/smoke-meta.mjs` drives the row.
 - ~~`tools/checksize.js` does not cover `.mjs`, so `tools/smoke.mjs` is 625 lines against a
   400-line cap and `npm run check` reports ok.~~ **CLOSED.** `EXTS` gained `.mjs`, which
   meant paying the 663 lines `smoke.mjs` had reached by then: it is now a 95-line entry
