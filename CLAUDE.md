@@ -3988,6 +3988,39 @@ by every rung of the incursion ladder and silently double-mutate it. Resolving t
 at config-build time, the way `campaignReplayPlan` already does, is what keeps the two
 apart.
 
+**⚠ AND WHEN THEY LANDED, A HARDER REGION MADE THE BOT WIN MORE — WHICH IS THE CLOCK
+FINDING ARRIVING FROM A THIRD DIRECTION.** `campaignTwistPlan` shipped, and both rows
+measured before and after moved the SAME WAY and by the same amount, against a
+prediction that they would fall:
+
+```
+region       before        after         delta   all-median
+gallowmoor   79%  16.2m    92%  14.4m     +13     16.2 -> 14.4m
+thanescar    58%  26.9m    71%  15.7m     +13     26.9 -> 15.7m
+```
+
+gallowmoor drew `bulwark` (+12% enemy defence) and thanescar `ironwall` (walls repair
+60% faster). Both are unambiguous difficulty INCREASES. Both rows got easier for the bot.
+
+**The all-run medians are the tell, and thanescar's is enormous: 26.9 minutes to 15.7.**
+Battles are finishing forty percent faster, and that is where the win rate came from —
+93% of this campaign's failures are the clock, so anything that shortens a battle raises
+the win rate whatever it does to the difficulty. The likely mechanism is the harness's
+own target selection: `simtactics.js bestAssaultTarget` walks away from any siege it
+cannot finish inside its budget, so a HARDER target makes the bot skip a grind it would
+otherwise have spent ten minutes on. That is the "a harness declining to play reads as a
+balance win" pattern this file already records twice — inverted, because here declining
+to grind is what lets it finish.
+
+**TREAT THIS AS A SCREEN, NOT A RESULT.** n=24, so the SEM near 50% is about ten points
+and either row alone is inside the noise band; two rows moving +13 together is
+suggestive and no more. The re-tune's own n>=96 sweep is where this gets a number, and
+protocol rule 6 is exactly why C1 landed before that sweep rather than after it. What
+should NOT be done is reading "+13" as "mutators made the campaign easier" and reaching
+for a dial — the honest reading is that the measurement is dominated by battle DURATION,
+which is the finding this file already carries at "the band the campaign is tuned against
+measures duration, not difficulty".
+
 **AND EIGHT VARIETY MECHANICS ARE BUILT, TESTED, AND NEVER SHOWN ON A FIRST RUN.**
 `content/incursion.data.js` ships `ironwall, warhost, bulwark, scorched, levies, thinned,
 sealed, entrenched`, each applied through a field that already crosses the seam.
