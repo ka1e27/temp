@@ -4957,9 +4957,24 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   `march` and `fortify` need no unlock, so their charges are pure relic value. The "booster
   stock" line looks stale relative to the crowns→relics repricing, but that is a guess:
   **this needs an intent decision, not a patch.** Left alone deliberately.
-- **`site.garrison` is still unvalidated at the seam**, which is the same shape as the
-  `expedition` hole the audit closed — a string count would concatenate into live sim state.
-  It was not part of that pass. Same file, same fix pattern (`checkComposition`).
+- ~~**`site.garrison` is still unvalidated at the seam.**~~ **CLOSED, and this bullet was
+  STALE — the exact failure the fog entry above is kept as a scar for.** `checks.js`
+  already runs `checkComposition` on every site's garrison; verified by probe against a
+  real `buildBattleConfig`, with both negative controls:
+
+  ```
+  ACCEPTED   untouched                      <- control
+  rejected   garrison militia="lots"        expected a non-negative integer
+  rejected   garrison militia=-50           expected a non-negative integer
+  rejected   garrison militia=Infinity      expected a non-negative integer
+  rejected   garrison unknown unit          unknown unit "nosuchunit"
+  ACCEPTED   garrison absent                <- control: absent is an empty garrison
+  ```
+
+  **A stale "still open" entry is worse than no list**, because it sends the next reader
+  to build something twice — and this one had a task already marked done against it. When
+  reading this section, spend the thirty seconds to check the claim against the code
+  before acting on it; two of these have now gone stale silently.
 - **The bot builds farms while it is losing.** `constructTurn` picks its kind on one
   rule — a yard while it holds fewer than three, a farm after that — and never a
   stronghold at all. Measured on obsidian, a run it lost: seven farms raised and seven
