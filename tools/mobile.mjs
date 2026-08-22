@@ -44,6 +44,22 @@ await page.send('Emulation.setDeviceMetricsOverride', {
   width: W, height: H, deviceScaleFactor: 3, mobile: true,
 });
 await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+// AUDIT THE RESTING LAYOUT, NEVER AN ANIMATION IN PROGRESS. Every finding this
+// tool produced that turned out to be false was a box measured mid-transition:
+// a 44px shop button caught entering on `hd-rise` measures 43.55, and a
+// training chip caught between `--sc: 0.6` (fan closed) and 1 (open) measures
+// 26.4 while its `visibility` is still `visible`, so the skip for hidden
+// elements does not catch it. Both are the dismissed-panel gotcha in CLAUDE.md
+// wearing a tap target's clothes.
+//
+// The stylesheet already collapses every duration under `prefers-reduced-motion`
+// (styles/tokens.css), so emulating it is not a special measuring mode — it is
+// the same layout, arrived at instantly. Sprinkling sleeps would be guessing at
+// durations the CSS already states, and an audit that cries wolf gets skimmed
+// exactly like one that stays silent.
+await page.send('Emulation.setEmulatedMedia', {
+  features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+});
 
 const scene = () => page.eval(() => document.body.dataset.scene ?? null);
 const has = (sel) => page.eval((s) => !!document.querySelector(s), sel);
@@ -177,7 +193,13 @@ const audit = (min) => page.eval((minTap) => {
     if (b.width === 0 || b.height === 0) continue;
     const label = `${name(el)}${el.textContent ? ` "${el.textContent.trim().slice(0, 18)}"` : ''}`;
     if (b.width < minTap || b.height < minTap) {
-      out.tiny.push({ el: label, w: Math.round(b.width), h: Math.round(b.height) });
+      // ONE DECIMAL, NOT A ROUND NUMBER. `Math.round` turned 43.55 into "44"
+      // and printed it under the words "under 44px", so the tool's own evidence
+      // read as a contradiction and the finding looked like a bug in the audit.
+      // A failure message that rounds its way into a passing number is worse
+      // than no message.
+      const dp = (n) => Math.round(n * 10) / 10;
+      out.tiny.push({ el: label, w: dp(b.width), h: dp(b.height) });
     }
     const cx = b.left + b.width / 2;
     const cy = b.top + b.height / 2;
@@ -263,6 +285,15 @@ try {
     if (await has(sel)) { await click(sel); break; }
   }
   if (await scene() === 'shop') {
+    // WAIT FOR THE SCREEN TO SETTLE BEFORE MEASURING IT. This was the one step
+    // that audited straight off the click while every other one sleeps, and it
+    // cried wolf for it: `.overlay`/`.dialog` enter on `hd-enter`/`hd-rise` at
+    // `--d-slow`, so a 44px button caught mid-animation measures 43.55 and gets
+    // reported as a tap-target failure that is not there. Same family as the
+    // dismissed-panel gotcha in CLAUDE.md — a box read mid-transition is not the
+    // box the player gets — and an audit that cries wolf gets skimmed exactly
+    // like one that stays silent, which this file's own comments already say.
+    await page.sleep(420);
     report(await audit(MIN_TAP), '3 shop   ');
     await shot('3-shop');
     // `.shop-close` IS THE BUTTON, and the four selectors that used to be
