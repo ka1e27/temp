@@ -140,6 +140,188 @@ which is the safe direction.
    third column.
 5. **The incursion ladder is downstream of all of this** — see item 4 below.
 
+## ⇒ THE CRITIC'S PASS: this game is engineered beautifully and is not fun yet
+
+**Everything in this section was measured today, on the shipped build, with the command
+to re-take it. Nothing here is taste.** The engineering in this project is genuinely
+better than most shipped commercial games — the invariants, the measurement culture, the
+scar-tissue documentation. It has been pointed almost entirely at making the SIMULATION
+correct rather than at making the GAME worth five hours. The result is a technically
+immaculate campaign whose last four and a half hours contain no new content, in which
+the player essentially cannot lose, and where waiting overnight is worth 16%.
+
+The five findings below are ranked by what they cost a real player. The features under
+them are ranked by fun per line of code.
+
+### 1. YOU CANNOT LOSE — AND THEREFORE YOU CANNOT WIN
+
+576 battles across the campaign: **401 wins, 12 defeats, 163 timeouts**, and 102 of
+those timeouts end AHEAD on territory. 93% of every failure in this game is a stopwatch.
+Being beaten is a story a player tells; running out of time reads as the game being
+broken. This is written up in full in CLAUDE.md — what belongs here is the consequence:
+**a game with no defeat state has no stakes**, and no amount of dial-tuning creates one,
+because defeat only starts appearing at `enemyMult` 8.50 against a shipped 4.60.
+
+### 2. THE PRE-COMMIT PREVIEW DELETES EVERY GAMBLE IN THE GAME
+
+Invariant 3 makes combat deterministic and the preview "a guarantee, not an estimate".
+So **every attack you will ever make is a solved arithmetic problem whose answer the
+game has already shown you.** No read, no risk, no lucky break, no heartbreak. The
+player is not deciding, they are executing a checkable procedure.
+
+Determinism is not the problem — Into the Breach is deterministic and superb. But it is
+a PUZZLE, where finding the one line that works is the game. Here the resolution is
+"bigger number wins" and the game tells you which number is bigger. Determinism plus a
+trivial decision space is not elegance, it is the absence of a game.
+
+**Do NOT fix this with dice.** It would break invariant 3, replay, and the harness. Fix
+it with the uncertainty that is already real — see feature B.
+
+### 3. THE CONTENT IS OVER AT REGION 8 OF 24 — MEASURED
+
+Modelling a player who plays back to back and never idles extra (`/tmp/cliff.mjs`
+pattern: `metaFor(before, cumulativeAdvertisedMinutes)`):
+
+```
+region  8  thornmoor    62m    LAST NEW THING IN THE GAME (unlockMarshal)
+region  9..24                  261 MINUTES — 4h21m — OF ZERO NEW CONTENT
+```
+
+Three of eleven unlocks — outriders, halberds, sappers, i.e. **every specialist** — are
+never bought at all on that curve. The enemy's own roster completes at region 10. And
+from region 15 to 24 the difficulty dial moves 4.60 → 5.07 (**10% across the last ten
+regions**) while the board grows 17×13 → 21×16 (**+15%**). Ten regions of nothing.
+
+**AND EIGHT VARIETY MECHANICS ARE ALREADY BUILT, TESTED, AND NEVER SHOWN TO A FIRST-RUN
+PLAYER.** `content/incursion.data.js` ships `ironwall, warhost, bulwark, scorched,
+levies, thinned, sealed, entrenched` — every one applied through a field that already
+crosses the seam, so they cost no engine change. `campaignReplayPlan` returns `null` for
+every region on `resets: 0`, verified today. They appear only on the endless ladder and
+on post-abdication replays, which is to say: **almost nobody will ever see one.**
+
+### 4. THE IDLE HALF STOPS PAYING AFTER ONE EVENING — MEASURED
+
+Army power against idle time, region 12, off real `buildBattleConfig` output:
+
+```
+idled      1h      8h     24h    1 week   1 month
+power    x2.39   x3.46   x4.02   x5.21    x6.19
+bodies    273     284     293     305      312
+```
+
+**One hour to one MONTH — 720x the wait — buys x2.6.** 8h → 24h buys 16%. And the only
+figure a player can actually see, the size of the landing force, is FLAT: 273 → 312
+bodies. For a game whose pitch is that your empire pays out while you are away, there is
+no reason to come back tomorrow. `SAFE_MAX_LEVEL` and the log-curve are doing exactly
+what they were designed to do, and what they were designed to do is remove the reward.
+
+### 5. THE BATTLE IS A CONVEYOR BELT, NOT A WAR
+
+Already in CLAUDE.md and it belongs in the fun list: 1,150 field battles in one
+20-minute gallowmoor battle — about one a second — with the enemy sending 2,114 columns
+at a **median size of two**. 78% of the bot's army is permanently in transit. Nothing
+that happens is decisive, so nothing is worth watching, so the 8–20 minutes of real-time
+attention the game asks for are not repaid.
+
+### ...and the first two minutes actively punish a new player — MEASURED
+
+Cold boot (`Storage.clearDataForOrigin`, not `localStorage.clear()`), no input, sampled:
+
+```
+t=      0s     30s     60s     90s    120s
+gold   294     244     194     145      95      monotonically DOWN
+sites  3v5     3v6     3v7     3v7     3v7
+```
+
+The biggest, brightest number on the screen is red and falling from tick one
+(`GOLD 294 / -1.7/s`). The board is 85% black with nothing to aim at. The objective says
+`TAKE THE CASTLE` and no castle is visible. Five booster buttons all read `–`, because a
+fresh save has no relics and relics only come from beating a region — so **five of the
+game's most interesting controls are dead on arrival for the entire first battle**. Of
+four BUILD buttons, three cost more than the player has, and the fourth bankrupts them.
+
+**And the endgame screenshot is worse.** Widowsgate, three minutes in, passive:
+`SITES 4 v 40`, `GOLD 0 · +0.0/s`, `110 troops · 0 marching`, objective reading
+`HOLD 7% OF 60%`, ~95% of a 336-hex board black, every booster still `–`, every build
+button still unaffordable. That is the climax of a five-hour campaign.
+
+*(One concrete bug found on the way: the booster rail overflows its plate at the default
+1440x760 — `scrollHeight` 315 against `clientHeight` 303 — so TITHE draws clipped. All
+five still hit-test, so it is cosmetic, but it is visible on the default desktop size.)*
+
+---
+
+## ⇒ WHAT WOULD ACTUALLY MAKE IT FUN, ranked by fun per line
+
+- [ ] **C1. PUT THE EIGHT EXISTING MUTATORS ON LATE CAMPAIGN REGIONS.** The single
+      highest fun-per-line change available in this codebase, and most of it is already
+      written. `incursionMods`/`incursionRegionInputs` already apply a hand through
+      fields that cross the seam; `campaignReplayPlan` already computes a seeded draw
+      from `(region id, resets)`. Give regions 10+ a hand drawn from `(region id, clears)`
+      instead of `null`, one mutator from tier 3, two from tier 5. **This makes fifteen
+      identical regions stop being identical for roughly the cost of one function.**
+      Balance caveat, stated up front: it moves every measured win rate on those rows, so
+      it lands with the re-tune, not before it. `sealed` stays excluded for the reason
+      `CAMPAIGN_REPLAY` already excludes it.
+
+- [ ] **C2. MAKE THE PREVIEW SHOW A RANGE WHENEVER THE TARGET CAN BE REINFORCED.**
+      Restores the gamble without touching invariant 3, because the uncertainty is
+      already REAL: `projectGarrison` projects training, but a defender can also be
+      reinforced by a column in flight that the player cannot see. Today the preview
+      quietly assumes that will not happen and prints a single confident number. Show
+      `you win — unless 12+ arrive first` and the player is making a bet again, on true
+      information, with the simulation still deterministic and the replay still exact.
+      The precedent is already here: a multi-source send WITHHOLDS its verdict rather
+      than softening it, and an unscouted target returns `kind: 'unscouted'`.
+
+- [ ] **C3. GIVE THE PLAYER A CHOICE BEFORE THEY LAND — three commanders, pick one.**
+      Not a new unit (a unit is a cliff, and this file says so). A one-off, per-battle
+      modifier chosen on the loadout screen from three seeded options: "your camp trains
+      at 2x for the first 90 seconds", "your first assault takes no losses", "+50% build
+      speed, -25% income". It rides `FactionMods`, which already crosses the seam, so it
+      is content rather than engine. It creates the thing the campaign most lacks: **a
+      decision made before you see the map, that makes two runs of the same region
+      different.**
+
+- [ ] **C4. LET A BOOSTER BE FIRED INTO A FIGHT THAT IS ALREADY HAPPENING.** The melee
+      layer gives every fight a six-second window and the player can currently only
+      reinforce it or run away. Bombard/fortify landing ON an open melee turns that
+      window into the tensest six seconds in the game, and the layer is already built —
+      `site.melee` carries the record, `meleeStep` already re-projects when either side
+      changes. **This is the cheapest way to make combat worth WATCHING**, which is the
+      whole problem with #5.
+
+- [ ] **C5. KILL THE TIMEOUT AS THE FAILURE MODE.** Two candidates, and this needs a
+      decision rather than a patch. (a) Make the last three minutes DECISIVE — the
+      attrition ladder already exists, already bites hard, and is currently a slow
+      squeeze nobody notices; turn its last rung into a real clock the player can feel.
+      (b) Resolve on territory with a graded payout instead of binary win/lose, so a
+      contested 20-minute battle pays something and reads as a hard-fought draw rather
+      than as the game giving up. Either beats 93% of failures being a stopwatch.
+
+- [ ] **C6. GIVE THE PLAYER SOMETHING TO SPEND SIX FIGURES ON DURING THE CAMPAIGN.**
+      Measured above: 691,468 crowns banked at region 23 with nothing to buy, because the
+      Crown tier is gated on FINISHING. Candidates: a standing garrison you pay to keep
+      (a conquered region that keeps paying more, and can be RAIDED BACK), or an offline
+      expedition that runs while you are away and returns loot — which would also fix #4,
+      because it makes tomorrow's login mean something specific rather than a slightly
+      larger multiplier.
+
+- [ ] **C7. GIVE THE ENEMY ONE SET-PIECE PER BATTLE.** The AI grinds; it never does
+      anything you have to ANSWER. A named event — a raid aimed at your camp at minute
+      five, a relief column visibly marching for the throne, a supply convoy you can
+      intercept for a lump of gold — creates the moment the conveyor belt never produces.
+      `aicore.js adjacentSources` already pools; this is a trigger and a target, not a
+      planner.
+
+- [ ] **C8. FIX THE OPENING BEAT: do not show a new player a falling red number.** The
+      first battle should not open on `GOLD 294 / -1.7/s` with three of four build
+      options unaffordable and five dead booster buttons. Either start the first region
+      cash-positive, or hide the training deficit until the player has captured
+      something. **And give the first battle one free booster charge** — five controls
+      that read `–` through the entire tutorial region is the "sold and did nothing"
+      failure this project has already refunded four upgrades for, wearing a different hat.
+
 ## ⇒ START HERE: the fun pass, live work list
 
 **This section is the one piece of this file that carries STATE, and it exists so a

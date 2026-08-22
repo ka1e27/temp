@@ -3923,6 +3923,74 @@ regressed). `enemyMult` and total sites are non-decreasing across all 24 rows an
 pointer events. `checkpure`'s banned-global list matches this file's, and both CI jobs still
 gate the deploy.
 
+## The content curve, measured: the game is over at region 8 of 24
+
+Two numbers a critic's pass took today, both off the real `metaFor`/`buildBattleConfig`
+pipeline rather than off the tables. They are here because every difficulty decision in
+this project is made against `WIN_BAND` and neither of these is visible from it.
+
+**THE LAST NEW THING IN THE GAME ARRIVES AT REGION 8.** Modelling a player who plays
+back to back and never idles extra — `metaFor(before, cumulativeAdvertisedMinutes)` —
+the unlock curve is:
+
+```
+region 4   saltmere    29m    unlockRaiders, tactician, boosterRally
+region 5   kaldan      37m    unlockRams, boosterTithe
+region 6   highmarch   45m    unlockArchers, boosterBombard
+region 8   thornmoor   62m    unlockMarshal          <- THE LAST ONE
+region 9..24            261 MINUTES OF NOTHING NEW
+```
+
+Four hours and twenty-one minutes — 68% of the campaign's running time — with no new
+unit, booster or ability. Three of eleven unlocks are never bought at all on that curve,
+and they are **all three specialists** (outriders, halberds, sappers), which is the same
+finding as "no specialist has a default weight" arriving from the player's side.
+
+The other columns say the same thing. `ENEMY_UNITS_BY_TIER` completes at tier 3
+(region 10). From region 15 to 24 `enemyMult` moves 4.60 → 5.07 — **10% across the last
+ten regions** — while the board grows 17×13 → 21×16, about 15%. `castleGateFrac` is a
+flat 0.60 for the last ten rows. Ten regions that differ by nothing a player can name.
+
+**AND EIGHT VARIETY MECHANICS ARE BUILT, TESTED, AND NEVER SHOWN ON A FIRST RUN.**
+`content/incursion.data.js` ships `ironwall, warhost, bulwark, scorched, levies, thinned,
+sealed, entrenched`, each applied through a field that already crosses the seam.
+`campaignReplayPlan` returns `null` for every region at `resets: 0` — verified, not
+inferred — so they reach the ladder and post-abdication replays and nothing else. The
+cheapest large fun win available in this codebase is a draw from that table on regions
+10+; it is priced in ROADMAP.md as C1, and it moves every measured win rate on those
+rows, so it belongs to the re-tune rather than ahead of it.
+
+**AND THE IDLE HALF STOPS PAYING AFTER ONE EVENING.** Army power against idle time at
+region 12, read off real `buildBattleConfig` output as
+`bodies × unitAtkMult × unitDefMult`:
+
+```
+idled      1h      8h     24h    1 week   1 month
+power    x2.39   x3.46   x4.02   x5.21    x6.19
+bodies    273     284     293     305      312
+```
+
+**One hour to one month — 720× the wait — buys ×2.6**, and 8h → 24h buys 16%. The only
+figure a player can see, the landing force, is essentially flat. This is the documented
+log curve (`power grows with the logarithm of crowns spent`) working exactly as designed,
+and what it is designed to do is remove the reason to come back tomorrow. That is a
+strange property for the half of the game the pitch is built on, and it is recorded here
+as a fact rather than a defect because changing it is a design decision, not a fix.
+
+**A NEW PLAYER'S FIRST TWO MINUTES ARE A BANKRUPTCY TIMER.** Cold boot on a genuinely
+wiped save, no input at all:
+
+```
+t=      0s     30s     60s     90s    120s
+gold   294     244     194     145      95
+sites  3v5     3v6     3v7     3v7     3v7
+```
+
+The largest, brightest element on the screen is `GOLD 294` with `-1.7/s` under it in red,
+falling from tick one, and nothing says that is normal. The board is 85% dark with no
+target in it, the objective names a castle that is not on screen, and five booster
+buttons read `–` for the whole battle because a fresh save has no relics.
+
 ### Still open, and why
 
 - **THE CAMPAIGN RE-TUNE (third pass), against the melee layer. TOP OF THE LIST.**
