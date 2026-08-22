@@ -63,10 +63,26 @@ test('boosters bought in the shop actually arrive in the battle', () => {
 });
 
 test('carrying no boosters is legal and yields an empty set', () => {
-  const config = buildBattleConfig(richMeta(0), 'riverfen', [], generateBattleMap, { seed: 4 });
+  // `stats.battles = 1`, because a GENUINE first battle is now handed one free
+  // `march` charge (meta/boosters.js `withFirstBattleCharge`) and this test is
+  // about the general property rather than that one. The fixture was already
+  // describing a player who cannot exist — 0 conquered and 0 battles means 0
+  // income, so 0 crowns and no unlocks — and the grant is what exposed it.
+  const meta = richMeta(0);
+  meta.stats.battles = 1;
+  const config = buildBattleConfig(meta, 'riverfen', [], generateBattleMap, { seed: 4 });
   assertBattleConfig(config);
   assert.deepEqual(config.boosters, []);
   assert.deepEqual(startBattle(config).boosters, {});
+});
+
+test('...and the first battle of all is the one exception, on purpose', () => {
+  // Pinned HERE rather than left as a surprise, because the test above is
+  // exactly where somebody would go looking after being handed a charge they
+  // did not select. See tests/openingbeat.test.js for the rule itself.
+  const config = buildBattleConfig(richMeta(0), 'riverfen', [], generateBattleMap, { seed: 4 });
+  assertBattleConfig(config);
+  assert.deepEqual(config.boosters, [{ id: 'march', charges: 1 }]);
 });
 
 // --- the validator now covers the field that drifted ----------------------

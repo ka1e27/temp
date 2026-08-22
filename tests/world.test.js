@@ -311,6 +311,10 @@ test('an outcome from a different config is rejected at the seam', () => {
 test('boosters are consumed by what was FIRED, not by what was carried in', () => {
   const s = world([], { boosterRally: 1 }, 1000);
   s.meta.boosters.rally = 3;
+  // Not a first battle: a genuine one is handed a free `march` charge, and this
+  // fixture already describes a player who cannot exist — nobody buys a booster
+  // unlock before conquering anything, because income needs conquered ground.
+  s.meta.stats.battles = 1;
   const cfg = buildBattleConfig(s, 'riverfen', ['rally'], null);
   assert.deepEqual(cfg.boosters, [{ id: 'rally', charges: 3 }]);
   assert.equal(s.meta.boosters.rally, 3, 'building a config must not mutate the inventory');
