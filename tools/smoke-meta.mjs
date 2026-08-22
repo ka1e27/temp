@@ -103,6 +103,40 @@ async function runEndgame(page, h, step, note, OUT) {
     throw new Error(`incursion did not reach its loadout (${JSON.stringify(loadout)})`);
   }
   step(`incursion loadout: "${loadout.title}", launch reads "${loadout.go}"`);
+
+  // THE DOCTRINE PICKER, ON THE ONE SCREEN THIS SUITE ALREADY REACHES WITH A
+  // FINISHED CAMPAIGN SEEDED. It is here rather than in a unit test because
+  // every way it has broken so far was invisible to one: the panel wrapped
+  // below the fold and `elementFromPoint` returned null on its own card, and
+  // the pick callback named a function that does not exist, so every click
+  // threw while focus still moved — which looks exactly like it working.
+  const cards = await page.eval(() => [...document.querySelectorAll('.pb-doctrine')]
+    .map((c) => ({ id: c.dataset.doctrine, on: c.getAttribute('aria-checked'), tab: c.tabIndex })));
+  if (cards.length !== 3) throw new Error(`doctrine: ${cards.length} cards, expected 3`);
+  if (cards.filter((c) => c.on === 'true').length !== 1) {
+    throw new Error(`doctrine: ${JSON.stringify(cards)} — exactly one must be checked`);
+  }
+  // A radiogroup keeps ONE tab stop. Three would make walking past the group
+  // cost three Tab presses, which is the whole thing the role exists to avoid.
+  if (cards.filter((c) => c.tab === 0).length !== 1) {
+    throw new Error(`doctrine: ${JSON.stringify(cards)} — exactly one tab stop`);
+  }
+  const other = cards.findIndex((c) => c.on !== 'true');
+  await h.hitPoint(`.pb-doctrine[data-doctrine="${cards[other].id}"]`, 'an unchosen doctrine');
+  await h.click(`.pb-doctrine[data-doctrine="${cards[other].id}"]`, 'the doctrine card');
+  const repicked = await page.eval(() => [...document.querySelectorAll('.pb-doctrine')]
+    .map((c) => ({ id: c.dataset.doctrine, on: c.getAttribute('aria-checked'), tab: c.tabIndex })));
+  const now = repicked.find((c) => c.on === 'true');
+  if (now?.id !== cards[other].id) {
+    throw new Error(`doctrine: pressed ${cards[other].id}, checked is ${now?.id}`);
+  }
+  // ...and the roving tabindex MOVED WITH IT. Patching `aria-checked` alone
+  // would leave two cards claiming the tab stop and read as fine on screen.
+  if (now.tab !== 0 || repicked.filter((c) => c.tab === 0).length !== 1) {
+    throw new Error('doctrine: tab stop did not follow the selection');
+  }
+  step(`doctrine: 3 cards, picked ${now.id}, checked state and tab stop moved together`);
+
   await page.eval(() => {
     const g = window.__game;
     g.scenes.replace(g.screens.worldmap);

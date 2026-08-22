@@ -23,9 +23,13 @@ import { unlockedUnits } from '../meta/upgrades.js';
 import { inventory, defaultSelection } from '../meta/boosters.js';
 import { markDirty } from '../core/store.js';
 import {
-  UNIT_LABEL, regionBrief, initialComposition, defaultComposition, loadoutBudget, overBudget,
+  UNIT_LABEL, regionBrief, briefPanel, initialComposition, defaultComposition,
+  loadoutBudget, overBudget,
 } from './prebattle-brief.js';
 import { renderArmy, renderBoosters } from './prebattle-army.js';
+import { renderDoctrines } from './prebattle-doctrine.js';
+import { doctrineChoices, doctrineOpen, defaultDoctrine } from '../meta/doctrine.js';
+import { regionsConquered, record } from '../meta/world.js';
 import { parseCount, setUnitCount, countNote } from './prebattle-count.js';
 
 // One front door. The screen's decisions live in prebattle-brief.js and the
@@ -43,6 +47,9 @@ export function createPreBattleScene(ctx) {
   let root = null;
   let armyBody = null;
   let boosterBody = null;
+  let doctrineBody = null;
+  let doctrines = [];
+  let picked = null;
   let announce = null;
   let regionId = null;
   let depth = null;
@@ -77,16 +84,54 @@ export function createPreBattleScene(ctx) {
       chosen = initialComposition(meta(), params?.composition ?? meta().loadout);
       ownable = new Set(defaultSelection(meta()));
       carried = new Set(params?.boosters ?? ownable);
+      // THE HAND, and it is dealt HERE rather than stored — see
+      // meta/doctrine.js `doctrineChoices` for why a retry must offer the same
+      // three. Empty until the first region falls, so the campaign opener keeps
+      // the screen it was measured with; `attempt` is the rung on an incursion
+      // and the region's own clear count otherwise, so a raid deals a new hand.
+      // One expression for the attempt counter, because `doctrineChoices` and
+      // `defaultDoctrine` must be asked the SAME question — two copies drifting
+      // would deal one hand and preselect a card from another.
+      const attempt = depth ?? record(meta(), regionId).clears;
+      doctrines = doctrineOpen(regionsConquered(meta()))
+        ? doctrineChoices(regionId, attempt) : [];
+      // Preselected rather than left blank, so Enter still launches and a player
+      // who does not care is never worse off than before doctrines existed. An
+      // explicit param wins — results.js re-opens on the fight that just ended.
+      picked = doctrines.length
+        ? (doctrines.some((d) => d.id === params?.doctrine)
+          ? params.doctrine : defaultDoctrine(regionId, attempt))
+        : null;
 
       document.body.dataset.scene = 'prebattle';
       announce = h('p.sr-only', { 'aria-live': 'polite' });
       armyBody = h('div.pb-army-body');
       boosterBody = h('div.pb-booster-body');
+      doctrineBody = h('div.pb-doctrine-body');
 
       root = h('div.screen.prebattle', {},
         h('div.pb-wrap', {},
           header(brief),
           h('div.pb-body', {},
+            // THE ONE CHOICE THAT IS NOT AN INVENTORY, and it is the grid's
+            // FIRST CHILD rather than its last. It spans the whole row (see
+            // prebattle.css), and a full-width band can only take row one if
+            // nothing is placed before it — as a fourth child it wrapped to a
+            // second row entirely below the fold and `elementFromPoint` on its
+            // own middle card returned null. Reading order pays a little for
+            // that: the choice sits above the briefing that informs it. The
+            // alternative was a decision the player could not click.
+            //
+            // Omitted entirely before the first conquest rather than shown
+            // disabled: a locked panel on the opening screen is a promise a
+            // brand-new player cannot act on, and that screen is already the
+            // most crowded moment in the game.
+            ...(doctrines.length
+              ? [h('section.pb-doctrine-panel.panel', { 'aria-labelledby': 'pb-doc-h' },
+                h('h2#pb-doc-h', { text: UI.doctrine }),
+                h('p.pb-note', { text: UI.doctrineHint }),
+                doctrineBody)]
+              : []),
             briefPanel(brief),
             h('section.pb-army.panel', { 'aria-labelledby': 'pb-army-h' },
               h('h2#pb-army-h', { text: UI.expedition }),
@@ -138,7 +183,9 @@ export function createPreBattleScene(ctx) {
     },
 
     exit() {
-      root = armyBody = boosterBody = announce = null;
+      root = armyBody = boosterBody = doctrineBody = announce = null;
+      doctrines = [];
+      picked = null;
       chosen = carried = regionId = depth = pending = null;
       notice = '';
       delete document.body.dataset.scene;
@@ -171,47 +218,6 @@ export function createPreBattleScene(ctx) {
           'aria-label': 'Back to the world map',
           on: { click: toMap },
         })));
-  }
-
-  function briefPanel(brief) {
-    return h('section.pb-brief.panel', { 'aria-labelledby': 'pb-brief-h' },
-      h('h2#pb-brief-h', {
-        text: brief.incursion ? brief.incursion.label : `Tier ${brief.tier} briefing`,
-      }),
-      h('dl.pb-stats', {}, ...brief.rows.flatMap(([k, v]) => [
-        h('dt.label', { text: k }), h('dd.num', { text: v }),
-      ])),
-      // The complications are the reason this screen matters on a rung: `thinned`
-      // lands a smaller army and `ironwall` makes engines the difference between
-      // a siege and a stalemate, so they are shown WHERE the army is chosen and
-      // not only on the briefing overlay the player has already closed.
-      ...(brief.incursion?.mutators?.length
-        ? [h('ul.pb-mutators', {}, ...brief.incursion.mutators.map((m) => h('li.pb-mutator', {
-          'data-mutator': m.id,
-        }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
-        : []),
-      // THE HAND THIS REGION CARRIES — its own (meta/incursion.js
-      // `campaignTwistPlan`, which is what an ordinary player meets from region
-      // 10 on) or a replayed run's (`campaignReplayPlan`). ONE block for both,
-      // because they are the same statement to the player and a third copy of
-      // this markup is how a surface drifts out of step with its own rule.
-      // Mutually exclusive with the incursion list above, and shown for the same
-      // reason: know before you pick a loadout, not mid-battle.
-      ...(brief.regionMutators?.length
-        ? [h('ul.pb-mutators.pb-replay-mutators', {},
-          ...brief.regionMutators.map((m) => h('li.pb-mutator', {
-            'data-mutator': m.id,
-          }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
-        : []),
-      // The specialists are opt-in and easy to forget; meta/specialists.js
-      // reads this same region's own data and says when one answers the fight
-      // better than the default spread. `data-unlocked` is what tells "bring
-      // it" from "consider buying it" apart without repeating the unit's name.
-      ...(brief.callouts?.length
-        ? [h('ul.pb-tips', {}, ...brief.callouts.map((c) => h('li.pb-tip', {
-          'data-unit': c.unit, 'data-unlocked': c.unlocked ? '1' : '0',
-        }, h('strong', { text: UNIT_LABEL[c.unit] }), h('span', { text: ` ${c.note}` }))))]
-        : []));
   }
 
   function footer(brief) {
@@ -258,8 +264,25 @@ export function createPreBattleScene(ctx) {
       },
       onToggle: (id, on) => { if (on) carried.add(id); else carried.delete(id); },
     });
+    if (doctrines.length) {
+      renderDoctrines(doctrineBody, {
+        choices: doctrines,
+        picked,
+        // Re-rendered rather than toggled in place, unlike a booster chip: a
+        // radiogroup has to move `aria-checked` AND the roving tabindex off the
+        // old card as it lands on the new one, so patching one node would leave
+        // two cards claiming the tab stop.
+        onPick: (id) => { picked = id; paint(); focusPicked(); },
+      });
+    }
     gate();
     markScroll();
+  }
+
+  /** A re-render replaces the pressed card, so focus has to be put back or a
+   *  keyboard arrow moves the selection once and then lands on the document. */
+  function focusPicked() {
+    root?.querySelector('.pb-doctrine.is-on')?.focus();
   }
 
   /**
@@ -347,6 +370,7 @@ export function createPreBattleScene(ctx) {
       regionId,
       boosters: [...carried],
       composition: { ...chosen },
+      ...(picked ? { doctrine: picked } : {}),
       ...(depth ? { incursion: depth } : {}),
     });
   }

@@ -97,7 +97,7 @@ export function createBattleScene(ctx) {
     id: 'battle',
 
     enter(params) {
-      const { regionId, boosters, composition, resume, incursion } = params;
+      const { regionId, boosters, composition, resume, incursion, doctrine } = params;
       finished = false;
 
       if (resume) {
@@ -136,7 +136,14 @@ export function createBattleScene(ctx) {
         config = buildBattleConfig(
           ctx.state, regionId, boosters,
           regionId === FRONTIER_ID ? generateFrontierMap : generateBattleMap,
-          { ...(composition ? { composition } : {}), ...(incursion ? { incursion } : {}) },
+          {
+            ...(composition ? { composition } : {}),
+            ...(incursion ? { incursion } : {}),
+            // The loadout screen's one non-inventory choice. Validated at
+            // the seam rather than trusted — `resolveDoctrine` refuses an
+            // id this battle was never dealt.
+            ...(doctrine ? { doctrine } : {}),
+          },
         );
         assertBattleConfig(config);
         ctx.state.battle = startBattle(config);

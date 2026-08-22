@@ -349,7 +349,48 @@ and is deliberately last of the features. The re-tune closes the pass.
       The precedent is already here: a multi-source send WITHHOLDS its verdict rather
       than softening it, and an unscouted target returns `kind: 'unscouted'`.
 
-- [ ] **C3. GIVE THE PLAYER A CHOICE BEFORE THEY LAND — three commanders, pick one.**
+- [x] ~~**C3. GIVE THE PLAYER A CHOICE BEFORE THEY LAND — three commanders, pick one.**~~
+      **SHIPPED as DOCTRINES**, and the rename is not cosmetic: `marshal`'s player-facing
+      `role` is already the word "Commander", so a second thing by that name would have
+      been two different objects sharing a label on the same screen. A doctrine is a plan
+      you commit to, not a person on the board.
+
+      Six in the pool (`content/doctrine.data.js`), three dealt per battle, one preselected
+      so Enter still launches. **Every one is a TRADE — one field up, one field down, on
+      different phases of the battle** — because a table of pure buffs collapses the choice
+      into "which number is biggest" AND re-tunes twenty-four regions at once. Each owns a
+      different axis: offence, defence, treasury, production, siege, mobility.
+
+      **It is content, not engine.** Every field was fact-checked as having a live,
+      SYMMETRIC reader (`modOf(state, site.owner, ...)`) before a number was written — not
+      assumed from the fact that `contract.js` declares it. No CONTRACT field moved and
+      `CONTRACT_VERSION` stays at 12; a doctrine is a `player` FactionMods transform, the
+      same shape as an incursion mutator of kind `playerMult`, and nothing branches on its
+      identity the way `rewards.js` branches on `rules.incursion`.
+
+      **The hand is a pure function of (region, attempt), so a retry deals the same three**
+      — re-rolling on retry would make the choice free, since backing out and re-entering
+      costs nothing. A raid steps the rotation by a stride coprime to the pool, so repeated
+      clears of one region walk all six.
+
+      **The harness plays it** (`--doctrine=<id>`, `--nodoctrine`), because the shipped
+      screen forces a pick from region 2 on and a bot that took none would measure a player
+      who does not exist. Fixed on the way: **`--notwist` was wired to `runFrontier` only**
+      — the one branch where `campaignTwistPlan` returns null regardless — and missing from
+      the fifteen campaign rows it exists for, so it parsed, ran, and changed nothing.
+
+      Three defects found by driving it, none of which a test could have seen: the panel
+      was a fourth child of a three-column grid and **wrapped entirely below the fold**
+      (`elementFromPoint` on its own middle card returned null at 1440x761); the pick
+      callback called `render()` where the scene's function is `paint()`, so **every click
+      threw and the card never changed** while focus still moved, which looks exactly like
+      it working; and `termLabel` took its sign from the gain/cost SLOT, printing the
+      Drillmaster's `trainCostMult: 1.30` as "-30% training cost" — reading as cheaper, the
+      opposite of the term, on a card whose entire job is comparison.
+
+      Original item text below.
+
+      **C3. GIVE THE PLAYER A CHOICE BEFORE THEY LAND — three commanders, pick one.**
       Not a new unit (a unit is a cliff, and this file says so). A one-off, per-battle
       modifier chosen on the loadout screen from three seeded options: "your camp trains
       at 2x for the first 90 seconds", "your first assault takes no losses", "+50% build

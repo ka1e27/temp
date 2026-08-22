@@ -36,6 +36,9 @@ export const UI = Object.freeze({
   worldMap: 'World Map',
   shop: 'Upgrades',
   boosters: 'Boosters',
+  doctrine: 'Doctrine',
+  doctrineHint: 'One choice, this battle only. Every doctrine trades something '
+    + 'away for what it gives you.',
   expedition: 'Expedition',
   attack: 'Attack',
   raid: 'Raid',

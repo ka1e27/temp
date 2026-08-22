@@ -6,6 +6,7 @@
 // is what it owns when the battle starts — and the second is what decides which
 // player the twenty-four measured win rates describe.
 import { UNIT_IDS } from '../src/content/balance.js';
+import { doctrineChoices, doctrineOpen } from '../src/meta/doctrine.js';
 import { UPGRADES } from '../src/content/upgrades.data.js';
 import { shopListing, buy, spendAll } from '../src/meta/upgrades.js';
 import { recalcIncome } from '../src/meta/idle.js';
@@ -104,3 +105,20 @@ function pointlessUnlocks(fielded) {
 /** The units a loadout actually asks for — the shop's reason to unlock them. */
 export const fieldedUnits = (weights) =>
   (weights ? UNIT_IDS.filter((u) => (weights[u] ?? 0) > 0) : []);
+
+/**
+ * Which doctrine this run fights under — none, a pinned one, or the seed's own
+ * pick from the hand this region deals.
+ *
+ * `attempt` is 0 here for the same reason `metaFor` never raids: the harness
+ * plays each region once from a fresh empire, so `clears` is always 0 and the
+ * hand is the region's first. A future raid harness would pass the clear count.
+ */
+export function doctrineOpt(regionId, seed, conquered, opts) {
+  if (opts.noDoctrine) return {};
+  if (opts.doctrine) return { doctrine: opts.doctrine };
+  if (!doctrineOpen(conquered)) return {};
+  const hand = doctrineChoices(regionId, 0);
+  if (!hand.length) return {};
+  return { doctrine: hand[Math.abs(seed | 0) % hand.length].id };
+}

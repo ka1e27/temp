@@ -14,6 +14,8 @@
 //   node tools/simrunner.js --all --pool          # ...one that CAN mass several sites at once
 //   node tools/simrunner.js --all --norichyards   # ...one that could not spend its own money
 //   node tools/simrunner.js --all --notwist      # regions 10-24 without their own mutators
+//   node tools/simrunner.js --all --nodoctrine   # ...and without the player's own doctrine
+//   node tools/simrunner.js --all --doctrine=breaker   # ...every region under ONE doctrine
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -170,6 +172,19 @@ for (const id of regionIds) {
     weights: WEIGHTS, legacy: Number(args.legacy ?? 0),
     relics: Number(args.relics ?? 0),
     sightedAi: SIGHTED.ai, sightedBot: SIGHTED.bot,
+    // `--notwist` WAS WIRED TO THE ONE BRANCH IT CANNOT AFFECT and missing from
+    // the fifteen rows it exists for: it reached `runFrontier` only, and the
+    // Frontier is absent from REGIONS, so `campaignTwistPlan` returns null for
+    // it whatever this flag says. Nothing failed — the flag parsed, the sweep
+    // ran, and every number came back with the twists still on. Exactly the
+    // shape of the escape hatches this file's own comments keep insisting on:
+    // a delta that stays re-takeable rather than remembered is worth nothing if
+    // the switch is not connected.
+    noTwist: !!args.notwist,
+    // `--nodoctrine` reverts to the pre-doctrine bot and is byte-identical to
+    // it; `--doctrine=warden` pins one so the six can be read against each
+    // other rather than averaged into the sweep.
+    noDoctrine: !!args.nodoctrine, doctrine: args.doctrine ?? null,
   };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 

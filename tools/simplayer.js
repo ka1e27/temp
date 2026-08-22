@@ -10,7 +10,7 @@ import { generateFrontierMap } from '../src/battle/frontier.js';
 import { FRONTIER_ID } from '../src/content/endless.data.js';
 // The between-battles shopping moved to ./simshop.js for the line budget and is
 // re-exported here, so this file stays the harness's one front door.
-import { spendCrowns, fieldedUnits } from './simshop.js';
+import { spendCrowns, fieldedUnits, doctrineOpt } from './simshop.js';
 export { spendCrowns, fieldedUnits };
 // The site-upgrade ladder moved to ./simbuild.js for the line budget and is
 // re-exported here, so `import { upgradeTurn } from './simplayer.js'` keeps
@@ -18,6 +18,7 @@ export { spendCrowns, fieldedUnits };
 import { rearOf, upgradeTurn, constructTurn, buildHexes, scoutTurn } from './simbuild.js';
 export { rearOf, upgradeTurn, constructTurn, scoutTurn };
 import { buildBattleConfig } from '../src/meta/modifiers.js';
+
 import { createState } from '../src/core/store.js';
 import { markConquered, refreshUnlocks } from '../src/meta/world.js';
 import { recalcIncome, incomePerSec } from '../src/meta/idle.js';
@@ -348,6 +349,16 @@ export function startRun(regionId, seed, conquered, idleMinutes = 0, opts = {}) 
     // harness cannot play is a mechanic nobody has measured, and regions 10-24
     // now carry mutators in the shipped game.
     ...(opts.noTwist ? { noTwist: true } : {}),
+    // THE DOCTRINE, PICKED THE WAY A POPULATION PICKS ONE. The shipped loadout
+    // screen offers three from region 2 on and preselects the first, so a bot
+    // that took none would be measuring a player who does not exist — the
+    // `upgradeTurn` lesson, which cost this project every balance number it had
+    // taken up to that point. A SEED-KEYED rotation rather than a fixed pick,
+    // so an n=96 sweep splits roughly evenly across the three on offer, which
+    // is what a table of players does; `--doctrine=<id>` pins one for a
+    // per-doctrine read and `--nodoctrine` reverts to a byte-identical
+    // pre-doctrine baseline.
+    ...doctrineOpt(regionId, seed, conquered.length, opts),
   });
   const battle = startBattle(config);
   if (opts.sightedAi) battle.ai.sighted = true;

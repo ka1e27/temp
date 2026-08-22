@@ -4,6 +4,7 @@
 // Split out of prebattle.js when the slot budget landed — the screen was at 398
 // lines against a 400 cap, and these are the parts worth testing directly.
 
+import { h } from '../ui/dom.js';
 import { compact, rate, duration, percent } from '../ui/format.js';
 import { UNIT_IDS, LOADOUT_TYPES_MAX } from '../content/balance.js';
 import { UNITS_UI, ENDGAME } from '../content/strings.js';
@@ -188,4 +189,45 @@ export function regionBrief(meta, regionId, depth = null) {
         : `${compact(reward.crowns)} crowns and ${rate(reward.incomeAdded)} forever`],
     ],
   };
+}
+
+export function briefPanel(brief) {
+  return h('section.pb-brief.panel', { 'aria-labelledby': 'pb-brief-h' },
+    h('h2#pb-brief-h', {
+      text: brief.incursion ? brief.incursion.label : `Tier ${brief.tier} briefing`,
+    }),
+    h('dl.pb-stats', {}, ...brief.rows.flatMap(([k, v]) => [
+      h('dt.label', { text: k }), h('dd.num', { text: v }),
+    ])),
+    // The complications are the reason this screen matters on a rung: `thinned`
+    // lands a smaller army and `ironwall` makes engines the difference between
+    // a siege and a stalemate, so they are shown WHERE the army is chosen and
+    // not only on the briefing overlay the player has already closed.
+    ...(brief.incursion?.mutators?.length
+      ? [h('ul.pb-mutators', {}, ...brief.incursion.mutators.map((m) => h('li.pb-mutator', {
+        'data-mutator': m.id,
+      }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
+      : []),
+    // THE HAND THIS REGION CARRIES — its own (meta/incursion.js
+    // `campaignTwistPlan`, which is what an ordinary player meets from region
+    // 10 on) or a replayed run's (`campaignReplayPlan`). ONE block for both,
+    // because they are the same statement to the player and a third copy of
+    // this markup is how a surface drifts out of step with its own rule.
+    // Mutually exclusive with the incursion list above, and shown for the same
+    // reason: know before you pick a loadout, not mid-battle.
+    ...(brief.regionMutators?.length
+      ? [h('ul.pb-mutators.pb-replay-mutators', {},
+        ...brief.regionMutators.map((m) => h('li.pb-mutator', {
+          'data-mutator': m.id,
+        }, h('strong', { text: m.name }), h('span', { text: ` ${m.note}` }))))]
+      : []),
+    // The specialists are opt-in and easy to forget; meta/specialists.js
+    // reads this same region's own data and says when one answers the fight
+    // better than the default spread. `data-unlocked` is what tells "bring
+    // it" from "consider buying it" apart without repeating the unit's name.
+    ...(brief.callouts?.length
+      ? [h('ul.pb-tips', {}, ...brief.callouts.map((c) => h('li.pb-tip', {
+        'data-unit': c.unit, 'data-unlocked': c.unlocked ? '1' : '0',
+      }, h('strong', { text: UNIT_LABEL[c.unit] }), h('span', { text: ` ${c.note}` }))))]
+      : []));
 }

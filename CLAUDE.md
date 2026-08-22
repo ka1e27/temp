@@ -2909,6 +2909,103 @@ than a constant `false`.
 An unknown `requires` value is treated as UNMET rather than ignored, so content asking
 for a gate `meta/upgrades.js` does not implement cannot go on sale by default.
 
+## A doctrine is the one decision made before the map is seen
+
+`content/doctrine.data.js` + `meta/doctrine.js` + `screens/prebattle-doctrine.js`. Six in
+a pool, **three dealt per battle, one preselected** so Enter still launches. It exists
+because of a measurement rather than a hunch: the last unlock in the game arrives at
+region 8 of 24, and the remaining 261 minutes — 68% of the campaign's running time —
+introduce no new unit, booster or ability at all.
+
+**IT IS CALLED A DOCTRINE AND NOT A COMMANDER, AND THAT IS NOT COSMETIC.** `marshal`'s
+player-facing `role` in `strings.js` is already the word "Commander", so a second thing
+by that name would be two different objects sharing a label on the same screen. A
+doctrine is a plan you commit to, not a person on the board.
+
+**EVERY ONE IS A TRADE — one field up, one field down, on different phases of the
+battle.** The Quartermaster front-loads the opening and pays over the whole fight; the
+Breaker buys walls and sells the march. A table of pure buffs would collapse the choice
+into "which number is biggest" *and* re-tune twenty-four regions at once, which is the
+work this file warns about at "a session would have been spent moving dials to
+compensate". Six axes, one each: offence, defence, treasury, production, siege, mobility.
+
+It does NOT follow that a trade is worth zero, and that asymmetry is the feature: the
+bot attacks far more than it defends, so `vanguard` reads as a buff to the harness and
+`warden` as a cost, and a human who turtles reads them the other way round.
+
+**IT IS CONTENT, NOT ENGINE, AND THAT WAS FACT-CHECKED RATHER THAN ASSUMED.** Every one
+of the eleven `FactionMods` fields was traced to a live reader in `battle/` that is
+SYMMETRIC — `modOf(state, site.owner, ...)` or `state.mods[site.owner]` — before a
+single number was written. A field declared in `contract.js` and read only on the
+enemy's path would be the fifth upgrade this project has refunded for doing nothing. No
+CONTRACT field moved and `CONTRACT_VERSION` stays at **12**: a doctrine is a `player`
+mods transform, exactly the shape of an incursion mutator of kind `playerMult`, and
+nothing branches on its identity the way `meta/rewards.js` branches on `rules.incursion`.
+
+**`garrisonCapBonus` IS REFUSED AS A COST, and the reason is stronger than balance.**
+`checks.js checkMods` requires every numeric mod to be finite and `>= 0`, and
+`assertBattleConfig` runs it for both factions on every config build and every battle
+start — so a negative value does not make a hard battle, it makes a battle that will not
+start and a resumed save `meta/resume.js` discards. It is also the one FactionMods number
+that is a SUM rather than a multiplier, which the picker's own percentage label cannot
+render. Available as a positive lever; unusable as a cost, whatever a table might want.
+
+**THE HAND IS A PURE FUNCTION OF (region, attempt), SO A RETRY DEALS THE SAME THREE.**
+Re-rolling on retry would make the choice free — backing out and re-entering costs
+nothing, so a player would simply spin until the one they wanted appeared. Same rule as
+"a rung is a pure function of its depth". A RAID steps the rotation by a stride coprime
+to the pool size, so repeated clears of one region walk all six before repeating; that is
+the one place variety beats repeatability, because a raid is by construction a rerun.
+
+**The campaign opener ships no doctrine**, counted off CONQUESTS rather than the region's
+index — so a player who abdicates and replays region 2 keeps the choice. A first battle
+already opens 85–90% dark with a visibly draining treasury; a third irreversible choice
+in front of that is where a new player stops reading.
+
+**The harness plays it** — `--doctrine=<id>` pins one, `--nodoctrine` reverts to a
+byte-identical pre-doctrine baseline, and by default the bot picks from the hand by SEED,
+so an n=96 sweep splits roughly evenly across the three on offer, which is what a
+population of players does. The shipped screen forces a pick from region 2 on, so a bot
+that took none would measure a player who does not exist — the `upgradeTurn` lesson,
+which cost this project every balance number it had taken up to that point.
+
+**AND FIXING THAT FOUND `--notwist` WIRED TO THE ONE BRANCH IT CANNOT AFFECT.** It
+reached `runFrontier` only, and the Frontier is absent from `REGIONS`, so
+`campaignTwistPlan` returns null for it whatever the flag says — meanwhile the fifteen
+campaign rows it exists for never saw it. Nothing failed: the flag parsed, the sweep ran,
+and every number came back with the twists still on. An escape hatch that keeps a delta
+"re-takeable rather than remembered" is worth nothing if the switch is not connected.
+
+**THREE DEFECTS TURNED UP BY DRIVING IT, AND NO TEST COULD HAVE SEEN ANY OF THEM.**
+
+- **The panel was a fourth child of a three-column grid and wrapped entirely below the
+  fold.** Measured at 1440x761: it landed at y=598, ran to y=928, and
+  `document.elementFromPoint` on its own middle card returned **null** — a brand-new
+  irreversible choice that could not be clicked at all on a standard laptop. The
+  `has-more` scroll fade correctly appeared and correctly did not help. No column had
+  room either (brief 305px, army 327px, boosters 482px against 561px of viewport), so it
+  takes the full width as row ONE with its cards laid out horizontally: ~120px instead of
+  329, above the fold, and the leftover pushes the tallest column a little under, which
+  is exactly what the fade already exists for. It must be the grid's FIRST child —
+  auto-placement gives a full-width band row one only if nothing precedes it — so the
+  choice sits above the briefing that informs it. That reading order is the price of
+  being clickable.
+- **The pick callback called `render()` where the scene's function is `paint()`.** Every
+  click threw, the card never changed, and focus still moved — because a browser focuses
+  a button on mousedown regardless — so it looked *exactly* like it was working. Same
+  family as the install row's TDZ, and found the same way.
+- **`termLabel` took its sign from the gain/cost SLOT rather than from the value.** A
+  cost is not always a number going down: `trainCostMult: 1.30` is the Drillmaster's
+  price and it is a RISE, so the card printed "-30% training cost", which reads as
+  training getting cheaper — the opposite of the term it describes, on a card whose
+  entire job is comparison against two others.
+
+Verified in real Chrome end to end: three cards in a `radiogroup` with correct roving
+tabindex, a hit-tested click moving `aria-checked` and the tab stop together, arrow keys
+walking and WRAPPING, the stack fallback at 390px, and launching under the Drillmaster
+producing `trainSpeedMult: 1.3` / `trainCostMult: 1.3` in the live battle config with
+every other field at its baseline.
+
 ## Four specialists, each owning a verb
 
 The roster was five units: a rock-paper-scissors of stats plus a siege engine. A sixth set
@@ -3536,6 +3633,15 @@ campaign has nothing new to acquire.
 
 ## Gotchas that have already cost time
 
+- **`node --test` AND `smoke.mjs` BOTH REPORT A LOADED BOX AS A BROKEN GAME, and the
+  two failures look nothing alike.** This file already records that `npm test` exits 0
+  having printed a truncated TAP stream when several sessions share the machine. The
+  browser half is worse because it fails LOUDLY and in the vocabulary of a real defect:
+  at load average 24 `smoke.mjs` reported `SMOKE FAILED: could not reach a battle from
+  "null"` — the boot poll timing out — while the same dev server, driven by hand thirty
+  seconds later, reached the battle scene in **1000ms with zero console errors**. Before
+  believing a smoke failure that names the BOOT rather than a step, check `uptime` and
+  drive the page once by hand; a real boot break shows an exception, not a silence.
 - **A PROBE THAT MEASURES A BOX MID-TRANSITION REPORTS A DISMISSED PANEL AS A
   LIVE ONE.** `.hud-selection` fades rather than un-mounting, so 250ms after a
   deselect it still reports `display: flex` and a 217x82 rect — opacity does not

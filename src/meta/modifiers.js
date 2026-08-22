@@ -43,6 +43,7 @@ import { metaOf } from '../core/store.js';
 import { createRng, deriveSeed } from '../core/rng.js';
 import { stack } from './stacking.js';
 import { enemyMods } from './enemymods.js';
+import { doctrineMods, resolveDoctrine } from './doctrine.js';
 import {
   offsetToAxial, fallbackMapGen, callMapGen, normalizeSites,
 } from './fallbackMap.js';
@@ -250,6 +251,10 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   // Whichever of the three this battle carries, if any — everywhere below only
   // cares about a `{mutators}` list, not about which kind it is.
   const mutation = plan ?? replay ?? twist;
+  const doctrine = resolveDoctrine(options.doctrine, {
+    regionId, attempt: plan ? plan.depth : (rec.clears ?? 0),
+    conquered: regionsConquered(meta),
+  });
   const isRaid = isConquered(meta, regionId);
   // THE SEED IS THE ONE FIELD `metaOf` CANNOT RESCUE, and that shipped a bug.
   // Every other read here goes through `metaOf`, which accepts the root state OR
@@ -315,9 +320,13 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
     },
     sites,
     adjacency: (gen.adjacency ?? []).filter(([a, b]) => a !== b && ids.has(a) && ids.has(b)),
-    player: mutation
+    // THE DOCTRINE IS THE LAST THING FOLDED IN, and it is the only one of the
+    // four the player CHOSE. It composes with the shop and with whatever hand
+    // the region carries rather than replacing either, and `resolveDoctrine`
+    // refuses an id this battle was never dealt — see meta/doctrine.js.
+    player: doctrineMods(mutation
       ? incursionMods(playerMods(meta, expedition), mutation, 'player')
-      : playerMods(meta, expedition),
+      : playerMods(meta, expedition), doctrine),
     enemy,
     // ONE FREE CHARGE ON A GENUINE FIRST BATTLE — see meta/boosters.js
     // `withFirstBattleCharge`. Granted here rather than in `createMeta` for the
