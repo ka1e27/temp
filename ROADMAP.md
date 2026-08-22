@@ -198,6 +198,48 @@ hold. **Check a "still open" claim against the code before spending a session on
 
 ---
 
+### ⇒ THE CANDIDATE TABLE FOR TIERS 3-5, AND IT IS COMPUTED RATHER THAN GUESSED
+
+**The slope is now measured on two rows at two tiers and it agrees: ~0.47 pts/0.01.**
+gallowmoor 4.01 -> 4.39 read 78% -> 60% (0.47); thanescar 4.60 -> 5.00 read 63% -> 44%
+(0.48). That is enough to size a table, PROVIDED every value is re-measured before it
+ships — kaldan's plateau is why.
+
+Solving for the **smallest monotone dial that puts every row 3 points inside its own
+ceiling** (aiming at the ceiling, not mid-band, is what keeps the cascade survivable for
+tier 5):
+
+```
+region        from     to   predicted   band     margin
+gallowmoor    4.01   4.20      69       50-72     +3
+sunder        4.08   4.20      62       50-72    +10
+vaelstrand    4.38   4.57      69       50-72     +3
+duskfell      4.45   4.66      69       50-72     +3
+karrowmere    4.58   4.66      68       50-72     +4
+thanescar     4.60   4.81      53       34-56     +3
+blackspire    4.73   5.11      53       34-56     +3
+ironcrown     4.73   5.11      53       34-56     +3
+obsidian      4.78   5.12      53       34-56     +3
+ravensmarch   4.80   5.12      27       22-42     +5
+gravenreach   4.93   5.12      24       22-42     +2   <- the tightest row
+nightharrow   4.94   5.12      27       22-42     +5
+```
+
+**Every row lands in band, so `enemyMult` alone IS sufficient** — the neutral-pool and
+`develop` levers are not needed here, which is worth knowing because both are bounded by
+the non-decreasing TOTAL-sites rule and obsidian in particular has no neutral room at all
+(its 38 equals ravensmarch's).
+
+**Three caveats, and the first is the one that will bite.** The predictions assume a
+uniform 0.47 slope, and rows have PLATEAUS — kaldan moved one point across a 0.21 step
+before falling twenty-one across the next. Expect one or two rows to miss and need
+bisecting. **gravenreach has only two points of margin** above its floor, so if tier 4
+lands harder than predicted, ease tier 4 rather than tier 5. And tier 6 is excluded
+because it was still being screened when this was computed; it sits above all of this
+and can move freely, so it does not constrain the rows here.
+
+---
+
 ### ⚠ TIER 5 IS ALREADY IN BAND, AND THAT BREAKS THE PLAN ABOVE
 
 ```
