@@ -4631,8 +4631,42 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   full at "A fight takes time" above. The short version, n=48: riverfen 96% TOO EASY,
   kaldan 77% ok, gallowmoor 23% TOO SLOW, thanescar 2%, ravensmarch 4%.
 
-  **⏳ SUBSTANTIAL PROGRESS THIS SESSION, NOT CLOSED — tier 1–2 are done and
-  confirmed, tier 3–6 have a diagnosed lever and a COMPLETE n=24 screen (all
+  **⇒ CURRENT STATUS, AND EVERYTHING BELOW THIS BLOCK IS PROVENANCE. TIERS 1-2 ARE
+  CLOSED at n>=96; tiers 3-6 are open and now read TOO EASY, not too hard.**
+
+  ```
+  tier 1   riverfen 80  ashford 90  ironwood 92  saltmere 83        all ok, n=96/240
+  tier 2   kaldan 70  highmarch 77  greywater 73  thornmoor 82
+           emberholt 82                                             all ok, n=96
+  tier 3   n=96 in flight
+  tier 4   thanescar 63  blackspire 71  ironcrown 71  obsidian 69   all TOO EASY, n=48
+  tier 5   n=48 in flight
+  tier 6   unmeasured since the n=12 screen (58 / 50 / 50 v an 18-36 band)
+  ```
+
+  **THE SIGN FLIPPED AND MOST OF THIS FILE PREDATES IT.** Every table below — and the
+  paragraph immediately following this block — describes tiers 3-6 as too HARD, eleven
+  of fifteen below their floors. That was measured against a bot that could not spend
+  its own gold; `--richyards` defaulted ON (2026-08-20) and the whole back half is now
+  ABOVE its ceilings. Check the date on any tier 3-6 claim before acting on it.
+
+  **AND THE BACK HALF IS ONE PROBLEM, NOT FIFTEEN.** Read off real `buildBattleConfig`
+  output, the player's landing power over the enemy's standing power crosses parity at
+  region 9 — where `EXPEDITION.surgeAfter: 8` fires and the landing force jumps 105 to
+  243 bodies — and reaches **2.4x** by tier 6, while `enemyMult` rises only 4.01 to 5.07
+  (+26%) across the same fifteen regions:
+
+  ```
+  region      0      8      9     14     18     23
+  P/E      0.20   0.90   1.59   1.87   1.84   2.42
+  ```
+
+  Monotonicity couples them anyway (tier 4 at ~5.2 forces tier 5 above it, and so on),
+  so the back half wants roughly 4.2 -> 6.3 — **double today's ramp** — authored as one
+  curve. Two independent routes to the same answer.
+
+  **⏳ WHAT FOLLOWS IS AN EARLIER SESSION'S PROGRESS NOTE, kept for its reasoning —
+  tier 3–6 have a diagnosed lever and a COMPLETE n=24 screen (all
   fifteen rows), and eleven of those fifteen are still below their tier's
   floor. Do not read this as a finished pass — n=24 is a screen, not the n≥96
   this file's own house rule requires, and read it as where the next session
