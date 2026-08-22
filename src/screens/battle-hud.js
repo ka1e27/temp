@@ -19,7 +19,7 @@ import { compact, clock, percent, rate } from '../ui/format.js';
 import { BOOSTER_KEYS, FILTER_KEYS, filterUnits, needsTarget } from './battle-keys.js';
 import { siteOf } from './battle-preview.js';
 import { sitesOwned, armyCensus } from '../battle/siteinfo.js';
-import { goldFlow, flowLine } from './battle-econ.js';
+import { goldFlow, flowLine, isDraining } from './battle-econ.js';
 import {
   createSitePanel, createWithdraw, createAlert, createBuildRail, wireAlerts,
   stalemateCheck, objectiveLine, boardSummary,
@@ -286,7 +286,7 @@ export function createBattleHud(o) {
     const flow = goldFlow(state, 'player');
     set.gold(compact(state.factions.player.goldCg / 100));
     set.rate(rate(flow.net));
-    set.drain(flow.net < 0);
+    set.drain(isDraining(flow));
     set.flow(flowLine(flow));
     // TROOPS, AND WHERE THEY ARE. Empty until there is an army, so battle one
     // does not open on a zero — same rule the EMPIRE line below follows.

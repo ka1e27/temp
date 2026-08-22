@@ -237,8 +237,9 @@ The biggest, brightest number on the screen is red and falling from tick one
 (`GOLD 294 / -1.7/s`). The board is 85% black with nothing to aim at. The objective says
 `TAKE THE CASTLE` and no castle is visible. Five booster buttons all read `–`, because a
 fresh save has no relics and relics only come from beating a region — so **five of the
-game's most interesting controls are dead on arrival for the entire first battle**. Of
-four BUILD buttons, three cost more than the player has, and the fourth bankrupts them.
+game's most interesting controls are dead on arrival for the entire first battle**. Of four BUILD buttons two are
+affordable (farm 200, watchtower 120) — an earlier draft of this said three were
+out of reach, which was wrong and is corrected here rather than quietly dropped.
 
 **And the endgame screenshot is worse.** Widowsgate, three minutes in, passive:
 `SITES 4 v 40`, `GOLD 0 · +0.0/s`, `110 troops · 0 marching`, objective reading
@@ -370,7 +371,7 @@ and is deliberately last of the features. The re-tune closes the pass.
       `aicore.js adjacentSources` already pools; this is a trigger and a target, not a
       planner.
 
-- [ ] **C8. FIX THE OPENING BEAT: do not show a new player a falling red number.** The
+- [x] ~~**C8. FIX THE OPENING BEAT: do not show a new player a falling red number.**~~ **DONE** — the drain alarm now fires on RUNNING OUT rather than on spending (a rule of the whole game, not a first-battle concession), and a genuine first battle lands with one `march` charge. See CLAUDE.md. The
       first battle should not open on `GOLD 294 / -1.7/s` with three of four build
       options unaffordable and five dead booster buttons. Either start the first region
       cash-positive, or hide the training deficit until the player has captured

@@ -221,8 +221,39 @@ function tellingUnit(g) {
 export function goldFlow(state, faction) {
   const income = factionGoldPerSec(state, faction);
   const spend = factionTrainCostPerSec(state, faction);
-  return { income, spend, net: income - spend };
+  const net = income - spend;
+  const gold = (state.factions[faction]?.goldCg ?? 0) / 100;
+  return { income, spend, net, gold, runwaySec: runwayOf(gold, net) };
 }
+
+/** Seconds of treasury left at the current net rate. `Infinity` while the
+ *  treasury is growing, which is what makes the alarm below one-sided. */
+export function runwayOf(gold, net) {
+  return net >= 0 ? Infinity : Math.max(0, gold) / -net;
+}
+
+/**
+ * WHEN THE TREASURY IS AN ALARM, and it used to be `net < 0` — which is not the
+ * same question. `net < 0` means SPENDING; a commander who is training troops
+ * out of a full treasury is doing exactly what the game wants and is not in
+ * trouble. Running OUT is trouble.
+ *
+ * Measured on a cold boot of region 1: the opening reads `GOLD 294 / -1.7/s`
+ * with the rate in red and the whole panel edged in the danger colour, from tick
+ * ONE — the largest, brightest element on a new player's first screen is an
+ * alarm about a deficit they have 180 seconds of runway against, before they
+ * have been told what to do about it or had a chance to do it. That is a
+ * bankruptcy timer as an opening beat.
+ *
+ * The rate itself is still shown, negative and exact, on every tick. What
+ * changed is only whether it is painted as an emergency — information kept,
+ * emphasis corrected. And it is a rule of the whole game rather than a
+ * first-battle concession: a late battle bleeding out at ten seconds' notice now
+ * goes red where before it looked identical to a healthy one that happened to be
+ * training.
+ */
+export const DRAIN_WARN_SEC = 45;
+export const isDraining = (flow) => flow.runwaySec < DRAIN_WARN_SEC;
 
 /** The breakdown under the headline net: `+7.0/s income · -3.0/s training`. */
 export function flowLine(flow) {

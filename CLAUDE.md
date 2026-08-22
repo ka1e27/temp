@@ -4024,7 +4024,30 @@ sites  3v5     3v6     3v7     3v7     3v7
 ```
 
 The largest, brightest element on the screen is `GOLD 294` with `-1.7/s` under it in red,
-falling from tick one, and nothing says that is normal. The board is 85% dark with no
+falling from tick one, and nothing says that is normal.
+
+**FIXED, AND THE FIX IS A RULE OF THE WHOLE GAME RATHER THAN A FIRST-BATTLE
+CONCESSION.** The alarm fired on `net < 0`, which is not the question anybody meant:
+`net < 0` is SPENDING, and a commander training troops out of a full treasury is doing
+exactly what the game wants. Running OUT is trouble. `battle-econ.js` reports
+`runwaySec` now and `isDraining` compares it against `DRAIN_WARN_SEC` (45), so the
+opening — 300 gold at -1.65/s, a hundred and eighty seconds of runway — is calm, and a
+late battle bleeding out at ten seconds' notice goes red where it used to look identical
+to a healthy one that happened to be training. The rate itself is still shown, negative
+and exact, every tick: information kept, emphasis corrected. Confirmed on a cold boot —
+`redAlarm: false` at t=0.
+
+**And a genuine first battle lands with one `march` charge** (`meta/boosters.js
+withFirstBattleCharge`), because five controls reading `–` through the whole tutorial
+region is the "sold and did nothing" failure this project has refunded four upgrades
+for. Two things about it are load-bearing. It WRAPS `toConfigBoosters` rather than
+feeding it — that function clamps every request to what the player owns, which is right
+for a selection and makes `min(1, 0)` of a grant, so the first cut silently produced an
+empty list. And the gate is "nothing has happened yet" rather than `stats.battles === 0`:
+`metaFor` builds its empire with `markConquered`, which never touches that counter, so a
+battles-only gate would have handed a free charge to every harness config for every
+region in the game. **Provably balance-neutral either way — `BOOSTER` appears nowhere in
+`tools/` at all**, so the harness cannot fire one whatever it is handed. The board is 85% dark with no
 target in it, the objective names a castle that is not on screen, and five booster
 buttons read `–` for the whole battle because a fresh save has no relics.
 

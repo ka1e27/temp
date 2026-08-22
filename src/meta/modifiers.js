@@ -48,7 +48,7 @@ import {
   upgradeEffects, addBonus, multBonus, flatBonus, unitMults,
 } from './upgrades.js';
 import { regionsConquered, effectiveEnemyMult, record, isConquered } from './world.js';
-import { toConfigBoosters } from './boosters.js';
+import { toConfigBoosters, withFirstBattleCharge } from './boosters.js';
 import { withFreeMarshal, withEnemyMarshal } from './marshals.js';
 import {
   planFor, incursionRegionInputs, incursionMods, incursionRules,
@@ -283,21 +283,13 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
   // whenever `plan` is already set — see the note above `campaignReplayPlan`.
   const replay = plan ? null : campaignReplayPlan(region, legacyResets(meta));
   const rec = record(meta, regionId);
-  // THE THIRD SOURCE, AND THE ONLY ONE AN ORDINARY PLAYER MEETS. A rung needs an
-  // incursion and a replay hand needs an abdication, so between them the eight
-  // mutators reached nobody on a first run — see meta/incursion.js
-  // `campaignTwistPlan` and content/incursion.data.js `CAMPAIGN_TWIST`.
-  //
-  // LAST in the chain deliberately: a replayed run's hand is scored on resets AND
-  // tier and is the stronger statement, so where both exist the replay wins and
-  // every number tests/campaignreplay.test.js pins is untouched.
-  //
-  // `options.noTwist` is the house `--noX` escape hatch (tools/simrunner.js
-  // `--notwist`), and unlike `campaignReplayPlan` — which is inert for the
-  // harness because `metaFor` never abdicates — this one is DELIBERATELY live
-  // for it. That is the whole point: a mechanic the harness cannot play is a
-  // mechanic nobody has measured. It also means every tier 3-6 win rate recorded
-  // before this stops describing what ships, which is why the flag exists.
+  // THE THIRD SOURCE, AND THE ONLY ONE AN ORDINARY PLAYER MEETS — see
+  // meta/incursion.js `campaignTwistPlan` for the whole argument. LAST in the
+  // chain deliberately: a replay hand is the stronger statement, so where both
+  // exist the replay wins and campaignreplay.test.js is untouched. `noTwist` is
+  // the house `--noX` hatch, and unlike `campaignReplayPlan` this one is
+  // deliberately LIVE for the harness — a mechanic it cannot play is a mechanic
+  // nobody has measured.
   const twist = (plan || options.noTwist)
     ? null : campaignTwistPlan(region, rec.clears ?? 0);
   // Whichever of the three this battle carries, if any — everywhere below only
@@ -372,7 +364,12 @@ export function buildBattleConfig(metaState, regionId, selectedBoosters, mapGen,
       ? incursionMods(playerMods(meta, expedition), mutation, 'player')
       : playerMods(meta, expedition),
     enemy,
-    boosters: toConfigBoosters(meta, selectedBoosters),
+    // ONE FREE CHARGE ON A GENUINE FIRST BATTLE — see meta/boosters.js
+    // `withFirstBattleCharge`. Granted here rather than in `createMeta` for the
+    // reason `withFreeMarshal` is: a persisted charge would be a real, spendable
+    // one indistinguishable from a shop purchase, and this is a courtesy for one
+    // battle rather than a starting inventory.
+    boosters: withFirstBattleCharge(meta, toConfigBoosters(meta, selectedBoosters)),
     rules: {
       victory: 'capture-castle',
       hardCapMs: region.hardCapMs,

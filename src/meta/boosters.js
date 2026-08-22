@@ -121,6 +121,55 @@ export function defaultSelection(meta) {
  * what is actually owned and unlocked, and sorts by id so two identical
  * selections always produce the same configHash.
  */
+/**
+ * ONE CHARGE, ON A GENUINE FIRST BATTLE — the other half of the opening beat.
+ *
+ * Measured on a cold boot: all five booster buttons read `–` for the whole of
+ * region 1, because a charge is bought with RELICS and relics are paid only for
+ * a region you have already BEATEN. So the five most tactical controls in the
+ * game are dead on arrival through the entire tutorial region, and a new player
+ * learns they are decoration. That is the "sold and did nothing" failure this
+ * project has already refunded four upgrades for, wearing a different hat.
+ *
+ * `march` because it needs no unlock (`unlockedBy: null`) and because it is the
+ * most legible thing a first booster can do: the column you just sent gets
+ * there faster. One charge, not five — the point is to teach that the rail is
+ * real, not to hand out a loadout.
+ *
+ * IT WRAPS `toConfigBoosters` RATHER THAN FEEDING IT, and that is forced rather
+ * than stylistic: that function clamps every request to `countOf(meta, id)` —
+ * what the player actually owns — which is exactly right for a selection and
+ * makes a grant of something they own none of impossible. `min(1, 0)` is 0, and
+ * the first cut of this silently produced an empty list.
+ *
+ * Modelled on `meta/marshals.js withFreeMarshal` exactly: a pure function of
+ * meta computed at config-build time, granting into a field that already
+ * crosses the seam, never touching persisted state and never spending a
+ * currency. So no `CONTRACT_VERSION` bump, the same way that one needed none.
+ *
+ * THE GATE IS "NOTHING HAS HAPPENED YET", not "region 1". `stats.battles` alone
+ * is not enough: `tools/simplayer.js metaFor` builds its empire by calling
+ * `markConquered` directly, which never touches that counter, so every harness
+ * config for every region would have matched it. Requiring an empty conquest
+ * list as well is what confines this to a real player's real first attempt.
+ *
+ * PROVABLY BALANCE-NEUTRAL, and not by argument: `BOOSTER` appears nowhere in
+ * `tools/` at all, so the harness cannot fire one whatever it is handed.
+ */
+export function withFirstBattleCharge(meta, configBoosters) {
+  const fought = meta?.stats?.battles ?? 0;
+  const held = Object.values(meta?.regions ?? {})
+    .filter((r) => r?.status === 'conquered').length;
+  if (fought > 0 || held > 0) return configBoosters;
+  const list = Array.isArray(configBoosters) ? configBoosters.slice() : [];
+  if (list.some((b) => b?.id === FIRST_BATTLE_BOOSTER)) return list;
+  list.push({ id: FIRST_BATTLE_BOOSTER, charges: 1 });
+  return list.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** The one a first-timer is handed. No unlock required — see above. */
+export const FIRST_BATTLE_BOOSTER = 'march';
+
 export function toConfigBoosters(meta, selection) {
   const requested = new Map();
   for (const entry of selection ?? []) {
