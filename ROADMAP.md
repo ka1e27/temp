@@ -135,14 +135,42 @@ git worktree add --detach /tmp/probe HEAD
 The control point must reproduce the main tree before any probe reading is trusted —
 kaldan at its shipped 3.23 read 92% in both, which is what licensed the rest.
 
+**⚠ TWO OPERATIONAL RULES FOR THESE SWEEPS, both learned the expensive way here.**
+
+**Never pipe a long sweep through `tail`.** `simrunner` prints its table at the end, so
+`... | tail -20` buffers everything: a job killed by its own `timeout` produces
+**nothing at all**, and two hours of CPU is simply lost. Let it stream.
+
+**And an out-of-band campaign is EXPENSIVE TO MEASURE, which is a feedback loop worth
+knowing about.** A tuned row resolves its battles; an untuned one runs every seed to the
+hard cap, and gallowmoor's cap is 38 minutes of game time. Tier 3 at n=96 (480 battles)
+burned over two CPU-hours here and still had not landed. **Screen at n=48 first** — the
+SEM there is ~7 points, which is ample to tell an 83% row from a 72% ceiling, and it is
+half the price. Save n>=96 for confirming a row you are about to ship.
+
 **IN FLIGHT AS OF THIS WRITING** (re-run any that did not land):
 
 ```bash
-node tools/simrunner.js --region=gallowmoor,sunder,vaelstrand,duskfell,karrowmere --n=96
-node tools/simrunner.js --region=thanescar,blackspire,ironcrown,obsidian --n=48
+node tools/simrunner.js --region=gallowmoor,sunder,vaelstrand,duskfell,karrowmere --n=48
+node tools/simrunner.js --region=ravensmarch,gravenreach,nightharrow --n=48
 node --test tests/campaignplay.test.js          # first run since the short-circuit
-# kaldan bracket at n=96, dials 3.23 (control) / 3.60 / 4.10 / 4.70
+# tier-4 candidate: thanescar 5.20 / blackspire 5.45 / ironcrown 5.45 / obsidian 5.50
 ```
+
+**THANESCAR IS BRACKETED AND THE RESULT IS A WARNING, not a value.** n=48:
+
+```
+dial      4.60    5.00    5.20    5.50
+win%        63      44      40      48
+timeouts     -      23      22      17
+losses       -       4       7       8
+all-med      -   28.1m   27.5m   22.4m
+```
+
+Anything from 5.00 to 5.50 reads `ok`. But the win rate is FLAT across that range within
+noise, and what actually moves is the failure mode — timeouts down, losses up. **The dial
+on this row buys who-beats-you, not how-often.** Pick the value for the outcome
+breakdown, not the percentage, and record which one you bought.
 
 **STILL UNTAKEN:** tiers 5 and 6. At ~100-133s a battle, n=96 is ~3.5 HOURS PER ROW and
 is not affordable here; take them at n=24-48 and label them a screen. They already read
