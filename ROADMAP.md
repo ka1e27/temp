@@ -340,7 +340,7 @@ and is deliberately last of the features. The re-tune closes the pass.
       decision made before you see the map, that makes two runs of the same region
       different.**
 
-- [ ] **C4. LET A BOOSTER BE FIRED INTO A FIGHT THAT IS ALREADY HAPPENING.** The melee
+- [x] ~~**C4. LET A BOOSTER BE FIRED INTO A FIGHT THAT IS ALREADY HAPPENING.**~~ **ALREADY SHIPPED — struck with the measurement that killed it.** `reprojectDefender` names BOMBARD in its own docblock as one of the five things the melee layer fixed, and `siteMelees` re-projects whenever `site.garrison` differs from what the phase last wrote. Measured: a bombard into an open melee cuts the defence 30 -> 20 and leaves 5 standing where an untouched assault leaves 8. **What it was NOT is guarded** — nothing in the suite fired a booster into an open fight, so the ID-set staleness test that makes it work could be refactored away with every test green and the charge spent for nothing. `tests/meleebooster.test.js` is the actual deliverable. Original item text below. The melee
       layer gives every fight a six-second window and the player can currently only
       reinforce it or run away. Bombard/fortify landing ON an open melee turns that
       window into the tensest six seconds in the game, and the layer is already built —
