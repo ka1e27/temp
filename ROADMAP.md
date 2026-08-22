@@ -251,6 +251,35 @@ five still hit-test, so it is cosmetic, but it is visible on the default desktop
 
 ---
 
+## ⇒ HOW THIS PASS IS BEING RUN, so a session that dies loses one task at most
+
+**Read this before picking anything up.** The C-list below is being worked one item per
+commit. The rules exist because the failure this pass is most likely to hit is not a bug,
+it is a session ending with three items of work living only in a chat transcript.
+
+1. **One item, one commit, pushed immediately.** Never batch. A usage limit costs at most
+   the item in flight.
+2. **The box is ticked in the same commit as the code.** A ticked box with no commit and
+   a commit with no tick are both lies about state.
+3. **A measurement is written to `CLAUDE.md` before it is acted on.** The scratchpad is
+   not the repository and does not survive; this file and that one do.
+4. **Subagents never hold a result.** They report, and the result is transcribed into
+   this file or CLAUDE.md and committed in the SAME turn it arrives. An agent's reply is
+   not storage.
+5. **Stage explicit paths.** Several sessions share this tree — `git add -A` has already
+   swept another engineer's in-flight edits into an unrelated commit once.
+6. **Balance-affecting items land BEFORE the re-tune, not after.** This inverts the
+   caution written when the C-list was drafted, and the inversion is the important part:
+   C1, C3, C5 and C7 all change what a late region IS, so a re-tune run before them is a
+   re-tune that has to be thrown away. Do the content, then tune once. Item #70's sweep
+   is the LAST thing this pass does, not the first.
+
+**Ordering, and why.** C1 first because it is mostly plumbing that already exists and it
+is the one that fixes fifteen identical regions. C8 next because it is cheap and it is
+the first thing every player sees. Then C4 and C2, which are what make a battle worth
+watching and a decision worth making. C3, C7, C6 are new systems. C5 needs a design call
+and is deliberately last of the features. The re-tune closes the pass.
+
 ## ⇒ WHAT WOULD ACTUALLY MAKE IT FUN, ranked by fun per line
 
 - [ ] **C1. PUT THE EIGHT EXISTING MUTATORS ON LATE CAMPAIGN REGIONS.** The single
