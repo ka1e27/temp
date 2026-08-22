@@ -321,8 +321,26 @@ and is deliberately last of the features. The re-tune closes the pass.
       the table already needed to go — which is why it lands BEFORE the re-tune sweep
       rather than after (protocol rule 6).
 
-- [ ] **C2. MAKE THE PREVIEW SHOW A RANGE WHENEVER THE TARGET CAN BE REINFORCED.**
-      Restores the gamble without touching invariant 3, because the uncertainty is
+- [x] ~~**C2. MAKE THE PREVIEW SHOW A RANGE WHENEVER THE TARGET CAN BE REINFORCED.**~~
+      **SHIPPED.** `battle-preview.js` gained two helpers. `reinforceMargin` binary-searches
+      the smallest reinforcement that flips the outcome, by re-running the SAME
+      `resolveField` call the send itself will make — so `unless +59 arrive` is a
+      guarantee about the sim, not a heuristic. `inboundDefenders` counts enemy columns
+      already aimed at the target and arriving inside the ETA, fog-gated through
+      `perceivedSquads`, so a relief you cannot see does not leak into the readout.
+
+      **The inbound count is REPORTED, never ABSORBED, and that is the whole
+      invariant-3 argument.** The first cut folded the relief into the `resolveField`
+      call, which is a plausible, confident, WRONG number: a column landing mid-melee
+      does not resolve as though both sides stood there from the first tick —
+      `reprojectDefender` banks casualties and re-projects against a fresh baseline. So
+      when `inboundN >= margin` the verdict becomes `CONTESTED` and the survivor count
+      and BREACH time are WITHHELD, exactly as a multi-source send withholds its
+      verdict. Confirmed in a real browser at both ends:
+      `WIN FIELD - 58 survive - BREACH 4.6s - unless +59 arrive` and
+      `CONTESTED - unless +59 arrive - 90 inbound`.
+
+      Original item text below. Restores the gamble without touching invariant 3, because the uncertainty is
       already REAL: `projectGarrison` projects training, but a defender can also be
       reinforced by a column in flight that the player cannot see. Today the preview
       quietly assumes that will not happen and prints a single confident number. Show

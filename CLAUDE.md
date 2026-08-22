@@ -3552,6 +3552,16 @@ campaign has nothing new to acquire.
 - **`grid.blocked` HOLDS STRING KEYS (`"q,r"`), not arrays or `{q,r}`.** A probe
   that reads `blocked[0].q` gets `undefined` and projects to NaN screen
   coordinates, which the camera happily accepts.
+- **AND `sq.path` HOLDS `{q,r}` OBJECTS WHILE `site.hex` IS A `[q,r]` ARRAY — the same
+  trap one layer along, and it fails SILENTLY.** A hand-built squad fixture whose path
+  is `[site.hex, site.hex]` reads `a.q === undefined`, so `squadHexOf` lerps NaN and
+  `round` hands back `{q: null, r: null}` rather than throwing. Every downstream
+  consumer then behaves exactly as it should for an army that is nowhere:
+  `perceivedSquads` drops it, so it is invisible to fog, to the preview and to the
+  towers, while still sitting in `state.squads` looking perfectly healthy. Cost half a
+  browser probe: the injected relief column simply never reached the reinforcement
+  preview, and the reading was "the feature does not work" rather than "the fixture is
+  wrong". Convert explicitly — `{q: site.hex[0], r: site.hex[1]}`.
 - **A SPLIT THAT MOVES A CLOSURE TURNS ITS CAPTURED VARIABLES INTO FREE ONES, AND A FREE
   VARIABLE IS NOT A SYNTAX ERROR.** `createSelection` destructured four of its seven
   dependencies; the two functions the split moved had also closed over `board`,
