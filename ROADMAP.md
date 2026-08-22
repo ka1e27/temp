@@ -47,16 +47,44 @@ a `--notwist` reading taken after this session is not comparable to one taken be
 screened but not moved.
 
 ```
-tier 1  riverfen 80  ashford 90  ironwood 92  saltmere 83            SHIPPED  all ok
-tier 2  kaldan 70  highmarch 77  greywater 73  thornmoor 82
-        emberholt 82                                                 SHIPPED  all ok
-tier 3  gallowmoor 78  sunder 68  vaelstrand 78  duskfell 79
-        karrowmere 72                                    n=96   3 rows over ceiling
-tier 4  thanescar 63  blackspire 71  ironcrown 71  obsidian 69
-                                                         n=48   ALL FOUR over
-tier 5  ravensmarch 42  gravenreach 33  nightharrow 35   n=48   all ok (see below)
-tier 6  stormhalt 50  cinderwatch 50  widowsgate ?      n=24   over; clock-bound
+tier 1  78-92   riverfen 80   ashford 90   ironwood 92   saltmere 83     SHIPPED, all ok
+tier 2  66-84   kaldan 70   highmarch 77   greywater 73
+                thornmoor 82   emberholt 82                             SHIPPED, all ok
+tier 3  50-72   gallowmoor 78  sunder 68  vaelstrand 78
+                duskfell 79  karrowmere 72              n=96    3 over the ceiling
+tier 4  34-56   thanescar 63  blackspire 71  ironcrown 71
+                obsidian 69                             n=48    ALL FOUR over
+tier 5  22-42   ravensmarch 42  gravenreach 33  nightharrow 35
+                                                        n=48    all ok
+tier 6  18-36   stormhalt 50  cinderwatch 50  widowsgate 46
+                                                        n=24    all three over
 ```
+
+**This is the first complete, current measurement of all 24 rows since the table drifted.**
+Nine shipped and in band; twelve out (tiers 3, 4 and 6); three in band but for the wrong
+reason (tier 5).
+
+**⚠ AND THE HEADLINE IS NOT A WIN RATE. THE BACK HALF BARELY LOSES AT ALL: EIGHT DEFEATS
+IN 216 BATTLES.**
+
+```
+                   battles   wins   TIMEOUTS   losses
+tier 5 (n=48 x3)      144      53       84        7
+tier 6 (n=24 x3)       72      35       36        1
+                      216      88      120        8   <- 3.7% of all battles
+```
+
+cinderwatch, widowsgate and nightharrow record **ZERO losses** across 96 battles between
+them, and every single all-median in both tiers sits EXACTLY on its hard cap (30.1/30.4,
+32.3/32.3, 34.2/34.2). Twelve of widowsgate's twenty-four runs end with the player AHEAD
+on territory when the clock stops.
+
+So `WIN_BAND` on these rows is not measuring "how often does the player win" — it is
+measuring "how often does the battle FINISH", and this is that finding stated over the
+whole back half rather than one row. **Before spending another dial on tiers 5-6, decide
+whether those regions should be able to beat the player at all, and if so, with what.**
+The dial is not it: thanescar's bracket converted six timeouts into four losses while
+holding the win rate flat.
 
 **Tier 6 is the same clock story as tier 5**: stormhalt's all-median is 30.1m against a
 30.4m cap and cinderwatch's is 32.3m against 32.3m — both pinned to the wall, cinderwatch
