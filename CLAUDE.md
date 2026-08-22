@@ -4974,11 +4974,16 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   **A stale "still open" entry is worse than no list**, because it sends the next reader
   to build something twice — and this one had a task already marked done against it. When
   reading this section, spend the thirty seconds to check the claim against the code
-  before acting on it. **FOUR of roughly fifteen entries in this section were stale when
-  audited** — this one, the install affordance, the bot's farm-building, and (earlier,
-  and recorded as its own scar) fog of war. That is a quarter of the list wrong, in a
-  document whose whole value is that it is right, so the audit is worth repeating
-  whenever this section is used to pick work.
+  before acting on it. **Eight entries were audited against the code and THREE were
+  stale** — this one, the install affordance, and the bot's farm-building — with fog of
+  war a fourth, recorded earlier as its own scar. The other five checked out: the enemy
+  still never builds (no `BUILD` anywhere in `ai*.js`), `upgradeTurn` still runs before
+  `constructTurn` and never in the same turn, abdication still clears `meta.boosters`,
+  and `ramImpactHp` / `rules.isRaid` / `rules.targetLengthMs` are still written at the
+  seam and read by nothing. The remaining entries (the re-tune, the dominant loadout,
+  the harness's poverty, `split`, the short session) were NOT re-checked. So the honest
+  rate is three in eight, not a claim about the whole list — and it is high enough that
+  the audit is worth repeating whenever this section is used to pick work.
 - ~~**The bot builds farms while it is losing.**~~ **ATTEMPTED, MEASURED, REJECTED —
   the fourth stale entry, and the most useful of them, because it records a lever
   nobody should re-spend.** The pressure term was written (`--wall`, `underPressure`,
