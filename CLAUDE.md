@@ -3878,16 +3878,35 @@ campaign has nothing new to acquire.
   **grep the test tree for the file you touched and for any constant you changed**
   (`grep -rln "battle-preview\|CONTRACT_VERSION" tests/`) before believing a green run,
   because the adjacent-suite habit is what makes a full-suite run feel redundant.
-- **THE FIVE LONG HARNESS FILES MAY BE UNRUNNABLE ON A BUSY BOX AT ANY TIMEOUT, and
-  "no result" is not "red".** Measured: at load average ~20 — from other tenants, with
-  nothing of this session's own running — `tactics`, `loadoutdominance`, `harness` and
-  `campaignplay` each printed `TAP version 13` and nothing else before being killed at
-  **900 seconds apiece, run one at a time**. Not one completed a single test. They fight
-  dozens of real battles, so their cost scales with whatever else is on the machine, and
-  the standing "≥180s each" figure is a floor for an idle box rather than a budget.
-  Check `uptime` before reading a result, and record "indeterminate" rather than
-  "failing" when the output is a bare TAP header — the two are indistinguishable in a
-  CI summary and only one of them is a defect.
+- **THE LONG HARNESS FILES NEED FAR MORE THAN THE "≥180s EACH" THIS FILE USED TO SAY,
+  and a bare TAP header is INDETERMINATE rather than red.** At load ~20 from other
+  tenants, `tactics`, `loadoutdominance`, `harness` and `campaignplay` each printed
+  `TAP version 13` and nothing else before being killed at **900 seconds apiece, run one
+  at a time** — not one completed a single test. Re-run at **2400s** two of them
+  finished, and the real durations say why 900 was never going to be enough:
+
+  ```
+  tactics            1,032s   9 pass 1 fail
+  loadoutdominance   1,795s   2 pass 1 fail
+  ```
+
+  **Thirty minutes for one file.** The old figure is a floor for an idle box, not a
+  budget. Check `uptime` before reading a result, give these four ≥2400s, and record
+  "indeterminate" rather than "failing" on a bare header — the two are indistinguishable
+  in a CI summary and only one of them is a defect. (I made exactly that mistake in this
+  session's own notes before the re-run corrected it: both of the above ARE red, with
+  the inherited failures, and calling them indeterminate was as wrong as calling them
+  green.)
+
+  **AND `loadoutdominance`'s FAILURE MESSAGE IS A MEASUREMENT WORTH MORE THAN THE PASS
+  WOULD HAVE BEEN.** It refuses to assert because the DEFAULT spread is outside its band
+  on both rows, and it names the numbers: `kaldan 100% (band 66-84)`, `gallowmoor 75%
+  (band 50-72)` — a third independent confirmation that tiers 2-3 now read too EASY
+  rather than too hard. Its own words: *"That is the CAMPAIGN's problem and
+  tests/campaignplay.test.js is what should be failing for it."* Note kaldan's mono gap
+  is **-8**: bringing only militia is now WORSE than the honest spread there. That is a
+  ceiling artefact at 100% rather than a fix, and it is exactly why the test declines to
+  report a gap off an out-of-band baseline.
 
   Worth knowing alongside it: **`scout` now PASSES 3/3** where this file records it red
   ("never completed a single watchtower across twelve tier-5/6 battles"). It is the one

@@ -43,11 +43,16 @@ a `--notwist` reading taken after this session is not comparable to one taken be
 
 **VERIFICATION, STATED HONESTLY.** 135/135 test files ran. `battlelength` is the
 inherited tier-3-advertises-20-minutes failure the re-tune owns. **`scout` now PASSES
-3/3** where CLAUDE.md records it red, most likely the same `--richyards` flip. The other
-four long harness files — `tactics`, `loadoutdominance`, `harness`, `campaignplay` — are
-**INDETERMINATE, not red**: at load ~20 from other tenants each printed `TAP version 13`
-and nothing else before being killed at 900 seconds apiece, run one at a time. None
-completed a single test. Browser smoke PASSED including the new doctrine step, and the
+3/3** where CLAUDE.md records it red, most likely the same `--richyards` flip. Of the other four,
+**`tactics` and `loadoutdominance` are genuinely RED with the inherited failures** — but
+only visible at a 2400s budget, because at 900s each printed `TAP version 13` and nothing
+else. Their real durations are 1,032s and 1,795s. `harness` and `campaignplay` remain
+**INDETERMINATE, not red**, never having completed a test here.
+
+`loadoutdominance`'s refusal is itself the most useful number this session produced about
+the table: it will not report a loadout gap off an out-of-band baseline, and it names
+`kaldan 100% (band 66-84)` and `gallowmoor 75% (band 50-72)`. A third independent
+confirmation that tiers 2-3 now read too EASY. Browser smoke PASSED including the new doctrine step, and the
 phone audit is clean except one unexplained finding recorded above.
 
 **Neither C5 nor C6 can move a win rate.** C5 pays a timeout that was led and leaves
