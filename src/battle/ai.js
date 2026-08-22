@@ -37,6 +37,7 @@ import {
 } from './aicore.js';
 import { homeGuard, pressure, commitFor, stagingFor, concurrentFor } from './aihome.js';
 import { adapt } from './aiadapt.js';
+import { muster } from './setpiece.js';
 import { beliefFor } from './belief.js';
 
 // --- 1. free lunch ---------------------------------------------------------
@@ -316,6 +317,18 @@ export function think(state) {
   const guarded = homeGuard(state, out, busy);
   freeLunch(view, knobs, out, busy, taken);
   defend(view, knobs, out, busy, guarded);
+  // THE SET-PIECE, once per battle — battle/setpiece.js. Placed HERE and not
+  // earlier: the household guard and any site fighting off its own attack have
+  // already taken their troops off the board, so the host is drawn from what is
+  // genuinely spare. Placed here and not LATER because it is a commitment — it
+  // gets first refusal on the surplus, ahead of the routine assault scan, or on
+  // a busy tick `attack()` would spend the country two bodies at a time and the
+  // one moment in the battle that is supposed to be decisive would arrive thin.
+  //
+  // Reads the true `state` rather than `view`, the third deliberate exception
+  // beside `homeGuard` and `adapt`: where the player LANDED is not intelligence,
+  // and nothing in it reads the camp's garrison.
+  muster(state, out, busy);
   attack(view, knobs, out, busy, taken, rng);
   consolidate(view, knobs, out, busy);
   retreat(view, knobs, out, rng, busy);

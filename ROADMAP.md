@@ -423,7 +423,59 @@ and is deliberately last of the features. The re-tune closes the pass.
       because it makes tomorrow's login mean something specific rather than a slightly
       larger multiplier.
 
-- [ ] **C7. GIVE THE ENEMY ONE SET-PIECE PER BATTLE.** The AI grinds; it never does
+- [x] ~~**C7. GIVE THE ENEMY ONE SET-PIECE PER BATTLE.**~~
+      **SHIPPED as THE MUSTER.** Once per battle, inside a window derived from the
+      region's own `hardCapTicks`, the enemy stops grinding and commits: it draws the
+      spare from up to twelve sites into ONE synchronized wave aimed at the player's
+      camp, and announces it with both numbers that make it answerable — how many are
+      coming and how many seconds out.
+
+      **Aiming it at the camp is three decisions at once.** It is the lose condition, so
+      it is the one target a player cannot choose to ignore. It is a site the player
+      OWNS, so the alert names ground they can already see — fog-safe by construction
+      rather than by a check, which matters because `screens/battle.js` emits the event
+      bus **regardless of fog** and `fxVisible` gates only the burst and the sound. And
+      it is the one site `attack()` will essentially never pick on its own, since that
+      phase scores by `AI.siteValue` and reach.
+
+      **The warning is the travel time, not a scripted countdown** — `launch()` already
+      holds every squad in a wave to the slowest contributor, so the ETA is a real
+      number the sim computes. Two honest answers, and the second is why this is a
+      decision rather than a chore: march home and meet it, or notice the enemy has
+      just emptied its own country and go and take it. The second is not scripted; it
+      falls out of `launch()` debiting every source, and `tests/setpiece.test.js` pins
+      it as a measured drop in enemy garrisons rather than as a claim.
+
+      **AND THE HARNESS COULD NOT ANSWER IT, WHICH WOULD HAVE MADE THE MEASUREMENT
+      MEANINGLESS.** The bot keeps a standing `HOME_FLOOR` at the camp and had never
+      once reacted to a threat, so a run of the muster would have measured a player who
+      watches a host walk into their camp and does nothing — the `upgradeTurn` lesson a
+      fourth time, with the twist that *answering* is as much a part of playing as
+      attacking is. `tools/simdefend.js` marches the nearest garrisons home when a wave
+      is inbound and the camp cannot hold. Provably inert without a muster: the enemy
+      never aimed a wave at the camp before this pass, so its first `if` was false on
+      every think of every measured number. `--nomuster` and `--noanswer` keep both
+      halves separately re-takeable.
+
+      **Contract v13**, and it is the v8 lesson a fifth time: no CONFIG field moved.
+      `state.ai` gained `musterTick`, and a v12 blob resumed after its muster landed
+      reads the latch as undefined, sits inside the window, and raises a SECOND host.
+      The new `ENEMY_MUSTER` event costs nothing — nothing in `battle/` or `tools/`
+      reads `state.events` at all.
+
+      Confirmed in real Chrome on a live gallowmoor board: `THE HOST MARCHES — 190
+      closing on your camp, 32s out. Their country is thin behind it.`
+
+      **The balance screen is not yet taken** — the box was saturated when this landed.
+      It is a real difficulty increase and it lands mid-re-tune, so `--nomuster` is the
+      control and the number belongs to whoever runs the next sweep. Worth knowing
+      before reading it: 93% of this campaign's non-wins are TIMEOUTS, and a forced
+      decisive engagement is exactly what a permanent grinder lacks — so it may well
+      read as C1's twists did, harder on paper and *faster* in practice.
+
+      Original item text below.
+
+      **C7. GIVE THE ENEMY ONE SET-PIECE PER BATTLE.** The AI grinds; it never does
       anything you have to ANSWER. A named event — a raid aimed at your camp at minute
       five, a relief column visibly marching for the throne, a supply convoy you can
       intercept for a lump of gold — creates the moment the conveyor belt never produces.

@@ -300,7 +300,17 @@ export function createBattleState(config) {
      *  so a listener can never mutate state mid-iteration. */
     events: [],
 
-    ai: { nextThinkTick: 0, activeAttacks: [], srcCooldown: {}, learnedPlayerComp: emptyComp() },
+    // `musterTick` is the set-piece's one-shot latch — 0 until the enemy has
+    // committed its host, the tick it did so afterwards (battle/setpiece.js).
+    // It is what CONTRACT_VERSION 13 is for: a v12 blob reads it as undefined,
+    // which is the RIGHT default for a battle that never had one and the wrong
+    // one for a battle resumed after its muster already landed — that board
+    // gets a SECOND host, which is the engine stepping a blob differently
+    // rather than merely reading a missing field.
+    ai: {
+      nextThinkTick: 0, activeAttacks: [], srcCooldown: {},
+      learnedPlayerComp: emptyComp(), musterTick: 0,
+    },
     boosters: makeBoosters(config.boosters),
 
     rules: {

@@ -120,7 +120,22 @@ import {
  * hostile forces on a hex fight rather than pass through. A v11 blob resumed
  * here has fights in flight with no melee record: each silently un-happens.
  */
-export const CONTRACT_VERSION = 12;
+/**
+ * v13 IS THE SET-PIECE, and it is the v8 lesson a FIFTH time: no CONFIG field
+ * moved. `state.ai` gained `musterTick`, the one-shot latch that says whether
+ * the enemy has already committed its host (battle/setpiece.js).
+ *
+ * A v12 blob reads it as `undefined`, and that is the RIGHT default for a board
+ * that never had a muster and the WRONG one for a board resumed AFTER its
+ * muster landed: the latch is clear, the tick is inside the window, and the
+ * enemy raises a second host. That is the engine stepping a blob differently,
+ * which is what this number tracks — not "a field is missing".
+ *
+ * Worth noting what did NOT need a bump alongside it. The new `ENEMY_MUSTER`
+ * event costs nothing, because nothing in `battle/` or `tools/` reads
+ * `state.events` at all: the only reference is the clear at the top of `step`.
+ */
+export const CONTRACT_VERSION = 13;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];

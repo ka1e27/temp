@@ -123,8 +123,17 @@ export function minFraction(state, sources, need, target) {
   return null;
 }
 
-/** Issue one synchronized wave: every squad gets the SAME arriveTick, held
- *  back to the slowest contributor. Orders execute next tick, hence the +1. */
+/**
+ * Issue one synchronized wave: every squad gets the SAME arriveTick, held back
+ * to the slowest contributor. Orders execute next tick, hence the +1.
+ *
+ * RETURNS THE SHARED ARRIVAL TICK, or 0 if nothing was launched. It used to
+ * return a bare boolean, and the set-piece needed the ETA to announce — the
+ * warning a muster gives the player IS its travel time. Computing that at the
+ * call site would be a second implementation of the synchronization rule, which
+ * is the class of bug this project keeps finding; a tick is always positive
+ * when parts exist, so every existing `if (launch(...))` caller is unchanged.
+ */
 export function launch(state, out, sources, target, frac, busy) {
   const parts = [];
   let common = 0;
@@ -141,7 +150,7 @@ export function launch(state, out, sources, target, frac, busy) {
     });
     busy.add(p.from);
   }
-  return parts.length > 0;
+  return parts.length > 0 ? common : 0;
 }
 
 /**

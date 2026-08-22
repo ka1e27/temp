@@ -65,6 +65,12 @@ export const EVENTS = Object.freeze({
   SKIRMISH_ESCAPE: 'skirmish-escape',
   BOOSTER_USED: 'booster-used',
   ATTRITION_STAGE: 'attrition-stage',
+  /** THE SET-PIECE, once per battle (battle/setpiece.js). Carries `to: 'player'`
+   *  so `render/fog.js fxVisible` passes it, `siteId` of the camp so the alert
+   *  can flag it on the board, and `bodies`/`arriveTick` because the WARNING IS
+   *  THE TRAVEL TIME — the whole feature is that the player is told in advance
+   *  and has a real number of seconds to decide what to do about it. */
+  ENEMY_MUSTER: 'enemy-muster',
   BATTLE_ENDED: 'battle-ended',
 });
 

@@ -163,10 +163,18 @@ mechanically. This is what lets the whole simulation run headless with zero mock
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **12**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **13**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly. **Read the version off
 `contract.js`, not off this line**: it said 10 for a whole release after v11 shipped, which
 is the same staleness this file warns about at "Still open".
+
+**v13 IS THE SET-PIECE, and it is the v8 lesson a FIFTH time.** `state.ai` gained
+`musterTick`, the latch that says whether the enemy has already committed its one host
+(`battle/setpiece.js`) — and no CONFIG field moved, again. A v12 blob resumed AFTER its
+muster landed reads the latch as undefined, sits inside the window, and raises a second
+host, which is the engine stepping a blob differently rather than merely reading a
+missing field. The `ENEMY_MUSTER` event that ships beside it needed no bump of its own:
+nothing in `battle/` or `tools/` reads `state.events` at all.
 
 **v12 is the v8 lesson a FOURTH time, and by now that is the pattern rather than the
 exception.** A field battle takes `MELEE.seconds` (see "A fight takes time" below), so a
@@ -2908,6 +2916,106 @@ than a constant `false`.
 
 An unknown `requires` value is treated as UNMET rather than ignored, so content asking
 for a gate `meta/upgrades.js` does not implement cannot go on sale by default.
+
+## The muster: the one thing the enemy does that you have to answer
+
+`content/setpiece.data.js` + `battle/setpiece.js`, one phase of `think()`, once per
+battle. It exists because of a measurement this file already carries: on gallowmoor the
+enemy sends **2,114 columns in twenty minutes at a median size of two**, about one field
+battle a second, forever. It is not making bigger decisions as difficulty rises; it is
+making vastly more, equally tiny ones — and a permanent grinder is hard to tune precisely
+because nothing that happens in it is decisive.
+
+So once per battle it stops grinding and commits: the spare from up to twelve sites, in
+ONE synchronized wave, aimed at the player's camp, announced out loud.
+
+**AIMING IT AT THE CAMP IS THREE DECISIONS AT ONCE.** It is the lose condition, so it is
+the one target a player cannot decide to ignore. It is a site the player OWNS, so the
+alert names ground they can already see — **fog-safe by construction rather than by a
+check**, which is the property every handler in `battle-alert.js` has to establish for
+itself, because `screens/battle.js` emits the event bus *regardless of fog* and
+`fxVisible` gates only the burst and the sound. And it is the one site the ordinary
+`attack()` phase will essentially never pick, since that scores by `AI.siteValue` and
+reach and the camp sits in the corner the enemy does not hold.
+
+**THE WARNING IS THE TRAVEL TIME, NOT A SCRIPTED COUNTDOWN.** `aicore.js launch` already
+holds every squad in a wave to the slowest contributor's arrival, so the ETA is a real
+number the sim computes rather than a constant somebody chose. That function now returns
+the shared arrival tick instead of a bare boolean — computing it at the call site would
+be a second implementation of the synchronization rule, and a tick is always positive
+when parts exist, so every `if (launch(...))` caller is unchanged.
+
+**TWO HONEST ANSWERS, AND THE SECOND IS WHY IT IS A DECISION.** March home and meet it,
+or notice that the enemy has just emptied its own country and go and take it. The second
+is not scripted: it falls out of `launch()` debiting every source, and
+`tests/setpiece.test.js` pins it as a *measured* drop in enemy garrisons rather than as a
+claim in a comment.
+
+**THE OBVIOUS SOURCE-GATHERING FUNCTION WOULD HAVE MADE THE WHOLE FEATURE
+UNREACHABLE.** `aicore.js adjacentSources` is bounded to `site.adj` — everything within
+`MOVEMENT.reachHexes` of the TARGET — and the player's camp is in the corner the enemy
+does not hold, so on most boards that set is EMPTY and a muster built on it could never
+fire at all. `musterSources` walks the whole site list instead, shaped on `aihome.js
+relievers`, which is the existing pattern for converging a whole country on one named
+site. Pinned as a test, because "built, documented, unreachable" is this project's
+signature failure.
+
+**IT LATCHES ONLY ON SUCCESS, and that half matters more than it sounds.** A thin enemy
+returns false *without* setting `musterTick`, so it keeps trying until the window closes:
+an enemy that is poor at minute eight and rich at minute eleven still gets its moment. A
+one-shot check at the opening tick would have spent the entire feature on whichever think
+happened to land first.
+
+**Placed after `homeGuard` and `defend`, before `attack`.** The household guard and any
+site fighting off its own assault have already taken their troops off the board, so the
+host is drawn from what is genuinely spare — and it gets first refusal on that surplus,
+because on a busy tick `attack()` would otherwise spend the country two bodies at a time
+and the one moment that is supposed to be decisive would arrive thin. It reads the true
+`state` rather than the fogged `view`: the third deliberate exception beside `homeGuard`
+and `adapt`, and the narrowest — where the expedition LANDED is not intelligence, and
+nothing in it reads the camp's garrison.
+
+### ...and the harness could not answer it, which would have made the number meaningless
+
+`tools/simdefend.js`. The scripted bot keeps a standing `HOME_FLOOR` at the camp and had
+**never once reacted to a threat** — so a harness run of the muster would have measured a
+player who watches a host walk into their camp and does nothing. That is the
+`upgradeTurn` lesson a fourth time, with a twist worth writing down: **answering is as
+much a part of playing as attacking is**, and every escape hatch this file records
+(`--noupgrades`, `--noconstruct`, `--noscout`, `--nothrone`) is about a verb the bot
+could not perform. This is the first one about a verb it could not perform *in response*.
+
+`defendTurn` marches the nearest garrisons home when a wave is inbound at the camp and
+the camp cannot hold it. Deliberately the SIMPLER of the two answers — counter-attacking
+the emptied country is the better play and a far harder policy to write, and this harness
+is specified as "a deliberately unremarkable player". Three rules: it stops recalling the
+moment the camp out-numbers the host (the camp defends at a multiplier and the attackers
+still have to breach it, so parity at the gate is a comfortable hold, and recalling the
+whole empire against a host the camp already beats is how a bot loses a won battle to its
+own panic); it never strips a site below `RECALL_FRAC`, because a site emptied to save the
+camp is a site handed over; and it skips anything that cannot arrive in time.
+
+**Provably inert without a muster**: before this pass the enemy never aimed a wave at the
+camp at all, so `defendTurn`'s first `if` is false on every think of every number in
+`regions.data.js`. `--nomuster` and `--noanswer` keep the two halves separately
+re-takeable — a muster nobody answers is a difficulty spike, and an answer with nothing
+to answer is dead code.
+
+**Contract v13 — the v8 lesson a FIFTH time: no CONFIG field moved.** `state.ai` gained
+`musterTick`, and a v12 blob resumed after its muster already landed reads the latch as
+undefined, sits inside the window, and raises a **second host**. That is the engine
+stepping a blob differently, which is what the number tracks. The new `ENEMY_MUSTER`
+event costs nothing and needed no bump of its own — nothing in `battle/` or `tools/`
+reads `state.events` at all, verified rather than assumed.
+
+Confirmed in real Chrome on a live gallowmoor board, through the real alert strip:
+`THE HOST MARCHES — 190 closing on your camp, 32s out. Their country is thin behind it.`
+
+**⚠ THE BALANCE SCREEN IS NOT YET TAKEN.** It is a real difficulty increase and it landed
+mid-re-tune with the machine saturated. `--nomuster` is the control. Worth knowing before
+reading the number: **93% of this campaign's non-wins are timeouts**, and a forced
+decisive engagement is exactly what a permanent grinder lacks — so it may well read as
+C1's twists did, harder on paper and measurably FASTER in practice.
 
 ## A doctrine is the one decision made before the map is seen
 

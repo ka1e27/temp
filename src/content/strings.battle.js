@@ -88,6 +88,20 @@ export const RESULTS = Object.freeze({
     'THE COUNTRY IS SPENT — half income, walls no longer repair at all, and'
       + ' troops cost double to train. Take something or withdraw.',
   ],
+  /**
+   * THE SET-PIECE, ANNOUNCED (battle/setpiece.js). A function rather than a
+   * constant, because the two numbers ARE the message: how many are coming and
+   * how long you have. A line reading "a host is marching on your camp" with no
+   * figures is a jump scare, not information, and the whole feature is that
+   * this one is answerable.
+   *
+   * It names the camp, which the player owns and can always see, so the line is
+   * FOG-SAFE BY CONSTRUCTION rather than by a check — the same property the six
+   * handlers around it in screens/battle-alert.js already have, and it matters
+   * because the event bus is emitted regardless of fog.
+   */
+  muster: (bodies, seconds) => `THE HOST MARCHES — ${bodies} closing on your camp,`
+    + ` ${seconds}s out. Their country is thin behind it.`,
   incomeNow: 'Income now',
   bestTime: 'Best time',
   // WHY, not just WHAT. Every one of these is derivable from the outcome the

@@ -12,6 +12,7 @@
 import { h, bindText, bindClass } from '../ui/dom.js';
 import { spaceCase } from '../ui/format.js';
 import { RESULTS } from '../content/strings.js';
+import { TICK_HZ } from '../core/loop.js';
 import { rejectionText } from './battle-upgrade.js';
 import { siteOf } from './battle-preview.js';
 
@@ -314,6 +315,21 @@ export function wireAlerts(o) {
   // Stage 0 is silence, deliberately — the ladder RETIRES when ground changes
   // hands, and "the country has recovered" is a message nobody needs while they
   // are busy taking the thing that recovered it.
+  // THE ONE THING THE ENEMY DOES THAT YOU HAVE TO ANSWER (battle/setpiece.js).
+  // Loudest line in the game, fired once a battle, and it carries both numbers
+  // because the point is that it is answerable: a host with no size and no ETA
+  // is a jump scare. `alarmSite` puts brackets on the camp through the same
+  // danger-tone path a siege already uses.
+  //
+  // FOG-SAFE BY CONSTRUCTION, not by a check — it names the player's OWN camp,
+  // which is the property every handler in this file has to establish for
+  // itself, because screens/battle.js emits the bus regardless of what the
+  // player can see and `fxVisible` gates only the burst and the sound.
+  off(bus.on('battle:enemy-muster', (ev) => {
+    const secs = Math.max(1, Math.round(((ev.arriveTick ?? 0) - (ev.tick ?? 0)) / TICK_HZ));
+    say(RESULTS.muster(ev.bodies ?? 0, secs), 'danger', ev.siteId);
+  }));
+
   off(bus.on('battle:attrition-stage', (ev) => {
     const line = RESULTS.attrition[(ev?.stage ?? 0) - 1];
     if (line) alert.show(line, now(), 'danger');

@@ -113,7 +113,7 @@ test('assertBattleConfig rejects unknown ids and bad charge counts', () => {
 // --- features: the seam that five purchased upgrades needed ---------------
 
 test('the contract carries shop features, and validates them', () => {
-  assert.equal(CONTRACT_VERSION, 12,
+  assert.equal(CONTRACT_VERSION, 13,
     'features + booster validation landed in v2, the terrain layer in v3,'
     + ' the castle gate in v4, the rally target list and hold-back default in v5,'
     + ' the incursion rung in v6, the per-troop multipliers in v7,'
@@ -133,7 +133,12 @@ test('the contract carries shop features, and validates them', () => {
     + ' FOURTH time — a field battle now takes MELEE.seconds, so a site carries'
     + ' `melee` and a squad carries one too, and a v11 blob is a board mid-assault'
     + ' whose fights simply are not happening: no melee record, so nothing steps'
-    + ' toward an outcome and both stacks stand there intact forever');
+    + ' toward an outcome and both stacks stand there intact forever;'
+    + ' and v13 is the v8 shape a FIFTH time — `state.ai` gained `musterTick`,'
+    + ' the latch for the enemy\'s one set-piece, so a v12 blob resumed AFTER its'
+    + ' host already landed reads the latch as undefined, sits inside the window'
+    + ' and raises a SECOND one. The ENEMY_MUSTER event beside it needed no bump'
+    + ' of its own: nothing in battle/ or tools/ reads state.events at all');
   const mods = makeMods({ features: ['doubleSpeed'] });
   assert.ok(hasMod(mods, 'doubleSpeed'));
   assert.ok(!hasMod(mods, 'standingOrders'));

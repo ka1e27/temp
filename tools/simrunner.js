@@ -16,6 +16,8 @@
 //   node tools/simrunner.js --all --notwist      # regions 10-24 without their own mutators
 //   node tools/simrunner.js --all --nodoctrine   # ...and without the player's own doctrine
 //   node tools/simrunner.js --all --doctrine=breaker   # ...every region under ONE doctrine
+//   node tools/simrunner.js --all --nomuster     # ...an enemy that never commits its host
+//   node tools/simrunner.js --all --noanswer     # ...a bot that never marches home to meet one
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -185,6 +187,15 @@ for (const id of regionIds) {
     // it; `--doctrine=warden` pins one so the six can be read against each
     // other rather than averaged into the sweep.
     noDoctrine: !!args.nodoctrine, doctrine: args.doctrine ?? null,
+    // `--nomuster` is the enemy that never commits its one host — see
+    // battle/setpiece.js. Same house pattern, same reason: the delta stays
+    // re-takeable rather than remembered.
+    noMuster: !!args.nomuster,
+    // ...and `--noanswer` is the bot that cannot come home. The pair is what
+    // makes the set-piece measurable in both directions: a muster nobody
+    // answers is a difficulty spike, and an answer with nothing to answer is
+    // dead code. See tools/simdefend.js.
+    answer: !args.noanswer,
   };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 
