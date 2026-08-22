@@ -198,6 +198,56 @@ hold. **Check a "still open" claim against the code before spending a session on
 
 ---
 
+### ⚠ TIER 5 IS ALREADY IN BAND, AND THAT BREAKS THE PLAN ABOVE
+
+```
+region       win%  band    all-med   cap    wins  timeouts(ahead)  losses
+ravensmarch    42  22-42    30.4m   30.4     20     25 (16)          3
+gravenreach    33  22-42    32.3m   32.3     16     28 (23)          4
+nightharrow    35  22-42    34.2m   34.2     17     31 (24)          0
+```
+
+All three read `ok`, so **"the whole back half is too easy" was wrong** — it is tiers 3
+and 4 that are out, not 3 through 6. That assumption came from an n=12 screen and is
+now retired.
+
+**BUT THEY ARE IN BAND FOR THE WRONG REASON.** Every all-median sits EXACTLY on the hard
+cap, and **nightharrow records zero losses in forty-eight battles** — 31 timeouts, 24 of
+them with the player AHEAD on territory. This tier is not a fight the enemy wins 65% of
+the time; it is a fight that runs out of clock 65% of the time. That is this file's own
+"`WIN_BAND` measures what fraction FINISHES" finding, in the one tier where it is total.
+
+**AND `enemyMult` MUST BE NON-DECREASING, SO THIS BOUNDS TIERS 3-4 FROM ABOVE.** The
+candidate now in flight (tier 3 to 4.39-4.85, tier 4 to 5.20-5.50) would force
+ravensmarch from 4.80 to >= 5.50 — about -31 points on a row currently at 42%, i.e.
+**11%, far under its 22 floor.** Aiming tiers 3-4 at MID-band breaks tier 5.
+
+**THE RESOLUTION IS TO AIM AT THE CEILING, NOT THE MIDDLE.** Tiers 3-4 are 6-15 points
+over, not 20-30:
+
+```
+              now   ceiling   needs        proposed dial   cascade
+gallowmoor     78      72      -8          4.01 -> ~4.19
+sunder         68      72       0 (rises with gallowmoor)  4.08 -> ~4.19
+vaelstrand     78      72      -8          4.38 -> ~4.56
+duskfell       79      72      -9          4.45 -> ~4.65
+karrowmere     72      72      -4          4.58 -> ~4.67
+thanescar      63      56      -19         4.60 -> ~5.00
+blackspire     71      56      -15         4.73 -> ~5.00
+ironcrown      71      56      -15         4.73 -> ~5.00
+obsidian       69      56      -13         4.78 -> ~5.00
+ravensmarch    42      42       0          4.80 -> 5.00  (-9, lands ~33, still ok)
+gravenreach    33      42       0          4.93 -> 5.00  (-3, lands ~30, still ok)
+nightharrow    35      42       0          4.94 -> 5.00  (-3, lands ~32, still ok)
+```
+
+Tier 5 ABSORBS a cascade to 5.00 and stays in band; it cannot absorb 5.50. **The two
+in-flight candidates are therefore too aggressive and will not ship as measured** — but
+they are not wasted, because what they buy is the SLOPE at tiers 3 and 4, which is the
+one number needed to size the gentler table above.
+
+---
+
 ### TIER 3 AT n=96 — and it hands #108 its numbers
 
 ```
