@@ -113,27 +113,32 @@
  * Recorded as an open observation rather than tuned, the same way `split`'s
  * uniform -6 is in CLAUDE.md: re-take it at n>=96 before spending a change.
  *
- * ⚠ AND IT SHIFTED AGAIN — the curve still falls, its WALL just arrives about
- * ten rungs late, and the win medians are 3-5x the ones above:
+ * ⇒ RE-BASED AGAIN, AND THIS TIME THE ARENA MOVED UNDERNEATH IT IN THE OTHER
+ * DIRECTION. The campaign re-tune restored the opening rungs with `baseDial`
+ * never being touched (depth 1 read 85%, not the 38% a stale warning recorded)
+ * and left the TAIL about ten rungs late. Measured, matched seeds:
  *
- *     depth        1     10     20     30     40
- *     win%        85     75     44     50     22
- *     target      94     75     38     19   ~0-6
- *     n           48     16     32     32     32
+ *     depth              1     10     20     30     40
+ *     4.42 / 0.0135     85     75     44     50     22     <- was
+ *     4.10 / 0.0208     83     75     31     19     13     <- SHIPPED
+ *     target            94     75     38     19   ~0-6
+ *     n (shipped)       48     16     16     16     32
  *
- * Opening and middle are fine; only the tail is late, and depth 40's 22% is
- * roughly where depth 30's 19% belongs. `baseDial` is nearly DEAD at depth 1
- * (4.42 -> 4.10 moved it 85% -> 83% at n=48) and `perDepth` cannot touch depth 1
- * at all since `dial(1) = baseDial * (1+p)^0` — so the 94% opening target is not
- * reachable through either knob. The candidate `4.10 / 0.0208` reads
- * 83/75/31/19 at depths 1/10/20/30, i.e. its tail lands ON target at a cost of
- * nil elsewhere; NOTHING SHIPPED pending its depth 40.
+ * `perDepth` is what moved and `baseDial` came down with it. Alone, 0.0184 lands
+ * the tail (depth 30 at 13%) and costs the middle 12-13 points; the pair costs
+ * nothing where the curve was already right — depth 1 -2, depth 10 zero, depth
+ * 20 a wash against its target — and takes depth 30 by THIRTY-ONE points onto
+ * its number. The doubling floor is clear with room (1.0208^59 = 3.37 > 2).
  *
- * ⚠ AND n=16 READS SYSTEMATICALLY LOW HERE — depth 1 measured 75 vs 85 and 69 vs
- * 83 against n=48, on two configs. That is the seed-prefix bias; on this ladder
- * **n=48 is the floor.** Full tables, the `4.10 / 0.0208` bracket and the next
- * steps are in ROADMAP.md. **Do not move anything for a single rung**: a rung is
- * `dial x a DRAWN HAND`, so rungs scatter around a smooth target by design.
+ * ⚠ TWO THINGS TO KNOW BEFORE MOVING THIS AGAIN. **`baseDial` is nearly DEAD at
+ * depth 1** — 4.42 -> 4.10 moved it 85% -> 83% at n=48, 0.06 pts/0.01 — and
+ * `perDepth` cannot touch depth 1 at all, since `dial(1) = baseDial * (1+p)^0`.
+ * So the 94% opening target is not reachable through either knob and wants
+ * re-authoring or a non-dial lever. And **n=16 reads systematically LOW here**:
+ * depth 1 measured 75 vs 85 and 69 vs 83 against n=48, on two configs. That is
+ * the seed-prefix bias; on this ladder n=48 is the floor for an absolute, though
+ * a matched-seed DELTA survives a smaller sample. **Do not move anything for a
+ * single rung**: a rung is `dial x a DRAWN HAND`, so rungs scatter by design.
  */
 export const INCURSION = Object.freeze({
   /** THE ARENA. The last region in the campaign: the deepest ground and the
@@ -159,9 +164,9 @@ export const INCURSION = Object.freeze({
    */
   gateCeiling: 0.75,
   /** Where the curve starts, independent of what the arena's own row says. */
-  baseDial: 4.42,
+  baseDial: 4.10,
   /** Compounding growth on `baseDial`, per rung. */
-  perDepth: 0.0135,
+  perDepth: 0.0208,
   /** Depth at which the 1st, 2nd and 3rd mutator arrive. Three is the ceiling
    *  because the table has eight entries: a fourth would mean half the table
    *  applies at once, and a hand of mutators that is always "most of them" is

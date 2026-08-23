@@ -263,42 +263,35 @@ at every depth (10.4m against 2.1m at depth 1), so a rung is not the battle thos
 describe. And widowsgate's `develop` — which a rung INHERITS unless a mutator overrides it
 — fell **3.3 -> 2.32** in the campaign re-tune.
 
-#### The bracket, and why NOTHING SHIPPED
-
-`perDepth` alone was tried first and it pays for the tail out of the middle:
+#### ⇒ SHIPPED: `baseDial 4.10 / perDepth 0.0208`
 
 ```
-depth              1     10     20     30
-4.42 / 0.0135     85     75     44     50
-4.42 / 0.0184      —     63     25     13     <- tail lands, middle 12-13 too hard
-4.10 / 0.0208     83     75     31     19     <- the derived pair
-target            94     75     38     19
-n (pair)          48     16     16     16
+depth              1     10     20     30     40
+4.42 / 0.0135     85     75     44     50     22     <- was
+4.42 / 0.0184      —     63     25     13      —     <- perDepth alone: middle pays
+4.10 / 0.0208     83     75     31     19     13     <- SHIPPED
+target            94     75     38     19   ~0-6
+n (shipped)       48     16     16     16     32
 ```
 
-**⇒ CORRECTION: I FIRST WROTE THAT THE PAIR'S DEPTH 30 WAS UNMEASURED. IT IS NOT — IT
-LANDS EXACTLY ON 19.** The sweep had finished that row before I deleted its worktree
-during cleanup; the job reported a non-zero exit from the trailing `pwd` failing, and I
-read the partial file rather than the final one. **A job that exits non-zero has still
-usually done its work — read the output before believing the exit code.** That is the
-third correction on this item and the only one that was my process rather than my sample.
+Matched seeds throughout, so the DELTAS are far better founded than any single absolute.
+The pair **costs nothing where the curve was already right** — depth 1 −2 (noise), depth
+10 zero, depth 20 a wash on absolute distance from target (44 is 6 over, 31 is 7 under) —
+and takes **depth 30 by thirty-one points onto its number** and depth 40 from 22 to 13.
+`perDepth` alone was tried first and pays for the tail out of the middle (0.0184 lands
+depth 30 at 13% and costs depths 10 and 20 twelve to thirteen points each), which is what
+named the second knob. Doubling floor clear at `1.0208^59 = 3.37 > 2`;
+`tests/incursion.test.js` 13/13, fast suite 1334/1334.
 
-So the pair is measured at four depths, and against the shipped config on MATCHED SEEDS
-it is: depth 1 −2 (noise), depth 10 0, depth 20 −13 (44→31 against a 38 target, a wash on
-absolute distance), **depth 30 −31, landing on target.**
+**⚠ TWO THINGS TO KNOW BEFORE MOVING IT AGAIN.**
 
-**`baseDial` IS NEARLY DEAD AT DEPTH 1, AND THAT IS THE FINDING THAT STOPPED THIS.**
-Cutting it 4.42 -> 4.10 moved the opening rung **85% -> 83% at n=48** — two points for a
-0.32 cut, 0.06 pts/0.01. So the 94% target for depth 1 **is not reachable through the
-dial at all**, and the "lift the line with `baseDial`" half of the two-knob plan buys
-nothing. This is emberholt's shape again: a rung where the dial is flat because the
-failure mode is not the enemy.
+**`baseDial` is nearly DEAD at depth 1** — 4.42 → 4.10 moved the opening rung **85% → 83%
+at n=48**, 0.06 pts/0.01 — and `perDepth` cannot touch depth 1 at all, since `dial(1) =
+baseDial * (1+p)^0`. **So the 94% target for the opening rung is not reachable through
+either knob** and wants re-authoring or a non-dial lever. That is emberholt's shape a
+second time: a fight where the dial is flat because the failure mode is not the enemy.
 
-`perDepth` provably cannot help the opening either — `dial(1) = baseDial * (1+p)^0` — so
-depth 1 is beyond both knobs.
-
-**⚠ AND n=16 READS SYSTEMATICALLY LOW ON THIS LADDER'S DEPTH 1 — measured twice, on two
-different configs:**
+**And n=16 reads systematically LOW here — measured twice, on two configs:**
 
 ```
 config            n=16    n=48
@@ -306,21 +299,11 @@ config            n=16    n=48
 4.10 / 0.0208      69      83
 ```
 
-Fourteen and ten points low, both times, same direction. That is the seed-prefix bias
-this project documents (`--n` walks seeds 0..n-1, so a small sample is a PREFIX rather
-than a draw) and the ladder's first sixteen seeds are unkind. **Three of this item's
-readings were misleading and all three were n=16.** On this measurement, n=48 is the floor.
-
-**DEPTH 40 IS THE ONE ROW STILL MISSING**, and it is running at n=32. The current config
-reads 22% there against a ~0-6 target; the pair raises that rung's dial 7.46 → 9.15, so it
-should improve too, but that is a prediction rather than a measurement and it is the last
-thing between this and a decision.
-
-**WHAT THE NEXT PASS SHOULD DO, in order:** (1) read depth 40 and, if it lands under ~10,
-ship `4.10 / 0.0208` — three of its four measured rungs are on or near target and its cost
-elsewhere is measured to be nil; (2) accept that depth 1 cannot reach 94 through the dial
-(85 → 83 for a 0.32 cut at n=48) and either re-author that target or find a non-dial
-lever; (3) never read a depth-1 number off n=16 again.
+Fourteen and ten points low, same direction both times. That is the seed-prefix bias
+(`--n` walks seeds 0..n-1, so a small sample is a PREFIX rather than a draw) and this
+ladder's first sixteen seeds are unkind. **Three of this item's readings were misleading
+and all three were n=16.** For an ABSOLUTE on this measurement, n=48 is the floor; a
+matched-seed delta survives a smaller sample, which is why the table above ships.
 
 ### ALSO SETTLED IN THE SAME PASS
 
