@@ -4698,21 +4698,29 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   tier 4   thanescar 54  blackspire 54                              SHIPPED  ok
            ironcrown 67  obsidian 67                                STILL OVER
   tier 5   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
-  tier 6   stormhalt ~48  cinderwatch 50  widowsgate 46             NOT MOVED
+  tier 6   stormhalt 25  cinderwatch 31  widowsgate 31              SHIPPED  ok
   ```
 
-  **NINETEEN OF TWENTY-FOUR ROWS ARE IN BAND** (twelve were out). Every shipped value
+  **TWENTY-TWO OF TWENTY-FOUR ROWS ARE IN BAND** (twelve were out). Every shipped value
   was measured AT that value, because the per-row slope spans **0.15 to 0.67 points per
   0.01** and adjacent rows differ twofold — see the bracket entries under "Tuning".
   Verified: 1,332 of 1,333 tests pass, `npm run check` clean, `smoke.mjs` all 24 steps.
   The one failure is `battlelength`'s tier-3 bulge, which is the deferred length pass.
 
-  **THE FIVE ROWS LEFT, and they are two different problems.** `ironcrown` and `obsidian`
-  are BOXED IN: the dial cannot reach them (0.24 and 0.15 pts/0.01, so +0.75 and +1.07,
-  while ravensmarch brackets 4.80/42% and 5.20/21% against a 22 FLOOR — anything past
-  ~5.05 pushes tier 5 out the bottom), and `siteCounts.neutral` is measured dead. Tier 6
-  is simply not re-tuned yet and is the one tier free to rise, since nothing sits above
-  it.
+  **THE TWO ROWS LEFT ARE NOT A TUNING PROBLEM.** `ironcrown` and `obsidian` have FOUR
+  levers measured spent — the dial cannot reach them (0.24 and 0.15 pts/0.01, so +0.75
+  and +1.07, while ravensmarch brackets 4.80/42% and 5.20/21% against a 22 FLOOR, so
+  anything past ~5.05 pushes tier 5 out the bottom), `siteCounts.neutral` is saturated
+  past its knee, `enemyMix` is already near its own optimum in BOTH directions, and the
+  board does nothing (18x13 read the same 67% as 17x13). **At an identical dial of 5.45,
+  n=48, blackspire reads 38% and ironcrown 54%** on matched columns and the same `choke`
+  silhouette — so the sixteen-point difference is the GENERATED MAP. The only knob left
+  is `shape`, which this project forbids using as a difficulty dial. See ROADMAP.md.
+
+  **AND THE WHOLE BACK HALF IS IN BAND WHILE STILL CLOCK-BOUND.** cinderwatch and
+  widowsgate take ZERO losses in sixteen battles apiece at their shipped dials, with
+  all-medians on their caps. `WIN_BAND` is satisfied; nothing about the failure mode is,
+  and no dial fixes it.
 
   **THE SIGN FLIPPED AND MOST OF THIS FILE PREDATES IT.** Every table below — and the
   paragraph immediately following this block — describes tiers 3-6 as too HARD, eleven
