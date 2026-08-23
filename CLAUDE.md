@@ -5073,12 +5073,19 @@ buttons read `–` for the whole battle because a fresh save has no relics.
         23     4.73     71      <- +4 sites bought NOTHING
      ```
 
+     **CONFIRMED ON A SECOND ROW, same shape, same knee.** obsidian, by neutral:
+
+     ```
+     neutral    15     20     24
+     win%       75     67     67
+     ```
+
      **The SIGN above is right — more neutral is harder — but the size is not.** It is
-     worth about two points a site between 15 and 19 and **zero above 19**, against the
-     recorded "-4 a site". obsidian at 20 → 24 read 69% → 67%, and ravensmarch at 18 → 22
-     read 42% → 38%, both consistent with a lever that is nearly spent by 19-20. So it
-     cannot make tier 4's late rows harder — they are on the flat part — while it remains
-     live on a row that sits below the knee.
+     worth roughly two points a site BELOW the knee (~19-20) and **zero above it**,
+     against the recorded "-4 a site" flat. ravensmarch at 18 → 22 read 42% → 38%, which
+     is the same story on a row that still sits under its own knee. So the lever cannot
+     make tier 4's late rows harder — they are already on the flat part — while it stays
+     live anywhere below 19.
 
      *(A cross-sectional reading of tier 4 briefly suggested the opposite sign, because
      the two rows with 19-20 neutral also read easier. That was n=24 noise plus an
