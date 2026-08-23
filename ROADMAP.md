@@ -263,32 +263,53 @@ at every depth (10.4m against 2.1m at depth 1), so a rung is not the battle thos
 describe. And widowsgate's `develop` — which a rung INHERITS unless a mutator overrides it
 — fell **3.3 -> 2.32** in the campaign re-tune.
 
-#### The bracket, measured at both ends
+#### The bracket, and why NOTHING SHIPPED
 
 `perDepth` alone was tried first and it pays for the tail out of the middle:
 
 ```
-depth          10    20    30
-perDepth .0135 75    44    50
-perDepth .0184 63    25    13      <- tail lands, middle is 12-13 too hard
-target         75    38    19
+depth              1     10     20     30
+4.42 / 0.0135     85     75     44     50
+4.42 / 0.0184      —     63     25     13     <- tail lands, middle 12-13 too hard
+4.10 / 0.0208     83     75     31      ?     <- the derived pair
+target            94     75     38     19
+n (pair)          48     16     16      —
 ```
 
-And `perDepth` provably CANNOT touch the opening: `dial(1) = baseDial * (1+p)^0`. So with
-0.0184 the whole line reads ~10 points hard from depth 1 on, which names the other knob.
-**`baseDial` DOWN to lift the line, `perDepth` UP to steepen the fall.** Three independent
-routes converge on the same pair:
+**`baseDial` IS NEARLY DEAD AT DEPTH 1, AND THAT IS THE FINDING THAT STOPPED THIS.**
+Cutting it 4.42 -> 4.10 moved the opening rung **85% -> 83% at n=48** — two points for a
+0.32 cut, 0.06 pts/0.01. So the 94% target for depth 1 **is not reachable through the
+dial at all**, and the "lift the line with `baseDial`" half of the two-knob plan buys
+nothing. This is emberholt's shape again: a rung where the dial is flat because the
+failure mode is not the enemy.
 
-1. depth 40's current dial (7.46) is what depth 30 should carry: `4.42(1+p)^29 = 7.46`
-   → p = 0.0182.
-2. lifting depths 10 and 20 by ~12 points at ~0.35 pts/0.01 needs `baseDial` ~4.13.
-3. holding depth 30 at the measured-good 7.50 from a 4.10 base: p = 0.0208.
+`perDepth` provably cannot help the opening either — `dial(1) = baseDial * (1+p)^0` — so
+depth 1 is beyond both knobs.
 
-**`baseDial 4.10 / perDepth 0.0208`** — dials 4.10 / 4.93 / 6.06 / 7.45 / 9.15 at depths
-1/10/20/30/40, doubling floor clear at 3.37 — is being screened now. It is an
-INTERPOLATION between measured endpoints rather than an extrapolation, but it is still a
-two-knob fit to screens: **confirm at n>=48 before trusting it**, and re-read the
-drawn-hand caveat above before moving anything for one rung.
+**⚠ AND n=16 READS SYSTEMATICALLY LOW ON THIS LADDER'S DEPTH 1 — measured twice, on two
+different configs:**
+
+```
+config            n=16    n=48
+4.42 / 0.0135      75      85
+4.10 / 0.0208      69      83
+```
+
+Fourteen and ten points low, both times, same direction. That is the seed-prefix bias
+this project documents (`--n` walks seeds 0..n-1, so a small sample is a PREFIX rather
+than a draw) and the ladder's first sixteen seeds are unkind. **Three of this item's
+readings were misleading and all three were n=16.** On this measurement, n=48 is the floor.
+
+**SO NOTHING WAS AUTHORED, DELIBERATELY.** The pair's depths 30 and 40 — the entire
+justification for changing anything — are unmeasured, and the one rung measured at n=48
+on BOTH configs says the change does essentially nothing there. Shipping it would be a
+two-knob move justified by n=16 at two depths and no data at the two that matter.
+
+**WHAT THE NEXT PASS SHOULD DO, in order:** (1) measure `4.10 / 0.0208` at depths 30 and
+40 at n>=32 — if the tail lands near 19 and ~5 it is a real candidate, since its cost
+elsewhere is now known to be nil; (2) accept that depth 1 cannot reach 94 through the
+dial and either re-author that target or find a non-dial lever; (3) never read a depth-1
+number off n=16 again.
 
 ### ALSO SETTLED IN THE SAME PASS
 
