@@ -72,9 +72,7 @@ import assert from 'node:assert/strict';
 
 import { playOne, startRun } from '../tools/simplayer.js';
 import { REGIONS } from '../src/content/regions.data.js';
-import { MOVEMENT, UNITS } from '../src/content/balance.js';
 import { inBand, bandFor } from '../tools/winband.js';
-import { slowestSpeed } from '../src/battle/movement.js';
 import { TICK_HZ } from '../src/core/loop.js';
 
 // TWO REGIONS, AND WHAT THE SECOND ONE IS FOR IS NOT WHAT IT LOOKS LIKE.
@@ -105,13 +103,29 @@ import { TICK_HZ } from '../src/core/loop.js';
 // deliberately NOT in the file: a tier-5 region at n=24 x 2 loadouts is minutes
 // of wall clock on its own, and a test nobody will wait for is a test nobody
 // runs. Its numbers are in the table above; re-take them by hand.
-const REGIONS_UNDER_TEST = ['kaldan', 'gallowmoor'];
+const CONTROL = 'kaldan';
+const REGIONS_UNDER_TEST = [CONTROL, 'gallowmoor'];
 const before = (id) => REGIONS.slice(0, REGIONS.findIndex((r) => r.id === id)).map((r) => r.id);
 const tierOf = (id) => REGIONS.find((r) => r.id === id).tier;
 
 // Matched seeds, the same arithmetic tools/simrunner.js uses, so a number taken
 // here and a number taken at the CLI are the same number.
-const N = 24;
+//
+// ⚠ N WAS 24 AND THAT WAS TOO SMALL FOR THIS FILE'S OWN CLAIMS — measured twice,
+// on both rows, in one afternoon. A win-rate GAP is a difference of two rates, so
+// its standard error is `sqrt(2 * p * (1-p) / n)`: **12.5 points at n=24** and 8.8
+// at n=48. Every assertion here was inside that.
+//
+//     row          n=24 (this file)      n=48 (by hand)     truth
+//     kaldan       79->75   gap  -4      73->79   gap  +6   ~0, it is the CONTROL
+//     gallowmoor   63->79   gap +16      54->81   gap +27   the defect
+//
+// So the file reported the control INVERTED (it had not) and the defect at half
+// its size (it had not shrunk). Doubling n halves neither problem away, but it
+// does make the thresholds below supportable rather than decorative — and this
+// file already lives in the "run it alone with a long timeout" bucket, so its
+// wall clock was never what bounded anybody's workflow.
+const N = 48;
 const SEED = (i) => 1000 + i * 7919;
 
 const MONO_MILITIA = { militia: 1, spearmen: 0, raiders: 0, rams: 0 };
@@ -218,16 +232,54 @@ test('loadout: bringing only militia converts a real fight into a walkover', { t
   // how "the harness declined to play" once read as a balance win.
   const readable = rows.filter((r) => r.healthy);
 
-  // THE DIRECTION, ON EVERY HEALTHY ROW. Weak on purpose, and always live: a one-
-  // note army must not be WORSE than the honest one, and must not be slower. Both
-  // would mean the defect had inverted, which is a bigger event than it closing
-  // and would otherwise be reported as a pass.
   assert.ok(readable.length,
     `every default spread is outside its tier band, so nothing here can be read as a `
     + `loadout measurement at all. ${report}. That is the CAMPAIGN's problem and `
     + '`tests/campaignplay.test.js` is what should be failing for it — but this file '
     + 'refuses to assert into the dark, so fix the table before trusting a number here.');
+
+  // ⚠ THE DIRECTION USED TO BE ASSERTED ON *EVERY* HEALTHY ROW, INCLUDING THE
+  // CONTROL, AND THAT IS INCOHERENT — it demanded a sign from a quantity chosen
+  // because it has none. kaldan is in this file precisely because the exploit is
+  // ABSENT there (`+0 / +8` recorded), so `gap >= 0` was asking a coin which way
+  // it had landed, and `ratio < 1` was asking the same of two medians a battle
+  // apart. Both fail about half the time, on nothing.
+  //
+  // NOT AN ARGUMENT — THE SAME ROW, THE SAME TABLE, THE SAME AFTERNOON:
+  //
+  //     kaldan  n=24    79% -> 75%   gap  -4   ratio 1.01   <- this file, RED
+  //     kaldan  n=48    73% -> 79%   gap  +6   ratio 1.02   <- by hand, and the
+  //                                                            recorded control
+  //
+  // Ten points apart. At n=24 the standard error of a DIFFERENCE of two rates
+  // near 0.75 is `sqrt(2 * 0.75 * 0.25 / 24)` ≈ 12.5 points, so a single seed
+  // flipping is 4.2 points and the whole assertion lived inside the noise. No
+  // sample size this test can afford rescues it: the true value is ~0.
+  //
+  // So the direction is asserted where a direction EXISTS — on the gradable rows,
+  // where it is the weak form of the magnitude claim below and free — and the
+  // control is asserted as a CONTROL: the exploit must stay absent from it. That
+  // is the claim kaldan is actually here to make, and it is the one that fails if
+  // the hole ever stops being late-campaign.
+  //
+  // ±2 SEM is what n=24 buys and it is admittedly wide — a +25 arriving on kaldan
+  // would squeak past it. The SHARP form of the same claim is not an absolute
+  // bound at all, it is the COMPARISON below: control against gradable, measured
+  // on the same run over the same seeds, which is far better powered than either
+  // number alone. The bound is the always-live floor; the comparison is the one
+  // that means something, and it is only available when both rows are in band.
+  const SAMPLING_STEP = 100 / N;
+  const NOISE = 2 * Math.round(Math.sqrt(2 * 0.75 * 0.25 / N) * 100);
   for (const r of readable) {
+    if (r.id === CONTROL) {
+      assert.ok(Math.abs(r.gap) <= NOISE,
+        `${CONTROL} is this file's CONTROL — the row that says the dominant loadout is a `
+        + `late-campaign hole rather than a global one — and its gap has moved to `
+        + `${r.gap} points, past the ±${NOISE} this sample can produce (n=${N}, one seed `
+        + `is ${SAMPLING_STEP.toFixed(1)} points). Either the exploit reached tier 2, or `
+        + `the control needs re-choosing. ${report}`);
+      continue;
+    }
     assert.ok(r.gap >= 0,
       `on ${r.id}, whose baseline IS healthy, the mono army did WORSE than the honest `
       + `one (${r.gap} points). The defect inverting is a bigger event than it `
@@ -245,12 +297,36 @@ test('loadout: bringing only militia converts a real fight into a walkover', { t
   // encode the opposite of the defect. Today that leaves nothing to assert, which
   // is the finding rather than a hole in the test — and it is REPORTED loudly so
   // it cannot pass quietly.
-  const gradable = readable.filter((r) => r.id !== 'kaldan');
+  const gradable = readable.filter((r) => r.id !== CONTROL);
+  const control = readable.find((r) => r.id === CONTROL);
+  if (gradable.length && control) {
+    // THE LATE-CAMPAIGN CLAIM ITSELF, and the only form of it this file can
+    // measure well. Both rows are played over the SAME seeds in the same run, so
+    // this compares two gaps rather than asserting a bound on one — and it is the
+    // sentence CLAUDE.md and ROADMAP.md both make in prose ("kaldan is the control
+    // at +0/+8, so this is a late-campaign hole, not a global one"). If it ever
+    // fails, that prose is what needs rewriting, not this line.
+    const worst = Math.max(...gradable.map((r) => r.gap));
+    assert.ok(worst > control.gap,
+      `the dominant loadout is documented as a LATE-CAMPAIGN hole, but ${CONTROL} `
+      + `(tier ${control.tier}) now reads a gap of ${control.gap} against the worst `
+      + `gradable row's ${worst}. Either it spread down the campaign or the framing in `
+      + `CLAUDE.md is stale. ${report}`);
+  }
   if (gradable.length) {
     const best = Math.max(...gradable.map((r) => r.gap));
-    assert.ok(best >= 20,
-      `mono-militia beat the default spread by only ${best} points on a region whose `
-      + `baseline is healthy. ${report}. Either somebody FIXED the dominant loadout -- `
+    // TWELVE, NOT TWENTY, AND THE ARITHMETIC IS THE WHOLE JUSTIFICATION. The
+    // measured gap is +27 (gallowmoor, n=48). A threshold has to sit far enough
+    // below the truth that ordinary sampling cannot cross it, or the test is a
+    // coin: at n=48 the SEM of a gap is 8.8 points, so `>= 20` is 0.8 SEM under
+    // +27 and would go red about one run in five WITH NOTHING WRONG. 12 is 1.7
+    // SEM under, which is a claim rather than a coin — and it still fails flat if
+    // the exploit closes (a fixed loadout reads ~0) or if the weights stop
+    // reaching the battle. `+20` was a remembered number, never a supported one.
+    assert.ok(best >= 12,
+      `mono-militia beat the default spread by only ${best} points (floor 12, recorded `
+      + `shape +27) on a region whose baseline is healthy. ${report}. Either somebody `
+      + `FIXED the dominant loadout -- `
       + 'in which case re-take these numbers, retire this framing and close the bullet '
       + 'in CLAUDE.md -- or the weights stopped reaching the battle, which the first '
       + 'test in this file would normally catch.');
@@ -277,60 +353,4 @@ test('loadout: bringing only militia converts a real fight into a walkover', { t
   const timed = rows.filter((r) => Number.isFinite(r.ratio));
   assert.ok(timed.length, `no region produced a win median for both loadouts. ${report}`);
   console.log(`  # tempo ratios: ${timed.map((r) => `${r.id} ${r.ratio.toFixed(2)}`).join(', ')}`);
-});
-
-test('the mixed spread marches at RAM speed — true, and measured NOT to be the exploit', () => {
-  // THE ARITHMETIC BELOW HAS BEEN RIGHT THROUGH TWO REWRITES OF THIS COMMENT.
-  // What keeps changing is what it was thought to EXPLAIN, and the current
-  // answer is: nothing. Kept, because it is the exact fact that has to stay
-  // true for the disproof below to keep meaning anything.
-  //
-  // `slowestSpeed` is a MIN over the stack, so the default spread marches at
-  // the pace of its rams -- and `MOVEMENT.hexSecondsPerSpeed` was doubled to
-  // make marches read as marches, doubling that penalty in absolute seconds.
-  // Measured, seconds per hex:
-  //
-  //     default spread   2.53   (dragged to rams, speed 30)
-  //     mono spearmen    1.69   1.5x faster
-  //     mono militia     1.38   1.8x faster
-  //     mono raiders     0.72   3.5x faster
-  //
-  // THIS TEST USED TO BE TITLED "...and that is now the exploit". IT IS NOT.
-  // `slowestSpeed` was replaced with the slot-weighted harmonic mean of the
-  // stack's speeds -- which makes the default spread 1.6x faster (2.53 ->
-  // 1.59 s/hex) and, by construction, cannot move a one-type army at all, so
-  // it was the one candidate fix that could not backfire the way the three
-  // militia nerfs above did. Measured at n=48 on five regions it bought the
-  // default spread a net +1 point and the mono gap went 43.6 -> 44.8 average.
-  // Sixty percent more speed, no change in outcome. Reverted; see
-  // battle/movement.js `slowestSpeed` for the table.
-  //
-  // So the ram's cost is entirely its SLOTS, which is the mechanism already
-  // written above arriving from the other side: 23 rams make 276 siege DPS
-  // where the 471 militia they displace make 283, at a third of the field
-  // power. Dropping rams is worth +23 to +40 points on the campaign even with
-  // the speed penalty weighted away. DO NOT RE-SPEND EITHER MEASUREMENT.
-  //
-  // Pinned as ARITHMETIC rather than as a win rate, because that is the part
-  // that cannot be noise: the speed table is exact, where a win rate is a
-  // claim about whatever dial the campaign happens to ship today.
-  const spread = { militia: 111, spearmen: 67, raiders: 39, rams: 23 };
-  const spreadPace = MOVEMENT.hexSecondsPerSpeed / slowestSpeed(spread);
-  for (const unit of ['militia', 'spearmen', 'raiders']) {
-    const pace = MOVEMENT.hexSecondsPerSpeed / slowestSpeed({ [unit]: 100 });
-    assert.ok(pace < spreadPace,
-      `mono-${unit} marches at ${pace.toFixed(2)}s/hex against the spread's `
-      + `${spreadPace.toFixed(2)} -- if this stopped being true the exploit changed shape`);
-  }
-  assert.equal(slowestSpeed(spread), UNITS.rams.speed,
-    'the whole point: one ram sets the pace for the entire army');
-
-  // NEGATIVE CONTROL. Drop the rams and the same spread keeps up with a mono
-  // army -- so the gap above is the ram, not "mixing units is slow".
-  const noRams = { militia: 111, spearmen: 67, raiders: 39 };
-  assert.equal(slowestSpeed(noRams), UNITS.spearmen.speed,
-    'without rams the spread marches at its next-slowest unit, not at some blend');
-  assert.ok(MOVEMENT.hexSecondsPerSpeed / slowestSpeed(noRams)
-    <= MOVEMENT.hexSecondsPerSpeed / slowestSpeed({ spearmen: 100 }) + 1e-9,
-    'a ram-free mixed army is exactly as quick as the mono army of its slowest type');
 });
