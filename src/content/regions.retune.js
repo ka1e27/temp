@@ -55,22 +55,31 @@
 // everything below this block is provenance.
 // ============================================================================
 //
-//     region        was    now     measured   band     verdict
-//     gallowmoor   4.01   4.39        60      50-72    ok
-//     sunder       4.08   4.39        60      50-72    ok
-//     vaelstrand   4.38   4.76        67      50-72    ok
-//     duskfell     4.45   4.85        71      50-72    ok  (1 under the ceiling)
-//     karrowmere   4.58   4.85        54      50-72    ok
-//     thanescar    4.60   4.90        54      34-56    ok
-//     blackspire   4.73   4.95        54      34-56    ok
-//     ironcrown    4.73   5.00        67      34-56    STILL OVER — see below
-//     obsidian     4.78   5.05        67      34-56    STILL OVER — see below
-//     ravensmarch  4.80   5.05        29      22-42    ok
-//     gravenreach  4.93   5.05        33      22-42    ok
-//     nightharrow  4.94   5.05         -      22-42    monotonicity only
-//     stormhalt    4.94   5.60        25      18-36    ok
-//     cinderwatch  5.06   5.65        31      18-36    ok
-//     widowsgate   5.07   5.70        31      18-36    ok
+// All win rates below are n=48 unless marked; tier 3's are AFTER its advertised
+// lengths were corrected (which tightened its caps and cost 0-7 points a row).
+//
+//     region        was    now     win%   band     verdict
+//     gallowmoor   4.01   4.39      54    50-72    ok
+//     sunder       4.08   4.39      60    50-72    ok
+//     vaelstrand   4.38   4.76      60    50-72    ok
+//     duskfell     4.45   4.85      69    50-72    ok
+//     karrowmere   4.58   4.85      52    50-72    ok  (2 over its floor)
+//     thanescar    4.60   4.90      52    34-56    ok
+//     blackspire   4.73   4.95      52    34-56    ok
+//     ironcrown    4.73   5.00      77    34-56    STILL OVER — see below
+//     obsidian     4.78   5.05      69    34-56    STILL OVER — see below
+//     ravensmarch  4.80   5.05      33    22-42    ok
+//     gravenreach  4.93   5.05      33    22-42    ok  (n=24)
+//     nightharrow  4.94   5.05      42    22-42    ON its ceiling — see below
+//     stormhalt    4.94   5.60      25    18-36    ok  (n=16)
+//     cinderwatch  5.06   5.65      21    18-36    ok  (n=24, re-taking at 48)
+//     widowsgate   5.07   5.70      31    18-36    ok  (n=16)
+//
+// ⚠ nightharrow IS THE ONE VALUE IN THIS TABLE THAT WAS SHIPPED UNMEASURED —
+// moved to 5.05 only to keep `enemyMult` non-decreasing, on a bracket argument
+// predicting ~30%. It measures 42%, exactly its ceiling, with no margin against
+// a ~7-point SEM. That is what an interpolated value costs; every other number
+// here was measured AT the value it ships.
 //
 // TIER 6 IS FREE TO RISE (nothing sits above it) so it took a real bracket, not
 // a cascade: stormhalt read 50% at 4.94, 25% at 5.60, 6% at 6.20 — slope 0.38.
