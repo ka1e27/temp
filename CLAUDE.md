@@ -3983,6 +3983,14 @@ campaign has nothing new to acquire.
   **grep the test tree for the file you touched and for any constant you changed**
   (`grep -rln "battle-preview\|CONTRACT_VERSION" tests/`) before believing a green run,
   because the adjacent-suite habit is what makes a full-suite run feel redundant.
+- **⇒ AND THE COST OF THOSE FILES IS A FUNCTION OF THE TABLE, NOT OF THE BOX.** Measured
+  on the SAME machine before and after the campaign re-tune: `loadoutdominance` took
+  **1,795s out of band and 433s in band** — better than 4x faster for the same work. It
+  plays real battles, and a tuned row RESOLVES its battles where an out-of-band one runs
+  every seed to the hard cap. The same mechanism is why `campaignplay` passed in CI in
+  eleven minutes on a commit titled "24 of 24 in band" and cannot finish here at all.
+  **So a long harness file timing out is evidence about the balance table**, and the
+  budget below is for a table that is out of band.
 - **THE LONG HARNESS FILES NEED FAR MORE THAN THE "≥180s EACH" THIS FILE USED TO SAY,
   and a bare TAP header is INDETERMINATE rather than red.** At load ~20 from other
   tenants, `tactics`, `loadoutdominance`, `harness` and `campaignplay` each printed
