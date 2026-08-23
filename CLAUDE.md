@@ -4690,14 +4690,29 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   CLOSED at n>=96; tiers 3-6 are open and now read TOO EASY, not too hard.**
 
   ```
-  tier 1   riverfen 80  ashford 90  ironwood 92  saltmere 83        all ok, n=96/240
+  tier 1   riverfen 80  ashford 90  ironwood 92  saltmere 83        SHIPPED  ok
   tier 2   kaldan 70  highmarch 77  greywater 73  thornmoor 82
-           emberholt 82                                             all ok, n=96
-  tier 3   n=96 in flight
-  tier 4   thanescar 63  blackspire 71  ironcrown 71  obsidian 69   all TOO EASY, n=48
-  tier 5   n=48 in flight
-  tier 6   unmeasured since the n=12 screen (58 / 50 / 50 v an 18-36 band)
+           emberholt 82                                             SHIPPED  ok
+  tier 3   gallowmoor 60  sunder 60  vaelstrand 67  duskfell 71
+           karrowmere 54                                            SHIPPED  ok
+  tier 4   thanescar 54  blackspire 54                              SHIPPED  ok
+           ironcrown 67  obsidian 67                                STILL OVER
+  tier 5   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
+  tier 6   stormhalt ~48  cinderwatch 50  widowsgate 46             NOT MOVED
   ```
+
+  **NINETEEN OF TWENTY-FOUR ROWS ARE IN BAND** (twelve were out). Every shipped value
+  was measured AT that value, because the per-row slope spans **0.15 to 0.67 points per
+  0.01** and adjacent rows differ twofold — see the bracket entries under "Tuning".
+  Verified: 1,332 of 1,333 tests pass, `npm run check` clean, `smoke.mjs` all 24 steps.
+  The one failure is `battlelength`'s tier-3 bulge, which is the deferred length pass.
+
+  **THE FIVE ROWS LEFT, and they are two different problems.** `ironcrown` and `obsidian`
+  are BOXED IN: the dial cannot reach them (0.24 and 0.15 pts/0.01, so +0.75 and +1.07,
+  while ravensmarch brackets 4.80/42% and 5.20/21% against a 22 FLOOR — anything past
+  ~5.05 pushes tier 5 out the bottom), and `siteCounts.neutral` is measured dead. Tier 6
+  is simply not re-tuned yet and is the one tier free to rise, since nothing sits above
+  it.
 
   **THE SIGN FLIPPED AND MOST OF THIS FILE PREDATES IT.** Every table below — and the
   paragraph immediately following this block — describes tiers 3-6 as too HARD, eleven
