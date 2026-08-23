@@ -4695,8 +4695,8 @@ buttons read `–` for the whole battle because a fresh save has no relics.
            emberholt 82                                             SHIPPED  ok
   tier 3   gallowmoor 60  sunder 60  vaelstrand 67  duskfell 71
            karrowmere 54                                            SHIPPED  ok
-  tier 4   thanescar 54  blackspire 54                              SHIPPED  ok
-           ironcrown 67  obsidian 67                                STILL OVER
+  tier 4   thanescar 52  blackspire 52                              SHIPPED  ok
+           ironcrown 77  obsidian 69                                STILL OVER
   tier 5   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
   tier 6   stormhalt 25  cinderwatch 31  widowsgate 31              SHIPPED  ok
   ```

@@ -56,8 +56,8 @@ tier 2  66-84   kaldan 70   highmarch 77   greywater 73
                 thornmoor 82   emberholt 82                              SHIPPED  ok
 tier 3  50-72   gallowmoor 60  sunder 60  vaelstrand 67
                 duskfell 71  karrowmere 54                               SHIPPED  ok
-tier 4  34-56   thanescar 54   blackspire 54                             SHIPPED  ok
-                ironcrown 67   obsidian 67                               STILL OVER
+tier 4  34-56   thanescar 52   blackspire 52                             SHIPPED  ok
+                ironcrown 77   obsidian 69                               STILL OVER
 tier 5  22-42   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
 tier 6  18-36   stormhalt 25   cinderwatch 31   widowsgate 31            SHIPPED  ok
 ```
@@ -109,7 +109,13 @@ tier 6  18-36   stormhalt 25   cinderwatch 31   widowsgate 31            SHIPPED
   region       dial    n     win%
   blackspire   5.45    48      38
   ironcrown    5.45    48      54     <- SAME dial, 16 points apart, ~2.3 SEM
+  blackspire   4.95    48      52
+  ironcrown    5.00    48      77     <- SHIPPED dials, 25 points, ~3.5 SEM
   ```
+
+  **Re-confirmed at n=48 on the shipped table and the gap got BIGGER, not smaller** —
+  ironcrown reads 77%, where an n=24 screen had said 67%. Two independent dial settings,
+  both at n=48, both showing the same thing.
 
   At identical dials, on the same 17x13 board, the same mix [2,4,7], the same enemy and
   player counts, the same gate and the same `choke` silhouette, ironcrown is sixteen
