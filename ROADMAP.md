@@ -245,11 +245,25 @@ for the same reason: the dial there buys failure mode, not win rate.
    Tiers 1-2, 4 and 5 were deliberately left alone — their promises sit within about a
    minute of measured, and moving them changes caps on rows just shipped for no gain.
 
-   **⚠ THE SIX MOVED ROWS ARE PLAYING AGAINST NEW CLOCKS AND ARE BEING RE-SWEPT.**
-   `targetLengthMin` derives `hardCapMs`, so their measured 60/60/67/71/54/31 will move;
-   vaelstrand is the one to watch, at a 22.9m all-run median against a new 24.7m cap. If
-   a row falls out, the fix is its dial, not its promise — the promise is now the honest
-   number.
+   **RE-SWEPT AGAINST THE NEW CLOCKS, and it cost about what was predicted:**
+
+   ```
+   region        cap was -> now    win% was -> now    verdict
+   gallowmoor     38.0 -> 28.5       60 -> 54          ok
+   sunder         38.0 -> 34.2       60 -> 60          ok
+   cinderwatch    32.3 -> 35.1       31 -> 21          ok, and see below
+   vaelstrand / duskfell / karrowmere                  sweep in flight
+   ```
+
+   Six points on gallowmoor and nothing on sunder — a tighter cap converts a region's
+   slowest WINS into timeouts, and how many depends on how much of its distribution sat
+   in the removed tail.
+
+   **⚠ cinderwatch's 31 -> 21 IS NOT THE CAP, IT IS THE SAMPLE, and it is the prefix bias
+   in miniature.** Its cap got LONGER, which can only help — and both readings have the
+   SAME FIVE WINS: five of sixteen is 31%, five of twenty-four is 21%. The eight extra
+   seeds simply all failed. **21% is the better estimate and it sits three points off its
+   floor**, so tier 6 is being re-confirmed at n=48 before it is trusted there.
 
    The dataset that fed this, for reference — win medians at the shipped dials — win median against what the row
    currently promises:
