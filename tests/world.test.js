@@ -192,11 +192,11 @@ test('the vertical slice matches the tuned balance table', () => {
     // kaldan ships at 3.60 because 3.60 was measured, not interpolated. thornmoor
     // has a plateau too — it read 82% at both 3.56 and 3.77 — which is why its
     // move is justified by monotonicity against greywater rather than by a gain.
-    ['riverfen', 1, 1.86, 11, 9, 5, 3, 3, 1.0, 9.5],
-    ['ashford', 1, 2.76, 12, 9, 6, 3, 3, 1.2, 10],
-    ['ironwood', 1, 3.19, 13, 10, 7, 5, 3, 1.5, 9.5],
-    ['saltmere', 1, 3.19, 13, 10, 8, 3, 4, 1.8, 7.5],
-    ['kaldan', 2, 3.60, 15, 11, 9, 5, 4, 4.0, 8.5],
+    ['riverfen', 1, 1.84, 11, 9, 5, 3, 3, 1.0, 9],
+    ['ashford', 1, 2.76, 12, 9, 6, 3, 3, 1.2, 9],
+    ['ironwood', 1, 3.19, 13, 10, 7, 5, 3, 1.5, 8.5],
+    ['saltmere', 1, 3.19, 13, 10, 8, 3, 4, 1.8, 8.5],
+    ['kaldan', 2, 3.60, 15, 11, 9, 5, 4, 4.0, 10],
   ];
   table.forEach((row, i) => {
     const [id, tier, mult, cols, rows, e, n, p, reward, len] = row;

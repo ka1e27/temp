@@ -1428,9 +1428,86 @@ a row whose battles RESOLVE** — tier 3's all-medians ran 17-24m against 36-38m
 is why it could be corrected at a cost of about six points. Check the all-median against
 the cap before touching this column, not just the win median against the promise.
 
-Worth knowing before authoring the column: **tiers 1-2 have no length ramp at all.**
-Measured at n=96/240, every one of the nine wins in **8.2-9.3 minutes** while advertising
-6.5 to 10 — so the promise varies by 54% across a tier whose real spread is 13%.
+**⚠ AND THE PROMISE IS THE CLOCK, SO THIS COLUMN IS A DIFFICULTY KNOB OF THE SAME ORDER
+AS `enemyMult` — MEASURED, NINE ROWS, ONE VARIABLE.** `hardCapMs = max(tierFloor,
+targetLengthMin * 1.9)`, so an under-promise is a tighter clock and nothing anywhere
+reports it. Tiers 1-2 advertised 6.5-10 minutes against measured win medians of 8.4-10.2
+— errors up to **-26%** (thornmoor advertising 6.5 for a battle it wins in 8.8) — and
+therefore carried hard caps from **14.0 to 19.0, a 36% spread across nine rows that all
+play within 21% of each other.** Nobody authored that; it fell out of the promise column.
+Re-authoring every one to its own measured median (all now within **2%**) moved the win
+rates like this, n=96 a row, matched seeds, nothing else touched:
+
+```
+row          cap             win%      per 1% of cap
+riverfen    18.1 -> 17.1    80 -> 77       -0.55
+ashford     19.0 -> 17.1    90 -> 89       -0.10
+ironwood    18.1 -> 16.1    92 -> 90       -0.18
+saltmere    14.3 -> 16.1    83 -> 86       +0.24
+kaldan      16.1 -> 19.0    70 -> 78       +0.44
+highmarch   17.1 -> 18.1    77 -> 76       -0.17   <- the one that reads as noise
+greywater   15.2 -> 17.1    73 -> 76       +0.23
+thornmoor   14.0 -> 17.1    82 -> 89       +0.32
+emberholt   15.2 -> 18.1    82 -> 86       +0.21
+```
+
+On kaldan a length edit alone was worth **+8 points** — more than any single dial step
+the re-tune made. Treat this column as a label and you re-tune the campaign by accident.
+
+**⚠ AND DO NOT AVERAGE THAT COLUMN INTO A CONSTANT.** Tier 1-2 alone spans 0.10 to 0.55,
+and tier 4 — measured the same day, same method — widens it to nearly TEN times:
+
+```
+thanescar    cap -25%     52 -> 50      0.08 pts per 1%
+blackspire   cap -15%     52 -> 46      0.40
+ironcrown    cap  -9%     77 -> 71      0.67
+```
+
+thanescar took the BIGGEST cut and moved least. The quantity that predicts the bite is
+not the size of the cap move, it is **how many of the row's wins live in the window you
+are adding or removing** — thanescar wins in 11.9 minutes and had almost nothing between
+22.8 and 30.4 to lose, where blackspire's all-median sits right on its new cap. So read
+the win-time distribution, not the percentage. This is the per-row-slope lesson arriving
+in a second column, and it should be no more surprising here than it was for `enemyMult`.
+
+Two rules fall out of it. **A length correction must be difficulty-neutral, and the dial
+is what pays**: riverfen fell to 77 against a 78 floor and was bracketed
+(`1.82 -> 88%, 1.84 -> 81%, 1.86 -> 77%`) and shipped at 1.84, because 1.82's 88% would
+have been an 8-point difficulty CUT smuggled in under a promise fix. And **`
+HARD_CAP_MIN_BY_TIER` is now inert on all 24 rows** — thornmoor was the last one pinned
+to it — so the clock has exactly one author. `tests/battlelength.test.js` asserts that:
+a row on its floor is a row whose advertised number has stopped ending its own battle,
+and the simrunner's own length gate cannot see it, because that gate only grades a region
+that plays LONGER than it claims.
+
+**⚠ AND A PLATEAU IS A PROPERTY OF A ROW *AT A GIVEN CLOCK*, NOT OF THE ROW.** thornmoor
+is recorded above as having one — 82% at both 3.56 and 3.77 — and that was measured at
+its old 14.0 cap. At 17.1 the same dial bites at 0.56 pts/0.01. Every plateau written
+down in this file was measured against whatever cap that row carried at the time; check
+the cap before trusting one.
+
+**THE SIGNATURE SAYS WHETHER THE DIAL IS EVEN THE LEVER.** emberholt went the WRONG WAY
+on +0.05 (86% -> 90%), and its breakdown is 10 non-wins in 96 of which **7 are timeouts
+while AHEAD and none are timeouts while behind** — a stronger enemy does not convert
+those.
+
+**⚠ AND `siteCounts.neutral` HAS NO FIXED SIGN — IT IS PER ROW, AND BOTH GENERALISATIONS
+IN THIS FILE'S HISTORY WERE WRONG.** The tier-2 header once said more neutral reads
+EASIER; a later pass "corrected" it to HARDER off two rows; and a third measurement says
+neither is a rule. Four rows, n=96 or n=48, one variable:
+
+```
+ironwood     neutral 4 -> 5    98% -> 90%     HARDER
+greywater    neutral 7 -> 6    63% -> 75%     HARDER (same sign, read backwards)
+thornmoor    neutral 7 -> 8    89% -> 90%     FLAT — the lever is dead on this row
+emberholt    neutral 7 -> 9    86% -> 97%     EASIER, and by a lot
+```
+
+The plausible mechanism is that unclaimed ground is a race, and who wins it depends on
+the row — the enemy's `concurrent` and `develop`, the board size, and how big a landing
+force the player brings. It is not something to reason about from the tier. **Measure the
+sign on the row you are tuning before you spend it**, and treat any sentence in this file
+that gives this lever a direction as a claim about the row it was taken on.
 
 **⚠ AND n=24 IS TOO NOISY TO TUNE ON EITHER — DEMONSTRATED, NOT ARGUED.** A full
 24-region sweep was taken, nineteen dials were moved, and the campaign was re-swept at the
@@ -4798,6 +4875,14 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   anything upstream: `enemyMult` 3.74→3.60 reads 69%. **Greywater** read 63%
   (floor 66, only ~1 SEM short, so this may have been noise) — eased with
   neutral 7→6 anyway since the fix cost nothing, reads 75%.
+
+  **⚠ THIS "CORRECTION" WAS ITSELF AN OVER-GENERALISATION AND HAS BEEN
+  RETRACTED — the lever has no fixed sign, it is per row. emberholt at
+  neutral 7→9 reads 86%→97% (EASIER) and thornmoor at 7→8 reads 89%→90%
+  (FLAT), against the two rows below. See the four-row table under
+  "Tuning" and measure the sign on the row you are tuning. The paragraph
+  is kept as written, because a claim generalised from two rows and
+  falsified by the third is the lesson.**
 
   **A CORRECTION TO THE TIER-2 HEADER'S OWN CLAIM**, found while chasing
   ironwood: "neutral is a difficulty knob that moves the WRONG way (more

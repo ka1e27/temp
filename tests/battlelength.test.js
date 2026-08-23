@@ -45,6 +45,34 @@ test('no battle is advertised longer than a browser session', () => {
   }
 });
 
+test('THE ADVERTISED LENGTH IS WHAT SETS THE CLOCK, not the tier floor', () => {
+  // `hardCapMs = max(HARD_CAP_MIN_BY_TIER[tier - 1], targetLengthMin * RATIO)`, so
+  // a row whose promise is short enough loses control of its own clock to the
+  // floor — SILENTLY, and in the one direction nothing else here can see: the
+  // simrunner's length gate grades `winMed > target * 1.6` and so only ever
+  // catches a region that plays LONGER than it claims.
+  //
+  // ⚠ THIS IS NOT HYPOTHETICAL. thornmoor advertised 6.5 minutes for a battle it
+  // wins in 8.8, which put its cap on the tier-2 floor at 14.0 while its
+  // tier-mates ran 15.2-17.1. Nobody authored that; it fell out of an
+  // under-promise. Measured, the difference was worth SEVEN POINTS of win rate
+  // (82% -> 89% on nothing but the length correction), and the whole tier's caps
+  // spanned 36% across nine rows that all play in 8.4-10.2 minutes. The full
+  // per-row table is in ROADMAP.md; the finding is that this column is a
+  // difficulty knob of the same order as `enemyMult` and reads as a label.
+  //
+  // So the floors stay — they are a safety net against a promise authored at one
+  // minute — and this asserts they are NET rather than TERM. Every one of the 24
+  // rows clears its floor today, which is what a safety limit should look like.
+  const pinned = REGIONS.filter((r) => r.targetLengthMin * HARD_CAP_RATIO <= HARD_CAP_MIN_BY_TIER[r.tier - 1]);
+  assert.deepEqual(pinned.map((r) => r.id), [],
+    `${pinned.map((r) => `${r.id} (t${r.tier}) advertises ${r.targetLengthMin}m, deriving `
+      + `${(r.targetLengthMin * HARD_CAP_RATIO).toFixed(1)}m, but the tier floor holds it at `
+      + `${HARD_CAP_MIN_BY_TIER[r.tier - 1]}m`).join('; ')} — so the number on the world map is `
+    + 'no longer the number that ends the battle. Either raise the promise to what the region '
+    + 'actually plays, or lower the floor deliberately and say why.');
+});
+
 test('...and the hard cap it derives stays under an hour', () => {
   // `hardCapMs` is the real clock. A player who fights to the cap has spent this
   // much of their evening on ONE region, win or lose.

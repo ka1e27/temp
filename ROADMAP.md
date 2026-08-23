@@ -43,21 +43,226 @@ a `--notwist` reading taken after this session is not comparable to one taken be
 
 ## ⇒⇒ WHERE TO RESUME THE RE-TUNE — READ THIS FIRST
 
+### ⏳ IN FLIGHT RIGHT NOW — the length column, and what it cost
+
+**`targetLengthMin` FOR TIERS 1-2 HAS BEEN AUTHORED FROM MEASUREMENT and the table is
+mid-correction. Two rows are knowingly out of band while their dials are bracketed.**
+If this session died here, this block is the whole state.
+
+The nine tier 1-2 promises were 6.5-10 minutes against measured win medians of 8.4-10.2
+— errors up to **-26%** (thornmoor advertising 6.5 for a battle it wins in 8.8). Every
+one is now within **2%** of its own measured median.
+
+**AND THAT WAS NEVER COSMETIC, BECAUSE THE PROMISE *IS* THE CLOCK.** `hardCapMs =
+max(tierFloor, targetLengthMin * 1.9)`, so nine rows that all play in 8.4-10.2 minutes
+were carrying hard caps from **14.0 to 19.0 — a 36% spread nobody authored**, and
+thornmoor's sat on the tier FLOOR purely because it under-promised. Measured, n=96 a
+row, matched seeds, nothing but the length moved:
+
+```
+row          cap             win%      per 1% of cap
+riverfen    18.1 -> 17.1    80 -> 77       -0.55
+ashford     19.0 -> 17.1    90 -> 89       -0.10
+ironwood    18.1 -> 16.1    92 -> 90       -0.18
+saltmere    14.3 -> 16.1    83 -> 86       +0.24
+kaldan      16.1 -> 19.0    70 -> 78       +0.44
+highmarch   17.1 -> 18.1    77 -> 76       -0.17   <- the one that reads as noise
+greywater   15.2 -> 17.1    73 -> 76       +0.23
+thornmoor   14.0 -> 17.1    82 -> 89       +0.32
+emberholt   15.2 -> 18.1    82 -> 86       +0.21
+```
+
+**Roughly +0.35 points per 1% of hard cap, monotone across eight of nine rows.** So
+`targetLengthMin` is a difficulty knob of the same order as `enemyMult`, and on kaldan a
+length edit alone was worth **+8 points** — more than any single dial step this pass has
+made. Anyone who treats this column as a label is re-tuning the campaign by accident.
+
+**THE CORRECTION MUST BE DIFFICULTY-NEUTRAL, and that is what decides each dial.**
+riverfen fell to 77 (floor 78) and was bracketed rather than guessed:
+
+```
+dial     1.82   1.84   1.86
+win%       88     81     77        local slope 3.5 then 2.0 pts/0.01
+```
+
+**1.84 ships, at 81% against a pre-change 80%** — 1.82's 88% would have smuggled an
+8-point difficulty CUT in under a promise fix. (A fifth independent demonstration that
+no slope constant sizes a move: 2.0-3.5 pts/0.01 here against the file's recorded ~1.8
+for small maps and ~1.0 campaign-wide.)
+
+**AND `HARD_CAP_MIN_BY_TIER` IS NOW INERT ACROSS ALL 24 ROWS** — thornmoor was the last
+one pinned to it. Every cap is `targetLengthMin * 1.9`, so the clock has exactly ONE
+author instead of two, which is what a safety floor should look like (the same shape as
+`maxRing` on the shipped Frontier board). `tests/battlelength.test.js` now asserts it:
+a row that falls back to its floor is a row whose advertised number has silently stopped
+ending its own battle, and nothing else in the tooling can see that — the simrunner's
+length gate only grades a region that plays LONGER than it claims.
+
+**thornmoor IS SETTLED AT 3.88 / 77%**, and its bracket is a cliff worth recording:
+
+```
+dial     3.77   3.86   3.88
+win%       89     84     77
+              0.56   3.50      <- pts per 0.01. SIX TIMES steeper in the last step.
+```
+
+3.86's 84% is the difficulty-neutral value (pre-change was 82) and it sits EXACTLY on the
+band ceiling with a cliff immediately above it. 3.88 ships instead: 11 above its floor and
+7 below its ceiling, the only value on this row with margin on both sides. That is a
+deliberate 5-point difficulty RISE rather than a neutral correction, recorded here as such.
+
+⚠ **thornmoor's documented PLATEAU did not survive the new clock** — it read 82% at both
+3.56 and 3.77 at the old 14.0 cap. **A plateau is a property of a row at a given clock,
+not of the row**, and every plateau written down in this project was measured against
+whatever cap that row carried at the time.
+
+**STILL OPEN: emberholt, 86% against an 84 ceiling, and SIX LEVERS ARE MEASURED DEAD —
+EVERY ONE OF THEM MAKES IT EASIER OR DOES NOTHING.** n=96 each, one variable at a time:
+
+```
+dial      3.88 / 3.93 / 4.05 / 4.20    86 / 90 / 88 / 84   flat across +0.32
+neutral      6 /    7 /    9           90 / 86 / 97        non-monotone
+enemyMix  [2,3,5] -> [3,3,4]           86 -> 93            a fort for a farm: EASIER
+develop      1.7 -> 1.8                86 -> 88            the whole legal headroom
+castleGate                             ~1 pt over 0.30-0.60, already recorded ON THIS ROW
+promise                                9.5 IS its measured win median
+```
+
+`siteCounts.player` 4 -> 3 is refused by `campaign.test.js` ("the war gets bigger"), so it
+is not available either.
+
+**THAT PATTERN IS THE DIAGNOSIS, not a run of bad luck.** Everything that makes the enemy
+stronger or better developed makes this row EASIER, which is the regime CLAUDE.md already
+records under C1 ("a harder region made the bot win more"): a better-defended enemy gives
+the bot better buildings to capture and makes it finish FASTER. And emberholt loses 0-3
+battles in 96 at every setting — the enemy never beats this bot here, so its win rate is
+measuring what fraction FINISH.
+
+One probe left (`enemyMix [2,3,6]`, a twelfth enemy site, worktree `pE2`). If that is flat
+too, **the honest outcome is to ship 86 and say so**: 0.6 SEM over an inclusive ceiling on
+a row with no working lever, where the only remaining move would be to under-state its
+length — the exact hazard this whole item exists to document.
+
+Its signature is the same at every dial: ~11 non-wins in 96, of which **~9 are timeouts
+while AHEAD and 1-3 are defeats**. The enemy does not beat this bot on emberholt at any
+dial in the range — a stronger one just makes the battle LONGER (win median rose 9.6 ->
+10.5 across the sweep while the win rate did not move). So the lever has to cost the bot
+TIME, and the two candidates left are running at n=96: `enemyMix [2,3,5] -> [3,3,4]` (one
+farm becomes a fort — more wall to crack, targeting the signature directly) in worktree
+`pE1`, and `develop 1.7 -> 1.8` (gallowmoor's, and the whole legal headroom) in `pE2`.
+If both are flat, the honest outcome is to ship 86 and say so — it is 0.6 SEM over an
+inclusive ceiling on a row with no working lever, and that is a finding rather than a
+failure.
+
+⚠ **thornmoor's documented PLATEAU did not survive the new clock** — it read 82% at both
+3.56 and 3.77 at the old 14.0 cap, and at 17.1 the dial bites again at 0.56 pts/0.01.
+**A plateau is a property of a row at a given clock, not of the row.** That is worth more
+than the number: every plateau recorded in this file was measured against whatever cap
+that row carried at the time.
+
+**emberholt moved the wrong way, and its signature says why**: 10 non-wins in 96, of
+which **7 are timeouts while AHEAD and 0 are timeouts while behind**. A stronger enemy
+does not convert those. So both rows are now being measured on `siteCounts.neutral`
+instead — the lever this session confirmed live at tier 2 in BOTH directions (ironwood
+4->5 read 98->90, greywater 7->6 read 63->75) — at their **shipped dials**, which leaves
+the `enemyMult` column untouched:
+
+```
+thornmoor  neutral 7 -> 8   (total 21 -> 22, equalling emberholt's; non-decreasing permits equal)
+emberholt  neutral 7 -> 9   (total 22 -> 24, against gallowmoor's 28)
+```
+
+Running at n=96 in worktree `pT`. If neutral overshoots, `thornmoor 3.86` is a measured
+fallback at 84 and emberholt backs off to 8.
+
+**THE OTHER THREE TIER-2 ROWS ARE LEFT ALONE DELIBERATELY.** kaldan also gained (+8, to
+78) but 78 is inside 66-84, and the contract this table owes is `WIN_BAND`, not "identical
+to yesterday". Correcting a row that is in band would be re-tuning tier 2's difficulty
+under cover of a promise fix — the exact thing riverfen's bracket was chosen to avoid.
+
+### ⏳ ALSO IN FLIGHT
+
+- **⚠ nightharrow's BRACKET IS NOT A BRACKET — the midpoint reads HIGHER THAN BOTH ENDS,
+  so the row cannot be tuned at n=48 at all. LEFT AT 5.05.**
+
+  ```
+  dial     5.05   5.12   5.20
+  win%       42     56     25
+  all-med  34.2m  29.2m  34.2m     <- 5.05 and 5.20 are pinned to the 34.2m CAP
+  losses      1      0      3      <- out of 48. The enemy never beats this bot.
+  ```
+
+  The three probes were checked for contamination before this was believed, and they are
+  clean: only `regions.retune.js` (a comment-only file nothing imports) separates the base
+  commits, and a direct `buildBattleConfig` diff across the tier 1-2 length change is
+  **byte-identical for gallowmoor and thanescar** — so region independence holds and the
+  readings are comparable. The non-monotonicity is real.
+
+  The explanation is in the `losses` column: **1, 0 and 3 defeats out of 48.** This row is
+  clock-bound, so its "win rate" is measuring what fraction of attempts FINISH, and that
+  is a far noisier quantity than whether they are won. 5.05 ships because it is in band
+  (42 against an inclusive 42 ceiling) and because shipping 5.20 on a broken bracket would
+  be the interpolation this file forbids. **A future pass needs n>=240 on this row, or a
+  lever that is not the dial.**
+- **TIER 4's HONEST LENGTHS — three of four in, and the CLOCK IS A REAL LEVER on the two
+  rows that needed one.** n=48, worktree `p4`, promises set to each row's own measured win
+  median:
+
+  ```
+  row          promise    cap             win%       pts per 1% of cap   verdict
+  thanescar    16 -> 12   30.4 -> 22.8    52 -> 50        0.08           ok
+  blackspire   16 -> 13.5 30.4 -> 25.7    52 -> 46        0.40           ok
+  ironcrown    16 -> 14.5 30.4 -> 27.6    77 -> 71        0.67           still over
+  obsidian     16 -> 13   30.4 -> 24.7    69 -> 65        0.23           still over
+  ```
+
+  **SHIPPED.** All four promises are now within 2% of their measured win medians, against
+  errors of +12% to +34% before.
+
+  **thanescar took the biggest cut and moved least**, which is the mechanism: the bite is
+  how many of a row's WINS live in the window you remove, and thanescar wins in 11.9
+  minutes with almost nothing between 22.8 and 30.4 to lose. So this column has no
+  constant either — 0.08 to 0.67 across one tier, measured the same afternoon.
+
+  **ironcrown -6 is the first thing that has moved it at all**, against four levers
+  measured dead (dial, neutral, enemyMix, board). It is still 15 over its ceiling, so this
+  is a contribution rather than the answer — but `targetLengthMin` was never among the four
+  and should be on the list now. Tiers 5-6 are deliberately NOT next: their all-medians sit
+  exactly ON their caps (ravensmarch 30.4/30.4, gravenreach 32.3/32.3, nightharrow
+  34.2/34.2, cinderwatch 35.1/35.1), so there the promise is load-bearing difficulty and
+  correcting it is a re-tune, not a cleanup.
+
+**TIERS 3-6 ARE DELIBERATELY NOT TOUCHED YET, and tier 4 is the one worth doing next.**
+Tier 3 was authored honestly earlier this session. Tiers 5-6 are **clock-bound** — their
+all-medians sit exactly ON their caps (ravensmarch 30.4/30.4, gravenreach 32.3/32.3,
+nightharrow 34.2/34.2, cinderwatch 35.1/35.1) — so their length column is load-bearing
+difficulty and correcting it is dangerous. **Tier 4 is not**: all four over-promise by
+12-34% (thanescar wins in 11.9 and advertises 16) with all-medians of 16.0-21.8 against
+a 30.4 cap, so it is the one tier where the promise can be corrected without the clock
+fighting back. And it points the RIGHT WAY for the two rows still over their ceiling —
+tightening ironcrown's and obsidian's caps pushes them DOWN. `targetLengthMin` was never
+among the four levers measured dead for those two.
+
+
 **THE RE-TUNE IS DONE: 22 OF 24 ROWS IN BAND** (twelve were out). Only ironcrown and
 obsidian remain, and their gap is measured to be in the GENERATED MAP rather than in any
 authored column — see below. That is a design decision, not a tuning one.
 
 ```
-tier 1  78-92   riverfen 80   ashford 90   ironwood 92   saltmere 83      SHIPPED  ok
-tier 2  66-84   kaldan 70   highmarch 77   greywater 73
-                thornmoor 82   emberholt 82                              SHIPPED  ok
+tier 1  78-92   riverfen 81   ashford 89   ironwood 90   saltmere 86      SHIPPED  ok
+tier 2  66-84   kaldan 78   highmarch 76   greywater 76
+                thornmoor 77   emberholt 86                              emberholt OVER
 tier 3  50-72   gallowmoor 54  sunder 60  vaelstrand 60
                 duskfell 69  karrowmere 52                               SHIPPED  ok
-tier 4  34-56   thanescar 52   blackspire 52                             SHIPPED  ok
-                ironcrown 77   obsidian 69                               STILL OVER
+tier 4  34-56   thanescar 50   blackspire 46                             SHIPPED  ok
+                ironcrown 71   obsidian 65                               STILL OVER (was 77/69)
 tier 5  22-42   ravensmarch 33  gravenreach 35  nightharrow 42           SHIPPED, see below
 tier 6  18-36   stormhalt 25   cinderwatch 23   widowsgate 31            SHIPPED  ok
 ```
+
+*(Tiers 1, 2 and 4 moved when `targetLengthMin` was authored from measurement — see the
+block below. ironcrown and obsidian came DOWN 6 and 4 points on that alone, which is the
+first thing that has moved either of them.)*
 
 *(Tier 3's figures are AFTER its advertised lengths were corrected, which tightened its
 hard caps and cost 0-7 points a row — see item 3 below. Every other tier's promise was
