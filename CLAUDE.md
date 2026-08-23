@@ -5054,6 +5054,36 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   where the table no longer holds, so all four are the re-tune's acceptance test
   rather than separate work — **but two of them read like independent defects.**
 
+  **⇒ `loadoutdominance` IS FIXED AND GREEN.** It was asserting into its own noise — see
+  "The dominant-loadout test was asserting into its own noise". It runs at N=48 now and
+  passes in 695s, against 1795s while it was red. The exploit itself is alive and
+  unchanged: **+27 on gallowmoor at n=48**, against a healthy 54% baseline — the first
+  time in this re-tune the gap has been readable against an in-band row at all. The
+  paragraph below is the state it was found in and is kept for its lesson.
+
+  **⚠ `tactics` IS DIAGNOSED, AND IT IS NOT A WINDOW PROBLEM.** Its one red test asserts
+  `riding.length >= 10` and reads **6**. `observe()` runs to `hardCapTicks`, so the
+  obvious suspect was the length correction shrinking the observation window — it is not.
+  Instrumented on the real pipeline (gallowmoor, seed 1000, the test's own weights and
+  think cadence):
+
+  ```
+  cap 17100 ticks, battle ENDED at 9986 in a WIN — the window never bound
+  2230 player squads launched, 6 of them carried a rider
+  those six went out at ticks 1, 1, 81, 81, 181, 181
+  ```
+
+  **Every rider squad launches in the first eighteen seconds and there is never another
+  for the remaining 99.8% of the battle.** 55 outriders land, the bot commits all of them
+  in six detachments at once, and **no player site trains outriders** — the beachhead's
+  yards are militia and spearmen — so six is all there will ever be. The threshold asks
+  for more squads than the landing force can be divided into under the bot's own batching,
+  and it is denominated in the expedition budget, which the ram slot reprice and every
+  `EXPEDITION` change since have moved. Its sibling assertions — a rider rides ALONG
+  rather than being benched, and the column is no slower for it — all pass, and those are
+  the claims the test exists to make. **Left alone deliberately**: the fix is a judgement
+  about a count threshold, not about the bot.
+
   **`loadoutdominance` is the trap.** Its own failure message offers two readings and
   invites the wrong one: *"Either somebody FIXED the dominant loadout — in which case
   re-take these numbers, retire this framing and close the bullet in CLAUDE.md — or

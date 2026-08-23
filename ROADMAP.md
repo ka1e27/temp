@@ -43,11 +43,11 @@ a `--notwist` reading taken after this session is not comparable to one taken be
 
 ## ⇒⇒ WHERE TO RESUME THE RE-TUNE — READ THIS FIRST
 
-### ⏳ IN FLIGHT RIGHT NOW — the length column, and what it cost
+### ✅ CLOSED — the length column, and what it cost
 
-**`targetLengthMin` FOR TIERS 1-2 HAS BEEN AUTHORED FROM MEASUREMENT and the table is
-mid-correction. Two rows are knowingly out of band while their dials are bracketed.**
-If this session died here, this block is the whole state.
+**`targetLengthMin` IS NOW AUTHORED FROM MEASUREMENT for tiers 1-4** (tier 3 earlier in
+this pass, tiers 1-2 and 4 here). Tiers 5-6 are deliberately excluded and the reason is
+at the end of this block. Shipped, tested and pushed; what follows is the record.
 
 The nine tier 1-2 promises were 6.5-10 minutes against measured win medians of 8.4-10.2
 — errors up to **-26%** (thornmoor advertising 6.5 for a battle it wins in 8.8). Every
@@ -197,7 +197,7 @@ fallback at 84 and emberholt backs off to 8.
 to yesterday". Correcting a row that is in band would be re-tuning tier 2's difficulty
 under cover of a promise fix — the exact thing riverfen's bracket was chosen to avoid.
 
-### ⏳ ALSO IN FLIGHT
+### ALSO SETTLED IN THE SAME PASS
 
 - **⚠ nightharrow's BRACKET IS NOT A BRACKET — the midpoint reads HIGHER THAN BOTH ENDS,
   so the row cannot be tuned at n=48 at all. LEFT AT 5.05.**
