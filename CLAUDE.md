@@ -5062,13 +5062,28 @@ buttons read `–` for the whole battle because a fresh save has no relics.
      points easier, and the whole difference was 15 neutral sites against 20. Widening
      it to 19 moved it 58% → 42% with nothing else touched.
 
-     **⚠ THIS NO LONGER REPRODUCES — THE LEVER IS SPENT.** Re-measured on ironcrown
-     itself, n=24, dial untouched, neutral **19 → 23**: it read **71% before and 71%
-     after**. obsidian at 20 → 24 moved 69% → 67%. So the recorded "-4 points a site" is
-     now **0 to -0.5 a site**, and the four extra sites bought nothing. The original
-     figure predates both `--richyards` and the melee layer, and a bot that converts its
-     own gold properly simply eats a bigger neutral pool. **Do not reach for this lever
-     on tier 4-5 rows**; it is the fifth stale measurement found in this file.
+     **⚠ IT SATURATES, AND ironcrown IS ALREADY PAST THE KNEE.** Everything measured on
+     that row, by (neutral, dial), n=24:
+
+     ```
+     neutral   dial    win%
+        15     5.00     75
+        19     5.00     67      <- shipped
+        19     4.73     71
+        23     4.73     71      <- +4 sites bought NOTHING
+     ```
+
+     **The SIGN above is right — more neutral is harder — but the size is not.** It is
+     worth about two points a site between 15 and 19 and **zero above 19**, against the
+     recorded "-4 a site". obsidian at 20 → 24 read 69% → 67%, and ravensmarch at 18 → 22
+     read 42% → 38%, both consistent with a lever that is nearly spent by 19-20. So it
+     cannot make tier 4's late rows harder — they are on the flat part — while it remains
+     live on a row that sits below the knee.
+
+     *(A cross-sectional reading of tier 4 briefly suggested the opposite sign, because
+     the two rows with 19-20 neutral also read easier. That was n=24 noise plus an
+     untested causal leap; the direct experiment above settles it. Run the one-line test
+     before publishing the correlation.)*
   4. **`targetLengthMin` derives `hardCapMs`, so re-authoring the promise re-tunes the
      battle.** Honest lengths cut tier 2's caps by 15–32% and cost that tier 2–8 points
      — which is correct (a region should not be allowed three times the time it

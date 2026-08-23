@@ -63,9 +63,10 @@ tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOV
 
 **The five rows still out, and what is known about each:**
 
-- **ironcrown, obsidian** — ⇒ **THE CAUSE IS THE NEUTRAL POOL, AND IT IS VISIBLE IN THE
-  TABLE.** Tier 4's four rows are IDENTICAL in every column — 17x13, enemy 14, player 4,
-  mix [2,4,7], gate 0.60, develop within 0.06 — except the dial and `neutral`:
+- **ironcrown, obsidian** — ⚠ **A DIAGNOSIS WAS PUBLISHED HERE AND THEN FALSIFIED BY ITS
+  OWN EXPERIMENT. Read the correction under the table before the table.** Tier 4's four
+  rows are IDENTICAL in every column — 17x13, enemy 14, player 4, mix [2,4,7], gate 0.60,
+  develop within 0.06, and even the same two silhouettes — except the dial and `neutral`:
 
   ```
   region        dial   neutral   slope   win%
@@ -75,18 +76,37 @@ tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOV
   obsidian      5.05      20      0.15     67   over
   ```
 
-  **Perfectly monotone, and it beats the dial.** More neutral makes the row both EASIER
-  and LESS RESPONSIVE — and note the two easy rows carry the HIGHER dials, so four
-  neutral sites outweigh +0.05 of `enemyMult` in the wrong direction. The mechanism is
-  that free ground lets the player grow without fighting, so enemy strength matters
-  less; that is also why RAISING neutral did nothing (19 -> 23 read 71% -> 71%): the
-  effect is saturated at the top. **The lever runs DOWNWARD**, to blackspire's 15, and
-  the non-decreasing TOTAL permits it exactly — both rows fall to 33, equal to
-  blackspire's 33.
+  That pattern is monotone and it is a CORRELATION ACROSS FOUR ROWS AT n=24, where the
+  standard error is about ten points. It read as "more neutral makes a row easier and
+  less responsive", and the direct experiment says the opposite.
 
-  **⚠ THIS REVERSES CLAUDE.md's "more neutral is HARDER" AT TIER 4.** That claim was
-  measured on greywater at tier 2. Whatever is true there, at tier 4 the sign is the
-  other way and the effect is large.
+  **THE EXPERIMENT: ironcrown's neutral 19 -> 15, dial held at 5.00, n=24 — 67% -> 75%.**
+  Cutting the pool made it EASIER, so **more neutral is HARDER**, which is what CLAUDE.md
+  said all along. The cross-sectional reading was backwards, and publishing it before
+  running the one-line test that checks it was the mistake.
+
+  **What the pooled evidence actually supports is SATURATION.** Everything measured on
+  ironcrown, by (neutral, dial):
+
+  ```
+  neutral   dial    win%
+     15     5.00     75
+     19     5.00     67      <- shipped
+     19     4.73     71
+     23     4.73     71      <- +4 sites bought NOTHING
+  ```
+
+  So the pool is worth roughly two points a site between 15 and 19 and **nothing at all
+  above 19**. That still closes the lever — ironcrown already sits on the flat part, so
+  there is no room to make it harder this way — but it closes it for the opposite reason
+  to the one written here first, and it leaves CLAUDE.md's tier-2 sign intact.
+
+  **AND THE 21-POINT GAP TO BLACKSPIRE IS STILL UNEXPLAINED.** With neutral controlled at
+  15, blackspire reads 54% and ironcrown 75% on the same board, the same mix, the same
+  silhouette (`choke`) and a dial 0.05 apart. That is ~1.5 SEM at this n, so it may be
+  noise — and if it is not, it is a property of the generated LAYOUT rather than of any
+  column, which no per-region dial can reach. **Re-take both at n>=96 before spending
+  anything on this row.**
 
   Three other levers are measured dead here and should not be re-spent: the dial (0.24
   and 0.15 pts/0.01, so they need +0.75 and +1.07, which ravensmarch's floor forbids),
