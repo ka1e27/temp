@@ -100,7 +100,16 @@
 //     obsidian     4.78   5.05        67      34-56    STILL OVER — see below
 //     ravensmarch  4.80   5.05        29      22-42    ok
 //     gravenreach  4.93   5.05        33      22-42    ok
-//     nightharrow / stormhalt  -> 5.05, monotonicity only, unmeasured there
+//     nightharrow  4.94   5.05         -      22-42    monotonicity only
+//     stormhalt    4.94   5.60        25      18-36    ok
+//     cinderwatch  5.06   5.65        31      18-36    ok
+//     widowsgate   5.07   5.70        31      18-36    ok
+//
+// TIER 6 IS FREE TO RISE — nothing sits above it — so it took a real bracket:
+// stormhalt read 50% at 4.94, 25% at 5.60 and 6% at 6.20, slope 0.38. Its
+// tier-mates went to 5.65/5.70 at that slope and both landed at 31%.
+// `widowsgate` is the incursion arena, but a rung OVERRIDES `enemyMult` with
+// INCURSION.baseDial, so the ladder does not inherit this move.
 //
 // ⚠ THE PER-ROW SLOPE VARIES THREEFOLD, so no constant sizes a move. Points of
 // win rate per 0.01: karrowmere 0.67, ravensmarch 0.53, gallowmoor 0.47,

@@ -198,14 +198,14 @@ export const REGIONS = Object.freeze([
   // attempts. Full reasoning and the current numbers: ./regions.provenance.js,
   // "TIER 6", and CLAUDE.md ("Still open" -> the campaign re-tune, third pass).
   T('stormhalt', 'Stormhalt', 6, [6, -1], ['ravensmarch', 'gravenreach', 'cinderwatch'],
-    5.05, 20, 15, [[2, 5, 9], 28, 5], 2.28, 0.6, 118, 16,
+    5.60, 20, 15, [[2, 5, 9], 28, 5], 2.28, 0.6, 118, 16,
     'A storm coast fortress fed from the sea. Five attacks at once, and every one of them means it.'),
   T('cinderwatch', 'Cinderwatch', 6, [6, 0],
     ['gravenreach', 'nightharrow', 'stormhalt', 'widowsgate'],
-    5.06, 20, 15, [[2, 5, 9], 30, 5], 2.30, 0.6, 147, 17,
+    5.65, 20, 15, [[2, 5, 9], 30, 5], 2.30, 0.6, 147, 17,
     'They burned their own farms rather than leave them standing. Take the ashes and hold them.'),
   T('widowsgate', 'The Widow’s Gate', 6, [6, 1], ['nightharrow', 'cinderwatch'],
-    5.07, 21, 16, [[3, 5, 9], 32, 5], 2.32, 0.6, 183, 18,
+    5.70, 21, 16, [[3, 5, 9], 32, 5], 2.32, 0.6, 183, 18,
     'The last gate, two banners behind it, and no throne left to retreat to. Finish it.'),
 ]);
 
