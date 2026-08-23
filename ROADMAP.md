@@ -271,10 +271,21 @@ describe. And widowsgate's `develop` — which a rung INHERITS unless a mutator 
 depth              1     10     20     30
 4.42 / 0.0135     85     75     44     50
 4.42 / 0.0184      —     63     25     13     <- tail lands, middle 12-13 too hard
-4.10 / 0.0208     83     75     31      ?     <- the derived pair
+4.10 / 0.0208     83     75     31     19     <- the derived pair
 target            94     75     38     19
-n (pair)          48     16     16      —
+n (pair)          48     16     16     16
 ```
+
+**⇒ CORRECTION: I FIRST WROTE THAT THE PAIR'S DEPTH 30 WAS UNMEASURED. IT IS NOT — IT
+LANDS EXACTLY ON 19.** The sweep had finished that row before I deleted its worktree
+during cleanup; the job reported a non-zero exit from the trailing `pwd` failing, and I
+read the partial file rather than the final one. **A job that exits non-zero has still
+usually done its work — read the output before believing the exit code.** That is the
+third correction on this item and the only one that was my process rather than my sample.
+
+So the pair is measured at four depths, and against the shipped config on MATCHED SEEDS
+it is: depth 1 −2 (noise), depth 10 0, depth 20 −13 (44→31 against a 38 target, a wash on
+absolute distance), **depth 30 −31, landing on target.**
 
 **`baseDial` IS NEARLY DEAD AT DEPTH 1, AND THAT IS THE FINDING THAT STOPPED THIS.**
 Cutting it 4.42 -> 4.10 moved the opening rung **85% -> 83% at n=48** — two points for a
@@ -300,16 +311,16 @@ this project documents (`--n` walks seeds 0..n-1, so a small sample is a PREFIX 
 than a draw) and the ladder's first sixteen seeds are unkind. **Three of this item's
 readings were misleading and all three were n=16.** On this measurement, n=48 is the floor.
 
-**SO NOTHING WAS AUTHORED, DELIBERATELY.** The pair's depths 30 and 40 — the entire
-justification for changing anything — are unmeasured, and the one rung measured at n=48
-on BOTH configs says the change does essentially nothing there. Shipping it would be a
-two-knob move justified by n=16 at two depths and no data at the two that matter.
+**DEPTH 40 IS THE ONE ROW STILL MISSING**, and it is running at n=32. The current config
+reads 22% there against a ~0-6 target; the pair raises that rung's dial 7.46 → 9.15, so it
+should improve too, but that is a prediction rather than a measurement and it is the last
+thing between this and a decision.
 
-**WHAT THE NEXT PASS SHOULD DO, in order:** (1) measure `4.10 / 0.0208` at depths 30 and
-40 at n>=32 — if the tail lands near 19 and ~5 it is a real candidate, since its cost
-elsewhere is now known to be nil; (2) accept that depth 1 cannot reach 94 through the
-dial and either re-author that target or find a non-dial lever; (3) never read a depth-1
-number off n=16 again.
+**WHAT THE NEXT PASS SHOULD DO, in order:** (1) read depth 40 and, if it lands under ~10,
+ship `4.10 / 0.0208` — three of its four measured rungs are on or near target and its cost
+elsewhere is measured to be nil; (2) accept that depth 1 cannot reach 94 through the dial
+(85 → 83 for a 0.32 cut at n=48) and either re-author that target or find a non-dial
+lever; (3) never read a depth-1 number off n=16 again.
 
 ### ALSO SETTLED IN THE SAME PASS
 

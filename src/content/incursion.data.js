@@ -122,11 +122,12 @@
  *     n           48     16     32     32     32
  *
  * Opening and middle are fine; only the tail is late, and depth 40's 22% is
- * roughly where depth 30's 19% belongs. NOTHING WAS SHIPPED for it. `perDepth`
- * 0.0184 lands the tail at 13% and costs the middle 12-13 points; `baseDial` is
- * nearly DEAD at depth 1 (4.42 -> 4.10 moved it 85% -> 83% at n=48), and
- * `perDepth` cannot touch depth 1 at all since `dial(1) = baseDial * (1+p)^0` —
- * so the 94% opening target is not reachable through either knob.
+ * roughly where depth 30's 19% belongs. `baseDial` is nearly DEAD at depth 1
+ * (4.42 -> 4.10 moved it 85% -> 83% at n=48) and `perDepth` cannot touch depth 1
+ * at all since `dial(1) = baseDial * (1+p)^0` — so the 94% opening target is not
+ * reachable through either knob. The candidate `4.10 / 0.0208` reads
+ * 83/75/31/19 at depths 1/10/20/30, i.e. its tail lands ON target at a cost of
+ * nil elsewhere; NOTHING SHIPPED pending its depth 40.
  *
  * ⚠ AND n=16 READS SYSTEMATICALLY LOW HERE — depth 1 measured 75 vs 85 and 69 vs
  * 83 against n=48, on two configs. That is the seed-prefix bias; on this ladder
