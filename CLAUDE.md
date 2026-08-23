@@ -5046,6 +5046,14 @@ buttons read `–` for the whole battle because a fresh save has no relics.
      header already said it did.** Ironcrown sat on obsidian's dial reading thirteen
      points easier, and the whole difference was 15 neutral sites against 20. Widening
      it to 19 moved it 58% → 42% with nothing else touched.
+
+     **⚠ THIS NO LONGER REPRODUCES — THE LEVER IS SPENT.** Re-measured on ironcrown
+     itself, n=24, dial untouched, neutral **19 → 23**: it read **71% before and 71%
+     after**. obsidian at 20 → 24 moved 69% → 67%. So the recorded "-4 points a site" is
+     now **0 to -0.5 a site**, and the four extra sites bought nothing. The original
+     figure predates both `--richyards` and the melee layer, and a bot that converts its
+     own gold properly simply eats a bigger neutral pool. **Do not reach for this lever
+     on tier 4-5 rows**; it is the fifth stale measurement found in this file.
   4. **`targetLengthMin` derives `hardCapMs`, so re-authoring the promise re-tunes the
      battle.** Honest lengths cut tier 2's caps by 15–32% and cost that tier 2–8 points
      — which is correct (a region should not be allowed three times the time it
