@@ -113,6 +113,14 @@
  * Recorded as an open observation rather than tuned, the same way `split`'s
  * uniform -6 is in CLAUDE.md: re-take it at n>=96 before spending a change.
  *
+ * ⚠ AND IT FLATTENED AGAIN: at n=16 the ladder now reads 75/100/88/75/75/44/50
+ * across depths 1/2/3/5/10/20/30 — **depth 30 is HIGHER than depth 20, so there
+ * is no wall left at all** — with win medians 3-5x the ones above. The lever is
+ * `perDepth` and not `baseDial` this time, and the doubling floor does not bind
+ * in that direction. Full table, the two measured causes and the starting
+ * bracket are in ROADMAP.md under the incursion entry; n=16 is a screen, so do
+ * not author a dial from it.
+ *
  * `sealed` is live here too: the campaign's own `GATE_CLAMP` plateaus at 0.60
  * regardless of what a region's raw `castleGateFrac` was authored as, so the
  * mutator's 0.72 is a genuine +0.12 whatever the arena's other columns do.

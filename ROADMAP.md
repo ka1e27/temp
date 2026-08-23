@@ -197,6 +197,47 @@ fallback at 84 and emberholt backs off to 8.
 to yesterday". Correcting a row that is in band would be re-tuning tier 2's difficulty
 under cover of a promise fix — the exact thing riverfen's bracket was chosen to avoid.
 
+### ⚠ THE INCURSION LADDER HAS NO WALL — measured, and the stale warning is retired
+
+CLAUDE.md carries a warning that the ladder **REGRESSED** (38% at depth 1 against a 94%
+target) and forbids re-authoring `baseDial` "until the campaign is back in band, because
+the arena is a campaign region and its row is mid-search". Widowsgate now reads 31% in an
+18-36 band, so that precondition is finally met and the ladder was re-taken.
+`--incursion=1,2,3,5,10,20,30 --n=16`:
+
+```
+depth      1    2    3    5   10   20   30
+win%      75  100   88   75   75   44   50
+win-med  9.6 11.7 18.0  7.9 11.9 14.3 22.4   (minutes)
+target    94   ~92  ~90  88   75   38   19
+recorded  98    -    -   96   69   46   17   (incursion.data.js, n=48)
+```
+
+**THE "REGRESSION" WARNING IS STALE — depth 1 is 75%, not 38%** — and the campaign
+re-tune restored it with `baseDial` never being touched, which is the strongest available
+confirmation of that warning's own diagnosis (the arena's row had moved underneath it).
+
+**But the new problem is the other end: depth 30 reads 50% against a 19% target and is
+HIGHER than depth 20's 44%, so the curve has stopped falling.** The runner's verdict line
+prints "wall at depth > 30" because it has nowhere left to look. Depths 10 and 20 are near
+target; it is the two ENDS that moved, which is a curve going flat rather than a curve
+moving — the same shape the ram slot reprice produced once already.
+
+**TWO CAUSES ARE MEASURED RATHER THAN GUESSED, and both are the arena coupling.** The win
+MEDIANS are **3-5x** the recorded ones at every depth (9.6m against 2.1m at depth 1), so a
+rung is simply not the battle those numbers describe any more. And widowsgate's `develop`
+— which a rung INHERITS unless a mutator overrides it — fell **3.3 -> 2.32** in the
+campaign re-tune. That is the ladder's difficulty silently tracking a campaign region it
+is not otherwise part of, exactly as `incursion.data.js`'s own header warns.
+
+**NOT AUTHORED, DELIBERATELY: n=16 is a screen** (SEM ~11 points) against this project's
+own n>=96 rule for tuning. What it establishes is the SHAPE, not a value. When it is
+re-taken, the knob is **`perDepth`, not `baseDial`** — and for once the doubling floor
+does not bind, because raising `perDepth` makes `(1+perDepth)^59` LARGER and 0.0135
+already clears it at 2.21. `baseDial` is the wrong lever because the opening rungs are if
+anything already too hard and raising it makes them worse while barely touching the tail.
+Solving `4.42 * (1+p)^29 = 7.5` gives **p ~ 0.0184** as the starting bracket.
+
 ### ALSO SETTLED IN THE SAME PASS
 
 - **⚠ nightharrow's BRACKET IS NOT A BRACKET — the midpoint reads HIGHER THAN BOTH ENDS,
