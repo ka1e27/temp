@@ -132,11 +132,33 @@ for the same reason: the dial there buys failure mode, not win rate.
    already measured (gallowmoor 0.47, sunder 0.26, vaelstrand 0.29, thanescar 0.38,
    blackspire 0.46, ironcrown 0.24, obsidian 0.15). Expect two or three rows to miss and
    need bisecting; expect ironcrown and obsidian to need the neutral lever.
-3. **Then, and only then, re-author `targetLengthMin`** (item #108). It derives
-   `hardCapMs`, so it changes the battle it describes — authoring it before the dials
-   settle guarantees throwing it away. The numbers it wants are already measured: real
-   win medians run ~8.6 / 9.4 / 13.6 / 14 minutes across tiers 1-4 against a promise
-   column of 7.5-10 / 6.5-9 / **19-20** / 16.
+3. **Then, and only then, re-author `targetLengthMin`** (item #108). **Every number it
+   needs is now measured at the SHIPPED dials** — win median against what the row
+   currently promises:
+
+   ```
+   gallowmoor  14.7 / 20     thanescar   11.6 / 16     ravensmarch 16.4 / 16
+   sunder      18.0 / 20     blackspire  11.9 / 16     gravenreach 11.9 / 17
+   vaelstrand  12.7 / 20     ironcrown   14.3 / 16     nightharrow ~18  / 18
+   duskfell    14.4 / 19     obsidian    10.8 / 16     stormhalt   20.3 / 16
+   karrowmere  16.2 / 19                               cinderwatch 17.8 / 17
+                                                       widowsgate  12.5 / 18
+   ```
+
+   **⚠ IT STILL CANNOT BE DONE FIRST, for two independent reasons.**
+   `battlelength.test.js` asserts the longest advertised battle is in the LAST tier, and
+   it compares maxima — so it passes only once tier 6 holds the strict maximum, which
+   needs tier 6's dials settled first (stormhalt's 20.3m win median would justify 20,
+   the column's own ceiling). And the column derives `hardCapMs`, so authoring it
+   **changes the battles it describes**: gallowmoor's cap would fall from
+   `max(17, 20 x 1.9)` = 38 minutes to `max(17, 15 x 1.9)` = 28.5, which turns some of
+   its slower wins into timeouts and moves the 60% just shipped. Budget a re-confirmation
+   sweep of tiers 3-4 immediately after, not as an optional extra.
+
+**VERIFIED AFTER SHIPPING TIERS 1-5:** 130 test files, **1,332 of 1,333 tests pass**. The
+single failure is `battlelength`'s tier-3 bulge — item #108 above, deferred on purpose.
+`npm run check` clean, and `tools/smoke.mjs` passes all 24 steps in a real browser against
+the shipped table.
 
 **AND ONE THING THAT IS NOT A DIAL PROBLEM AT ALL.** Tier 5 is in band because battles
 run out of CLOCK, not because the enemy wins: every all-median sits exactly on the hard
