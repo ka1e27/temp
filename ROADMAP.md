@@ -43,9 +43,6 @@ a `--notwist` reading taken after this session is not comparable to one taken be
 
 ## ⇒⇒ WHERE TO RESUME THE RE-TUNE — READ THIS FIRST
 
-**Measured state of all 24 rows.** Tiers 1-2 are SHIPPED and confirmed; the rest is
-screened but not moved.
-
 **THE RE-TUNE IS DONE: 22 OF 24 ROWS IN BAND** (twelve were out). Only ironcrown and
 obsidian remain, and their gap is measured to be in the GENERATED MAP rather than in any
 authored column — see below. That is a design decision, not a tuning one.
@@ -54,15 +51,19 @@ authored column — see below. That is a design decision, not a tuning one.
 tier 1  78-92   riverfen 80   ashford 90   ironwood 92   saltmere 83      SHIPPED  ok
 tier 2  66-84   kaldan 70   highmarch 77   greywater 73
                 thornmoor 82   emberholt 82                              SHIPPED  ok
-tier 3  50-72   gallowmoor 60  sunder 60  vaelstrand 67
-                duskfell 71  karrowmere 54                               SHIPPED  ok
+tier 3  50-72   gallowmoor 54  sunder 60  vaelstrand 60
+                duskfell 69  karrowmere 52                               SHIPPED  ok
 tier 4  34-56   thanescar 52   blackspire 52                             SHIPPED  ok
                 ironcrown 77   obsidian 69                               STILL OVER
 tier 5  22-42   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
 tier 6  18-36   stormhalt 25   cinderwatch 31   widowsgate 31            SHIPPED  ok
 ```
 
-**The five rows still out, and what is known about each:**
+*(Tier 3's figures are AFTER its advertised lengths were corrected, which tightened its
+hard caps and cost 0-7 points a row — see item 3 below. Every other tier's promise was
+left alone.)*
+
+**THE TWO ROWS STILL OUT — and they are one problem, not two:**
 
 - **ironcrown, obsidian** — ⚠ **A DIAGNOSIS WAS PUBLISHED HERE AND THEN FALSIFIED BY ITS
   OWN EXPERIMENT. Read the correction under the table before the table.** Tier 4's four
