@@ -46,23 +46,36 @@ a `--notwist` reading taken after this session is not comparable to one taken be
 **Measured state of all 24 rows.** Tiers 1-2 are SHIPPED and confirmed; the rest is
 screened but not moved.
 
+**ALL OF TIERS 1-5 IS SHIPPED. Nineteen of twenty-four rows are in band** (was twelve
+out). What remains is tier 6 entire, plus ironcrown and obsidian.
+
 ```
-tier 1  78-92   riverfen 80   ashford 90   ironwood 92   saltmere 83     SHIPPED, all ok
+tier 1  78-92   riverfen 80   ashford 90   ironwood 92   saltmere 83      SHIPPED  ok
 tier 2  66-84   kaldan 70   highmarch 77   greywater 73
-                thornmoor 82   emberholt 82                             SHIPPED, all ok
-tier 3  50-72   gallowmoor 78  sunder 68  vaelstrand 78
-                duskfell 79  karrowmere 72              n=96    3 over the ceiling
-tier 4  34-56   thanescar 63  blackspire 71  ironcrown 71
-                obsidian 69                             n=48    ALL FOUR over
-tier 5  22-42   ravensmarch 42  gravenreach 33  nightharrow 35
-                                                        n=48    all ok
-tier 6  18-36   stormhalt 50  cinderwatch 50  widowsgate 46
-                                                        n=24    all three over
+                thornmoor 82   emberholt 82                              SHIPPED  ok
+tier 3  50-72   gallowmoor 60  sunder 60  vaelstrand 67
+                duskfell 71  karrowmere 54                               SHIPPED  ok
+tier 4  34-56   thanescar 54   blackspire 54                             SHIPPED  ok
+                ironcrown 67   obsidian 67                               STILL OVER
+tier 5  22-42   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
+tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOVED
 ```
 
-**This is the first complete, current measurement of all 24 rows since the table drifted.**
-Nine shipped and in band; twelve out (tiers 3, 4 and 6); three in band but for the wrong
-reason (tier 5).
+**The five rows still out, and what is known about each:**
+
+- **ironcrown, obsidian** — boxed in, with BOTH levers measured dead (see below). They
+  need `enemyMix`, the board, or the AI tier. None of the three is measured.
+- **stormhalt, cinderwatch, widowsgate** — never re-tuned, and tier 6 is the one tier
+  FREE to rise as far as it likes because nothing sits above it. So it is the cheapest
+  remaining fix on paper and the least meaningful in practice, because all three are
+  clock-bound: the dial there buys failure mode, not win rate.
+
+**The measured per-row slopes, for whoever sizes the next move** (points of win rate per
+0.01 of dial): karrowmere 0.67, ravensmarch 0.53, gallowmoor 0.47, blackspire 0.46,
+kaldan 0.41 (over its cliff), thanescar 0.38, vaelstrand 0.29, sunder 0.26, ironcrown
+0.24, duskfell 0.20, obsidian 0.15. **Threefold spread, and adjacent rows differ by
+2x** — no constant sizes a move, and kaldan additionally has a 0.21-wide plateau before
+its cliff.
 
 **⚠ AND THE HEADLINE IS NOT A WIN RATE. THE BACK HALF BARELY LOSES AT ALL: EIGHT DEFEATS
 IN 216 BATTLES.**
