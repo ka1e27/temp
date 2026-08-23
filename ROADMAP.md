@@ -241,14 +241,23 @@ recorded  98    -    -   96   69   46   17   (incursion.data.js, n=48)
 re-tune restored it with `baseDial` never being touched, which is the strongest available
 confirmation of that warning's own diagnosis (the arena's row had moved underneath it).
 
-**But the new problem is the other end: depth 30 reads 50% against a 19% target and is
-HIGHER than depth 20's 44%, so the curve has stopped falling.** ⇒ **CONFIRMED AT n=32:
-depth 30 reads 50% again, win-med 19.2m.** Identical to the screen, so the flat tail is
-real rather than a small-sample artefact — which is what makes this worth acting on even
-though the rest of the table above is only n=16. The runner's verdict line
-prints "wall at depth > 30" because it has nowhere left to look. Depths 10 and 20 are near
-target; it is the two ENDS that moved, which is a curve going flat rather than a curve
-moving — the same shape the ram slot reprice produced once already.
+**⚠ CORRECTION — I FIRST WROTE THAT THE WALL WAS GONE, AND IT IS NOT. IT MOVED OUT BY
+ABOUT TEN RUNGS.** Depth 30 was re-taken at n=32 (50% again, win-med 19.2m, so the reading
+is solid) and **depth 40 was added: 22%**. That changes the diagnosis:
+
+```
+depth      1    2    3    5   10   20   30   40
+win%      75  100   88   75   75   44   50   22
+target    94   ~92  ~90  88   75   38   19   ~0-6
+n         16   16   16   16   16   32   32   32
+```
+
+The curve still descends — 44 -> 50 at depths 20-30 is a local wobble inside a 12-point
+SEM, not a plateau — it simply arrives about **ten rungs late**: depth 40's 22% is roughly
+where depth 30's 19% belongs. That is a shifted curve, not a broken one, and it is a much
+milder finding than "no wall". Recorded as a correction rather than edited away, because
+the first reading was published off a table that stopped at depth 30 and the fix was to
+look one rung further out.
 
 **TWO CAUSES ARE MEASURED RATHER THAN GUESSED, and both are the arena coupling.** The win
 MEDIANS are **3-5x** the recorded ones at every depth (9.6m against 2.1m at depth 1), so a
@@ -263,7 +272,25 @@ re-taken, the knob is **`perDepth`, not `baseDial`** — and for once the doubli
 does not bind, because raising `perDepth` makes `(1+perDepth)^59` LARGER and 0.0135
 already clears it at 2.21. `baseDial` is the wrong lever because the opening rungs are if
 anything already too hard and raising it makes them worse while barely touching the tail.
-Solving `4.42 * (1+p)^29 = 7.5` gives **p ~ 0.0184** as the starting bracket.
+**AND THE ARITHMETIC CONVERGES ON THE SAME NUMBER FROM THE NEW DATA.** If depth 40's
+current dial (7.46) is what depth 30 should carry, then `4.42 * (1+p)^29 = 7.46` gives
+**p = 0.0182** — essentially the 0.0184 derived independently above.
+
+**BUT ONE KNOB IS NOT ENOUGH, and the first screen of the candidate says so.** At
+`perDepth 0.0184`, depth 10 reads **63%** against 75% at 0.0135 — steepening fixes the tail
+at the cost of the middle, because the whole line is already low. `perDepth` provably
+cannot help the opening at all: `dial(1) = baseDial * (1+p)^0`, so depth 1 is untouched by
+it by construction, and depth 1 is 19 points under target.
+
+So it is a TWO-KNOB fit: **`baseDial` DOWN** (lifts the whole line, which depths 1 and 10
+need) and **`perDepth` UP** (steepens the fall, which the tail needs). Working the same
+arithmetic at a lifted base — say `baseDial 4.10` — `4.10 * (1+p)^29 = 7.46` gives
+**p ~ 0.0208**, and the doubling floor is still clear at `1.0208^59 = 3.39 > 2`.
+
+**`baseDial 4.10 / perDepth 0.0208` IS A STARTING BRACKET, NOT A VALUE.** It fits two
+knobs to three points taken at n=16-32 against a rule that says n>=96 to tune, and this
+project has burned two sessions on exactly that arithmetic. Measure depths 1, 10, 30 and
+40 at n>=48 before shipping anything.
 
 ### ALSO SETTLED IN THE SAME PASS
 

@@ -113,13 +113,22 @@
  * Recorded as an open observation rather than tuned, the same way `split`'s
  * uniform -6 is in CLAUDE.md: re-take it at n>=96 before spending a change.
  *
- * ⚠ AND IT FLATTENED AGAIN: at n=16 the ladder now reads 75/100/88/75/75/44/50
- * across depths 1/2/3/5/10/20/30 — **depth 30 is HIGHER than depth 20, so there
- * is no wall left at all** — with win medians 3-5x the ones above. The lever is
- * `perDepth` and not `baseDial` this time, and the doubling floor does not bind
- * in that direction. Full table, the two measured causes and the starting
- * bracket are in ROADMAP.md under the incursion entry; n=16 is a screen, so do
- * not author a dial from it.
+ * ⚠ AND IT SHIFTED AGAIN — the curve still falls, it just arrives about TEN
+ * RUNGS LATE, and the win medians are 3-5x the ones above:
+ *
+ *     depth      1    2    3    5   10   20   30   40
+ *     win%      75  100   88   75   75   44   50   22
+ *     target    94   ~92  ~90  88   75   38   19   ~0-6
+ *     n         16   16   16   16   16   32   32   32
+ *
+ * Depth 40's 22% is roughly where depth 30's 19% belongs. Fixing it needs BOTH
+ * knobs — `baseDial` down (depth 1 is 19 under target and `perDepth` provably
+ * cannot touch it, since `dial(1) = baseDial * (1+p)^0`) and `perDepth` up
+ * (steepen the fall; the doubling floor does not bind in that direction). A
+ * measured screen at `perDepth 0.0184` alone reads depth 10 at 63% against 75%,
+ * which is the middle paying for the tail. Full table, the two measured causes
+ * and a `4.10 / 0.0208` starting BRACKET are in ROADMAP.md; these samples are
+ * screens, so do not author a dial from them.
  *
  * `sealed` is live here too: the campaign's own `GATE_CLAMP` plateaus at 0.60
  * regardless of what a region's raw `castleGateFrac` was authored as, so the
