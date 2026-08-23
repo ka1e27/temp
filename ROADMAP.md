@@ -101,12 +101,37 @@ tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOV
   there is no room to make it harder this way — but it closes it for the opposite reason
   to the one written here first, and it leaves CLAUDE.md's tier-2 sign intact.
 
-  **AND THE 21-POINT GAP TO BLACKSPIRE IS STILL UNEXPLAINED.** With neutral controlled at
-  15, blackspire reads 54% and ironcrown 75% on the same board, the same mix, the same
-  silhouette (`choke`) and a dial 0.05 apart. That is ~1.5 SEM at this n, so it may be
-  noise — and if it is not, it is a property of the generated LAYOUT rather than of any
-  column, which no per-region dial can reach. **Re-take both at n>=96 before spending
-  anything on this row.**
+  **⇒ AND THE REAL ANSWER IS THAT THE GAP IS NOT IN THE TABLE AT ALL. It is the
+  GENERATED LAYOUT, and there is a clean same-dial measurement at n=48 that shows it:**
+
+  ```
+  region       dial    n     win%
+  blackspire   5.45    48      38
+  ironcrown    5.45    48      54     <- SAME dial, 16 points apart, ~2.3 SEM
+  ```
+
+  At identical dials, on the same 17x13 board, the same mix [2,4,7], the same enemy and
+  player counts, the same gate and the same `choke` silhouette, ironcrown is sixteen
+  points easier than blackspire. With neutral then controlled at 15 the gap is 21 points
+  the same way. **Every authored column is matched, so what differs is the map** — the
+  shape MASK and the site scatter are rolled per region from its own seed, and CLAUDE.md
+  already records that a silhouette "re-rolls where the sites land" and is worth up to
+  sixteen points. ironcrown's `choke` happens to be kind; blackspire's happens to be cruel.
+
+  **So there is no column left to turn, and that is the finding.** The one knob that
+  would move it is `shape` — and this project explicitly forbids using it as a difficulty
+  dial ("reaching for a shape BECAUSE a region needs to be harder is forbidden; a shape
+  says what the region already claimed"). The honest options are therefore a DESIGN call,
+  not a tuning one:
+
+  1. **Accept both rows ~11 points over** and say so — they are the only two, and the
+     campaign is 19/24 in band with them.
+  2. **Re-author what those regions ARE** (flavour and silhouette together), which is the
+     one route the shape rule permits.
+  3. **Revisit the shape rule deliberately**, with the cost written down.
+
+  Do NOT spend another dial, neutral site, mix or board column here; all four are
+  measured.
 
   Three other levers are measured dead here and should not be re-spent: the dial (0.24
   and 0.15 pts/0.01, so they need +0.75 and +1.07, which ravensmarch's floor forbids),
