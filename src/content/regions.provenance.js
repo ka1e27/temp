@@ -84,6 +84,48 @@
 // is capped at 15 by blackspire, i.e. at what it already ships.
 
 // ============================================================================
+// TIERS 3-6 — RE-TUNED AGAINST THE MELEE LAYER. Current answer at the top;
+// everything below this block is provenance.
+// ============================================================================
+//
+//     region        was    now     measured   band     verdict
+//     gallowmoor   4.01   4.39        60      50-72    ok
+//     sunder       4.08   4.39        60      50-72    ok
+//     vaelstrand   4.38   4.76        67      50-72    ok
+//     duskfell     4.45   4.85        71      50-72    ok  (1 under the ceiling)
+//     karrowmere   4.58   4.85        54      50-72    ok
+//     thanescar    4.60   4.90        54      34-56    ok
+//     blackspire   4.73   4.95        54      34-56    ok
+//     ironcrown    4.73   5.00        67      34-56    STILL OVER — see below
+//     obsidian     4.78   5.05        67      34-56    STILL OVER — see below
+//     ravensmarch  4.80   5.05        29      22-42    ok
+//     gravenreach  4.93   5.05        33      22-42    ok
+//     nightharrow / stormhalt  -> 5.05, monotonicity only, unmeasured there
+//
+// ⚠ THE PER-ROW SLOPE VARIES THREEFOLD, so no constant sizes a move. Points of
+// win rate per 0.01: karrowmere 0.67, ravensmarch 0.53, gallowmoor 0.47,
+// blackspire 0.46, thanescar 0.38, vaelstrand 0.29, sunder 0.26, ironcrown
+// 0.24, duskfell 0.20, obsidian 0.15. Every value above was measured AT it.
+//
+// ⚠ IRONCROWN AND OBSIDIAN CANNOT BE FIXED BY THE DIAL. At 0.24 and 0.15 they
+// need about +0.75 and +1.07 to reach band; `enemyMult` is non-decreasing, and
+// ravensmarch brackets at 4.80 -> 42% / 5.20 -> 21% against a 22 FLOOR, so
+// anything past ~5.05 pushes tier 5 out the bottom. They are boxed in.
+//
+// ⚠ AND THE NAMED FALLBACK IS DEAD. `siteCounts.neutral` is recorded below at
+// "-4 points a site", measured on ironcrown itself. Re-measured there at n=24
+// with the dial untouched, 19 -> 23 neutral read **71% before, 71% after**
+// (obsidian 20 -> 24: 69% -> 67%; ravensmarch 18 -> 22: 42% -> 38%). It is now
+// 0 to -1 a site — the old figure predates `--richyards`. Untried levers for
+// those two rows: `enemyMix` (ravensmarch's [2,5,8] against their [2,4,7], the
+// move that fixed ravensmarch once), the board, the AI tier. None measured.
+//
+// ⚠ TIERS 5-6 SIT IN BAND BECAUSE BATTLES RUN OUT OF CLOCK: eight defeats in
+// 216 battles, every all-run median exactly on its hard cap. The dial there
+// moves who beats you, not how often — thanescar at 5.00/5.20/5.50 held 44/40/48
+// while timeouts fell 23 -> 17 and losses rose 4 -> 8. See CLAUDE.md.
+
+// ============================================================================
 // TIER 3 (5) — 16x12 to 17x13. Sieges are the conversation.
 // ============================================================================
 //
