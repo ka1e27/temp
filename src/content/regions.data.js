@@ -30,7 +30,8 @@
 // row rather than about any one of them, which is that file's job.
 //
 // PER-TIER AND PER-REGION PROVENANCE — why a dial sits where it sits, and what
-// measuring it cost — lives in ./regions.provenance.js, moved there for the
+// measuring it cost — lives in ./regions.provenance.js (and TODAY'S dials, with
+// the bracket that found each one, in ./regions.retune.js), moved there for the
 // same 400-line cap. It is NOT imported by anything (there is no data in it,
 // only reasoning); the short comment above each tier/row here is the
 // pointer, not the whole story.

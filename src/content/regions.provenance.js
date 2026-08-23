@@ -4,6 +4,12 @@
 // pointers, this file is the reasoning and the measurements behind them, per
 // tier and per region where a row needed one of its own.
 //
+// ⇒ TODAY'S DIALS ARE NOT HERE — they are in ./regions.retune.js, split off at
+// the cap along the seam that matters: this file is HOW EACH TIER GOT ITS
+// COLUMNS over the project's life, that one is WHAT THE TABLE READS NOW. Read
+// that one first if you are about to move a dial; most of what follows is
+// provenance for a value that has since changed.
+//
 // NOT IMPORTED BY ANYTHING, DELIBERATELY. There is no data here for code to
 // read — every number a battle or a test needs already lives on the row in
 // regions.data.js. This file exists to be READ, the same job a comment
@@ -15,49 +21,6 @@
 //
 // PURE PROSE. No logic reads a number that is not defined in regions.data.js
 // or balance.js.
-
-// ============================================================================
-// TIERS 1-2 (9) — RE-TUNED AGAINST THE MELEE LAYER, at n>=96. This is the
-// current answer; everything below it in this section is provenance.
-// ============================================================================
-//
-// The screen that opened this pass was n=24/n=12 and was wrong in BOTH
-// directions, which is worth more than the numbers: highmarch read 67% and is
-// 84%, thornmoor read 67% and is 82% — both within two points of their CEILING,
-// where the screen put them comfortably mid-band. Moving a dial to "fix" those
-// 67s would have pushed two healthy rows through the floor.
-//
-//     region     n=12   n=96  n=240   band     dial            measured
-//     riverfen     83     80     83   78-92    1.86  held      80/83
-//     ashford     100     94     95   78-92    2.70 -> 2.76    90
-//     ironwood    100     92     93   78-92    3.19  held      92/93
-//     saltmere     83     83     82   78-92    3.19  held      83/82
-//     kaldan      100     92      -   66-84    3.23 -> 3.60    70
-//     highmarch    67     84      -   66-84    3.39 -> 3.60    77
-//     greywater    75     86      -   66-84    3.39 -> 3.60    73
-//     thornmoor    67     82      -   66-84    3.56 -> 3.77    82
-//     emberholt    92     90      -   66-84    3.67 -> 3.88    82
-//
-// All nine read `ok` on the shipped dials. Two of the moves are NOT justified by
-// a measured gain: thornmoor read 82% at both 3.56 and 3.77, and it rises only
-// because greywater rose to 3.60 and `enemyMult` must be non-decreasing.
-//
-// ⚠ THE SLOPE CONSTANT DOES NOT WORK HERE. CLAUDE.md's "~1.8 points per 0.01 on
-// the small maps" predicted -12 points for kaldan's first +0.21; it bought ONE.
-// Bracketed at n=96 the row has a 0.21-wide plateau and then a cliff:
-//
-//     dial   3.23   3.44   3.60   4.10   4.70
-//     win%     92     91     70     30     11
-//              0.05   1.31   0.80   0.32     <- local slope, pts per 0.01
-//
-// Every shipped value above was MEASURED at that value, never interpolated.
-//
-// Battle lengths are healthy across both tiers and there is NO length ramp in
-// them: all nine win in 8.2-10.2 minutes while advertising 6.5 to 10, so the
-// promise varies by 54% across a real spread of 13%. That is the
-// `targetLengthMin` pass's problem, not the dial's, and it is deliberately NOT
-// fixed here — the column derives `hardCapMs`, so re-authoring it changes the
-// battle and every row above would need re-confirming.
 
 // ============================================================================
 // TIER 2 (5) — the first real wall. Kaldan proves the upgrade layer matters.
@@ -82,57 +45,6 @@
 // no non-decreasing constraint, TOTAL sites does, so a region's neutral pool
 // can never exceed nextRegion.total - (thisRegion.enemy + player). Thanescar
 // is capped at 15 by blackspire, i.e. at what it already ships.
-
-// ============================================================================
-// TIERS 3-6 — RE-TUNED AGAINST THE MELEE LAYER. Current answer at the top;
-// everything below this block is provenance.
-// ============================================================================
-//
-//     region        was    now     measured   band     verdict
-//     gallowmoor   4.01   4.39        60      50-72    ok
-//     sunder       4.08   4.39        60      50-72    ok
-//     vaelstrand   4.38   4.76        67      50-72    ok
-//     duskfell     4.45   4.85        71      50-72    ok  (1 under the ceiling)
-//     karrowmere   4.58   4.85        54      50-72    ok
-//     thanescar    4.60   4.90        54      34-56    ok
-//     blackspire   4.73   4.95        54      34-56    ok
-//     ironcrown    4.73   5.00        67      34-56    STILL OVER — see below
-//     obsidian     4.78   5.05        67      34-56    STILL OVER — see below
-//     ravensmarch  4.80   5.05        29      22-42    ok
-//     gravenreach  4.93   5.05        33      22-42    ok
-//     nightharrow  4.94   5.05         -      22-42    monotonicity only
-//     stormhalt    4.94   5.60        25      18-36    ok
-//     cinderwatch  5.06   5.65        31      18-36    ok
-//     widowsgate   5.07   5.70        31      18-36    ok
-//
-// TIER 6 IS FREE TO RISE — nothing sits above it — so it took a real bracket:
-// stormhalt read 50% at 4.94, 25% at 5.60 and 6% at 6.20, slope 0.38. Its
-// tier-mates went to 5.65/5.70 at that slope and both landed at 31%.
-// `widowsgate` is the incursion arena, but a rung OVERRIDES `enemyMult` with
-// INCURSION.baseDial, so the ladder does not inherit this move.
-//
-// ⚠ THE PER-ROW SLOPE VARIES THREEFOLD, so no constant sizes a move. Points of
-// win rate per 0.01: karrowmere 0.67, ravensmarch 0.53, gallowmoor 0.47,
-// blackspire 0.46, thanescar 0.38, vaelstrand 0.29, sunder 0.26, ironcrown
-// 0.24, duskfell 0.20, obsidian 0.15. Every value above was measured AT it.
-//
-// ⚠ IRONCROWN AND OBSIDIAN CANNOT BE FIXED BY THE DIAL. At 0.24 and 0.15 they
-// need about +0.75 and +1.07 to reach band; `enemyMult` is non-decreasing, and
-// ravensmarch brackets at 4.80 -> 42% / 5.20 -> 21% against a 22 FLOOR, so
-// anything past ~5.05 pushes tier 5 out the bottom. They are boxed in.
-//
-// ⚠ AND THE NAMED FALLBACK IS DEAD. `siteCounts.neutral` is recorded below at
-// "-4 points a site", measured on ironcrown itself. Re-measured there at n=24
-// with the dial untouched, 19 -> 23 neutral read **71% before, 71% after**
-// (obsidian 20 -> 24: 69% -> 67%; ravensmarch 18 -> 22: 42% -> 38%). It is now
-// 0 to -1 a site — the old figure predates `--richyards`. Untried levers for
-// those two rows: `enemyMix` (ravensmarch's [2,5,8] against their [2,4,7], the
-// move that fixed ravensmarch once), the board, the AI tier. None measured.
-//
-// ⚠ TIERS 5-6 SIT IN BAND BECAUSE BATTLES RUN OUT OF CLOCK: eight defeats in
-// 216 battles, every all-run median exactly on its hard cap. The dial there
-// moves who beats you, not how often — thanescar at 5.00/5.20/5.50 held 44/40/48
-// while timeouts fell 23 -> 17 and losses rose 4 -> 8. See CLAUDE.md.
 
 // ============================================================================
 // TIER 3 (5) — 16x12 to 17x13. Sieges are the conversation.
