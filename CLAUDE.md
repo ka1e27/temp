@@ -5230,6 +5230,35 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   agreement is the strongest available evidence that kaldan is behaving as it always
   has — and that pinning the exploit there would encode the opposite of the defect.
 
+  **⚠ RE-TAKEN AFTER THE TIER 1-5 RE-TUNE, AND THE GAP MOVED IN BOTH DIRECTIONS. The
+  test now FAILS on an INVERSION rather than on an out-of-band baseline** — which is
+  itself the re-tune working, because both rows are finally inside their bands and the
+  file will now measure rather than refuse:
+
+  ```
+  region       baseline -> mono    gap    win medians       band
+  kaldan          79% -> 75%        -4    10.2m -> 10.3m    66-84
+  gallowmoor      71% -> 88%       +17    19.2m -> 10.6m    50-72
+  ```
+
+  **On kaldan the exploit is now BACKWARDS** — bringing only militia is four points
+  worse than the honest spread — and the test's own words are that "the defect inverting
+  is a bigger event than it closing", which is why it refuses to pass on it.
+
+  **And on gallowmoor the re-tune WIDENED it, +0 to +17**, which is a cost of that pass
+  and is recorded as one. The mechanism is the tempo finding above arriving from a new
+  direction: a harder gallowmoor made the DEFAULT spread slower (19.2m against mono's
+  10.6m, 1.8x), and the tighter the clock the more a fast army is worth. **Making a
+  region harder can widen the dominant-loadout gap** — that is not obvious, and it is
+  worth checking on any future difficulty move.
+
+  **⚠ READ THE ABSOLUTE NUMBERS WITH CARE: they are a SEED PREFIX.** This file runs
+  n=24 on `1000 + i * 7919`, byte-identical to `simrunner`'s formula, so its seeds are
+  the first 24 of an n=48 run — and gallowmoor reads 71% here against **60% at n=48**,
+  kaldan 79% against **70% at n=96**. Nine to eleven points of prefix bias, exactly the
+  effect recorded under "Tuning". The GAP is matched-seed and sound; the baselines are
+  not the shipped numbers.
+
   **The TEMPO half has weakened too**, which is new and is why `tests/loadoutdominance
   .test.js` no longer asserts it at a number: ravensmarch and gallowmoor still "delete
   the battle" (0.39 and 0.56 of the honest army's time) while thanescar and kaldan read
