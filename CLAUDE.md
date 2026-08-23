@@ -1418,6 +1418,16 @@ player who just spent twenty minutes on gallowmoor is told the tier-6 opener is 
 `max(17, 20 x 1.9)` = **38 minutes** for a tier-3 region, against this project's own
 stated premise of a 7-15 minute battle.
 
+**⚠ AND ON A CLOCK-BOUND ROW THE PROMISE AND THE DIFFICULTY ARE THE SAME KNOB, which is
+why tier 5 was left alone.** `gravenreach` advertises 17 minutes and is WON in 11.9 — a
+1.43x overclaim, and the second-worst in the table after tier 3's. But its ALL-run median
+is 32.3m, exactly its cap: most of its battles never finish. Authoring the honest 12 would
+drop its cap from 32.3 to 22.8 and cut off a third of its running time, taking a row that
+sits at 33% against a 22 floor straight through it. **The promise is only free to move on
+a row whose battles RESOLVE** — tier 3's all-medians ran 17-24m against 36-38m caps, which
+is why it could be corrected at a cost of about six points. Check the all-median against
+the cap before touching this column, not just the win median against the promise.
+
 Worth knowing before authoring the column: **tiers 1-2 have no length ramp at all.**
 Measured at n=96/240, every one of the nine wins in **8.2-9.3 minutes** while advertising
 6.5 to 10 — so the promise varies by 54% across a tier whose real spread is 13%.
