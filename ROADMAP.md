@@ -63,7 +63,34 @@ tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOV
 
 **The five rows still out, and what is known about each:**
 
-- **ironcrown, obsidian** — boxed in, with THREE levers now measured dead. `enemyMix`
+- **ironcrown, obsidian** — ⇒ **THE CAUSE IS THE NEUTRAL POOL, AND IT IS VISIBLE IN THE
+  TABLE.** Tier 4's four rows are IDENTICAL in every column — 17x13, enemy 14, player 4,
+  mix [2,4,7], gate 0.60, develop within 0.06 — except the dial and `neutral`:
+
+  ```
+  region        dial   neutral   slope   win%
+  thanescar     4.90      15      0.38     54   ok
+  blackspire    4.95      15      0.46     54   ok
+  ironcrown     5.00      19      0.24     67   over
+  obsidian      5.05      20      0.15     67   over
+  ```
+
+  **Perfectly monotone, and it beats the dial.** More neutral makes the row both EASIER
+  and LESS RESPONSIVE — and note the two easy rows carry the HIGHER dials, so four
+  neutral sites outweigh +0.05 of `enemyMult` in the wrong direction. The mechanism is
+  that free ground lets the player grow without fighting, so enemy strength matters
+  less; that is also why RAISING neutral did nothing (19 -> 23 read 71% -> 71%): the
+  effect is saturated at the top. **The lever runs DOWNWARD**, to blackspire's 15, and
+  the non-decreasing TOTAL permits it exactly — both rows fall to 33, equal to
+  blackspire's 33.
+
+  **⚠ THIS REVERSES CLAUDE.md's "more neutral is HARDER" AT TIER 4.** That claim was
+  measured on greywater at tier 2. Whatever is true there, at tier 4 the sign is the
+  other way and the effect is large.
+
+  Three other levers are measured dead here and should not be re-spent: the dial (0.24
+  and 0.15 pts/0.01, so they need +0.75 and +1.07, which ravensmarch's floor forbids),
+  the BOARD (ironcrown at 18x13 read 67%, identical to its 17x13), and `enemyMix`
   was the most promising and is the most decisively dead, because it fails in BOTH
   directions (n=24, dial untouched, against ironcrown's 67% baseline):
 
