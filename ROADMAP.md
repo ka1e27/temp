@@ -228,8 +228,24 @@ for the same reason: the dial there buys failure mode, not win rate.
    already measured (gallowmoor 0.47, sunder 0.26, vaelstrand 0.29, thanescar 0.38,
    blackspire 0.46, ironcrown 0.24, obsidian 0.15). Expect two or three rows to miss and
    need bisecting; expect ironcrown and obsidian to need the neutral lever.
-3. **Then, and only then, re-author `targetLengthMin`** (item #108). **Every number it
-   needs is now measured at the SHIPPED dials** — win median against what the row
+3. ~~Then re-author `targetLengthMin`~~ **DONE, AND `battlelength` PASSES 4/4** — it was
+   the last failing test in the fast suite. Tier 3 went from promising 19-20 minutes for
+   a 12.7-18.0 minute battle to 15 / 18 / 13 / 14.5 / 16, authored from its measured win
+   medians, and gallowmoor's hard cap fell from **38 minutes to 28.5**. cinderwatch moved
+   17 -> 18.5 for a second reason: the test compares tier MAXIMA and tier 3's max (sunder,
+   18.0) would otherwise have TIED tier 6's; rounding cinderwatch's 18.4 median up breaks
+   that honestly where shading sunder down would not.
+
+   Tiers 1-2, 4 and 5 were deliberately left alone — their promises sit within about a
+   minute of measured, and moving them changes caps on rows just shipped for no gain.
+
+   **⚠ THE SIX MOVED ROWS ARE PLAYING AGAINST NEW CLOCKS AND ARE BEING RE-SWEPT.**
+   `targetLengthMin` derives `hardCapMs`, so their measured 60/60/67/71/54/31 will move;
+   vaelstrand is the one to watch, at a 22.9m all-run median against a new 24.7m cap. If
+   a row falls out, the fix is its dial, not its promise — the promise is now the honest
+   number.
+
+   The dataset that fed this, for reference — win medians at the shipped dials — win median against what the row
    currently promises:
 
    ```
