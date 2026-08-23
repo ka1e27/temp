@@ -69,7 +69,7 @@
 //     ironcrown    4.73   5.00      77    34-56    STILL OVER — see below
 //     obsidian     4.78   5.05      69    34-56    STILL OVER — see below
 //     ravensmarch  4.80   5.05      33    22-42    ok
-//     gravenreach  4.93   5.05      33    22-42    ok  (n=24)
+//     gravenreach  4.93   5.05      35    22-42    ok
 //     nightharrow  4.94   5.05      42    22-42    ON its ceiling — see below
 //     stormhalt    4.94   5.60      25    18-36    ok  (n=16)
 //     cinderwatch  5.06   5.65      23    18-36    ok

@@ -55,7 +55,7 @@ tier 3  50-72   gallowmoor 54  sunder 60  vaelstrand 60
                 duskfell 69  karrowmere 52                               SHIPPED  ok
 tier 4  34-56   thanescar 52   blackspire 52                             SHIPPED  ok
                 ironcrown 77   obsidian 69                               STILL OVER
-tier 5  22-42   ravensmarch 33  gravenreach 33  nightharrow 42           SHIPPED, see below
+tier 5  22-42   ravensmarch 33  gravenreach 35  nightharrow 42           SHIPPED, see below
 tier 6  18-36   stormhalt 25   cinderwatch 23   widowsgate 31            SHIPPED  ok
 ```
 
