@@ -248,16 +248,21 @@ for the same reason: the dial there buys failure mode, not win rate.
    **RE-SWEPT AGAINST THE NEW CLOCKS, and it cost about what was predicted:**
 
    ```
-   region        cap was -> now    win% was -> now    verdict
-   gallowmoor     38.0 -> 28.5       60 -> 54          ok
-   sunder         38.0 -> 34.2       60 -> 60          ok
-   cinderwatch    32.3 -> 35.1       31 -> 21          ok, and see below
-   vaelstrand / duskfell / karrowmere                  sweep in flight
+   region        cap was -> now   win% was -> now   advertised v measured
+   gallowmoor     38.0 -> 28.5      60 -> 54           15  v  14.2   ok
+   sunder         38.0 -> 34.2      60 -> 60           18  v  18.0   ok
+   vaelstrand     38.0 -> 24.7      67 -> 60           13  v  12.6   ok
+   duskfell       36.1 -> 27.5      71 -> 69         14.5  v  14.2   ok
+   karrowmere     36.1 -> 30.4      54 -> 52           16  v  15.6   ok
+   cinderwatch    32.3 -> 35.1      31 -> 21         18.5  v  13.4   ok, see below
    ```
 
-   Six points on gallowmoor and nothing on sunder — a tighter cap converts a region's
-   slowest WINS into timeouts, and how many depends on how much of its distribution sat
-   in the removed tail.
+   **ALL FIVE TIER-3 ROWS HELD, at a cost of 0 to 7 points, and the promise column is now
+   accurate to within half a minute on every one of them.** The cost is uneven for a
+   reason worth knowing: a tighter cap converts a region's slowest WINS into timeouts, so
+   what it costs depends on how much of that row's distribution sat in the tail that was
+   removed. sunder's wins cluster inside its new cap and it lost nothing; gallowmoor's did
+   not and it lost six.
 
    **⚠ cinderwatch's 31 -> 21 IS NOT THE CAP, IT IS THE SAMPLE, and it is the prefix bias
    in miniature.** Its cap got LONGER, which can only help — and both readings have the
