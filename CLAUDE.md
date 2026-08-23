@@ -1480,6 +1480,17 @@ a row on its floor is a row whose advertised number has stopped ending its own b
 and the simrunner's own length gate cannot see it, because that gate only grades a region
 that plays LONGER than it claims.
 
+**AND `develop` HAS A PROMOTION THRESHOLD YOU CAN CHECK WITHOUT A SWEEP.**
+`mapgen.js developLevels` promotes `up = round(share * pool.length)` forts, where the
+pool is castle + strongholds + trainingGrounds. On the tier-4 rows that pool is **7**, so
+a second promotion needs `share >= 1.5/7 = 0.214` — and ironcrown's entire legal headroom
+(2.14 -> obsidian's 2.16) and obsidian's (2.16 -> ravensmarch's 2.19) both land on
+`round(...) = 1`, changing nothing. **Two twenty-minute sweeps replaced by thirty seconds
+of arithmetic, and a stronger answer than a sample would have given.** Do this check
+before spending a measurement on this column: the quantised nature of `develop` is
+already recorded here as "where the fraction lands matters more than how big it is", and
+this is how you find out where it lands.
+
 **⚠ AND A PLATEAU IS A PROPERTY OF A ROW *AT A GIVEN CLOCK*, NOT OF THE ROW.** thornmoor
 is recorded above as having one — 82% at both 3.56 and 3.77 — and that was measured at
 its old 14.0 cap. At 17.1 the same dial bites at 0.56 pts/0.01. Every plateau written

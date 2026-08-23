@@ -138,10 +138,27 @@ the bot better buildings to capture and makes it finish FASTER. And emberholt lo
 battles in 96 at every setting — the enemy never beats this bot here, so its win rate is
 measuring what fraction FINISH.
 
-One probe left (`enemyMix [2,3,6]`, a twelfth enemy site, worktree `pE2`). If that is flat
-too, **the honest outcome is to ship 86 and say so**: 0.6 SEM over an inclusive ceiling on
-a row with no working lever, where the only remaining move would be to under-state its
-length — the exact hazard this whole item exists to document.
+**THE SEVENTH LEVER CAME IN FLAT TOO, AND ITS BREAKDOWN CLOSES THE QUESTION.** A twelfth
+enemy site (`enemyMix [2,3,6]`) reads **86% — identical to baseline** — but `losses` went
+**1 -> 5** and the win median 9.6 -> 10.7. The enemy really did get stronger; it converted
+timeouts into DEFEATS at about one for one and never converted a single win. That is
+verbatim the thanescar finding already in CLAUDE.md ("`enemyMult` on this row converts
+'ran out of clock' into 'was beaten', not 'won' into 'lost'"), arriving on a second row
+through a different column.
+
+**So emberholt SHIPS AT 86**, 0.6 SEM over an inclusive ceiling, and that is the finding
+rather than a failure: the only thing that could move it is the clock, and its clock is
+its promise, and its promise is its measured win median. Under-stating it is the exact
+hazard this whole item exists to document.
+
+**AND THAT POINTS AT THE ONE STRUCTURAL KNOB THIS PASS UNCOVERED AND DID NOT SPEND.**
+With an honest length column, every cap is `targetLengthMin * HARD_CAP_RATIO` and every
+tier 1-2 row now carries a cap about **1.8x its own all-median** — a backstop rather than
+a difficulty term, which is correct, and which is precisely why those rows read a few
+points easier. `HARD_CAP_RATIO` (1.9, campaign-wide) is therefore now **the single knob
+that decides how much the clock contributes to difficulty anywhere in the game**. Moving
+it re-tunes all 24 rows at once, so it is a pass of its own — but it is the honest home
+for the difficulty that used to hide in nine mis-authored promises.
 
 Its signature is the same at every dial: ~11 non-wins in 96, of which **~9 are timeouts
 while AHEAD and 1-3 are defeats**. The enemy does not beat this bot on emberholt at any
@@ -277,6 +294,29 @@ being re-measured at 5.20 (tier 6 opens at 5.60, so the room exists and nothing 
 to move).
 
 **THE TWO ROWS STILL OUT — and they are one problem, not two:**
+
+**⚠ `develop` IS THE FIFTH LEVER MEASURED DEAD ON BOTH, AND THIS ONE IS A PROOF RATHER
+THAN A SAMPLE.** `mapgen.js developLevels` promotes `up = round(share * pool.length)`
+forts, and the fort pool (castle + strongholds + trainingGrounds) is **7** on both rows.
+So a SECOND promotion needs `share >= 1.5/7 = 0.214`, i.e. `develop >= 2.215`:
+
+```
+ironcrown  develop 2.14, headroom to 2.16 (obsidian's)   -> round(0.16 x 7) = 1.  No change.
+obsidian   develop 2.16, headroom to 2.19 (ravensmarch's)-> round(0.19 x 7) = 1.  No change.
+```
+
+`develop` is required non-decreasing, so reaching 2.215 on ironcrown means dragging
+obsidian, all of tier 5 and all of tier 6 up with it — a cascade, not a row fix. **No
+sweep was run for this and none is needed**: it is arithmetic on the real
+`buildBattleConfig` output, and it replaced two twenty-minute measurements with a
+thirty-second check. `castleGateFrac` is spent too — both ship at 0.60, the `GATE_CLAMP`
+ceiling.
+
+So the authored columns are now exhausted: dial, neutral, enemyMix, board, develop and
+gate are all dead, and `targetLengthMin` (the one lever that DID move them, -6 and -4) is
+now honest and cannot be spent further without lying. `shape` is the only column left and
+this project forbids reaching for it as a difficulty dial.
+
 
 - **ironcrown, obsidian** — ⚠ **A DIAGNOSIS WAS PUBLISHED HERE AND THEN FALSIFIED BY ITS
   OWN EXPERIMENT. Read the correction under the table before the table.** Tier 4's four
