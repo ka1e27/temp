@@ -55,13 +55,21 @@ tier 3  50-72   gallowmoor 54  sunder 60  vaelstrand 60
                 duskfell 69  karrowmere 52                               SHIPPED  ok
 tier 4  34-56   thanescar 52   blackspire 52                             SHIPPED  ok
                 ironcrown 77   obsidian 69                               STILL OVER
-tier 5  22-42   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
+tier 5  22-42   ravensmarch 33  gravenreach 33  nightharrow 42           SHIPPED, see below
 tier 6  18-36   stormhalt 25   cinderwatch 31   widowsgate 31            SHIPPED  ok
 ```
 
 *(Tier 3's figures are AFTER its advertised lengths were corrected, which tightened its
 hard caps and cost 0-7 points a row — see item 3 below. Every other tier's promise was
 left alone.)*
+
+**⚠ nightharrow SITS EXACTLY ON ITS CEILING (42 in a 22-42 band), and it is the one value
+in the whole table that was shipped UNMEASURED** — moved to 5.05 purely to keep
+`enemyMult` non-decreasing, with a bracket argument predicting ~30%. The bracket was
+wrong: measured at n=48 it is 42%, with zero margin against a ~7-point SEM. **That is the
+cost of shipping an interpolated value, on the one occasion this pass did it.** It is
+being re-measured at 5.20 (tier 6 opens at 5.60, so the room exists and nothing else has
+to move).
 
 **THE TWO ROWS STILL OUT — and they are one problem, not two:**
 
