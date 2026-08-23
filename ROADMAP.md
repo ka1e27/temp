@@ -241,15 +241,30 @@ for the same reason: the dial there buys failure mode, not win rate.
                                                        widowsgate  12.5 / 18
    ```
 
-   **⚠ IT STILL CANNOT BE DONE FIRST, for two independent reasons.**
-   `battlelength.test.js` asserts the longest advertised battle is in the LAST tier, and
-   it compares maxima — so it passes only once tier 6 holds the strict maximum, which
-   needs tier 6's dials settled first (stormhalt's 20.3m win median would justify 20,
-   the column's own ceiling). And the column derives `hardCapMs`, so authoring it
-   **changes the battles it describes**: gallowmoor's cap would fall from
-   `max(17, 20 x 1.9)` = 38 minutes to `max(17, 15 x 1.9)` = 28.5, which turns some of
-   its slower wins into timeouts and moves the 60% just shipped. Budget a re-confirmation
-   sweep of tiers 3-4 immediately after, not as an optional extra.
+   **⇒ ITS BLOCKER IS NOW CLEARED — tier 6 is shipped, so it can hold the strict
+   maximum.** Win medians AT THE SHIPPED DIALS, against what each row promises:
+
+   ```
+   tier 1   8.9 / 8.8 / 8.6 / 8.4        v 9.5 / 10 / 9.5 / 7.5    roughly honest
+   tier 2   9.5 / 9.6 / 8.8 / 8.8 / 9.4  v 8.5 / 9 / 8 / 6.5 / 8   thornmoor +35%
+   tier 3  14.7 / 18.0 / 12.7 / 14.4 / 16.2  v 20 / 20 / 20 / 19 / 19   BIG overclaim
+   tier 4  11.9 / 13.6 / ? / ?           v 16 each                 overclaim
+   tier 5  16.4 / 11.9 / ?               v 16 / 17 / 18            roughly honest
+   tier 6  16.1 / 18.4 / 15.0            v 16 / 17 / 18            roughly honest
+   ```
+
+   **Tier 3 is the whole defect** — it promises 19-20 for a 12.7-18.0 minute battle.
+   And there is one arithmetic trap in making the test pass: it compares tier MAXIMA, so
+   tier 3's max (sunder, 18.0 -> 18) must not TIE tier 6's. Rounding cinderwatch's 18.4
+   up to 19 breaks the tie honestly; shading sunder down to 17 would not.
+
+   **⚠ AND IT CHANGES THE BATTLES IT DESCRIBES, so it is not a free edit.** The column
+   derives `hardCapMs`: gallowmoor's cap falls from `max(17, 20 x 1.9)` = 38 minutes to
+   `max(17, 15 x 1.9)` = 28.5, and its all-run median is 24.4m — so some slower wins
+   become timeouts and the 60% just shipped will move. **Budget a re-confirmation sweep
+   of tiers 3-4 as part of this item, not as an optional extra**, and do not start it
+   without the time to finish that sweep — a half-authored length column leaves the
+   whole table unverified.
 
 **VERIFIED AFTER SHIPPING TIERS 1-5:** 130 test files, **1,332 of 1,333 tests pass**. The
 single failure is `battlelength`'s tier-3 bulge — item #108 above, deferred on purpose.
