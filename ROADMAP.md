@@ -221,76 +221,74 @@ the standing caveat that the short-circuit's wall-clock effect was unverified.
 `scout` passes too, which CLAUDE.md still recorded as red ("never completed a single
 watchtower across twelve tier-5/6 battles") — that predates the `--richyards` default flip.
 
-### ⚠ THE INCURSION LADDER HAS NO WALL — measured, and the stale warning is retired
+### THE INCURSION LADDER: its wall is ~10 rungs late, and the bracket is measured
 
 CLAUDE.md carries a warning that the ladder **REGRESSED** (38% at depth 1 against a 94%
-target) and forbids re-authoring `baseDial` "until the campaign is back in band, because
-the arena is a campaign region and its row is mid-search". Widowsgate now reads 31% in an
+target) and forbids re-authoring `baseDial` until the campaign is back in band, because
+the arena is a campaign region and its row was mid-search. Widowsgate now reads 31% in an
 18-36 band, so that precondition is finally met and the ladder was re-taken.
-`--incursion=1,2,3,5,10,20,30 --n=16`:
+
+**THAT WARNING IS STALE: depth 1 reads 85%, not 38%** — and the campaign re-tune restored
+it with `baseDial` never being touched, which confirms that warning's own diagnosis better
+than any argument could.
+
+**⚠ THIS ENTRY WAS WRITTEN THREE TIMES AND THE FIRST TWO WERE WRONG IN THE SAME
+DIRECTION — both over-stated the problem, and both were corrected by taking a bigger
+sample rather than by thinking harder.** I first published "the wall is gone" off a table
+that stopped at depth 30; adding depth 40 showed it had only moved. I then published the
+opening as 19 points under target off an n=16 reading of 75%; at n=48 it is 85%. The
+lesson is the one this project already knows and I re-learned twice in one item: **n=16 is
+a screen, and a screen's job is to tell you where to spend a real sample.**
 
 ```
-depth      1    2    3    5   10   20   30
-win%      75  100   88   75   75   44   50
-win-med  9.6 11.7 18.0  7.9 11.9 14.3 22.4   (minutes)
-target    94   ~92  ~90  88   75   38   19
-recorded  98    -    -   96   69   46   17   (incursion.data.js, n=48)
+depth        1     10     20     30     40
+win%        85     75     44     50     22
+target      94     75     38     19   ~0-6
+n           48     16     32     32     32
 ```
 
-**THE "REGRESSION" WARNING IS STALE — depth 1 is 75%, not 38%** — and the campaign
-re-tune restored it with `baseDial` never being touched, which is the strongest available
-confirmation of that warning's own diagnosis (the arena's row had moved underneath it).
+**The honest reading: the opening and the middle are FINE (-9, 0, +6) and only the TAIL is
+late.** The curve still descends 85 -> 22 across forty rungs; depth 40's 22% is roughly
+where depth 30's 19% belongs, so a player is stopped about ten rungs deeper than intended.
+44 -> 50 across depths 20-30 is a wobble inside an 8.5-point SEM, not a plateau.
 
-**⚠ CORRECTION — I FIRST WROTE THAT THE WALL WAS GONE, AND IT IS NOT. IT MOVED OUT BY
-ABOUT TEN RUNGS.** Depth 30 was re-taken at n=32 (50% again, win-med 19.2m, so the reading
-is solid) and **depth 40 was added: 22%**. That changes the diagnosis:
+**Worth knowing before over-fitting: a rung is `dial x a DRAWN HAND`**, and the hands
+differ in strength (depth 20 drew Shieldwall/Scorched/Levied, depth 30 Iron Wall/War
+Host/Shieldwall). So individual rungs scatter around any smooth target BY DESIGN, and
+chasing a single rung onto the curve is chasing a draw.
+
+**TWO CAUSES ARE MEASURED RATHER THAN GUESSED, and both are the arena coupling** that
+`incursion.data.js`'s own header warns about. The win MEDIANS are 3-5x the recorded ones
+at every depth (10.4m against 2.1m at depth 1), so a rung is not the battle those numbers
+describe. And widowsgate's `develop` — which a rung INHERITS unless a mutator overrides it
+— fell **3.3 -> 2.32** in the campaign re-tune.
+
+#### The bracket, measured at both ends
+
+`perDepth` alone was tried first and it pays for the tail out of the middle:
 
 ```
-depth      1    2    3    5   10   20   30   40
-win%      75  100   88   75   75   44   50   22
-target    94   ~92  ~90  88   75   38   19   ~0-6
-n         16   16   16   16   16   32   32   32
+depth          10    20    30
+perDepth .0135 75    44    50
+perDepth .0184 63    25    13      <- tail lands, middle is 12-13 too hard
+target         75    38    19
 ```
 
-The curve still descends — 44 -> 50 at depths 20-30 is a local wobble inside a 12-point
-SEM, not a plateau — it simply arrives about **ten rungs late**: depth 40's 22% is roughly
-where depth 30's 19% belongs. That is a shifted curve, not a broken one, and it is a much
-milder finding than "no wall". Recorded as a correction rather than edited away, because
-the first reading was published off a table that stopped at depth 30 and the fix was to
-look one rung further out.
+And `perDepth` provably CANNOT touch the opening: `dial(1) = baseDial * (1+p)^0`. So with
+0.0184 the whole line reads ~10 points hard from depth 1 on, which names the other knob.
+**`baseDial` DOWN to lift the line, `perDepth` UP to steepen the fall.** Three independent
+routes converge on the same pair:
 
-**TWO CAUSES ARE MEASURED RATHER THAN GUESSED, and both are the arena coupling.** The win
-MEDIANS are **3-5x** the recorded ones at every depth (9.6m against 2.1m at depth 1), so a
-rung is simply not the battle those numbers describe any more. And widowsgate's `develop`
-— which a rung INHERITS unless a mutator overrides it — fell **3.3 -> 2.32** in the
-campaign re-tune. That is the ladder's difficulty silently tracking a campaign region it
-is not otherwise part of, exactly as `incursion.data.js`'s own header warns.
+1. depth 40's current dial (7.46) is what depth 30 should carry: `4.42(1+p)^29 = 7.46`
+   → p = 0.0182.
+2. lifting depths 10 and 20 by ~12 points at ~0.35 pts/0.01 needs `baseDial` ~4.13.
+3. holding depth 30 at the measured-good 7.50 from a 4.10 base: p = 0.0208.
 
-**NOT AUTHORED, DELIBERATELY: n=16 is a screen** (SEM ~11 points) against this project's
-own n>=96 rule for tuning. What it establishes is the SHAPE, not a value. When it is
-re-taken, the knob is **`perDepth`, not `baseDial`** — and for once the doubling floor
-does not bind, because raising `perDepth` makes `(1+perDepth)^59` LARGER and 0.0135
-already clears it at 2.21. `baseDial` is the wrong lever because the opening rungs are if
-anything already too hard and raising it makes them worse while barely touching the tail.
-**AND THE ARITHMETIC CONVERGES ON THE SAME NUMBER FROM THE NEW DATA.** If depth 40's
-current dial (7.46) is what depth 30 should carry, then `4.42 * (1+p)^29 = 7.46` gives
-**p = 0.0182** — essentially the 0.0184 derived independently above.
-
-**BUT ONE KNOB IS NOT ENOUGH, and the first screen of the candidate says so.** At
-`perDepth 0.0184`, depth 10 reads **63%** against 75% at 0.0135 — steepening fixes the tail
-at the cost of the middle, because the whole line is already low. `perDepth` provably
-cannot help the opening at all: `dial(1) = baseDial * (1+p)^0`, so depth 1 is untouched by
-it by construction, and depth 1 is 19 points under target.
-
-So it is a TWO-KNOB fit: **`baseDial` DOWN** (lifts the whole line, which depths 1 and 10
-need) and **`perDepth` UP** (steepens the fall, which the tail needs). Working the same
-arithmetic at a lifted base — say `baseDial 4.10` — `4.10 * (1+p)^29 = 7.46` gives
-**p ~ 0.0208**, and the doubling floor is still clear at `1.0208^59 = 3.39 > 2`.
-
-**`baseDial 4.10 / perDepth 0.0208` IS A STARTING BRACKET, NOT A VALUE.** It fits two
-knobs to three points taken at n=16-32 against a rule that says n>=96 to tune, and this
-project has burned two sessions on exactly that arithmetic. Measure depths 1, 10, 30 and
-40 at n>=48 before shipping anything.
+**`baseDial 4.10 / perDepth 0.0208`** — dials 4.10 / 4.93 / 6.06 / 7.45 / 9.15 at depths
+1/10/20/30/40, doubling floor clear at 3.37 — is being screened now. It is an
+INTERPOLATION between measured endpoints rather than an extrapolation, but it is still a
+two-knob fit to screens: **confirm at n>=48 before trusting it**, and re-read the
+drawn-hand caveat above before moving anything for one rung.
 
 ### ALSO SETTLED IN THE SAME PASS
 
