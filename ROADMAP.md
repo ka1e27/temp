@@ -46,8 +46,9 @@ a `--notwist` reading taken after this session is not comparable to one taken be
 **Measured state of all 24 rows.** Tiers 1-2 are SHIPPED and confirmed; the rest is
 screened but not moved.
 
-**ALL OF TIERS 1-5 IS SHIPPED. Nineteen of twenty-four rows are in band** (was twelve
-out). What remains is tier 6 entire, plus ironcrown and obsidian.
+**THE RE-TUNE IS DONE: 22 OF 24 ROWS IN BAND** (twelve were out). Only ironcrown and
+obsidian remain, and their gap is measured to be in the GENERATED MAP rather than in any
+authored column — see below. That is a design decision, not a tuning one.
 
 ```
 tier 1  78-92   riverfen 80   ashford 90   ironwood 92   saltmere 83      SHIPPED  ok
@@ -58,7 +59,7 @@ tier 3  50-72   gallowmoor 60  sunder 60  vaelstrand 67
 tier 4  34-56   thanescar 54   blackspire 54                             SHIPPED  ok
                 ironcrown 67   obsidian 67                               STILL OVER
 tier 5  22-42   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
-tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOVED
+tier 6  18-36   stormhalt 25   cinderwatch 31   widowsgate 31            SHIPPED  ok
 ```
 
 **The five rows still out, and what is known about each:**
@@ -153,10 +154,17 @@ tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOV
   non-decreasing grid rule) and the AI TIER (`AI_TIERS[3]` moves all four tier-4 rows at
   once — thanescar and blackspire sit at 54% with twenty points of floor beneath them,
   so they can absorb it).
-- **stormhalt, cinderwatch, widowsgate** — never re-tuned, and tier 6 is the one tier
-  FREE to rise as far as it likes because nothing sits above it. So it is the cheapest
-  remaining fix on paper and the least meaningful in practice, because all three are
-  clock-bound: the dial there buys failure mode, not win rate.
+- ~~**stormhalt, cinderwatch, widowsgate**~~ **SHIPPED.** Tier 6 is the one tier free to
+  rise (nothing sits above it), so it took a real bracket rather than a cascade:
+  stormhalt read 50% at 4.94, **25% at 5.60** and 6% at 6.20 — slope 0.38, with 6.20
+  decisively past the band. Its tier-mates went to 5.65 and 5.70 at that slope and both
+  landed at 31%. `widowsgate` is the incursion arena, but a rung OVERRIDES `enemyMult`
+  with `INCURSION.baseDial` and inherits only `siteCounts`, the board, `castleGateFrac`
+  and `targetLengthMin` — none of which moved.
+
+  **⚠ THEY ARE IN BAND AND STILL CLOCK-BOUND.** cinderwatch and widowsgate record ZERO
+  losses in 16 apiece at the shipped dial, with all-medians on their caps. The band is
+  satisfied; the failure mode is not fixed, and no dial fixes it.
 
 **The measured per-row slopes, for whoever sizes the next move** (points of win rate per
 0.01 of dial): karrowmere 0.67, ravensmarch 0.53, gallowmoor 0.47, blackspire 0.46,
