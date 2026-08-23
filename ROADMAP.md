@@ -307,10 +307,15 @@ for the same reason: the dial there buys failure mode, not win rate.
    without the time to finish that sweep — a half-authored length column leaves the
    whole table unverified.
 
-**VERIFIED AFTER SHIPPING TIERS 1-5:** 130 test files, **1,332 of 1,333 tests pass**. The
-single failure is `battlelength`'s tier-3 bulge — item #108 above, deferred on purpose.
-`npm run check` clean, and `tools/smoke.mjs` passes all 24 steps in a real browser against
-the shipped table.
+**⇒ VERIFIED ON THE FINAL TABLE: 130 test files, 1,333 of 1,333 TESTS PASS, ZERO
+FAILURES.** That is the whole fast suite green — `battlelength` was the last holdout and
+item #108 cleared it. `npm run check` clean, and `tools/smoke.mjs` passes all 24 steps in
+a real browser against the shipped table.
+
+The five long harness files are excluded from that run and are their own story:
+`campaignplay` cannot complete in this environment (see CLAUDE.md), `tactics` fails on a
+sampling assertion untouched by this pass, `loadoutdominance` fails on an INVERSION it can
+only see now that its baselines are back in band, `harness` passes 11/0 and `scout` 3/3.
 
 **AND ONE THING THAT IS NOT A DIAL PROBLEM AT ALL.** Tier 5 is in band because battles
 run out of CLOCK, not because the enemy wins: every all-median sits exactly on the hard
