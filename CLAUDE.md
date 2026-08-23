@@ -4195,6 +4195,23 @@ campaign has nothing new to acquire.
   out-of-band one runs every seed to the cap** — so the cost is a symptom of the thing the
   test exists to detect, and the way to make it fast is to finish the re-tune.
 
+  **⇒ VERIFIED END TO END, AND IT PASSES.** On the re-tuned table,
+  `--test-name-pattern="winnable"` completed here for the FIRST TIME:
+
+  ```
+  ok 1 - campaign: every region is winnable by an ordinary player, at every tier
+  duration_ms 884063        <- 14.7 minutes, against being KILLED at fifty
+  ```
+
+  So the short-circuit's wall-clock effect is now measured rather than argued, and the
+  caveat below is retired. **It is also the cleanest confirmation of this entry's own
+  claim** — the file's cost is a function of the TABLE, and the same test that could not
+  finish in fifty minutes on an out-of-band table finishes in fifteen on a tuned one,
+  with no code change between the two runs. Test 2 (the length medians) still cannot
+  complete here: a median cannot stop early, so it plays ~480 battles regardless.
+
+  The paragraph below is what was true before that run and is kept for its reasoning.
+
   Worth knowing before re-running it here: it is the ONLY test in the suite that cannot
   complete in this environment, and `--test-name-pattern="winnable"` runs test 1 alone —
   **which was also killed, at fifty minutes, with four other sweeps sharing the box.** So

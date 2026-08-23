@@ -197,6 +197,30 @@ fallback at 84 and emberholt backs off to 8.
 to yesterday". Correcting a row that is in band would be re-tuning tier 2's difficulty
 under cover of a promise fix — the exact thing riverfen's bracket was chosen to avoid.
 
+### ✅ THE ACCEPTANCE RUN — and `campaignplay` finished here for the first time
+
+```
+smoke.mjs                 24/24 in real Chrome
+mobile.mjs                6/6, no layout problems, board 61-75%
+harness/scout/richyards    23/23
+loadoutdominance            2/2 at N=48 in 695s   (was red; fixed this pass)
+campaignplay test 1         PASS in 884s          (was KILLED at 3000s)
+tactics                     9/10 — inherited, diagnosed, left alone
+campaignplay test 2         still cannot complete here — a median cannot stop early
+fast suite                1334/1334
+```
+
+**`campaignplay`'s winnability test — "every region is winnable by an ordinary player, at
+every tier" — completed in this environment for the FIRST TIME, in 14.7 minutes, against
+having been killed at fifty.** No code changed between those two runs; the TABLE did.
+That is the cleanest possible confirmation of the claim this file already makes about that
+test: **its cost and its redness are both functions of how well-tuned the campaign is**, so
+an expensive `campaignplay` is a symptom of the thing it exists to detect. It also retires
+the standing caveat that the short-circuit's wall-clock effect was unverified.
+
+`scout` passes too, which CLAUDE.md still recorded as red ("never completed a single
+watchtower across twelve tier-5/6 battles") — that predates the `--richyards` default flip.
+
 ### ⚠ THE INCURSION LADDER HAS NO WALL — measured, and the stale warning is retired
 
 CLAUDE.md carries a warning that the ladder **REGRESSED** (38% at depth 1 against a 94%
@@ -218,7 +242,10 @@ re-tune restored it with `baseDial` never being touched, which is the strongest 
 confirmation of that warning's own diagnosis (the arena's row had moved underneath it).
 
 **But the new problem is the other end: depth 30 reads 50% against a 19% target and is
-HIGHER than depth 20's 44%, so the curve has stopped falling.** The runner's verdict line
+HIGHER than depth 20's 44%, so the curve has stopped falling.** ⇒ **CONFIRMED AT n=32:
+depth 30 reads 50% again, win-med 19.2m.** Identical to the screen, so the flat tail is
+real rather than a small-sample artefact — which is what makes this worth acting on even
+though the rest of the table above is only n=16. The runner's verdict line
 prints "wall at depth > 30" because it has nowhere left to look. Depths 10 and 20 are near
 target; it is the two ENDS that moved, which is a curve going flat rather than a curve
 moving — the same shape the ram slot reprice produced once already.
