@@ -56,7 +56,7 @@ tier 3  50-72   gallowmoor 54  sunder 60  vaelstrand 60
 tier 4  34-56   thanescar 52   blackspire 52                             SHIPPED  ok
                 ironcrown 77   obsidian 69                               STILL OVER
 tier 5  22-42   ravensmarch 33  gravenreach 33  nightharrow 42           SHIPPED, see below
-tier 6  18-36   stormhalt 25   cinderwatch 31   widowsgate 31            SHIPPED  ok
+tier 6  18-36   stormhalt 25   cinderwatch 23   widowsgate 31            SHIPPED  ok
 ```
 
 *(Tier 3's figures are AFTER its advertised lengths were corrected, which tightened its
@@ -273,11 +273,12 @@ for the same reason: the dial there buys failure mode, not win rate.
    removed. sunder's wins cluster inside its new cap and it lost nothing; gallowmoor's did
    not and it lost six.
 
-   **⚠ cinderwatch's 31 -> 21 IS NOT THE CAP, IT IS THE SAMPLE, and it is the prefix bias
-   in miniature.** Its cap got LONGER, which can only help — and both readings have the
-   SAME FIVE WINS: five of sixteen is 31%, five of twenty-four is 21%. The eight extra
-   seeds simply all failed. **21% is the better estimate and it sits three points off its
-   floor**, so tier 6 is being re-confirmed at n=48 before it is trusted there.
+   **⚠ cinderwatch's 31 -> 21 WAS NOT THE CAP, IT WAS THE SAMPLE, and it is the prefix
+   bias in miniature.** Its cap got LONGER, which can only help — and both readings had
+   the SAME FIVE WINS: five of sixteen is 31%, five of twenty-four is 21%, with the eight
+   extra seeds all failing. **Re-taken at n=48 it is 23%**, five points clear of its floor
+   at a sample whose SEM is ~6, so the row is safe and the 31% I first published was the
+   artefact.
 
    The dataset that fed this, for reference — win medians at the shipped dials — win median against what the row
    currently promises:

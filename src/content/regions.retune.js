@@ -72,7 +72,7 @@
 //     gravenreach  4.93   5.05      33    22-42    ok  (n=24)
 //     nightharrow  4.94   5.05      42    22-42    ON its ceiling — see below
 //     stormhalt    4.94   5.60      25    18-36    ok  (n=16)
-//     cinderwatch  5.06   5.65      21    18-36    ok  (n=24, re-taking at 48)
+//     cinderwatch  5.06   5.65      23    18-36    ok
 //     widowsgate   5.07   5.70      31    18-36    ok  (n=16)
 //
 // ⚠ nightharrow IS THE ONE VALUE IN THIS TABLE THAT WAS SHIPPED UNMEASURED —

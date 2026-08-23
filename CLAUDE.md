@@ -4708,7 +4708,7 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   tier 4   thanescar 52  blackspire 52                              SHIPPED  ok
            ironcrown 77  obsidian 69                                STILL OVER
   tier 5   ravensmarch 29  gravenreach 33  nightharrow ~30          SHIPPED  ok
-  tier 6   stormhalt 25  cinderwatch 31  widowsgate 31              SHIPPED  ok
+  tier 6   stormhalt 25  cinderwatch 23  widowsgate 31              SHIPPED  ok
   ```
 
   **TWENTY-TWO OF TWENTY-FOUR ROWS ARE IN BAND** (twelve were out). Every shipped value
