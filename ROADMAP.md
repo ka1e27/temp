@@ -63,8 +63,24 @@ tier 6  18-36   stormhalt ~48   cinderwatch 50   widowsgate 46           NOT MOV
 
 **The five rows still out, and what is known about each:**
 
-- **ironcrown, obsidian** — boxed in, with BOTH levers measured dead (see below). They
-  need `enemyMix`, the board, or the AI tier. None of the three is measured.
+- **ironcrown, obsidian** — boxed in, with THREE levers now measured dead. `enemyMix`
+  was the most promising and is the most decisively dead, because it fails in BOTH
+  directions (n=24, dial untouched, against ironcrown's 67% baseline):
+
+  ```
+  forts/grounds/farms      win%
+  2 / 4 / 7  (shipped)      67
+  4 / 6 / 3  military       71    <- EASIER
+  1 / 2 / 10 farm-heavy     79    <- EASIER STILL
+  ```
+
+  Fewer farms starves the enemy's gold; more farms leaves it rich with only two training
+  grounds to spend through — the same conversion failure `--richyards` fixed in the
+  harness bot. **The shipped mix is already near its own optimum.** Untried: the BOARD
+  (both are 17x13 against ravensmarch's 18x13, so each has one column of room under the
+  non-decreasing grid rule) and the AI TIER (`AI_TIERS[3]` moves all four tier-4 rows at
+  once — thanescar and blackspire sit at 54% with twenty points of floor beneath them,
+  so they can absorb it).
 - **stormhalt, cinderwatch, widowsgate** — never re-tuned, and tier 6 is the one tier
   FREE to rise as far as it likes because nothing sits above it. So it is the cheapest
   remaining fix on paper and the least meaningful in practice, because all three are
