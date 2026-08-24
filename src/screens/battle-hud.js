@@ -137,7 +137,9 @@ export function createBattleHud(o) {
   // `board` is what lets the panel sit on the site it describes. Read-only.
   // `tip` (built above) is the hover card the composition bar's segments
   // attach to.
-  const site = createSitePanel({ getState, view, input, board, tip });
+  // `bus` is here for ONE thing: the keyboard asks for this panel by name when
+  // it selects a site. See battle-panel.js `ui:focus-panel`.
+  const site = createSitePanel({ getState, view, input, board, tip, bus });
   const withdraw = createWithdraw({ input });
   const alert = createAlert();
   // ALWAYS visible, like the troop-type and booster rails it now sits beside

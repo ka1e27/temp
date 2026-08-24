@@ -34,7 +34,19 @@ export function createView(init = {}) {
      *  occupies. An armed booster still outranks this: see battle-input.js. */
     armedBuild: null,
     selectedSquad: null,
+    /**
+     * WHERE THE CURSOR IS, from either input. A pointermove writes it and so
+     * do the board's keyboard keys (`]`/`[`/arrows in battle-hotkeys.js), which
+     * is why the keyboard needed no draw code of its own — the renderer has
+     * always put a ring here. Last input to speak wins, which is the right
+     * precedence for "what am I looking at".
+     */
     hoverId: null,
+    /** The keyboard is choosing a SEND TARGET rather than walking its own
+     *  sites: `hoverId` is the target, `selection` is still the source, and
+     *  Enter commits. The pointer has no equivalent flag because a drag holds
+     *  the same state in the gesture itself. */
+    kbAiming: false,
     dragFrom: null,
     dragTo: null,
     /** A drag that began on a CAMPED force rather than on a building: the

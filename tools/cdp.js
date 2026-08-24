@@ -134,6 +134,25 @@ function connect(wsUrl) {
             type, x, y, button, buttons, clickCount: type === 'mousePressed' ? 1 : 0,
           });
         },
+        /**
+         * A REAL KEY EVENT, for the same reason `mouse` dispatches a real
+         * pointer one: the board's keys are bound on `window` and read
+         * `ev.target`, so a synthetic `new KeyboardEvent` fired from page
+         * script can be made to say anything and proves nothing about whether
+         * the listener is attached where the game thinks it is.
+         *
+         * `key` is what `ev.key` reports and is the only field this game's
+         * handler reads; `rawKeyDown` rather than `keyDown` because the latter
+         * expects `text` for printable characters and silently sends nothing
+         * without it.
+         */
+        async key(key, type = 'rawKeyDown') {
+          await send('Input.dispatchKeyEvent', { type, key, windowsVirtualKeyCode: 0 });
+        },
+        async press(key) {
+          await api.key(key, 'rawKeyDown');
+          await api.key(key, 'keyUp');
+        },
         async drag(from, to, steps = 12, button = 'left') {
           const mask = button === 'right' ? 2 : 1;
           await api.mouse('mouseMoved', from.x, from.y, 'none', 0);

@@ -58,7 +58,7 @@ export { REJECTIONS, rejectionText, upgradeOffer, upgradeLabel } from './battle-
  *   (battle-tip.js) the troop composition bar attaches to; also optional.
  */
 export function createSitePanel(o) {
-  const { getState, view, input, board, tip } = o;
+  const { getState, view, input, board, tip, bus } = o;
   const targetId = () => (view.selection.length === 1 ? view.selection[0] : null);
   const title = h('div.hud-selection-title', { text: '' });
   const sub = h('div.hud-selection-sub', { text: '' });
@@ -121,8 +121,27 @@ export function createSitePanel(o) {
   // #hud is pointer-events:none, so a panel that let clicks through would take
   // a click on its own text as a click on empty ground, clear the selection,
   // and vanish under the cursor that was reaching for it.
-  const el = h('div.hud-selection.panel', { 'data-interactive': true },
+  // `tabindex="-1"` — FOCUSABLE, BUT NOT A TAB STOP. The keyboard opens this
+  // panel (battle-hotkeys.js `]`/`[`) and then has to be able to reach what is
+  // in it: measured, the panel's own buttons sit more than twelve Tab stops
+  // past the rails, so without somewhere to jump to a keyboard player selected
+  // a site and then tabbed through every troop chip, booster and build button
+  // to reach Upgrade. Focusing the CONTAINER rather than its first button is
+  // what keeps `]` working afterwards — `isControl` exempts BUTTON and friends
+  // from the board's keys, and a div is not one, so the cursor can still walk.
+  const el = h('div.hud-selection.panel', { 'data-interactive': true, tabindex: '-1' },
     head, mid, actions);
+  // THE KEYBOARD'S WAY IN. `battle-hotkeys.js` emits this when `]`/`[` select a
+  // site, because a keyboard player who has just opened this panel should not
+  // have to Tab past every troop chip, booster and build button to reach what
+  // is in it — measured, that was more than twelve stops; it is one now.
+  //
+  // NEXT FRAME, and that is not a nicety: the emit rides `selectOnly`, and
+  // `is-open` is not applied until the HUD's update has run, so guarding on it
+  // synchronously read false every time and focus never moved at all.
+  bus?.on?.('ui:focus-panel', () => requestAnimationFrame(() => {
+    if (el.classList.contains('is-open')) el.focus();
+  }));
   const follower = createFollower(el, board, siteOf);
   let anchor = null;
 

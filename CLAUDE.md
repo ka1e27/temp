@@ -4053,14 +4053,77 @@ a live enemy-vs-neutral fight sampling flat fog colour.
 
 **THE OPEN ONES, ranked by what they cost a player.** The board is a nameless
 canvas with no AX node, so a screen-reader user gets nothing spatial for a whole
-battle. There is no keyboard path to the core verb — the site panel's own
-controls are proper buttons, but the panel cannot be opened without a mouse. Site
-hit-targets fall to 34px at the default zoom on the biggest maps. And every
-unlock in the game is bought by about region 8 of 24, so the back half of the
-campaign has nothing new to acquire.
+battle. Site hit-targets fall to 34px at the default zoom on the biggest maps.
+And every unlock in the game is bought by about region 8 of 24, so the back half
+of the campaign has nothing new to acquire. **~~There is no keyboard path to the
+core verb~~ — CLOSED, see below.**
+
+### The board answers the keyboard now, and the panel was only half of it
+
+`src/screens/battle-keynav.js` (pure: an order and a step) + four keys in
+`battle-hotkeys.js`. **`]` / `[` / the arrows walk your own sites, `Enter` aims,
+`Enter` again sends, `Escape` unwinds.**
+
+**WHAT WAS ACTUALLY MISSING WAS A *SELECTION*, and that is why the cost was so
+much larger than it looked.** The keyboard already bound fifteen shortcuts —
+filters, boosters, speed, the send fraction, retreat, slow-mo, pause — and every
+one of them either needs a selection or does nothing to the board. Nothing could
+CREATE one. So the site panel never opened, and with it went train, upgrade,
+build, rally and the send: the whole game behind a single gesture.
+
+**THE CURSOR IS `view.hoverId`, DELIBERATELY, AND THAT IS WHY THIS NEEDED NO
+DRAW CODE.** The renderer has always drawn a ring there for the mouse, so a
+keyboard player sees exactly the mark a pointer player does, and a pointermove
+overwrites it — the right precedence for "what am I looking at". Aiming keeps
+the source in `view.selection` and moves only the cursor, which is precisely how
+a drag already looks.
+
+**IT IS FOG-GATED ON THE SAME PREDICATE THE CURSOR USES.** `battleView.js
+siteAt` refuses a site the player has never seen; a cycle over the raw list
+would be that same leak with a keystroke instead of a sweep, handing back every
+enemy building's existence for free. `tests/keynav.test.js` pins it with the
+control that matters — every unseen site must be unreachable AND the seen ones
+must still be there, or the assertion passes just as happily on a function that
+returns nothing.
+
+**AND OPENING THE PANEL WAS ONLY HALF THE JOB — MEASURED.** Its buttons are
+proper `tabindex: 0` controls and they sat **more than twelve Tab stops** past
+the troop chips, boosters and build rail, so a keyboard player selected a site
+and then tabbed through the entire HUD to reach Upgrade. The panel root takes
+`tabindex="-1"` and the keyboard focuses THE CONTAINER, not its first button:
+one Tab now reaches Upgrade, and because a `div` is not a "control" the board's
+own keys keep working from there. Focusing a button instead would have trapped
+the cursor.
+
+**Two things a browser found that no unit test could.** The focus hop had to be
+deferred a frame — the emit rides `selectOnly` and `is-open` is not applied until
+the HUD's update has run, so a synchronous guard read false every time and focus
+never moved at all. And the existing "a focused control keeps its own keys" guard
+only exempted single alphanumerics, so `Enter` would have fired the board's aim
+AND activated the focused button in one keystroke.
+
+`tools/smoke-keyboard.mjs` drives all of it with REAL key events through CDP
+(`page.press`, new in `tools/cdp.js`), for the same reason every click in that
+suite is a real pointer event: the handler is bound on `window` and reads
+`ev.target`, so a synthetic `KeyboardEvent` from page script can be made to say
+anything. Its fourth step is the negative control — `]` from a focused button
+must NOT walk the board, or every panel control would move the cursor out from
+under the player pressing it.
 
 ## Gotchas that have already cost time
 
+- **A PROBE THAT LAUNCHES A BROWSER AND CALLS `process.exit(0)` LEAVES IT
+  RUNNING, AND TWENTY OF THEM LOOK EXACTLY LIKE A BROKEN GAME.** `tools/cdp.js
+  launch` starts Chrome as a child; exiting the driver does not reap it.
+  Measured after an afternoon of hand probes: **134 chrome processes and a load
+  average of 28**, at which point `smoke.mjs` failed with `could not reach a
+  battle from "null"` — the boot-shaped failure this file already warns is the
+  signature of a loaded box rather than of a defect. Killing the orphans took it
+  straight back to 28/28 steps green with no code change. Close the browser in
+  the probe, or reap by PID afterwards — and **`pkill -f chromium` does not
+  work**, because `pkill -f` matches its own wrapper's command line and the job
+  kills itself (exit 144, no output), which is the same gotcha recorded below
+  for sweeps.
 - **RUNNING THE SUITES *ADJACENT* TO A CHANGE IS NOT RUNNING ITS OWN SUITE, and this
   cost two red files in one session.** C2 changed `screens/battle-preview.js`, and the
   suites run against it were `previewhonesty`, `multisend`, `battleui`, `towers` and

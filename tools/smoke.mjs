@@ -23,6 +23,7 @@ import { runBoot, runCanvas, runHud, runSimSpeed } from './smoke-battle.mjs';
 import { runDrag, runRally, runBuild } from './smoke-orders.mjs';
 import { runCampedDrag } from './smoke-camped.mjs';
 import { runSelect } from './smoke-select.mjs';
+import { runKeyboard } from './smoke-keyboard.mjs';
 import { runEffects, runSanity } from './smoke-checks.mjs';
 import { runMeta } from './smoke-meta.mjs';
 
@@ -93,6 +94,9 @@ try {
   // long time with nothing in the game able to issue one, and the whole suite
   // stayed green. What was missing was a hit-test.
   await runCampedDrag(page, step, note);
+  // LAST among the order steps, and after the camped drag on purpose: it leaves
+  // the board deselected and unfocused, which is what the steps after it expect.
+  await runKeyboard(page, step, note);
 
   // ---- 6. effects actually render ----------------------------------------
   await runEffects(page, step, note);
