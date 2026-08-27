@@ -64,6 +64,14 @@ export async function launch({ url, port, width = 1440, height = 900 } = {}) {
 
   const client = await connect(target.webSocketDebuggerUrl);
   client.close = ((inner) => async () => { inner(); proc.kill(); })(client.close);
+  // AND REAPED EVEN IF THE DRIVER NEVER CALLS close(). Exiting this process
+  // does not kill a spawned child, so a probe that ends with `process.exit(0)`
+  // — which is most of them, written by hand and thrown away — leaves a whole
+  // Chrome behind. Measured after one afternoon of that: 134 orphaned
+  // processes and a load average of 28, at which point `smoke.mjs` fails with
+  // `could not reach a battle from "null"` and looks exactly like a broken
+  // game rather than a busy box. Discipline was the wrong fix; this is free.
+  process.once('exit', () => { try { proc.kill(); } catch { /* already gone */ } });
   await client.goto(url);
   return client;
 }

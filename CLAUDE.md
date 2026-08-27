@@ -4051,12 +4051,32 @@ sources only, so most of the documented ~106 columns/minute happen where the
 player provably cannot perceive them — reproduced twice, with the screen pixel at
 a live enemy-vs-neutral fight sampling flat fog colour.
 
-**THE OPEN ONES, ranked by what they cost a player.** The board is a nameless
-canvas with no AX node, so a screen-reader user gets nothing spatial for a whole
-battle. Site hit-targets fall to 34px at the default zoom on the biggest maps.
-And every unlock in the game is bought by about region 8 of 24, so the back half
-of the campaign has nothing new to acquire. **~~There is no keyboard path to the
-core verb~~ — CLOSED, see below.**
+**THE OPEN ONES, ranked by what they cost a player.** Site hit-targets fall to
+34px at the default zoom on the biggest maps. And every unlock in the game is
+bought by about region 8 of 24, so the back half of the campaign has nothing new
+to acquire. **~~There is no keyboard path to the core verb~~ — CLOSED, see
+below.**
+
+**⚠ AND "THE BOARD IS A NAMELESS CANVAS WITH NO AX NODE" WAS STALE — the FIFTH
+entry in this file found claiming something was open after it had shipped.**
+Measured in real Chrome on a live gallowmoor battle:
+
+```
+#board-fx   role="img"
+            aria-label="Battle map. You hold 3 sites, the enemy 5. 17 troops, 0 marching."
+   ...7s later, unprompted:
+            "Battle map. You hold 3 sites, the enemy 5. 16 troops, 0 marching. 1 site under attack."
+#board-bg   aria-hidden="true"        <- the duplicate picture, correctly silenced
+live regions: hud-alert, hud-leavehint, hint
+```
+
+`battle-status.js boardSummary` has been feeding that name for some time, and
+it is genuinely live rather than set once. What is still true is narrower and
+worth keeping separate: the summary is a TALLY, not a layout — it says how many
+sites you hold, not where they are. **The keyboard walk closed most of that gap
+by accident**: `]` selects a site and focuses the panel, which announces
+`CAMP · L1 480/480 9 GOLD +4.0`, so a screen-reader user now walks the board
+site by site and hears each one. Check the claim before building for it.
 
 ### The board answers the keyboard now, and the panel was only half of it
 
