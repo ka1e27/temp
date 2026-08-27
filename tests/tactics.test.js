@@ -128,9 +128,41 @@ test('tactics: a rider the raid turns down still marches with the column', () =>
   const { squads } = observe('gallowmoor', withSpecialists({ outriders: 0.3 }));
   const riding = carrying(squads, 'outriders');
   const mixed = riding.filter((s) => UNIT_IDS.some((u) => !RIDERS.includes(u) && s.comp[u] > 0));
-  assert.ok(riding.length >= 10, `only ${riding.length} squads carried a rider at all`);
-  assert.ok(mixed.length > 0,
-    'every outrider travelled alone, so the ones no raid wanted were benched');
+  assert.ok(riding.length > 0, 'not one squad carried a rider — they were all benched');
+
+  // ⚠ THIS USED TO ASSERT `riding.length >= 10` AND THAT NUMBER WAS DENOMINATED
+  // IN SOMETHING THIS TEST IS NOT ABOUT. It read 6 and went red, and the
+  // obvious diagnosis — the observation window, since `observe` runs to
+  // `hardCapTicks` and the advertised lengths had just been re-authored — was
+  // wrong. Instrumented on the real pipeline (gallowmoor, seed 1000):
+  //
+  //     cap 17100 ticks, battle ENDED at 9986 in a WIN — the window never bound
+  //     2230 player squads launched, 6 of them carried a rider
+  //     those six went out at ticks 1, 1, 81, 81, 181, 181
+  //
+  // Every rider squad launches in the first eighteen seconds and there is never
+  // another. 55 outriders land, the bot commits all of them at once in a
+  // handful of detachments, and NO PLAYER SITE TRAINS OUTRIDERS — the
+  // beachhead's yards are militia and spearmen — so six is all there will ever
+  // be. The count was a function of the expedition budget and the bot's
+  // batching, both of which move for reasons that have nothing to do with
+  // whether a rider rides along.
+  //
+  // THE CLAIM IS A SHARE, so that is what is asserted. Under the hold-back rule
+  // this test exists to forbid, riders travel ONLY in their own detachments and
+  // `mixed` is exactly zero; measured on the real bot it never falls below a
+  // third of rider squads:
+  //
+  //     gallowmoor seed 1000    6 rider squads = 4 pure + 2 mixed
+  //     gallowmoor seed 8919    6             = 2 pure + 4 mixed
+  //     thanescar  seed 1000   10             = 2 pure + 8 mixed
+  //     thanescar  seed 8919    6             = 3 pure + 3 mixed
+  const share = mixed.length / riding.length;
+  assert.ok(share >= 0.25,
+    `only ${mixed.length} of ${riding.length} rider squads carried anything else `
+    + `(${(share * 100).toFixed(0)}%, floor 25%, measured 33-80%). Riders are travelling `
+    + 'in their own detachments and nothing else — the hold-back rule is back, and it '
+    + 'is worth 50 points of win rate in the wrong direction.');
   // And the column they joined is no slower for having them.
   for (const s of mixed) {
     assert.ok(slowestSpeed(s.comp) < UNITS.outriders.speed);

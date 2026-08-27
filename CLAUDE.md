@@ -5161,7 +5161,23 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   time in this re-tune the gap has been readable against an in-band row at all. The
   paragraph below is the state it was found in and is kept for its lesson.
 
-  **⚠ `tactics` IS DIAGNOSED, AND IT IS NOT A WINDOW PROBLEM.** Its one red test asserts
+  **⇒ `tactics` IS FIXED AND GREEN (10/10).** Its threshold was a raw squad
+  COUNT, and a count is denominated in the expedition budget and the bot's
+  batching — neither of which the test is about. It asserts the SHARE now: under
+  the hold-back rule this test forbids, riders travel only in their own
+  detachments and `mixed` is exactly zero; measured on the real bot it never
+  falls below a third.
+
+  ```
+  gallowmoor seed 1000    6 rider squads = 4 pure + 2 mixed
+  gallowmoor seed 8919    6             = 2 pure + 4 mixed
+  thanescar  seed 1000   10             = 2 pure + 8 mixed
+  thanescar  seed 8919    6             = 3 pure + 3 mixed
+  ```
+
+  Floor 25% against a measured 33-80%. The diagnosis below is what found it.
+
+  **⚠ `tactics` WAS DIAGNOSED FIRST, AND IT WAS NOT A WINDOW PROBLEM.** Its one red test asserts
   `riding.length >= 10` and reads **6**. `observe()` runs to `hardCapTicks`, so the
   obvious suspect was the length correction shrinking the observation window — it is not.
   Instrumented on the real pipeline (gallowmoor, seed 1000, the test's own weights and
