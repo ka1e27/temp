@@ -197,6 +197,30 @@ fallback at 84 and emberholt backs off to 8.
 to yesterday". Correcting a row that is in band would be re-tuning tier 2's difficulty
 under cover of a promise fix — the exact thing riverfen's bracket was chosen to avoid.
 
+### ✅ EVERY TEST FILE IN THE REPO IS GREEN
+
+The session opened with four red. All four are closed, and three of them were
+closed by fixing what the test ASSERTED rather than what the game did:
+
+```
+fast suite (130 files)   1339/1339
+tactics                    10/10    was 9/10 — asserted a squad COUNT for a claim about a SHARE
+loadoutdominance            2/2     was 2/3 — asserted a SIGN on its own control row
+scout                       3/3     recorded as red; predates the --richyards flip
+harness / richyards        23/23
+campaignplay test 1        PASS     884s, and the first completion in this environment
+campaignplay test 2        cannot complete here — structural, a median cannot stop early
+smoke.mjs                  28/28    real Chrome, including four new keyboard steps
+mobile.mjs                   6/6    no layout problems, board 61-75%
+checksize / checkpure      clean
+```
+
+**The pattern in three of the four is worth more than the green.** Each tripwire
+was sound and the NUMBER attached to it was remembered rather than supported —
+`>= 20` points of loadout gap, `>= 10` rider squads, `gap >= 0` on a control row
+whose expected gap is zero. A test that fails on noise trains people to re-run
+it, which is the same end state as having no test.
+
 ### ✅ THE ACCEPTANCE RUN — and `campaignplay` finished here for the first time
 
 ```
