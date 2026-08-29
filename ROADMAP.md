@@ -2126,15 +2126,30 @@ dump; every finding reproduced before it was believed.
       the more interesting half. The drawer half of this is fixed (`openDrawer`);
       the button half is not.
 
-- [ ] **THE CAMPED-DRAG SMOKE STEP STILL FLAKES, about one run in four.**
-      *"the press found something other than the army the click just selected"*,
-      then three consecutive green runs with no change. The mechanism is worth
-      writing down because it makes every fixture-dependent step intermittent:
-      `smoke.mjs` boots a FRESH SAVE and `newCampaign` takes its seed from
-      `Math.random()`, so **every smoke run plays a different board**. Either seed
-      the smoke run deterministically or make each step pick its own fixture and
-      say so when it cannot — the keyboard send step was fixed the second way in
-      the same pass that found this.
+- [x] ~~**THE CAMPED-DRAG SMOKE STEP STILL FLAKES, about one run in four.**~~
+      **DIAGNOSED — it was never flaky, and the gate is deterministic now.**
+      `smoke.mjs` booted a blank save and the game's boot seed was
+      `Math.random()`, so every run played a different board and every step that
+      picks a fixture out of it was intermittent. `?seed=N` pins the world on a
+      BLANK save only (New Campaign keeps its own randomness — "a new campaign is
+      a new world" is a promise to the player), and the suite prints the seed so a
+      red run is reproducible. Five seeds were compared by how many steps actually
+      RAN, not by how many passed, because a pinned board can quietly stop
+      asserting: 99991 ships at 27 ok and zero skipped steps.
+
+      **The camped-drag failure survives, and that is the point** — see the item
+      immediately below. `SMOKE_SEED=1234` reproduces it every time.
+
+- [ ] **THE CAMPED-DRAG STEP FAILS ON SOME BOARDS, DETERMINISTICALLY.**
+      `SMOKE_SEED=1234 node tools/smoke.mjs` → *"pressing the camped force began
+      no squad drag — the press found something other than the army the click just
+      selected"*, every run, at the step right after `build`. It passes on 99991,
+      7, 42 and 20260829. Now that it reproduces it can be put under a debugger,
+      which was impossible while it looked like one-run-in-four noise. Note the
+      step already guards the documented HUD-overlap trap (it picks a hex whose
+      screen point hit-tests to the canvas), so this is something else — start by
+      asking what the click selected and what the press actually found, rather
+      than assuming a plate is in the way.
 
 - [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
       The coarse-pointer media query is verified working, which is why the phone

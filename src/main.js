@@ -23,9 +23,25 @@ const storage = createStorageAdapter(window.localStorage);
 
 // A save we cannot read is never overwritten — the player's progress stays on
 // disk while they decide what to do about it.
+// `?seed=N` PINS THE WORLD, and it exists for the browser gate rather than for
+// players. `tools/smoke.mjs` boots a blank save, so before this it took a fresh
+// `Math.random()` world every run — measured, that made two separate steps fail
+// on two runs and pass on the next three with no code change, because each step
+// picks its fixture out of whatever board it was dealt. A gate that fails one
+// run in four teaches people to re-run until green, which is how a real failure
+// gets ignored.
+//
+// It only reaches a BLANK save: `bootstrapGame` ignores the seed when there is
+// a campaign on disk, and New Campaign keeps its own `Math.random()`, because
+// "a new campaign is a new world" is a promise to the player and this is a
+// debug hook. Same shape as `?dev=1` below.
+const params = new URLSearchParams(location.search);
+const pinnedSeed = Number.parseInt(params.get('seed') ?? '', 10);
 const boot = bootstrapGame(storage, {
   now: Date.now(),
-  seed: (Math.random() * 0xffffffff) >>> 0,
+  seed: Number.isFinite(pinnedSeed)
+    ? pinnedSeed >>> 0
+    : (Math.random() * 0xffffffff) >>> 0,
   bus,
 });
 const state = boot.state;
@@ -149,7 +165,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => autosaver.flush(state, Date.now()));
 
 // Dev overlay: ?dev=1 gives speed control, crown grants and a state inspector.
-if (new URLSearchParams(location.search).has('dev')) {
+if (params.has('dev')) {
   state.session.dev = true;
   import('./ui/devoverlay.js')
     .then((m) => m.mountDevOverlay({ state, bus, scenes, loop, ctx }))

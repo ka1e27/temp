@@ -27,7 +27,39 @@ import { runKeyboard } from './smoke-keyboard.mjs';
 import { runEffects, runSanity } from './smoke-checks.mjs';
 import { runMeta } from './smoke-meta.mjs';
 
-const URL = process.env.URL || 'http://localhost:8080/';
+// A FIXED WORLD, SO A RED RUN MEANS SOMETHING. This suite boots a blank save,
+// and the game's boot seed was `Math.random()` — so every run played a
+// different board and every step that picks its fixture out of that board
+// (the drag's target, the rally's neighbour pair, the build's legal hex, the
+// keyboard walk's source) was intermittent. Measured: two different steps went
+// red on two runs and green on the next three with no change between them.
+//
+// The seed is PRINTED rather than merely pinned, and overridable, so the
+// random-board coverage is still available on purpose (`SMOKE_SEED=random`)
+// and any failure is reproducible by hand at the same URL.
+//
+// 99991 IS CHOSEN FOR COVERAGE, NOT FOR GREEN. Pinning a board trades
+// flakiness for the risk of a step that quietly stops asserting — the failure
+// smoke-select.mjs already records, where a step placed after the beachhead
+// shrank reported "fewer than two player sites to box" and passed, worthless.
+// Five seeds were run and compared by how many steps ACTUALLY RAN:
+//
+//     seed 99991   27 ok   0 skipped steps     <- shipped
+//     seed 7       26 ok   1 (no rally pair)
+//     seed 42      26 ok   1
+//     seed 20260829 25 ok  2
+//     seed 1234    FAILS   — see below
+//
+// AND PINNING DOES NOT MAKE THE OTHER BOARDS PASS. `SMOKE_SEED=1234`
+// reproduces a real camped-drag failure every time, which is the whole value
+// of this change: what looked like one-run-in-four flakiness is a
+// deterministic, board-dependent defect that can now be put under a debugger.
+// Do not raise the seed to dodge a red run.
+const SEED = process.env.SMOKE_SEED === 'random'
+  ? (Math.random() * 0xffffffff) >>> 0
+  : Number(process.env.SMOKE_SEED ?? 99991);
+const BASE = process.env.URL || 'http://localhost:8080/';
+const URL = `${BASE}${BASE.includes('?') ? '&' : '?'}seed=${SEED}`;
 const OUT = 'screenshots';
 await mkdir(OUT, { recursive: true });
 
@@ -35,6 +67,7 @@ const errors = [];
 const step = (m) => console.log(`  ok  ${m}`);
 const note = (m) => console.log(`  --  ${m}`);
 
+console.log(`  ..  world seed ${SEED} (SMOKE_SEED=random for a fresh board)`);
 const page = await launch({ url: URL });
 page.on((method, params) => {
   if (method === 'Runtime.exceptionThrown') {
