@@ -21,6 +21,7 @@ import { renderSettings } from './mainmenu-settings.js';
 import { renderAbdicate } from './mainmenu-legacy.js';
 import { endgameEntry } from './endgate.js';
 import { renderRecord } from './mainmenu-record.js';
+import { honourCount } from '../meta/milestones.js';
 import { renderRefusal } from './mainmenu-recovery.js';
 import { renderExport, renderImport } from './mainmenu-io.js';
 import { canAbdicate, legacyPoints } from '../meta/legacy.js';
@@ -219,9 +220,15 @@ export function createMainMenuScene(ctx) {
       h('button.btn.ghost.menu-import', {
         type: 'button', text: 'Import save', on: { click: showImport },
       }),
+      // THE COUNT RIDES THE BUTTON, and without it the honours are a drawer
+      // nobody opens. `honourCount` is null on a save that has done nothing —
+      // "0 / 20" in front of a new player is a scolding, and the drawer already
+      // refuses to draw a table of zeroes for the same reason.
       h('button.btn.ghost.menu-record-btn', {
-        type: 'button', text: 'Record', on: { click: showRecord },
-      }),
+        type: 'button', on: { click: showRecord },
+      }, h('span', { text: 'Record' }), ...(recordTally() ? [
+        h('span.menu-record-tally', { text: recordTally() }),
+      ] : [])),
       h('button.btn.ghost.menu-settings-btn', {
         type: 'button', text: 'Settings', on: { click: showSettings },
       }));
@@ -252,19 +259,46 @@ export function createMainMenuScene(ctx) {
     actions.firstChild?.focus?.();
   }
 
+  /**
+   * Open a drawer: bring it into view, THEN focus its entry point.
+   *
+   * MEASURED, and it is the reason the honours are visible at all. The menu
+   * keeps its six action buttons on screen while a drawer is open — right, so
+   * you can switch drawers — but that puts `.menu-io` at y=671 inside a
+   * `.dialog` sitting at `scrollTop: 0`, so at a 760px window a 488px drawer
+   * showed its TITLE and nothing else: body 761..1050 and Close at 1115 were
+   * both past the bottom edge. Byte-identical before the honours landed, so
+   * this is a pre-existing trap rather than their cost — it simply had no
+   * content worth scrolling to until now.
+   *
+   * `focus()` alone cannot fix it and that is the subtle part: browsers scroll
+   * a focused element into view by the MINIMAL amount, and the title was
+   * already inside the container, so the correct call did nothing. Scrolling
+   * the drawer's own top to the container's top is what buys it the full
+   * height. `preventScroll` then stops the focus undoing it.
+   */
+  function openDrawer(target) {
+    drawer.scrollIntoView?.({ block: 'start' });
+    target?.focus?.({ preventScroll: true });
+  }
+
+  /** `earned / total` for the button, or '' when there is nothing to tally. */
+  function recordTally() {
+    const c = honourCount(meta().stats);
+    return c ? `${c.earned} / ${c.total}` : '';
+  }
+
   /** The lifetime record — see ./mainmenu-record.js. Offered unconditionally,
    *  unlike Abdicate: it is never destructive and a save with nothing in it
    *  says so, so there is no state in which the button would be a dead end. */
   function showRecord() {
-    renderRecord(drawer, ctx, {
-      onCancel: backToActions,
-    })?.focus?.();
+    openDrawer(renderRecord(drawer, ctx, { onCancel: backToActions }));
   }
 
   /** The prestige decision. Destructive, so it lives behind the same second
    *  click "New Campaign" does — see ./mainmenu-legacy.js. */
   function showAbdicate() {
-    renderAbdicate(drawer, ctx, {
+    openDrawer(renderAbdicate(drawer, ctx, {
       onCancel: backToActions,
       onDone: (result) => {
         say(`Abdicated. You hold ${result.total} legacy.`);
@@ -275,7 +309,7 @@ export function createMainMenuScene(ctx) {
         if (overlay) ctx.scenes.pop();
         ctx.scenes.replace(ctx.screens.worldmap);
       },
-    })?.focus?.();
+    }));
   }
 
   /** Wiping is destructive and irreversible from in here, so it always costs
@@ -320,7 +354,7 @@ export function createMainMenuScene(ctx) {
   // --- export / import -----------------------------------------------------
 
   function showSettings() {
-    renderSettings(drawer, ctx)?.focus?.();
+    openDrawer(renderSettings(drawer, ctx));
   }
 
   function showExport() {

@@ -4166,6 +4166,105 @@ anything. Its fourth step is the negative control — `]` from a focused button
 must NOT walk the board, or every panel control would move the cursor out from
 under the player pressing it.
 
+## Honours: the back half of the campaign had nothing left to acquire
+
+`content/milestones.data.js` + `meta/milestones.js` + `screens/mainmenu-honours.js`.
+Twenty named goals over the thirteen `meta.stats` counters, shown in the record drawer.
+
+**THE PROBLEM IS MEASURED AND IT IS THE WHOLE JUSTIFICATION.** Modelling the shop
+screen's own `spendAll` with no skip set — a real player, cheapest-affordable-first —
+**all ELEVEN one-off unlocks are bought by REGION 8, at 64 cumulative minutes of a
+297-minute campaign.** So 233 minutes, **78% of the running time**, has nothing NEW to
+acquire, only larger numbers on things already owned.
+
+```
+region  4 saltmere    27m   unlockRaiders unlockOutriders boosterRally
+region  5 kaldan      35m   unlockRams tactician boosterTithe
+region  6 highmarch   45m   unlockHalberds unlockArchers boosterBombard
+region  7 greywater   55m   unlockSappers
+region  8 thornmoor   64m   unlockMarshal          <- THE LAST ONE, 11/11
+region  9..24               NOTHING
+```
+
+**AND THAT CORRECTS THIS FILE'S OWN CLAIM that the three specialists are "never bought
+at all".** They are never bought *by the harness*: `simshop.js pointlessUnlocks` withholds
+them deliberately, and that withholding is a documented measurement fix worth 14 points on
+obsidian (adding them to the shop dropped obsidian 47% → 33% purely by draining the
+treasury). A PLAYER buys all three, and **earlier than the Marshal** — 400/1200/1800
+against 4000. The old reading had a harness artefact standing in for a design fact.
+
+**AN HONOUR PAYS NOTHING, AND THAT IS A DECISION RATHER THAN A SHORTCUT.** Nothing in
+`battle/`, `meta/modifiers.js` or `tools/` imports the table, so this could not move a win
+rate and needed no measurement to ship — which is why it could land *after* the re-tune
+instead of inside it. `tests/milestones.test.js` asserts that against the SOURCE, by
+walking `src/battle`, `src/meta`, `src/content` and `tools` for an import, because "no code
+reads this" is a claim no fixture can demonstrate. The obvious extension is to pay relics,
+and relics genuinely are outside the measured table (the harness earns zero) — but
+`--relics=78` is worth **+25 points on gallowmoor**, so paying them would widen the
+already-recorded gap between the table and the shipped game. Left as a separate, measurable
+decision rather than taken by accident.
+
+**NOTHING IS STORED.** An honour is `stats[stat] >= need`, derived — so no persisted field,
+no migration, no second copy to fall out of step with the counters, and no way for the
+drawer to claim something the record below it contradicts. Same rule as the incursion
+ladder's `cleared`.
+
+**THE THRESHOLDS ARE MEASURED.** Modelling a player who fights each region at its own
+shipped win rate — so a region won 30% of the time costs three sittings — a full campaign
+is **685 minutes, 47 battles, 78 relics, ~4,700 kills and ~46M crowns earned**. Kills per
+battle were taken off real `playOne` runs (54–135 killed, 123–321 lost, so **the player
+structurally loses about twice what they kill** — do not author a "kill more than you lose"
+goal). Every ladder's first rung lands around region 8–10, its second around 18–20, its
+third at or past the end. `relicsEarned: 78` is the one exact figure: it is the campaign's
+whole first-clear payout, so that honour means "all twenty-four", stated in a currency.
+
+**THE GOALS LEAD AND THE COUNTERS FOLLOW**, and the goals are sorted NEAREST-FIRST on
+screen. `nextHonours` answers in table order — right for the module, since a ladder's
+identity does not depend on how far up it you are — and the sort is a presentation
+decision that stays in the screen. Seven goals in a fixed order is a list; the same seven
+sorted by proximity is a target.
+
+**AND A SCREENSHOT FOUND THAT THE DRAWER HAS ALWAYS OPENED BELOW THE FOLD.** The menu keeps
+its six action buttons on screen while a drawer is open — right, so you can switch drawers
+— but that puts `.menu-io` at **y=671 inside a `.dialog` sitting at `scrollTop: 0`**, so at
+a 760px window a 488px drawer showed its TITLE and nothing else: body 761..1050 and Close
+at 1115 both past the bottom edge. **Verified byte-identical at HEAD before the honours
+landed** (`drawer 671..1159` either way), so it is a pre-existing trap rather than their
+cost — it simply had no content worth scrolling to until now.
+
+`focus()` alone cannot fix it, and that is the subtle part: **browsers scroll a focused
+element into view by the MINIMAL amount**, and the title was already inside the container,
+so the correct call did nothing at all. `mainmenu.js openDrawer` scrolls the drawer's own
+top to the container's top and then focuses with `preventScroll`. Applied to all three
+drawers, since record, settings and abdication share the fault. After: drawer 171..658,
+Close at 614, on screen — and 140..606 at 390x844.
+
+**`tools/smoke.mjs` COVERS IT**, because a block that renders nothing looks identical to
+one that is not mounted: the record step asserts the count, the goal rows, and that **not
+every progress bar reads 0%** — a stat that never reached the module is a perfectly healthy
+empty bar.
+
+**Two things found on the way and NOT fixed here**, both pre-existing and both confirmed
+against HEAD:
+
+- **The main menu's action list is below the fold in phone landscape.** At a true 391px
+  content height the Record button sits at **y=485..529** and `elementFromPoint` returns
+  nothing — identical with and without this change. Reachable by scrolling `.dialog`, so
+  the phone audit's own "content in a scroll container is not stranded" rule passes it, and
+  `tools/mobile.mjs` never visits the menu at all.
+- **The camped-drag smoke step still flakes**, once in four runs here
+  (*"the press found something other than the army the click just selected"*). `smoke.mjs`
+  seeds a RANDOM world each run — `newCampaign` takes its seed from `Math.random()` — so
+  every run is a different board, which is what makes fixture-dependent steps intermittent.
+  Same family as the gotcha already recorded for this exact step.
+
+**And my own keyboard smoke step had the same disease, which is why it went red here.**
+Step 3 sent from whatever site `]` left the cursor on, and by that point in the run that
+can be the farm the BUILD step raised — which starts at 1 HP with an **empty garrison**, so
+the send committed nothing and reported a broken verb. It now walks on until the cursor
+holds troops, which is what a player choosing a source does anyway. Three consecutive green
+runs after the fix, reporting the source's strength so the fixture is visible in the log.
+
 ## Gotchas that have already cost time
 
 - **A PROBE THAT LAUNCHES A BROWSER AND CALLS `process.exit(0)` LEAVES IT

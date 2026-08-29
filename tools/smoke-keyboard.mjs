@@ -32,6 +32,14 @@ const ui = (page) => page.eval(() => {
     mine: b.sites.filter((s) => s.owner === 'player').length,
     panelOpen: !!panel?.classList.contains('is-open'),
     focusInPanel: !!a?.closest?.('.hud-selection'),
+    // How many bodies stand at the site under the cursor. Step 3 needs it: a
+    // site the player BUILT this run starts at one hit point with an empty
+    // garrison, so aiming from it commits nothing and the step fails on the
+    // fixture rather than on the feature.
+    hoverTroops: (() => {
+      const site = b.sites.find((x) => x.id === v?.hoverId);
+      return site ? Object.values(site.garrison ?? {}).reduce((t, n) => t + (n || 0), 0) : 0;
+    })(),
   };
 });
 
@@ -73,7 +81,26 @@ export async function runKeyboard(page, step, note) {
   await page.press('Shift');   // no-op, keeps the sequence readable
   await page.eval(() => document.querySelector('.hud-selection')?.focus());
   await page.sleep(120);
-  const start = await ui(page);
+
+  //    WALK ON UNTIL THE CURSOR HOLDS TROOPS. Step 1 leaves the cursor on
+  //    whatever site is last in reading order, and by this point in the run
+  //    that can be the farm the BUILD step raised — which starts empty, so the
+  //    send commits nothing and this reads as a broken verb. Observed: it
+  //    aimed from `bf01` and reported "0 new squads". A player picking a
+  //    source to attack from does exactly this, so the step is more honest for
+  //    it, not less.
+  let start = await ui(page);
+  for (let i = 0; i < before.mine && start.hoverTroops < 2; i++) {
+    await page.press(']');
+    await page.sleep(160);
+    await page.eval(() => document.querySelector('.hud-selection')?.focus());
+    await page.sleep(60);
+    start = await ui(page);
+  }
+  if (start.hoverTroops < 2) {
+    note(`no owned site holds two troops to send (best ${start.hoverTroops})`);
+    return;
+  }
   await page.press('Enter');
   await page.sleep(200);
   const aiming = await ui(page);
@@ -94,7 +121,7 @@ export async function runKeyboard(page, step, note) {
       + `${fresh.length} new squad(s), none of them from the source`);
   }
   step(`keyboard: Enter aimed and sent — ${fromSource.length} column(s) left `
-    + `${start.selection.join('/')}`);
+    + `${start.selection.join('/')} (${start.hoverTroops} strong)`);
 
   // 4. NEGATIVE CONTROL. A focused BUTTON owns its own keys; if `]` walked the
   //    board from there, every panel control would move the cursor under the

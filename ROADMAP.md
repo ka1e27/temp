@@ -1988,7 +1988,20 @@ against a freshly wiped save and `simrunner` spot-checks.
       broken, but the deceleration lands squarely inside the window this review
       covers. Recorded rather than actioned: changing it is a balance pass.
 
-- [ ] **EVERY UNLOCK IN THE GAME IS BOUGHT BY REGION 8 OF 24**, about ninety
+- [x] ~~**EVERY UNLOCK IN THE GAME IS BOUGHT BY REGION 8 OF 24.**~~ **ANSWERED with
+      HONOURS** — twenty named goals over the thirteen `meta.stats` counters, in the
+      record drawer, with the nearest rung of each ladder shown first. Re-measured
+      before building: 11 of 11 unlocks by region 8 at 64 minutes of a 297-minute
+      campaign, so 233 minutes — 78% of the running time — had nothing new to acquire.
+      Thresholds are authored off a measured accumulation curve rather than chosen as
+      round numbers. **It pays nothing, deliberately**, so it could not move a win rate
+      and needed no measurement to ship; a test asserts that against the source. Two
+      pre-existing defects turned up and one was fixed (the record drawer has always
+      opened below the fold — `focus()` cannot fix it, because browsers scroll by the
+      minimal amount). Numbers, the correction to the "specialists are never bought"
+      claim, and the two findings left open in CLAUDE.md. Original:
+
+      **EVERY UNLOCK IN THE GAME IS BOUGHT BY REGION 8 OF 24**, about ninety
       minutes in, under simple cheapest-first shopping. So for the remaining
       sixteen regions and the majority of playtime there is nothing NEW to
       acquire — only larger numbers on things already owned. This compounds with
@@ -2102,6 +2115,26 @@ dump; every finding reproduced before it was believed.
       default state is the one that matters. Related to the readability critic's
       independent finding that widowsgate renders at 34.9 px/hex against
       riverfen's 65.8.
+
+- [ ] **THE MAIN MENU'S ACTION LIST IS BELOW THE FOLD IN PHONE LANDSCAPE.** At a
+      true 391px content height the Record button sits at y=485..529 and
+      `document.elementFromPoint` on its own centre returns NOTHING, so a tap there
+      does not land — measured, and byte-identical with and without the honours
+      change, so it is pre-existing. It is reachable by scrolling `.dialog`, which
+      is why the phone audit's own "content in a scroll container is not stranded"
+      rule would pass it; `tools/mobile.mjs` never visits the menu at all, which is
+      the more interesting half. The drawer half of this is fixed (`openDrawer`);
+      the button half is not.
+
+- [ ] **THE CAMPED-DRAG SMOKE STEP STILL FLAKES, about one run in four.**
+      *"the press found something other than the army the click just selected"*,
+      then three consecutive green runs with no change. The mechanism is worth
+      writing down because it makes every fixture-dependent step intermittent:
+      `smoke.mjs` boots a FRESH SAVE and `newCampaign` takes its seed from
+      `Math.random()`, so **every smoke run plays a different board**. Either seed
+      the smoke run deterministically or make each step pick its own fixture and
+      say so when it cannot — the keyboard send step was fixed the second way in
+      the same pass that found this.
 
 - [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
       The coarse-pointer media query is verified working, which is why the phone

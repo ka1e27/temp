@@ -18,6 +18,7 @@ import { h, clear, mount } from '../ui/dom.js';
 import { compact, duration, percent, fixed } from '../ui/format.js';
 import { RECORD } from '../content/strings.js';
 import { recordView } from '../meta/record.js';
+import { honoursSection } from './mainmenu-honours.js';
 
 /** One `dt`/`dd` pair. Same markup as the abdication payout table, so the two
  *  drawers line up rather than each inventing a layout. */
@@ -82,6 +83,12 @@ export function renderRecord(drawer, ctx, { onCancel }) {
   // without scrolling — a dialog whose dismiss control is below the fold is a
   // trap, and the browser smoke test failed on exactly that.
   const body = h('div.menu-record-body', {}, ...[
+  // HONOURS FIRST, and that ordering is the point of them. The seventeen rows
+  // below are a record of what has happened; these are what is left to do, and
+  // a player opening this drawer in the back half of the campaign has nothing
+  // else anywhere in the game aiming them at anything.
+  ...honoursSection(ctx.state.meta.stats),
+
   ...section(RECORD.warTitle,
     row(RECORD.winRate, orDash(v.winRate, (x) => percent(x))),
     row(RECORD.battles, compact(v.battles)),

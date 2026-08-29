@@ -226,6 +226,12 @@ export const RECORD = Object.freeze({
   crownsSpent: 'Crowns spent',
   relicsEarned: 'Relics earned',
   relicsSpent: 'Relics spent',
+  // HONOURS — see content/milestones.data.js. Named goals over the same
+  // counters, and the reason the drawer is worth opening in the back half of a
+  // campaign whose last unlock arrives at region 8 of 24.
+  honoursTitle: 'Honours',
+  honoursEarned: 'Earned:',
+  honoursAll: 'Every honour earned. There is nothing left to prove.',
 });
 
 export const SHOP = Object.freeze({

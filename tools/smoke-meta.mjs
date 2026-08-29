@@ -246,16 +246,33 @@ async function runEndgame(page, h, step, note, OUT) {
       rows: dds.length,
       winRate: document.querySelector('.menu-record dd')?.textContent ?? null,
       dashes: dds.filter((t) => t === '—').length,
+      // HONOURS — the goals half. Asserted here because a block that renders
+      // nothing looks identical to one that is simply not mounted, and the
+      // unit test can only prove the drawer NAMES `honoursSection`.
+      honourCount: document.querySelector('.menu-honour-count')?.textContent ?? null,
+      goals: document.querySelectorAll('.menu-honour').length,
+      // A bar that never leaves 0% is the silent failure: `progress` is a
+      // clamped ratio, so a stat that never reached the module reads as a
+      // perfectly healthy empty bar.
+      widths: [...document.querySelectorAll('.menu-honour-fill')]
+        .map((e) => e.style.width),
     };
   });
   if (!rec.open) throw new Error('the Record drawer did not render');
+  if (!rec.honourCount) throw new Error('the honours block did not render');
+  if (!rec.goals) throw new Error('the honours block offered no goals');
+  if (!rec.widths.some((w) => w !== '0%')) {
+    throw new Error(`every honour bar reads 0% (${rec.widths.join(',')}) `
+      + '— the counters never reached meta/milestones.js');
+  }
   if (rec.groups < 4) throw new Error(`record showed ${rec.groups} groups, expected 4`);
   if (rec.rows < 10) throw new Error(`record showed ${rec.rows} rows, expected 10+`);
   if (rec.dashes === rec.rows) {
     throw new Error('every record figure is an em dash — the counters never reached the drawer');
   }
   await h.hitPoint('.menu-record-close', 'the Record close button');
-  step(`record: ${rec.groups} groups, ${rec.rows} rows, win rate ${rec.winRate}`);
+  step(`record: ${rec.groups} groups, ${rec.rows} rows, win rate ${rec.winRate}`
+    + `, honours ${rec.honourCount} with ${rec.goals} goal(s)`);
   await page.screenshot(`${OUT}/07-record.png`);
 
   // THE INSTALL ROW. Chrome only fires `beforeinstallprompt` over https with a

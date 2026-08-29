@@ -224,3 +224,32 @@
 }
 .menu-status { min-height: 1.4em; font-size: var(--t-sm); color: var(--c-warn); }
 .menu-status:empty { display: none; }
+
+/* HONOURS (screens/mainmenu-honours.js). The goals half of the record drawer.
+   Deliberately NOT the `.menu-empire` dl the counters use: a goal is a title, a
+   fraction, a bar and a sentence, which is four things where that table has two.
+
+   THE BAR IS A PLAIN DIV rather than a `<progress>`, for the reason the site
+   panel's build bar is: `progress` cannot be styled consistently across engines
+   without unsetting its appearance first, and this needs no interaction. It is
+   `aria-hidden` because the fraction beside it already says the same thing in
+   words a screen reader can read. */
+.menu-honour-count {
+  margin: 0; color: var(--c-rank);
+  font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num);
+}
+.menu-honour-list { margin: var(--s-2) 0 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: var(--s-2); }
+.menu-honour-line { display: flex; justify-content: space-between; gap: var(--s-2);
+  align-items: baseline; }
+.menu-honour-title { font: var(--w-bold) var(--t-sm) / 1.3 var(--font-ui); color: var(--c-text); }
+.menu-honour-num { font: var(--w-normal) var(--t-xs) / 1.3 var(--font-num); color: var(--c-text-dim);
+  white-space: nowrap; }
+.menu-honour-bar { height: 3px; margin-top: var(--s-1); border-radius: var(--r-1);
+  background: var(--c-surface-2); overflow: hidden; }
+.menu-honour-fill { height: 100%; background: var(--c-rank); }
+.menu-honour-note { margin: var(--s-1) 0 0; font-size: var(--t-xs); }
+.menu-honour-earned { margin: var(--s-3) 0 0; font-size: var(--t-xs); line-height: 1.5; }
+/* The button becomes a two-part row once it carries a tally. */
+.menu-record-btn { display: flex; justify-content: space-between; gap: var(--s-2); }
+.menu-record-tally { color: var(--c-rank); font-family: var(--font-num); }
