@@ -2050,7 +2050,20 @@ dump; every finding reproduced before it was believed.
       nothing"), but this is the first time it has been dumped rather than
       reasoned about. Categorically absent rather than degraded.
 
-- [ ] **THERE IS NO KEYBOARD PATH TO THE CORE VERB.** A keyboard-only player can
+- [x] ~~**THERE IS NO KEYBOARD PATH TO THE CORE VERB.**~~ **FIXED.** `]` / `[` and
+      the arrows walk your own sites, `Enter` aims, `Enter` again sends, `Escape`
+      unwinds. `screens/battle-keynav.js` is the pure part (a reading order and a
+      step); four keys in `battle-hotkeys.js` are the rest. **What was actually
+      missing was a SELECTION** — the keyboard already bound fifteen shortcuts and
+      every one of them either needed one or did nothing to the board, so the whole
+      game sat behind a single gesture. The cursor is `view.hoverId`, which the
+      renderer has always drawn a ring at, so this needed no draw code; it is
+      fog-gated on the same `siteAt` predicate the pointer uses; and the panel root
+      took `tabindex="-1"` so one Tab reaches Upgrade instead of twelve.
+      `tools/smoke-keyboard.mjs` drives it with real CDP key events, its fourth step
+      being the negative control. Original:
+
+      **THERE IS NO KEYBOARD PATH TO THE CORE VERB.** A keyboard-only player can
       pause and change speed and nothing else: every verb that changes the
       battle's state needs a mouse gesture to have happened first, and the site
       panel cannot be opened without one. The panel's own controls ARE proper
@@ -2073,7 +2086,17 @@ dump; every finding reproduced before it was believed.
       invariant this project treats as load-bearing, so it should either be fixed
       or the invariant's scope written down honestly.
 
-- [ ] **SITE HIT-TARGETS FALL TO 34px (farm) / 31px (watchtower) AT THE DEFAULT
+- [x] ~~**SITE HIT-TARGETS FALL TO 34px (farm) / 31px (watchtower) AT THE DEFAULT
+      ZOOM ON THE BIGGEST MAPS.**~~ **FIXED.** Reproduced analytically off the real
+      `fitTo`/`gridBounds`/`siteRadius` path — ten of twenty-four regions are under
+      44px at 1440x761, and at 1280x700 it starts at region five. `siteShapes.js`
+      grew `pickRadius(kind, hexSize, slop, zoom)` with a 44px SCREEN floor, and the
+      floor is gated on `slop > 1` so `battle-input.js`'s precision call is
+      byte-identical at every zoom — a picture may scale, a target may not.
+      `tests/pickradius.test.js` pins it, three of its four tests negative controls.
+      Original:
+
+      **SITE HIT-TARGETS FALL TO 34px (farm) / 31px (watchtower) AT THE DEFAULT
       ZOOM ON THE BIGGEST MAPS** — under the 44px guideline on exactly the boards
       that carry the most simultaneous action. Player-fixable by zooming, but the
       default state is the one that matters. Related to the readability critic's
