@@ -13,6 +13,8 @@
 // stayed green throughout. What was missing was a hit-test, and a hit-test is
 // exactly what a fake DOM cannot check.
 
+import { whyNotFound } from './smoke-campedwhy.mjs';
+
 /** The board facts the tile search needs, fetched once. */
 const readBoard = (page) => page.eval(() => {
   const b = window.__game.state.battle;
@@ -190,7 +192,20 @@ export async function runCampedDrag(page, step, note) {
   // left exactly as the previous step set it, so neither the squad branch NOR
   // the site branch fired. A second click costs a frame and keeps the assertion
   // rather than downgrading it to a note that would quietly stop testing.
+  //
+  // AND IT CLEARS `selectedSquad` FIRST, WHICH IS THE HALF THAT WAS MISSING.
+  // Reading the field after the click cannot tell "this click selected the
+  // army" from "the army was ALREADY selected and this click did nothing" —
+  // measured on seed 1234, the assertion passed on a selection left over from
+  // an earlier step while the pointer was not picking the army at all, so the
+  // step sailed past its own hit-test proof and failed one line later at the
+  // press. A test that can pass without doing its work is this project's
+  // recurring failure mode, not a rare one.
   const clickAt = async () => {
+    await page.eval(() => {
+      const v = window.__game.__ui;
+      if (v) v.selectedSquad = null;
+    });
     await page.mouse('mouseMoved', at.x, at.y);
     await page.mouse('mousePressed', at.x, at.y);
     await page.mouse('mouseReleased', at.x, at.y);
@@ -205,48 +220,9 @@ export async function runCampedDrag(page, step, note) {
     // fixes: a SITE under the pointer means `tap` took the site branch and
     // never asked about squads, while no site and no squad means the squad
     // hit-test itself missed.
-    const why = await page.eval(async (p) => {
-      const { loadStops, routeAt } = await import('/src/render/routePath.js');
-      const { squadProgress, squadBow } = await import('/src/render/routes.js');
-      const g = window.__game;
-      const st = g.state.battle;
-      const w = g.__view.toWorld(p.x, p.y, {});
-      const near = g.__view.siteAt(st, w.x, w.y);
-      const on = g.__view.siteAt(st, w.x, w.y, 1);
-      const sq = st.squads.find((s) => s.owner === 'player' && s.camped);
-      const h = sq && (Array.isArray(sq.hex) ? { q: sq.hex[0], r: sq.hex[1] } : sq.hex);
-      const end = sq && sq.path && sq.path[sq.path.length - 1];
-      return {
-        siteNear: near ? near.id : null,
-        siteOn: on ? on.id : null,
-        selection: (g.__ui?.selection ?? []).join(','),
-        camped: st.squads.filter((s) => s.owner === 'player' && s.camped).length,
-        // THE TWO PLACES A CAMPED ARMY CAN BE. `squadHexOf` (and therefore the
-        // draw, and the click point this step aims at) reads `sq.hex`;
-        // `squadAt` walks `sq.path` and lands on its LAST hex. If these differ
-        // the army is drawn in one place and pickable in another.
-        hex: h ? `${h.q},${h.r}` : null,
-        pathEnd: end ? `${end.q},${end.r}` : null,
-        pathLen: sq && sq.path ? sq.path.length : null,
-        // ...and the GEOMETRY the picker actually measures against, run here
-        // through the very same exported functions battle-squadpick.js calls.
-        // "The hit-test missed" is a guess until this says by how far.
-        miss: sq ? (() => {
-          const geo = { byId: () => null, pos: () => null,
-            hexPos: (q, r, o) => g.__view.hexPos(q, r, o) };
-          const n = loadStops(sq, geo);
-          if (!n) return 'no-stops';
-          const at2 = { x: 0, y: 0 };
-          routeAt(sq, n, squadProgress(sq, st.tick), squadBow(sq), at2, null);
-          const d = Math.hypot(w.x - at2.x, w.y - at2.y);
-          return `${d.toFixed(1)}px vs radius ${(g.__view.hexSize * 0.5).toFixed(1)}`;
-        })() : null,
-      };
-    }, at);
     throw new Error(`clicking the camped force at [${camped.q},${camped.r}] selected `
-      + `${picked === null ? 'nothing' : `squad ${picked}`} — siteNear=${why.siteNear} `
-      + `siteOn=${why.siteOn} selection=[${why.selection}] campedSquads=${why.camped} `
-      + `hex=${why.hex} pathEnd=${why.pathEnd} pathLen=${why.pathLen} miss=${why.miss}`);
+      + `${picked === null ? 'nothing' : `squad ${picked}`}. `
+      + `${await whyNotFound(page, camped.id, at)}`);
   }
 
   // ...AND PROVE THE PRESS TOO, not only the click. The retry above guards
@@ -300,6 +276,13 @@ export async function runCampedDrag(page, step, note) {
  */
 async function dragFromArmy(page, squadId, from, to, steps = 12) {
   for (let attempt = 1; attempt <= 2; attempt++) {
+    // FLUSH ANY POINTER STILL DOWN BEFORE PRESSING. `onDown`'s FIRST branch
+    // returns on `pointers.size === 2` and treats the gesture as a two-finger
+    // pan, so one unbalanced press left behind by an earlier step makes every
+    // later drag silently do nothing — no order, no rejection, no error. The
+    // step already has a "start from a neutral pointer" rule for `rallyMode`
+    // and this is the same rule for the pointer map itself.
+    await page.mouse('mouseReleased', from.x, from.y, 'left', 0);
     await page.mouse('mouseMoved', from.x, from.y, 'none', 0);
     await page.mouse('mousePressed', from.x, from.y);
     const took = await page.eval(() => window.__game.__ui?.dragFromSquad ?? null);
@@ -311,8 +294,15 @@ async function dragFromArmy(page, squadId, from, to, steps = 12) {
       });
       await page.sleep(150);
       if (attempt === 2) {
+        // SAY WHAT IT SAW, the rule the click path already follows. The press
+        // and the click run the SAME `squadAt`, so "the hit-test missed" is
+        // never the whole story — ./smoke-campedwhy.mjs reports the two things
+        // that separate the real causes: whether the CAMERA moved under the
+        // step, and where the picker actually places the army against the
+        // radius it is allowed.
         throw new Error(`pressing the camped force began ${took === null ? 'no squad drag' : `a drag off ${took}`}`
-          + ' — the press found something other than the army the click just selected');
+          + ' — the press found something other than the army the click just '
+          + `selected. ${await whyNotFound(page, squadId, from)}`);
       }
       continue;
     }

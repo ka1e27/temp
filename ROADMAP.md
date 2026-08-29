@@ -2140,16 +2140,37 @@ dump; every finding reproduced before it was believed.
       **The camped-drag failure survives, and that is the point** — see the item
       immediately below. `SMOKE_SEED=1234` reproduces it every time.
 
-- [ ] **THE CAMPED-DRAG STEP FAILS ON SOME BOARDS, DETERMINISTICALLY.**
-      `SMOKE_SEED=1234 node tools/smoke.mjs` → *"pressing the camped force began
-      no squad drag — the press found something other than the army the click just
-      selected"*, every run, at the step right after `build`. It passes on 99991,
-      7, 42 and 20260829. Now that it reproduces it can be put under a debugger,
-      which was impossible while it looked like one-run-in-four noise. Note the
-      step already guards the documented HUD-overlap trap (it picks a hex whose
-      screen point hit-tests to the canvas), so this is something else — start by
-      asking what the click selected and what the press actually found, rather
-      than assuming a plate is in the way.
+- [ ] **A CAMPED ARMY CAN BE CLICKED AND NOT PRESSED, on some boards.**
+      `SMOKE_SEED=1234 node tools/smoke.mjs` reproduces it every run.
+      **NARROWED AS FAR AS A BLACK-BOX PROBE CAN GO; what is left needs an
+      instrument inside `squadAt` itself.** Established, all measured on the
+      failing run through `tools/smoke-campedwhy.mjs`:
+
+      - The CLICK picks the army and the PRESS does not, at the same screen
+        point, moments apart, through what should be the same `ord.squadAt`
+        (`tap`'s `!hit` branch and `onDown`'s `ownSquadAt`).
+      - The army is on the board, `camped`, its `hex` and its `path` end AGREE
+        (`-1,2`), no fight is open and nothing is armed.
+      - It survives the fog gate: `perceivedSquads(state,'player')` contains it.
+      - The camera did not move (0.4px) and no site is under the pointer at
+        either slop, so `onDown`'s `army && !onBuilding` should hold.
+      - Replicating the picker's geometry through the very functions it calls
+        puts the army **0.4px from the press point against a 17px radius**.
+
+      So the two paths disagree while every input to them looks identical. The
+      untested candidate is `loadStops(sq, geo)` returning null under the REAL
+      `geo` — `squadAt` does `if (!stops) continue`, which drops a squad in
+      silence — where the probe's stub `geo` returns stops and a clean distance.
+      **Next step: log inside `battle-squadpick.js squadAt`** (stops null? owner
+      filtered? distance?) rather than another probe from outside.
+
+      Two probe lessons already paid for, both worth more than the bug: the
+      step's click assertion read `view.selectedSquad` WITHOUT clearing it, so
+      it passed on a selection left over from an earlier step and proved
+      nothing — fixed; and the forensic called `board.squadAt`, **which does not
+      exist**, so it reported `squadAt->null` for every failure and read like a
+      smoking gun. A probe that does not assert its own instrument is measuring
+      nothing.
 
 - [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
       The coarse-pointer media query is verified working, which is why the phone
