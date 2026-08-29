@@ -120,15 +120,13 @@ export function createBattleInput(o) {
     //
     // PRECISION BEATS FORGIVENESS, which is the whole precedence rule. `siteAt`
     // carries 1.25 hexes of slop ON PURPOSE so a fingertip near a building still
-    // lands on it; `squadAt` is deliberately tight, because a stray click near a
-    // column must be able to mean "deselect". So a press that hits an army has
-    // genuinely hit it, while one that hits a building may only have been
-    // forgiven — a camped force wins over a site the pointer merely landed NEAR,
-    // and loses to one it is actually on (`siteAt` with the slop off). Without
-    // it, troops parked within a hex or so of your own farm could not be dragged
-    // at all: the farm would swallow the press and issue a SEND. Reasoned, not
-    // observed — the smoke failure that prompted the look turned out to be a
-    // flaky fixture, and the board had no site near the army at all.
+    // lands on it; `squadAt` is tight, because a stray click near a column must
+    // be able to mean "deselect". So a press that hits an army has genuinely hit
+    // it, while one that hits a building may only have been forgiven — a camped
+    // force wins over a site the pointer merely landed NEAR, and loses to one it
+    // is actually on (`siteAt` with the slop off). Without it, troops parked
+    // within a hex of your own farm could not be dragged at all: the farm would
+    // swallow the press and issue a SEND. Reasoned, not observed.
     const army = ownSquadAt(ord, getState(), w.x, w.y);
     const onBuilding = army ? board.siteAt(getState(), w.x, w.y, 1) : null;
     if (army && !onBuilding) {
@@ -357,6 +355,8 @@ export function createBattleInput(o) {
 
   return {
     view,
+    /** The order layer, so a probe calls the REAL `squadAt`, not a replica. */
+    ord,
     /** Exposed so HUD chips route through exactly the same code as the keys. */
     setFraction(f) { view.fraction = f; bus?.emit('ui:fraction', f); },
     /** Switch what a plain drag means. Turning it on cancels an armed booster:

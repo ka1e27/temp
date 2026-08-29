@@ -53,13 +53,22 @@ export async function whyNotFound(page, squadId, at) {
       perceivedN: perceivedSquads(st, 'player').length,
       squadsN: st.squads.length,
       camped: !!sq?.camped,
-      // NOT `board.squadAt` — THERE IS NO SUCH FUNCTION. The picker lives in
-      // battle-squadpick.js and is reached through `ord`, which main.js does
-      // not expose; `g.__view` is the BOARD. An earlier version of this probe
-      // called it anyway and reported `squadAt->null` for every failure, which
-      // is a probe measuring nothing and reading like a smoking gun. What is
-      // reachable is the geometry, replicated below.
-      pickerReachable: typeof g.__view.squadAt === 'function',
+      // THE REAL PICKER, through `__ord`. NOT `board.squadAt`, which does not
+      // exist — an earlier version of this probe called that and reported
+      // `squadAt->null` for every failure: a probe measuring nothing, reading
+      // like a smoking gun, and it cost several runs.
+      picks: g.__ord?.squadAt?.(st, wp.x, wp.y)?.id ?? null,
+      // ...and the same question one layer up, which is what `onDown` asks.
+      picksOwn: (() => { const p2 = g.__ord?.squadAt?.(st, wp.x, wp.y);
+        return p2 && p2.owner === 'player' ? p2.id : null; })(),
+      pickerReachable: typeof g.__ord?.squadAt === 'function',
+      // WHAT THE BROWSER WOULD ACTUALLY DELIVER THE PRESS TO. The step checks
+      // this before it clicks — but the CLICK opens the site panel, and a panel
+      // that lands over the army swallows every press after it. `#screen-root`
+      // is pointer-events:none and only the plates opt back in, so this reads
+      // CANVAS when the board is clear and a plate's class when it is not.
+      hits: (() => { const el = document.elementFromPoint(px, py);
+        return el ? `${el.tagName}.${el.className || '-'}` : 'nothing'; })(),
       selected: g.__ui?.selectedSquad ?? null,
       siteNear: g.__view.siteAt(st, wp.x, wp.y)?.id ?? null,
       siteOn: g.__view.siteAt(st, wp.x, wp.y, 1)?.id ?? null,
@@ -83,6 +92,8 @@ export async function whyNotFound(page, squadId, at) {
     : `puts it ${w.pick?.err ?? 'nowhere'}`;
   return `onBoard=${w.onBoard} camped=${w.camped} perceivedByOwner=${w.perceived} `
     + `(${w.perceivedN} of ${w.squadsN} squads perceived) `
+    + `REAL squadAt->${w.pickerReachable ? w.picks : 'UNREACHABLE'} `
+    + `ownSquadAt->${w.picksOwn} pressLandsOn=${w.hits} `
     + `selected=${w.selected} siteNear=${w.siteNear} siteOn=${w.siteOn} `
     + `fights=${w.fights} armed=${w.armed} hex=${w.hex} pathEnd=${w.pathEnd} `
     + `pathLen=${w.pathLen} cameraMoved=${w.moved?.toFixed(1)}px — the picker ${pick}`;

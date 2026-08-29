@@ -225,6 +225,41 @@ export async function runCampedDrag(page, step, note) {
       + `${await whyNotFound(page, camped.id, at)}`);
   }
 
+  // ...AND GET THE PANEL OFF THE ARMY BEFORE DRAGGING, which is the whole
+  // cause of this step's long-running intermittency and was found only by
+  // asking what the press ACTUALLY LANDED ON:
+  //
+  //     pressLandsOn=DIV.hud-selection panel is-open
+  //
+  // The click proves the hit-test and, by selecting, OPENS THE SITE PANEL —
+  // which on some boards lands squarely over the army it just selected. Every
+  // press after that hits the plate, `onDown` never runs, and the gesture
+  // evaporates one layer above the simulation. The step checked `armyClear`
+  // BEFORE the click, so it was measuring a board the click then changed.
+  //
+  // Escape deselects, which is what a player does, and dragging without a
+  // preceding click is the ordinary flow anyway. Re-asserted rather than
+  // assumed: if the plate is still there the step SAYS SO instead of failing
+  // as a hit-test mystery.
+  // POLLED, NOT SLEPT, because the panel FADES: it keeps its box and stays
+  // hit-testable while opacity runs down, so a fixed wait reports a dismissed
+  // panel as a live one — the transition trap this project has already filed
+  // once for the same element.
+  await page.press('Escape');
+  let clearNow = '';
+  for (let i = 0; i < 12; i++) {
+    await page.sleep(120);
+    clearNow = await page.eval((p) => {
+      const el = document.elementFromPoint(p.x, p.y);
+      return el ? `${el.tagName}.${el.className || '-'}` : 'nothing';
+    }, at);
+    if (clearNow.startsWith('CANVAS')) break;
+  }
+  if (!clearNow.startsWith('CANVAS')) {
+    note(`camped force at [${camped.q},${camped.r}] stayed under ${clearNow} after Escape`);
+    return;
+  }
+
   // ...AND PROVE THE PRESS TOO, not only the click. The retry above guards
   // `tap`, and the drag's own `pointerdown` is a SECOND, independently flaky
   // hit-test that nothing was checking: observed once in CI, the click selected

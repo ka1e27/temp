@@ -2140,37 +2140,50 @@ dump; every finding reproduced before it was believed.
       **The camped-drag failure survives, and that is the point** — see the item
       immediately below. `SMOKE_SEED=1234` reproduces it every time.
 
-- [ ] **A CAMPED ARMY CAN BE CLICKED AND NOT PRESSED, on some boards.**
-      `SMOKE_SEED=1234 node tools/smoke.mjs` reproduces it every run.
-      **NARROWED AS FAR AS A BLACK-BOX PROBE CAN GO; what is left needs an
-      instrument inside `squadAt` itself.** Established, all measured on the
-      failing run through `tools/smoke-campedwhy.mjs`:
+- [x] ~~**A CAMPED ARMY CAN BE CLICKED AND NOT PRESSED, on some boards.**~~
+      **SOLVED, and the cause is one line of output nothing was printing:**
 
-      - The CLICK picks the army and the PRESS does not, at the same screen
-        point, moments apart, through what should be the same `ord.squadAt`
-        (`tap`'s `!hit` branch and `onDown`'s `ownSquadAt`).
-      - The army is on the board, `camped`, its `hex` and its `path` end AGREE
-        (`-1,2`), no fight is open and nothing is armed.
-      - It survives the fog gate: `perceivedSquads(state,'player')` contains it.
-      - The camera did not move (0.4px) and no site is under the pointer at
-        either slop, so `onDown`'s `army && !onBuilding` should hold.
-      - Replicating the picker's geometry through the very functions it calls
-        puts the army **0.4px from the press point against a 17px radius**.
+      ```
+      pressLandsOn=DIV.hud-selection panel is-open
+      ```
 
-      So the two paths disagree while every input to them looks identical. The
-      untested candidate is `loadStops(sq, geo)` returning null under the REAL
-      `geo` — `squadAt` does `if (!stops) continue`, which drops a squad in
-      silence — where the probe's stub `geo` returns stops and a clean distance.
-      **Next step: log inside `battle-squadpick.js squadAt`** (stops null? owner
-      filtered? distance?) rather than another probe from outside.
+      Clicking the army SELECTS it, which OPENS THE SITE PANEL, which on some
+      boards lands squarely over the army it just selected. Every press after
+      that hits the plate, `onDown` never runs, and the gesture evaporates one
+      layer above the simulation — no order, no rejection, no error. The step
+      asserted `elementFromPoint` BEFORE the click, so it was measuring a board
+      the click then changed. It presses Escape and re-asserts now, polling for
+      the fade rather than sleeping (the panel keeps its box and stays
+      hit-testable while opacity runs down — the transition trap already filed
+      once for this same element). Three clean runs on the seed that failed four
+      times, and the shipped seed still green.
 
-      Two probe lessons already paid for, both worth more than the bug: the
-      step's click assertion read `view.selectedSquad` WITHOUT clearing it, so
-      it passed on a selection left over from an earlier step and proved
-      nothing — fixed; and the forensic called `board.squadAt`, **which does not
-      exist**, so it reported `squadAt->null` for every failure and read like a
-      smoking gun. A probe that does not assert its own instrument is measuring
-      nothing.
+      **AND MY OWN "DETERMINISTIC" CLAIM WAS WRONG, which is worth more than the
+      fix.** Seed 1234 failed four runs, then passed two, then failed three. The
+      seed pins the BOARD, not the RUN: the battle keeps ticking through every
+      probe round-trip, so anything depending on live state varies with latency.
+      A pinned seed makes a gate reproducible, not deterministic.
+
+      Three probe lessons, all paid for: the click assertion read
+      `view.selectedSquad` without clearing it, so it passed on a leftover
+      selection and proved nothing; the forensic called `board.squadAt`, **which
+      does not exist**, and reported a confident `squadAt->null` that read like a
+      smoking gun for several runs; and every geometric suspect measured innocent
+      (0.4px off a 17px radius, fog gate passed, camera still, no site at either
+      slop) while the answer was not geometry at all. `screens/battle-input.js`
+      now returns `ord` and `battle.js` exposes `__ord`, so a probe can call the
+      REAL picker instead of a replica of it.
+
+- [ ] **SELECTING A CAMPED ARMY CAN PUT THE SITE PANEL ON TOP OF IT.** The
+      player-facing half of the item above, and it is not fixed. Tap a camped
+      force to inspect it and the panel can open over the army, after which it
+      cannot be dragged — the press lands on the plate. `.hud-selection` already
+      carries `z-index: 2` for the rule *"advice never covers a control"*; this
+      is the same rule one step further, where the plate covers the ARMY, which
+      is the thing being operated. A player can pan out of it, so it is a
+      papercut rather than a trap, and the honest options are to place the panel
+      away from the current selection or to let a press fall through to the board
+      when the plate is over the selected unit.
 
 - [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
       The coarse-pointer media query is verified working, which is why the phone

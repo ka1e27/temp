@@ -4265,6 +4265,48 @@ the send committed nothing and reported a broken verb. It now walks on until the
 holds troops, which is what a player choosing a source does anyway. Three consecutive green
 runs after the fix, reporting the source's strength so the fixture is visible in the log.
 
+## The click that opens a panel over the thing it selected
+
+A long-running intermittent smoke failure, chased to the end because pinning the
+world made it reproducible. The answer is one line of output nothing was printing:
+
+```
+pressLandsOn=DIV.hud-selection panel is-open
+```
+
+**Clicking a camped army SELECTS it, which OPENS THE SITE PANEL, which on some boards
+lands squarely over the army it just selected.** Every press after that hits the plate,
+`onDown` never runs, and the gesture evaporates one layer above the simulation — no
+order, no rejection, no error. The step asserted `elementFromPoint` **before** the click,
+so it was measuring a board the click then changed.
+
+**THE PLAYER-FACING HALF IS REAL AND IS NOT FIXED.** Tap a camped force to inspect it and
+the panel can cover it, after which it cannot be dragged. `.hud-selection` already carries
+`z-index: 2` for the rule *"advice never covers a control"*; this is that rule one step
+further, where the plate covers the ARMY, which is the thing being operated.
+
+**AND "DETERMINISTIC" WAS WRONG, which is worth more than the fix.** Seed 1234 failed four
+runs, then passed two, then failed three. **A pinned seed makes a gate REPRODUCIBLE, not
+DETERMINISTIC** — the battle keeps ticking through every probe round-trip, so anything
+depending on live state varies with latency. Do not read a fixed seed as a fixed run.
+
+**Three probe lessons, each of which cost runs:**
+
+- **The click assertion read `view.selectedSquad` WITHOUT CLEARING IT**, so it could not
+  tell "this click picked the army" from "the army was already selected". It passed on a
+  leftover selection, sailed past its own hit-test proof, and pointed the investigation at
+  the drag when the click was the thing never demonstrated.
+- **The forensic called `board.squadAt`, WHICH DOES NOT EXIST.** The picker lives in
+  `battle-squadpick.js` behind `ord`; `__view` is the board. `undefined ?? null` reported a
+  confident `squadAt->null` for every failure, reading exactly like a picker that missed.
+  `battle-input.js` returns `ord` now and `battle.js` exposes `__ord`, so a probe calls the
+  REAL function instead of a replica. **A probe that does not assert its own instrument is
+  measuring nothing.**
+- **Every geometric suspect measured innocent** — 0.4px off a 17px radius, fog gate passed,
+  camera still to 0.4px, no site at either slop, `hex` and path end agreeing — while the
+  answer was not geometry at all. When each suspect comes back clean, stop interrogating
+  the suspects and ask what the browser would actually deliver the event to.
+
 ## Gotchas that have already cost time
 
 - **A PROBE THAT LAUNCHES A BROWSER AND CALLS `process.exit(0)` LEAVES IT

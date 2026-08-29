@@ -217,10 +217,16 @@ export function createBattleScene(ctx) {
       // `__view` is the BOARD (geometry + camera); `__ui` is the presentation
       // state the input layer writes — two different things that both got
       // called "view" in conversation, so they are named apart here.
+      // `__ord` is the ORDER layer, and it is here because its absence cost a
+      // whole diagnosis: `squadAt` lives behind it, a probe reaching for
+      // `board.squadAt` gets `undefined`, and `undefined ?? null` reports a
+      // confident `null` that reads exactly like a picker that missed. A probe
+      // that cannot call the real function is measuring a replica of it.
       if (window.__game) {
         window.__game.__view = board;
         window.__game.__fx = fx;
         window.__game.__ui = view;
+        window.__game.__ord = input.ord;
       }
 
       return [
