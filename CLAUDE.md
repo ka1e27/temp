@@ -4051,11 +4051,47 @@ sources only, so most of the documented ~106 columns/minute happen where the
 player provably cannot perceive them — reproduced twice, with the screen pixel at
 a live enemy-vs-neutral fight sampling flat fog colour.
 
-**THE OPEN ONES, ranked by what they cost a player.** Site hit-targets fall to
-34px at the default zoom on the biggest maps. And every unlock in the game is
-bought by about region 8 of 24, so the back half of the campaign has nothing new
-to acquire. **~~There is no keyboard path to the core verb~~ — CLOSED, see
-below.**
+**THE OPEN ONES, ranked by what they cost a player.** Every unlock in the game
+is bought by about region 8 of 24, so the back half of the campaign has nothing
+new to acquire. **~~There is no keyboard path to the core verb~~** and
+**~~site hit-targets fall to 34px~~** are both CLOSED — see below.
+
+### A site is a target as well as a picture, and only one of those scales
+
+`siteShapes.js pickRadius` + `MIN_PICK_PX` (44 — the same number
+`tools/mobile.mjs` already enforced for every DOM control, so the board and the
+HUD now answer to one).
+
+**A SITE'S RADIUS IS IN WORLD UNITS AND SCALES WITH THE CAMERA, WHICH IS RIGHT
+FOR A PICTURE AND WRONG FOR A TARGET.** A fingertip is the same size whatever
+the zoom, and the board AUTO-FITS — so a bigger region is a smaller one.
+Measured off the real `fitTo`/`gridBounds`/`siteRadius` path, screen hit
+DIAMETER at the default zoom:
+
+```
+board       11x9   13x10   15x11   17x13   19x15   21x16
+farm        59px    53px    49px    41px    36px    34px
+watchtower  55px    50px    45px    38px    33px    31px
+```
+
+**Ten of the twenty-four regions were under 44px on a 1440x761 laptop**, from
+thanescar (region 15) on; at 1280x700 it starts at region five and bottoms out
+at 30px. The worst case is the WATCHTOWER — the smallest thing on the build
+menu and the one you place deliberately.
+
+**THE FLOOR IS PART OF THE FORGIVENESS, AND THAT IS WHY IT IS GATED ON `slop`.**
+`battle-input.js` calls `siteAt` with `slop = 1` to ask the precise question —
+is this press actually ON a building, or was it only forgiven near it — and that
+answer is what lets a camped army win a press a farm would otherwise swallow.
+Flooring that call would make the tight one forgiving and take the gesture back.
+Pinned as equality against the old formula at every zoom, because a control that
+merely checks the floor exists would pass just as happily with the gesture gone.
+
+It cannot make two sites ambiguous: `MAPGEN.minSeparation` is 3 hexes and
+`BUILD_MIN_SEPARATION` 2 — 80+ screen px at the widest zoom the floor applies at
+— and `siteAt` resolves overlap to the nearest centre regardless. And it is a
+FLOOR rather than a resize: on the early boards nothing is touched (riverfen's
+castle reads 99.6px before and after), so no measured number moves.
 
 **⚠ AND "THE BOARD IS A NAMELESS CANVAS WITH NO AX NODE" WAS STALE — the FIFTH
 entry in this file found claiming something was open after it had shipped.**

@@ -149,6 +149,41 @@ export const siteTier = (kind) => SITE_TIER[kind] ?? 0;
 export const hexSizeFor = (kind, r) => r / (SITE_R[kind] ?? 0.5);
 
 /**
+ * THE SMALLEST A SITE MAY BE TO POINT AT, in SCREEN pixels — the same 44
+ * `tools/mobile.mjs` enforces for every DOM control, so the board and the HUD
+ * answer to one number.
+ */
+export const MIN_PICK_PX = 44;
+
+/**
+ * How near a world point has to be to count as ON a site, in WORLD units.
+ *
+ * A site's size is in world units and scales with the camera, which is right
+ * for a picture and wrong for a target: a fingertip is the same size whatever
+ * the zoom, and the board AUTO-FITS, so a bigger region is a smaller one.
+ * Measured at 1440x761 before the floor existed — ten of the twenty-four
+ * regions were under 44px, and the full table is in CLAUDE.md:
+ *
+ *     board    11x9   15x11   17x13   19x15   21x16
+ *     farm     59px    49px    41px    36px    34px
+ *
+ * THE FLOOR IS PART OF THE FORGIVENESS, which is why it is gated on `slop`. A
+ * caller that passes 1 is asking the precise question — `battle-input.js` wants
+ * to know whether a press is actually ON a building or merely near it, and that
+ * is what lets a camped army win a press a site would otherwise swallow.
+ * Applying the floor there would make the tight call forgiving and take the
+ * gesture back.
+ *
+ * @param {string} kind @param {number} hexSize
+ * @param {number} slop 1 for the precise question, >1 to be forgiving
+ * @param {number} zoom screen px per world unit
+ */
+export function pickRadius(kind, hexSize, slop, zoom) {
+  const r = siteRadius(kind, hexSize) * slop + hexSize * 0.25;
+  return slop > 1 ? Math.max(r, MIN_PICK_PX / 2 / zoom) : r;
+}
+
+/**
  * Append a site body outline to the current path — lets a caller batch every
  * site of one owner into a single fill, and lets the same call draw the body,
  * the garrison core inside it and the selection halo outside it.

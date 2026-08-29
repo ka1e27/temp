@@ -21,7 +21,7 @@ import {
   siteRadius, drawSiteBase, drawHpRing, drawSiegeRing, drawSiteState,
   drawGarrisonPlaque, drawSelection, drawHover, builtLevel, siteStackY, siteStackLen,
 } from './siteGlyphs.js';
-import { siteHeadYAt } from './siteShapes.js';
+import { siteHeadYAt, pickRadius } from './siteShapes.js';
 import { drawBuildBar } from './siteBuild.js';
 import { drawBuildTargets } from './buildTargets.js';
 import { drawAlarm } from './alarm.js';
@@ -49,6 +49,7 @@ const _bounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 /** Space the HUD occupies over the board: the gold/clock row on top and the
  *  strength/filter/booster dock below. The sides are the player's. */
 const HUD_INSETS = Object.freeze({ top: 56, bottom: 96, left: 8, right: 8 });
+
 
 /**
  * @param {{bg:HTMLCanvasElement, fx:HTMLCanvasElement, hexSize?:number,
@@ -155,7 +156,10 @@ export function createBattleView(opts) {
         const dx = wx - _a.x;
         const dy = wy - _a.y;
         const d = dx * dx + dy * dy;
-        const rr = siteRadius(s.kind, hexSize) * slop + hexSize * 0.25;
+        // One rule, in siteShapes.js `pickRadius`, so the 44px screen floor
+        // cannot drift from the radius it floors — and so it is testable with
+        // no canvas at all.
+        const rr = pickRadius(s.kind, hexSize, slop, camera.zoom);
         if (d < rr * rr && d < bestD) { bestD = d; best = s; }
       }
       return best;

@@ -22,7 +22,13 @@ const ui = (page) => page.eval(() => {
     hoverId: v?.hoverId ?? null,
     selection: (v?.selection ?? []).slice(),
     kbAiming: !!v?.kbAiming,
-    squads: b.squads.length,
+    // SQUAD IDS, NOT A COUNT. A count is racy in a live battle and this step
+    // failed on it once: columns arrive and resolve every tick, so `squads`
+    // read 8 before the send and 7 after while the send itself was perfectly
+    // fine. What proves a send happened is a squad that did not exist before
+    // and whose `from` is the source that was selected.
+    ids: b.squads.map((q) => q.id),
+    from: Object.fromEntries(b.squads.map((q) => [q.id, q.from ?? null])),
     mine: b.sites.filter((s) => s.owner === 'player').length,
     panelOpen: !!panel?.classList.contains('is-open'),
     focusInPanel: !!a?.closest?.('.hud-selection'),
@@ -80,10 +86,15 @@ export async function runKeyboard(page, step, note) {
   await page.sleep(400);
   const sent = await ui(page);
   if (sent.kbAiming) throw new Error('Enter committed but left the reticle up');
-  if (sent.squads <= start.squads) {
-    throw new Error(`Enter committed and no squad marched: ${start.squads} -> ${sent.squads}`);
+  const had = new Set(start.ids);
+  const fresh = sent.ids.filter((id) => !had.has(id));
+  const fromSource = fresh.filter((id) => start.selection.includes(sent.from[id]));
+  if (!fromSource.length) {
+    throw new Error(`Enter committed and nothing marched from ${start.selection.join('/')}: `
+      + `${fresh.length} new squad(s), none of them from the source`);
   }
-  step(`keyboard: Enter aimed and sent — squads ${start.squads} -> ${sent.squads}`);
+  step(`keyboard: Enter aimed and sent — ${fromSource.length} column(s) left `
+    + `${start.selection.join('/')}`);
 
   // 4. NEGATIVE CONTROL. A focused BUTTON owns its own keys; if `]` walked the
   //    board from there, every panel control would move the cursor under the
