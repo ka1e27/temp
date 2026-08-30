@@ -2174,16 +2174,31 @@ dump; every finding reproduced before it was believed.
       now returns `ord` and `battle.js` exposes `__ord`, so a probe can call the
       REAL picker instead of a replica of it.
 
-- [ ] **SELECTING A CAMPED ARMY CAN PUT THE SITE PANEL ON TOP OF IT.** The
-      player-facing half of the item above, and it is not fixed. Tap a camped
-      force to inspect it and the panel can open over the army, after which it
-      cannot be dragged — the press lands on the plate. `.hud-selection` already
-      carries `z-index: 2` for the rule *"advice never covers a control"*; this
-      is the same rule one step further, where the plate covers the ARMY, which
-      is the thing being operated. A player can pan out of it, so it is a
-      papercut rather than a trap, and the honest options are to place the panel
-      away from the current selection or to let a press fall through to the board
-      when the plate is over the selected unit.
+- [x] ~~**SELECTING A CAMPED ARMY CAN PUT THE SITE PANEL ON TOP OF IT.**~~
+      **FIXED, and it was one stale premise rather than a layout problem.**
+      `showSquad` anchored the panel to `siteOf(state, squad.to)` under a comment
+      beginning *"A squad stores no position"* — true before the squad-path
+      rewrite, false since. A CAMPED squad has no `to` at all, so the anchor was
+      null, `createFollower.place` returns early on a falsy anchor, and the panel
+      fell back to the stylesheet **with no keep-out box for anything** — which
+      is the very mechanism that stops it covering a SITE you select.
+      `battle-status.js squadAnchor` gives a camped force a synthetic anchor at
+      its own hex carrying exactly the three fields the follower reads (`id`,
+      `hex`, `adj`), so the army gets the same protection a site always had.
+
+      **Verified by DELETING the smoke workaround rather than keeping it.** The
+      step no longer presses Escape to get the panel out of the way; it asserts
+      the army is still on the canvas after the click and FAILS if it is not, so
+      the run now proves the fix instead of routing around it. Clean on 1234
+      (which failed four times), 99991, 7, 42 and 20260829.
+
+      The same stale premise had a second symptom one field along: the subtitle
+      read `null → null` for a camped force. `squadRoute` says where it is
+      holding. `tests/squadanchor.test.js` pins both, three of its six tests
+      negative controls — a marching column must still anchor to its
+      destination, a squad that is nowhere must still yield no anchor, and the
+      anchor id must be stable across frames or the follower re-measures every
+      frame.
 
 - [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
       The coarse-pointer media query is verified working, which is why the phone

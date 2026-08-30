@@ -4280,10 +4280,26 @@ lands squarely over the army it just selected.** Every press after that hits the
 order, no rejection, no error. The step asserted `elementFromPoint` **before** the click,
 so it was measuring a board the click then changed.
 
-**THE PLAYER-FACING HALF IS REAL AND IS NOT FIXED.** Tap a camped force to inspect it and
-the panel can cover it, after which it cannot be dragged. `.hud-selection` already carries
-`z-index: 2` for the rule *"advice never covers a control"*; this is that rule one step
-further, where the plate covers the ARMY, which is the thing being operated.
+**THE PLAYER-FACING HALF WAS REAL, AND IT WAS A STALE PREMISE RATHER THAN A LAYOUT
+PROBLEM.** `battle-panel.js showSquad` anchored the panel with
+`setAnchor(siteOf(state, squad.to))`, under a comment beginning *"A squad stores no
+position"* — true before the squad-path rewrite and false since. A CAMPED squad has no
+`to`, so the anchor was null; `createFollower.place` returns early on a falsy anchor, and
+the panel fell back to the stylesheet **with no keep-out box for anything**, which is
+exactly the mechanism that keeps it off a SITE you select. `battle-status.js squadAnchor`
+hands a camped force a synthetic anchor at its own hex carrying the three fields the
+follower reads — a stable `id` (or `setAnchor` tears the follower down every frame), a
+`hex` for `siteScreen`, and an `adj` array for the neighbour keep-outs — so an army is
+protected the way a building always was.
+
+**VERIFIED BY DELETING THE WORKAROUND, NOT BY KEEPING IT.** The smoke step had been
+pressing Escape to move the panel; it now asserts the army is still on the canvas after
+the click and FAILS if it is not, so the run proves the fix rather than routing around
+it. Clean on the seed that failed four times and on four other boards.
+
+The same premise had a second symptom one field along: the panel's subtitle read
+`null → null` for a camped force, because `${squad.from} → ${squad.to}` is a route and a
+stopped column has neither end. `squadRoute` says where it is holding instead.
 
 **AND "DETERMINISTIC" WAS WRONG, which is worth more than the fix.** Seed 1234 failed four
 runs, then passed two, then failed three. **A pinned seed makes a gate REPRODUCIBLE, not

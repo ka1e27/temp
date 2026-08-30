@@ -30,7 +30,8 @@ import {
   siteIntel, trainLine, gateLine, upgradePreview,
 } from './battle-econ.js';
 import { rejectionText, upgradeOffer, upgradeLabel } from './battle-upgrade.js';
-import { squadById, hpColor, statusLine, offerTitle } from './battle-status.js';
+import { squadById, hpColor, statusLine, offerTitle, squadAnchor, squadRoute }
+  from './battle-status.js';
 export { objectiveLine, boardSummary } from './battle-status.js';
 import { createKeepRow, createRecruitRow } from './battle-actions.js';
 // Re-exported so nothing downstream has to know the actions group moved out.
@@ -343,14 +344,16 @@ export function createSitePanel(o) {
   }
 
   function showSquad(state, squad) {
-    // A squad stores no position — the renderer derives one from `arriveTick`
-    // — so the panel hangs off where the column is HEADED, which is the site
-    // the player is actually watching.
-    setAnchor(siteOf(state, squad.to));
+    // A MARCHING column hangs the panel off where it is HEADED — the site the
+    // player is watching, and one that holds still. A CAMPED one has no
+    // destination, so that rule anchored it to NOTHING and the panel fell back
+    // to the stylesheet, on top of the army it had just selected. See
+    // battle-status.js `squadAnchor` for what that cost.
+    setAnchor(squadAnchor(state, squad, siteOf(state, squad.to)));
     set.open(true);
     let wrote = 0;
     wrote |= set.title(`SQUAD · ${total(squad.comp)} troops`);
-    wrote |= set.sub(`${squad.from} → ${squad.to}`);
+    wrote |= set.sub(squadRoute(state, squad));
     wrote |= blankVitals();
     wrote |= set.trains('');
     wrote |= set.stat(squad.retreating

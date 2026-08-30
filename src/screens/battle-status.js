@@ -7,6 +7,7 @@
 // because none of it is API: the panel is the only caller and these are its
 // vocabulary, not its surface.
 import { rallyTargetsOf } from '../battle/state.js';
+import { squadHexOf } from '../battle/movement.js';
 import { perceivedSquads } from '../battle/vision.js';
 import { gateLine } from './battle-econ.js';
 import { REJECTIONS } from './battle-upgrade.js';
@@ -146,4 +147,49 @@ export function boardSummary(state, alarms) {
   const n = alarms ? Object.keys(alarms).length : 0;
   if (n > 0) out += ` ${n} site${n === 1 ? '' : 's'} under attack.`;
   return out;
+}
+
+/**
+ * WHAT THE SITE PANEL HANGS OFF FOR A SQUAD.
+ *
+ * A MARCHING column anchors to its DESTINATION — that is the site the player is
+ * actually watching, and it holds still while the column does not.
+ *
+ * A CAMPED one has no destination at all (`to` is null the moment a squad stops
+ * on open ground), so that rule anchored it to NOTHING: `createFollower.place`
+ * returns early on a falsy anchor, and the panel falls back to wherever the
+ * stylesheet puts it — with no keep-out box for the army, which is the very
+ * mechanism that stops it covering a SITE you selected.
+ *
+ * Measured in a real browser rather than reasoned: the panel landed squarely on
+ * the camped force it had just selected, `elementFromPoint` at the army's own
+ * screen point returned `DIV.hud-selection`, and every press after that hit the
+ * plate instead of the canvas — so the army could be inspected and then not
+ * dragged, with no order, no rejection and no error. It read as an intermittent
+ * hit-test failure for a long time.
+ *
+ * The synthetic anchor carries exactly the three fields the follower reads: a
+ * stable `id`, or `setAnchor` tears the follower down every frame; a `hex` for
+ * `siteScreen`; and an `adj` array for the neighbour keep-outs.
+ *
+ * @param {object} state battle state
+ * @param {object} squad the selected squad
+ * @param {?object} dest the site it is headed for, already resolved
+ * @returns {?object} a site-shaped anchor, or null when the squad is nowhere
+ */
+export function squadAnchor(state, squad, dest) {
+  if (dest) return dest;
+  const at = squadHexOf(state, squad);
+  return at ? { id: `sq:${squad.id}`, hex: [at.q, at.r], adj: [] } : null;
+}
+
+/**
+ * The panel's subtitle for a squad. `from → to` is right for a march and reads
+ * "null → null" for a camped force, which is the same stale premise the anchor
+ * carried: a squad that has stopped has neither end any more.
+ */
+export function squadRoute(state, squad) {
+  if (!squad.camped) return `${squad.from} → ${squad.to}`;
+  const at = squadHexOf(state, squad);
+  return at ? `holding [${at.q},${at.r}]` : 'holding';
 }
