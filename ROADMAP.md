@@ -10,6 +10,127 @@ or explicitly flagged as an opinion.
 
 ---
 
+## ⇒ NEWEST: THE FULL GAME REVIEW — one defect outranks the re-tune
+
+Four lenses (core loop, onboarding, engineering health, progression). Every number
+below was taken today against the real pipeline, and every reviewer claim repeated
+here was re-verified with a negative control before it was written down.
+
+### R1. The enemy concentrates force exactly once per battle, and it kills beginners
+
+**These are one finding seen from two ends, and neither end is in CLAUDE.md.**
+
+The ordinary `attack()` phase cannot mass: at t=201s on a passive riverfen the enemy
+holds **122 troops across 8 sites and pools 16** against a 59-defender camp — ratio
+0.27 against `safetyMargin` 1.6, so it never attacks. On gallowmoor it emits **105
+columns a minute at a median size of 2**. The muster is the one exception, and on the
+tutorial region it is fatal:
+
+```
+riverfen 1000/8919/16838      muster       outcome
+harness bot                   never 0/3    win 9.2m, win 11.4m, win 7.3m
+NO PLAYER ORDERS              FIRED 3/3    loss 9.9m, timeout, loss 9.4m
+
+--nomuster, same passive seeds
+muster ON    loss · timeout · loss        two outright defeats
+muster OFF   timeout · timeout · timeout  camp intact 3/3
+```
+
+**The floor never binds** — it fires with 72–94 bodies against `minBodies` 24 — and
+**the real gate is PACE**, measured on riverfen at n=3 a row:
+
+```
+an order every    2s     10s     30s     60s    120s
+muster fires     0/3     0/3     1/3     2/3     2/3
+```
+
+A player reading a tooltip, choosing a build site or holding a drag to see the preview
+is in the 30–120s column. **Tier 1 is the only tier where this is the executioner** —
+from kaldan on a passive camp falls in 2.8–6.0 minutes, before the window opens at all.
+
+**The lever is `atFrac` or a tutorial gate, NOT `minBodies`.** Re-take with
+`tools/simstart.js startRun(region, seed, conqueredBefore(region))` stepped with no
+`playerTurn`, watching for `enemy-muster`; `--nomuster` is the control. Priced at one
+constant plus a measurement; the CLAUDE.md correction is already shipped (`e66b229`).
+
+**The design question underneath it is bigger than the fix**: an enemy whose only
+decisive act is scripted is why 93% of this campaign's non-wins are timeouts. A muster
+that fires when the enemy has *earned* an advantage rather than when the clock says so
+would make the whole tier 3–6 grind decisive. That is a design pass, not a constant.
+
+### R2. The opening has nothing in it, from both directions
+
+An engaged player reads **"NOTHING KNOWN TO ATTACK" for ~45s** — fog hides every
+non-player site — and the first target to appear is often a farm they just lost.
+Independently, the natural second action is *refused*: dragging onto the one visible
+building answers `Something unscouted is standing there. March beside it.`
+(`battle-upgrade.js:36`, confirmed verbatim), squad count 4→4, no order issued.
+
+The refusal is deliberate and self-documented. What is not deliberate is that the
+coach's own next line teaches the thing that is refused. One line of copy.
+
+### R3. Passive play LOSES; the record says it stalls
+
+CLAUDE.md's "Still open" describes passive riverfen as *"a twenty-minute stall… ends
+on Time expired"*. Two of three seeds are **outright defeats at 9.4m and 9.9m** (R1).
+The two failures want different copy and different fixes, so this matters beyond the
+correction.
+
+### R4. Nothing consequential happens for 227–294 seconds at a stretch
+
+Longest interval with no site changing hands: **227–294s passive, 37–134s for the
+bot**, against an enemy running 105 columns a minute. The board is extremely busy and
+almost none of it is decisive. This is the felt version of the tier 3–6 tuning problem
+and it is the same root as R1.
+
+### R5. The length promise is 60% wrong where the gate looks hardest
+
+gallowmoor n=24: **63% `ok`**, 2 losses, 7 timeouts (5 of them AHEAD), win median
+16.1m, **all-run median 23.8m against 15m advertised**. `WIN_BAND` passes it because
+the simrunner's length gate is one-sided (already recorded); the player is told 15
+minutes and spends 24.
+
+### R6. Dead weight, verified with controls — no defects, all drift risk
+
+- **15 strings across 5 blocks have no reader.** Sampled 6 (`UI.crowns`,
+  `UI.cannotAfford`, `WORLD.gateHint`, `SHOP.header`, `RESULTS.incomeNow`,
+  `SAVE.saved`) — all 6 dead. The results screen's "Change loadout & retry" is a
+  hardcoded literal beside an unread `UI` key, which is exactly how these drift.
+- **12 of 23 event types have no consumer.** Sampled 5 (`site-built`, `site-razed`,
+  `siege-lifted`, `squad-camped`, `booster-used`) — all 0; **control** `site-captured`
+  has 5.
+- `DOCTRINE_IDS`: one occurrence, its own declaration. Six dead CSS classes
+  (**control** `.is-rejected` is applied once).
+
+Nothing breaks. Every one is a place a future claim can go stale silently, which is
+this codebase's signature failure mode — the same shape as the four refunded upgrades.
+
+### R7. NOT A GAME PROBLEM: the deploy has never seen this work
+
+The branch is **259 commits and 273 files ahead of `main`**, and
+`.github/workflows/pages.yml` triggers on `main` only. The live Pages site has no melee
+layer, no fog, no construction and no free movement. **Every gate that supposedly
+protects the deploy has never run against any of it.** Largest single risk on the
+board, and it is a release decision rather than a code change.
+
+### R8. Two small ones
+
+- No in-game key list: `]` `[` arrows `Enter` `Esc` `R` `Space` `P` all work and
+  nothing says so.
+- Camp and training-ground glyphs still read alike at 20–30px (the chevron fix works;
+  the glyph similarity is untouched).
+
+### What the review did NOT find, which is worth as much
+
+All four invariants hold. **No live instance of a test encoding a bug** — the failure
+mode this project has shipped twice. The pre-commit preview is honest and calls the
+same function the sim runs. The alert strip had no false positives and no silences
+across two independent lenses. The coach chevron and bearing needle are both correctly
+placed, vector-checked rather than eyeballed. Gates green: ~1,365 tests / 136 files,
+0 failures; `npm run check` clean; smoke 28/28; mobile clean both orientations.
+
+---
+
 ## ⇒ THE FUN PASS IS CLOSED. THE RE-TUNE IS THE ONLY THING LEFT.
 
 **All eight critic items (C1-C8) are done or struck**, each with its measurement. Six
