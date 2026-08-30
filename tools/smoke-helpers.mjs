@@ -108,5 +108,7 @@ export function makeHelpers(page) {
     return (await scene()) === want;
   }
 
-  return { waitFor, scene, has, hitPoint, click, clickAt, reach };
+  // `page` is handed back too, so a step that needs a raw `eval` does not have
+  // to take a second parameter alongside the helpers it already has.
+  return { page, waitFor, scene, has, hitPoint, click, clickAt, reach };
 }

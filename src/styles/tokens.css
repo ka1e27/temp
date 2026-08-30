@@ -192,7 +192,11 @@
 
   /* --- Fixed control metrics --------------------------------------------- */
   --hit: 44px; /* minimum touch target, also the training-picker chip size */
-  --hit-sm: 32px; /* compact controls; grows to --hit on a coarse pointer */
+  /* Compact controls: the site panel's rows, the world map's chips and the
+     prebattle steppers. NOT the battle HUD any more — its controls are --hit on
+     every pointer (see hud.responsive.css for the measurement and for why this
+     token was not simply raised: the site panel is height-capped on a phone). */
+  --hit-sm: 32px;
   --bar-h: 6px;
   --sidebar: clamp(280px, 24vw, 360px);
   /* How much room the bottom dock claims. Everything that floats above it

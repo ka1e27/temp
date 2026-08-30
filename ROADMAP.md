@@ -2175,9 +2175,35 @@ dump; every finding reproduced before it was believed.
       (390x844) are untouched, and the boundary (1280x700, vh exactly 560) was
       checked rather than assumed.
 
-- [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
-      The coarse-pointer media query is verified working, which is why the phone
-      audit passes — it simply does not apply to a mouse or trackpad.
+- [x] ~~**SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP
+      SESSION.**~~ **FIXED, and it was TWELVE control classes rather than
+      "several"** — measured at 1440x900: the send-fraction segments, drag mode,
+      pause, the speed slider, the troop filter chips, Withdraw and all four
+      build buttons, all at 32px, beside boosters that were correctly 44. The
+      44px rule lived behind `@media (pointer: coarse)`, so a mouse never got it
+      and `tools/mobile.mjs` never looks at a mouse.
+
+      **44 rather than a new desktop figure**, because it is the ONE number this
+      project already enforces for the board's pick radius and the phone audit,
+      and a second would be the "two tables to keep in step" hazard it warns
+      about. These are the controls used under time pressure in a real-time
+      battle: a mouse is precise, but the cost of a near-miss is the same
+      whatever is holding it.
+
+      **PRICED BEFORE IT WAS SPENT: two points of board.** The dock goes 91px to
+      103px and board share 85% to 83%, against a 55% floor. Phone is unchanged
+      in both orientations (it already had 44 via the coarse query) — portrait
+      75%/61%, landscape 73%/58%, audit clean.
+
+      **SCOPED, NOT A TOKEN CHANGE.** `--hit-sm` has twelve users across six
+      stylesheets including the site panel, which is height-capped on a phone at
+      `min(52vh, 16rem)` and was measured back over its floor by exactly that
+      cap — raising the token would re-open it. `.chip` is scoped to `#hud`
+      because prebattle builds booster chips with the same class.
+
+      **And there is a gate for it now**, which is what was missing: `smoke.mjs`
+      fails if any `#hud` control is under 44px on a desktop session, so the
+      regression cannot come back the way it arrived.
 
 ### From the board-readability critic
 

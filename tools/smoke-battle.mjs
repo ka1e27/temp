@@ -72,7 +72,28 @@ export async function runHud(h, step, note) {
     else if (required) throw new Error(`${label} (${sel}) is missing from the HUD`);
     else note(`${label} not present`);
   }
-  step('HUD controls hittable');
+  // ...AND BIG ENOUGH TO HIT, which nothing checked on a DESKTOP session.
+  // `tools/mobile.mjs` enforces 44px, but only at phone metrics; the HUD's own
+  // 44px rule used to live behind `@media (pointer: coarse)`, so a mouse got
+  // 32px controls and the audit passed because it never looks at a mouse.
+  // Measured before the fix: twelve control classes at 32px — the send
+  // fraction, drag mode, pause, the speed slider, the troop chips, Withdraw and
+  // all four build buttons — beside boosters that were correctly 44.
+  const small = await h.page.eval((min) => {
+    const out = [];
+    for (const el of document.querySelectorAll('#hud button, #hud input')) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (getComputedStyle(el).visibility === 'hidden') continue;
+      if (r.height < min) out.push(`${el.className || el.tagName} ${Math.round(r.height)}px`);
+    }
+    return [...new Set(out)];
+  }, 44);
+  if (small.length) {
+    throw new Error(`${small.length} HUD control(s) under 44px on a desktop session: `
+      + small.slice(0, 6).join(', '));
+  }
+  step('HUD controls hittable, and all >= 44px');
 }
 
 /** Step 4. The simulation runs, and speed actually changes it.

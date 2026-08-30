@@ -157,11 +157,40 @@ html.is-docked { --dock-h: calc(var(--hit) + var(--s-6) + var(--s-5)); }
   .hud-preview { max-width: 92vw; min-width: 0; }
 }
 
-/* Touch: compact desktop metrics grow to a real thumb target. */
+/* THE BATTLE HUD'S CONTROLS ARE 44px ON EVERY POINTER, and the coarse-pointer
+   gate this replaces is why they were not.
+ 
+   Measured on a 1440x900 desktop session: twelve control classes came out
+   32px tall — the send-fraction segments, drag mode, pause, the speed slider,
+   the troop filter chips, Withdraw and all four build buttons — while the
+   boosters beside them were correctly 44. These are the controls a player uses
+   under time pressure in a real-time battle, and missing one costs a mistake in
+   a live fight; a mouse is precise, but the cost of a near-miss is the same
+   whatever is holding it. 44 is also the ONE number this project already
+   enforces for the board's own pick radius (`MIN_PICK_PX`) and for
+   `tools/mobile.mjs` — inventing a second desktop-only figure is the "two
+   tables to keep in step" hazard it warns about elsewhere.
+ 
+   IT COSTS TWO POINTS OF BOARD, MEASURED, NOT ESTIMATED: the dock goes 91px to
+   103px and plate coverage takes board share from 85% to 83%, against the phone
+   audit's 55% floor. Cheap enough to buy outright.
+ 
+   SCOPED, NOT GLOBAL. `--hit-sm` has twelve users across six stylesheets —
+   including the site panel, which is height-capped on a phone at `min(52vh,
+   16rem)` and was measured back over its board-share floor by exactly that cap.
+   Raising the token itself would re-open that. `.chip` is scoped to `#hud`
+   because prebattle-army.js builds booster chips with the same class, and the
+   build rail is named rather than `.hud-build`, which the site panel shares. */
+.seg,
+#hud .chip,
+.hud-withdraw,
+.hud-rail-build .hud-build,
+.hud-speed-slider { min-height: var(--hit); }
+
+/* Width is still touch-only: a segment is already 44 wide on a desktop and
+   only the SQUARE ones need padding out for a thumb. */
 @media (pointer: coarse) {
-  .seg, .chip { min-height: var(--hit); }
   .seg { min-width: var(--hit); }
-  .hud-withdraw { min-height: var(--hit); }
 }
 
 /* The speed slider. Wider than the other HUD segments because it carries
