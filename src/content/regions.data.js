@@ -235,8 +235,14 @@ export const REGION_IDS = Object.freeze(REGIONS.map((r) => r.id));
 export const totalSites = (region) =>
   region.siteCounts.enemy + region.siteCounts.neutral + region.siteCounts.player;
 
-/** Income at 100% conquest, for balance sanity checks. 508/s: the first
- *  eighteen regions pay 276 and tier 5 adds 232.
+/** Income at 100% conquest, for balance sanity checks. **956/s.** The 508 this
+ *  comment used to claim is tiers 1-5 exactly, and it predates tier 6 shipping:
+ *  the first eighteen regions pay 276, tier 5 adds 232, and tier 6 adds another
+ *  448 — nearly half the total, because the ramp compounds and the last three
+ *  regions are the biggest rungs on it. Re-derive rather than trusting this
+ *  line: `REGIONS.reduce((a, r) => a + r.rewardPerSec, 0)` is one expression,
+ *  and a hand-carried total is exactly the claim that goes stale silently when
+ *  a tier is appended.
  *
  *  That 276 is itself load-bearing and unchanged. The tail was re-spread onto a
  *  smooth x1.2-a-region ramp (the old table stepped 1.8 -> 4.0 -> 13.0 -> 38.0
