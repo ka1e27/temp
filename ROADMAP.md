@@ -58,7 +58,54 @@ decisive act is scripted is why 93% of this campaign's non-wins are timeouts. A 
 that fires when the enemy has *earned* an advantage rather than when the clock says so
 would make the whole tier 3–6 grind decisive. That is a design pass, not a constant.
 
-### R2. The opening has nothing in it, from both directions
+### R2. The whole balance table is measured against a player who cannot exist
+
+**`simrunner.js:135` defaults to `--idle=10`.** A real player reaching gallowmoor has
+spent **82 minutes** just playing the campaign to get there — and that is a FLOOR, not
+an estimate: it assumes they win every region first attempt in exactly its advertised
+length. Cumulative advertised minutes before each region:
+
+```
+riverfen (1)   0      kaldan (5)   35      gallowmoor (10)   82
+thanescar (15) 159                         widowsgate (24)  297
+```
+
+So the table describes a player **8× poorer than the poorest possible real one at
+region 10, and ~30× poorer at region 24**, before a single minute of actual idling.
+Measured on gallowmoor, n=16, matched seeds, nothing but `--idle` moved:
+
+```
+                          win%   win-med   all-med   target   verdict
+idle=10  (the harness)     63%     20.3m     25.0m     15m    ok
+idle=82  (a real floor)   100%      6.8m      6.8m     15m    TOO EASY
+```
+
+**Three things happen at once and each is worse than the last.** The verdict flips out
+of band — 100% at n=16 has a Clopper-Pearson lower bound of ~79%, still clear of the
+tier-3 ceiling of 72, so this is not a small-sample artefact. The battle gets **three
+times shorter**. And every timeout and loss disappears (`losses=0 timeout(0,0)` against
+`losses=1 timeout(ahead=4,behind=1)`), which is the R1/R6 clock problem evaporating the
+moment the player is as rich as they actually are.
+
+**Neither figure matches the promise, in opposite directions.** The region advertises
+15 minutes: the harness's player over-runs it at 20–25m, a real player under-runs it at
+6.8m. So `targetLengthMin` is not merely mis-authored on this row — there is no single
+idle assumption under which it could be right for both.
+
+The 63% is solid: three independent runs this session (mine at n=24, the progression
+lens at n=48, this one at n=16) all read 63%. What is new is the comparison to the
+campaign's own advertised lengths, which nobody had taken.
+
+CLAUDE.md already records the DIRECTION ("the harness player is poorer than any real
+one… `--idle=50` takes the last region 25% → 85%"). What it does not say is that the
+gap is structural and knowable from the region table itself, that it flips a row's
+verdict at the poorest a real player can be, or that the two ends straddle the
+advertised length. **Before the next re-tune moves a single dial, decide what idle the
+table is FOR** — the honest candidates are cumulative advertised time (a floor) or that
+plus a session gap (realistic). Re-take: `--region=<any> --idle=10` against
+`--idle=<cumulative advertised before it>`.
+
+### R3. The opening has nothing in it, from both directions
 
 An engaged player reads **"NOTHING KNOWN TO ATTACK" for ~45s** — fog hides every
 non-player site — and the first target to appear is often a farm they just lost.
@@ -69,28 +116,28 @@ building answers `Something unscouted is standing there. March beside it.`
 The refusal is deliberate and self-documented. What is not deliberate is that the
 coach's own next line teaches the thing that is refused. One line of copy.
 
-### R3. Passive play LOSES; the record says it stalls
+### R4. Passive play LOSES; the record says it stalls
 
 CLAUDE.md's "Still open" describes passive riverfen as *"a twenty-minute stall… ends
 on Time expired"*. Two of three seeds are **outright defeats at 9.4m and 9.9m** (R1).
 The two failures want different copy and different fixes, so this matters beyond the
 correction.
 
-### R4. Nothing consequential happens for 227–294 seconds at a stretch
+### R5. Nothing consequential happens for 227–294 seconds at a stretch
 
 Longest interval with no site changing hands: **227–294s passive, 37–134s for the
 bot**, against an enemy running 105 columns a minute. The board is extremely busy and
 almost none of it is decisive. This is the felt version of the tier 3–6 tuning problem
 and it is the same root as R1.
 
-### R5. The length promise is 60% wrong where the gate looks hardest
+### R6. The length promise is 60% wrong where the gate looks hardest
 
 gallowmoor n=24: **63% `ok`**, 2 losses, 7 timeouts (5 of them AHEAD), win median
 16.1m, **all-run median 23.8m against 15m advertised**. `WIN_BAND` passes it because
 the simrunner's length gate is one-sided (already recorded); the player is told 15
 minutes and spends 24.
 
-### R6. Dead weight, verified with controls — no defects, all drift risk
+### R7. Dead weight, verified with controls — no defects, all drift risk
 
 - **15 strings across 5 blocks have no reader.** Sampled 6 (`UI.crowns`,
   `UI.cannotAfford`, `WORLD.gateHint`, `SHOP.header`, `RESULTS.incomeNow`,
@@ -105,7 +152,7 @@ minutes and spends 24.
 Nothing breaks. Every one is a place a future claim can go stale silently, which is
 this codebase's signature failure mode — the same shape as the four refunded upgrades.
 
-### R7. NOT A GAME PROBLEM: the deploy has never seen this work
+### R8. NOT A GAME PROBLEM: the deploy has never seen this work
 
 The branch is **259 commits and 273 files ahead of `main`**, and
 `.github/workflows/pages.yml` triggers on `main` only. The live Pages site has no melee
@@ -113,7 +160,7 @@ layer, no fog, no construction and no free movement. **Every gate that supposedl
 protects the deploy has never run against any of it.** Largest single risk on the
 board, and it is a release decision rather than a code change.
 
-### R8. Two small ones
+### R9. Two small ones
 
 - No in-game key list: `]` `[` arrows `Enter` `Esc` `R` `Space` `P` all work and
   nothing says so.
