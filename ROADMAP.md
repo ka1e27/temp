@@ -1944,14 +1944,30 @@ screenshot, and the report separates measured from reasoned throughout.
       the problem: measured 15-125ms typical, which is one sim tick, exactly what the
       10Hz-plus-decoupled-renderer model predicts.
 
-- [ ] **THE ONE-LINE ALERT CHANNEL DROPS MORE MESSAGES THE FASTER YOU PLAY.** `show()`
-      replaces whatever is displayed — no queue, no counter, no history — and its hold is
-      a fixed number of wall-clock ms, while event rate scales roughly linearly with sim
-      speed (measured 2 -> 5 -> 12 events per 3s at 1x/4x/8x in one sample, 8 -> 21 at
-      1x/4x in another). So at 4x, several alert-worthy events can arrive and be
-      overwritten before the first could be read. The renderer stays crisp throughout —
-      this is an information-channel failure, not a legibility one. Lowest-ranked of the
-      five because it only bites players running above the free 2x tier.
+- [x] ~~**THE ONE-LINE ALERT CHANNEL DROPS MORE MESSAGES THE FASTER YOU PLAY.**~~
+      **ALREADY FIXED, and this entry was STALE — caught by reading the code
+      before building it, which is the fourth stale "still open" entry this
+      session.** `screens/battle-alertstrip.js` guarantees a minimum display
+      time (`MIN_SHOW_MS`), parks ONE message behind the current line rather
+      than queueing without bound, lets a higher tone preempt instead of wait,
+      and coalesces an identical repeat into a count. Its own header carries the
+      same measurement this item cites.
+
+      What WAS stale and is now fixed is a comment: `battle-alert.js fightAlert`
+      justified its silence rule with *"the alert has no queue"*, which stopped
+      being true. The rule still holds and the justification is now the honest
+      one — a single pending slot cannot absorb 374 messages, and a strict queue
+      that tried would run minutes behind the battle narrating history. On this
+      codebase the comment is the specification, so a load-bearing rule resting
+      on a false premise is worth correcting even when the behaviour is right.
+
+      Original:
+
+      **THE ONE-LINE ALERT CHANNEL DROPS MORE MESSAGES THE FASTER YOU PLAY.**
+      `show()` replaces whatever is displayed — no queue, no counter, no history
+      — and its hold is a fixed number of wall-clock ms, while event rate scales
+      roughly linearly with sim speed (measured 2 -> 5 -> 12 events per 3s at
+      1x/4x/8x in one sample, 8 -> 21 at 1x/4x in another).
 
 ### From the hours-2-to-10 critic
 

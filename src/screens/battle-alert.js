@@ -160,10 +160,17 @@ export function createWithdraw(o) {
  *
  * SILENCE IS THE DEFAULT AND IT IS THE HARD PART. Measured over whole battles,
  * `field-battle` fires 73 times on riverfen and 929 on gallowmoor; of those,
- * 40 and 374 are the player's own assaults. The alert has no queue — every call
- * replaces whatever is showing — so announcing "a fight started" at that rate
- * would bury the one message that mattered under 25 a minute of chatter, which
- * is indistinguishable from saying nothing.
+ * 40 and 374 are the player's own assaults. Announcing "a fight started" at that
+ * rate would bury the one message that mattered under 25 a minute of chatter,
+ * which is indistinguishable from saying nothing.
+ *
+ * THE STRIP HAVING GAINED A QUEUE DOES NOT RELAX THIS, and the sentence above
+ * used to lean on the opposite. ./battle-alertstrip.js now guarantees a minimum
+ * display time and parks one message behind the current line — but that bounds
+ * how much of what IS said gets lost, not how much may be said. A single
+ * pending slot cannot absorb 374 messages, and a strict queue that tried would
+ * run minutes behind the battle narrating history. The filter is still the
+ * fix.
  *
  * So this speaks for exactly the two outcomes a player would act on, and both
  * are things they cannot currently see:
