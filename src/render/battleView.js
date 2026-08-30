@@ -30,6 +30,7 @@ import {
   drawSquads, drawDragArc, drawBox, drawSquadRoutes,
 } from './routes.js';
 import { drawRallies, drawRallyDrag } from './rallyLines.js';
+import { drawBearing } from './bearing.js';
 import { drawStaticFormation } from './formation.js';
 // FOG OF WAR. `perceivedSite`/`perceivedSquads` are the one resolver every
 // surface is meant to call (battle/vision.js); `fog.js` is the renderer's own
@@ -286,6 +287,12 @@ export function createBattleView(opts) {
     opts.fxLayer?.drawGround(ctx, p, px);
     // The veil now paints onto #board-bg, in redrawBg — see the comment
     // there for why this moved off the per-frame canvas.
+    // WHICH WAY THE THRONE IS, while it is still unknown — a heading, not a
+    // ghost. See bearing.js for why this is not the one-line `state.seen` seed
+    // it looks like it should be. Under the routes and the squads: it is
+    // scenery pointing off the board, not a piece on it.
+    gridBounds(state.grid.cols, state.grid.rows, hexSize, _bounds);
+    drawBearing(ctx, state, viewFaction, geo, _bounds, hexSize, p, px);
     drawRallies(ctx, state, viewFaction, px, geo);
     drawSquadRoutes(ctx, visSquads, px, geo);
     drawHighlights(ctx, state, view, px, pulse);

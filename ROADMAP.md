@@ -2407,7 +2407,32 @@ all three of which are balance or design decisions rather than defects.
       *Do not fix the numbers here* — that is the retune's job and it is mid-search.
       What is safe to land now is the guard and the corrected premise.
 
-- [ ] **AT TICK 0 THERE ARE ZERO KNOWN ENEMY OR NEUTRAL SITES, SO THE ENTIRE
+- [x] ~~**AT TICK 0 THERE ARE ZERO KNOWN ENEMY OR NEUTRAL SITES, SO THE ENTIRE
+      "SELECT THAT BUILDING AND ATTACK IT" VOCABULARY HAS NOTHING TO OPERATE
+      ON.**~~ **ANSWERED WITH A BEARING, which is the option this item and the
+      objective item below both named as the safe one.** `render/bearing.js`
+      draws a needle beside your own camp pointing the way the throne lies,
+      while the throne is unknown, and retires the moment it is seen.
+
+      **THE ONE-LINE VERSION WAS TRIED AND REVERTED, and that is the useful
+      part.** Seeding the throne into `state.seen` is what the objective item
+      proposes first, and it fails three tests — because a previous pass
+      deliberately fog-gated `castleTouchesPlayer` so the coach could not
+      announce a throne nobody has looked at, *"the same leak as a rally line
+      drawn into the dark, except this one is the GAME talking"*. Reversing a
+      documented, tested decision is not a one-liner however short the diff is.
+      This item's own text says the fix is not "show the buildings".
+
+      **AND A SCREENSHOT CAUGHT THE FIRST BEARING BEING A PIN.** It walked from
+      the camp toward the throne and clipped at the board's edge — but the
+      throne is ON the board, so the clip never bound and the marker drew
+      exactly on the castle: the precise position, for free, at tick 0, which is
+      strictly MORE than the ghost it exists to avoid. It is anchored at a fixed
+      distance from the camp now, so neither the position nor the DISTANCE
+      leaks, and `tests/bearing.test.js` pins both — including that moving the
+      throne further away must not move the needle. Original:
+
+      **AT TICK 0 THERE ARE ZERO KNOWN ENEMY OR NEUTRAL SITES, SO THE ENTIRE
       "SELECT THAT BUILDING AND ATTACK IT" VOCABULARY HAS NOTHING TO OPERATE ON.**
       Measured off the real `buildBattleConfig`/`startBattle` pipeline, riverfen, seeds
       1/7/42/99 — every one reads `sites 11 · mine 3 · seen 3 · known non-player sites 0`.
@@ -3492,7 +3517,16 @@ historical.*
       out-fought at the wall". Every one of those facts is already in the battle state at
       the moment it ends. This is the single biggest gap between "the game is deep" and
       "the player can tell that it is".
-- [ ] **THE OBJECTIVE NAMES A BUILDING THAT IS NOT ON THE BOARD AND GIVES NO BEARING.**
+- [x] ~~**THE OBJECTIVE NAMES A BUILDING THAT IS NOT ON THE BOARD AND GIVES NO
+      BEARING.**~~ **FIXED by the bearing marker — see the tick-0 item above,
+      which this one pairs with; one fix closed both.** Its FIRST candidate
+      (seed the throne into `state.seen`) was tried and reverted: it is not
+      balance-neutral in the way the note claims it is *behaviourally*, but it
+      does reverse a deliberate fog decision that three tests encode. The second
+      candidate, which this item itself called the one that "discloses strictly
+      less than a ghost", is what shipped. Original:
+
+      **THE OBJECTIVE NAMES A BUILDING THAT IS NOT ON THE BOARD AND GIVES NO BEARING.**
       Verified on the campaign opener: `Take the Castle.` with `castleSeenByPlayer: null`
       and the throne five hexes away on an 11x9 board — no marker, no compass, nothing.
       On widowsgate (21x16) it is far worse. The site-existence gate is right as a FOG
