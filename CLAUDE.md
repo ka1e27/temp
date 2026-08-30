@@ -4056,6 +4056,37 @@ is bought by about region 8 of 24, so the back half of the campaign has nothing
 new to acquire. **~~There is no keyboard path to the core verb~~** and
 **~~site hit-targets fall to 34px~~** are both CLOSED — see below.
 
+### A bearing is not a ghost, and the difference is the whole design
+
+**MEASURED: at tick 0 the campaign opener has ZERO known non-player sites** — `sites 11 ·
+mine 3 · seen 3 · known non-player sites 0` on every seed tried (1/7/42/99). Not "few".
+So the objective strip says TAKE THE CASTLE about a building that is not on the board,
+and the entire select-a-building-and-attack-it vocabulary has nothing to operate on;
+driven in a browser, a policy playing the way an RTS player thinks issued **zero orders
+in 340 seconds** because its target set never became non-empty.
+
+`render/bearing.js` draws a needle beside your own camp pointing the way the throne lies,
+and retires the instant the throne is known — an arrow at a thing you can see is clutter.
+
+**THE ONE-LINE VERSION IS THE TRAP.** Seeding the throne into `state.seen` looks free and
+is what one critic proposed first; it fails three tests, because a previous pass
+deliberately fog-gated `castleTouchesPlayer` so the coach could not announce a throne
+nobody has looked at — *"the same leak as a rally line drawn into the dark, except this
+one is the GAME talking, which reads as authoritative rather than as a guess"*. It also
+makes the castle a clickable ghost with an owner colour and its own influence flood.
+**Reversing a documented, tested decision is not a one-liner however short the diff is.**
+
+**AND A SCREENSHOT CAUGHT THE FIRST BEARING BEING A PIN.** It walked from the camp toward
+the throne and clipped at the board's edge — but the throne is ON the board, so the clip
+never bound and the marker drew *exactly on the castle*: the precise position, for free,
+at tick 0, which is strictly MORE than the ghost it exists to avoid. Every unit test
+passed. It is anchored at a **fixed** distance from the camp now, never a fraction of the
+way there, so neither the position nor the DISTANCE leaks — `tests/bearing.test.js` pins
+that moving the throne further away must not move the needle.
+
+Nothing in it touches `state.seen`, `canSee` or `siteKnown`, and a test asserts that
+drawing a bearing leaves the seen map byte-identical and the throne still unknown.
+
 ### The veil was painting over the one thing that is common knowledge
 
 **"The ground is always visible; the people are not"** is this file's own rule, and the
