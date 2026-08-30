@@ -2910,75 +2910,25 @@ as broken.
 > `--pool` rather than `--nopool`; see the resolution above for why the default went the
 > other way.)*
 
-- [ ] **The campaign re-tune against the melee layer.** Full brief in the section below
-      (`Do this first`). **IN PROGRESS, substantial but not closed** — see CLAUDE.md
-      ("Still open" -> the campaign re-tune, third pass) for the full, current write-up.
-      Tier 1-2 (nine regions) are re-measured at n=48 and all read `ok`; three needed a
-      dial change (ironwood, emberholt, greywater). Tiers 3-6 (fifteen regions) have a
-      DIAGNOSED lever — a Marshal'd castle that is never attacked for a whole battle
-      out-trains any one rear site's ability to mass a legal first strike, traced with a
-      direct probe rather than inferred — and a `develop` cut applied against it. The n=24
-      screen is now COMPLETE for all fifteen rows (`widowsgate` landed just as this was
-      being written — the biggest board in the game, and this environment spent over
-      ninety CPU-minutes on it before it produced a number):
-      ```
-      tier 3   gallowmoor 38  sunder 25  vaelstrand 17  duskfell 17  karrowmere 38
-      tier 4   thanescar 29  blackspire 29  ironcrown 38 ok  obsidian 42 ok
-      tier 5   ravensmarch 17  gravenreach 42 ok  nightharrow 29 ok
-      tier 6   stormhalt 8  cinderwatch 13  widowsgate 4
-      ```
-      Every row improved from its pre-session reading. Four already clear their own band
-      (ironcrown, obsidian, gravenreach, nightharrow) on the SAME cut applied to every row
-      in their tier, so the lever is real. Eleven are still below floor: all five of tier 3,
-      half of tier 4 (thanescar/blackspire), ravensmarch, and all of tier 6.
-      **Three shapes only visible once the sweep filled in:** tier 4 SPLITS exactly down the
-      middle on an otherwise-uniform cut (thanescar/blackspire below, ironcrown/obsidian
-      comfortably above) — worth understanding before another blanket tier-4 move;
-      ravensmarch is tier 5's one bad row by a wide margin (17% against 42%/29%), matching
-      what an inherited n=8 quickscreen already hinted; and **widowsgate (4%) is now the
-      single worst row in the table**, worse than stormhalt (8%), on the SMALLEST
-      proportional `enemyMult` cut this pass applied to any tier-4-6 row — worth the next
-      look ahead of stormhalt, which this pass already had a real-difficulty diagnosis for.
-      Treat every number here as n=24
-      (±10pt noise) — `tests/scout.test.js`/`tactics`/`loadoutdominance`/`campaignplay`
-      were NOT re-run (each needs >=180s alone and the table is still unsettled).
-      Do not re-spend `enemyMult` on the Marshal-affected rows — it moved gallowmoor and
-      thanescar the WRONG direction at n=24 twice, consistent with noise once the
-      `develop` cut was already in, which itself is consistent with the diagnosis
-      (a consolidation race, not a power ratio). `siteCounts.neutral` is a confirmed,
-      cheap, bounded lever in BOTH directions (this session, both signs measured).
-      Next session: (1) re-take all fifteen rows at n>=96 before moving the dial again;
-      (2) understand the tier-4 split and the ravensmarch/widowsgate outlier gaps;
-      (3) re-run the five acceptance files one at a time from a clean worktree.
-      For provenance, the OLDER n=48 table (immediately below, pre-this-session) was:
-      riverfen 90 ok, kaldan 73 ok, gallowmoor 17 TOO SLOW, thanescar 6, ravensmarch 2 —
-      riverfen's 90 already matches this session's fresh re-take (unchanged dial), so that
-      part of the historical table is still good; the rest is superseded above.
-      **⚠ `targetLengthMin` is NOT the binding lever on those two rows**, though it is
-      everywhere else: the cap is a MAX against a per-tier floor
-      (`HARD_CAP_MIN_BY_TIER = [12,14,17,20,24,28]`, ratio 1.9), and both are pinned to
-      the FLOOR (nightharrow `max(24, 12.4)`, stormhalt `max(28, 17.1)`). Raising either
-      promise moves nothing until it passes 12.6m / 14.7m. So the first decision is
-      whether tiers 5–6 get a bigger floor or a faster battle.
-      **Mind the order:** those rows have no wins, so there is no win-median to author a
-      promise from. Lift the caps, get medians, then set promises from them and
-      re-confirm.
-      **⇒ STORMHALT'S LEVER IS DIFFICULTY, NOT THE CLOCK — measured on the shipped
-      code, cap lifted to 60m: two seeds of three are outright LOSSES at 6–8 minutes
-      holding one to three sites, and the third is contested 47 v 56 with the castle at
-      full HP, never besieged. It is not failing to close, it never arrives. So reach
-      for `enemyMult` / `develop` / the ground / the AI tier on that row, and ignore the
-      `targetLengthMin` and `HARD_CAP_MIN_BY_TIER` advice below for it — that was
-      derived from the buggy engine and from nightharrow, which has since fixed itself.
-      **⚠⚠ AND RE-TAKE EVERY NUMBER ABOVE BEFORE ACTING ON IT.** They were measured on a
-      build with five simulation bugs in it (defender reinforcement doing nothing, a
-      rally printing troops, a retreat cloning a garrison, bombard and training
-      discarded — all fixed since). That changed how battles RESOLVE: a nightharrow seed
-      unwinnable in ninety minutes on the old engine wins in fourteen on the fixed one.
-      Two lessons kept because they outlive the figures: **lift the cap before concluding
-      a region is slow rather than stalemated** (with the cap at 90m those two still won
-      0 of 12, so "slow" was wrong), and a long background measurement reports the code
-      as it was when it STARTED, not as it is when it prints.
+- [x] ~~**The campaign re-tune against the melee layer.**~~ **CLOSED. This entry was
+      STALE — it still carried the mid-search n=24 screen.** Twenty-two of twenty-four
+      rows are in band (twelve were out at the start), and every shipped dial was
+      measured AT that value rather than interpolated, because the per-row slope spans
+      0.15 to 0.67 points per 0.01 and adjacent rows differ twofold.
+
+      **CLAUDE.md carries the current table and is the authority**; this file keeps the
+      ordering (protocol rule 3). If a number here and there disagree, that one wins.
+
+      **The two rows left are not a tuning problem**, which is why the item closes rather
+      than staying open forever: `ironcrown` and `obsidian` have four levers measured
+      spent, and at an IDENTICAL dial on matched columns and the same silhouette they
+      read sixteen points apart — so the difference is the GENERATED MAP, and the only
+      knob left is `shape`, which this project forbids using as a difficulty dial.
+
+      One number in this entry's own history was checked rather than inherited while
+      closing it: `emberholt` was recorded in a session note as out of band, and re-taken
+      at n=48 it reads **83%, `ok`** against a 66-84 band — tight against the ceiling, so
+      it is the first row to re-check if anything upstream of tier 2 moves.
 
 ### The fun pass — findings from the specialist review
 
