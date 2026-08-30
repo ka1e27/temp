@@ -32,6 +32,22 @@ export const UI = Object.freeze({
   // that is the whole reason a player would want the number to be bigger.
   offlineCapHint: 'How long your empire keeps earning after you close the tab.'
     + ' Treasury in Upgrades adds 2h a level, from 8h up to a 24h ceiling.',
+  // THE SAME MISSING-EXPLANATION SHAPE, on the pair a player most confuses.
+  // "Hard cap" was developer jargon sitting one row under "Typical length" on
+  // the loadout brief, with no title anywhere — and the two numbers mean
+  // opposite things: one is a promise, the other ENDS the battle. A passive
+  // first battle is measured as a twenty-minute stall finishing on copy that
+  // reads as a clock problem rather than as "you never attacked", which is
+  // exactly the reading an unexplained cap invites. Titled on BOTH halves for
+  // the reason `offlineCapHint` is: a player hovers whichever their pointer is
+  // over, so a title on one of two is a coin flip.
+  timeLimit: 'Time limit',
+  timeLimitHint: 'The battle ends here whatever is happening — this is not a'
+    + ' target, it is the wall. If you are ahead on territory when it lands you'
+    + ' still get paid for the ground you hold, but the region is not taken.',
+  typicalLengthHint: 'How long this region takes to WIN, measured over battles'
+    + ' that were won. It is a guide, not a deadline — the time limit below is'
+    + ' the one that ends the fight.',
   relics: 'Relics',
   worldMap: 'World Map',
   shop: 'Upgrades',

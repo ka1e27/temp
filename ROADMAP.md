@@ -2749,12 +2749,31 @@ is silently undone by a save-on-unload handler re-persisting the in-memory state
       the same claim before it bites, and it is guarded by the same test that guards that
       one. `worldmap.js` hit the line cap on the way, so the header — four figures, four
       ways off the screen — moved to `worldmap-header.js`.
-- [ ] **Passive play ends on undefined developer jargon.** The "Time expired" screen is
-      legible, correctly styled and carries accurate stats, but never states the
-      actionable lesson, and "hard cap" appears on both it and the loadout screen with no
-      tooltip anywhere. (This corroborates the already-recorded finding that a passive
-      first battle is a twenty-minute stall ending on copy that reads as a clock problem
-      rather than as "you never attacked".)
+- [x] ~~**Passive play ends on undefined developer jargon.**~~ **HALF WAS ALREADY
+      FIXED AND THE OTHER HALF IS NOW.** Checked against the code before touching
+      it, as usual:
+
+      - *"never states the actionable lesson"* — **already false.** `resultReason`
+        has been causal since C5 and the `whyClockOnly` correction: a timeout below
+        the gate names the number (*"the throne needs 60% and you finished on
+        43%"*), and one on a gateless region says *"the castle was there to be
+        taken the whole time"*, which is precisely the "you never attacked"
+        lesson.
+      - *"'hard cap' with no tooltip anywhere"* — **true, and fixed.** It appeared
+        on the loadout brief only (the world map has no such row), as a bare
+        jargon label one line under "Typical length" — two numbers that mean
+        opposite things, one a promise and one a wall, with no explanation on
+        either. It reads **Time limit** now, and both it and Typical length carry
+        a title distinguishing them, on BOTH halves of the row for the reason
+        `UI.offlineCapHint` does: a player hovers whichever their pointer is over,
+        so a title on one of two is a coin flip.
+
+      The cap hint also tells the player what a timeout still pays, which is only
+      sayable because `HELD_FIELD` shipped — and `tests/briefhints.test.js` checks
+      that claim against `rewards.js` rather than trusting it, because copy
+      promising a payout the game does not make is worse than copy saying nothing.
+      Confirmed rendering in a real browser: `Time limit 17:06` with the
+      explanation on the label and the value.
 - [x] ~~**An empty booster gives no feedback at all** — no message, no shake — where the
       BUILD buttons in the same rail at least say "Not enough gold".~~ **STRUCK — FALSE
       against current code.** Reproduced on a fresh save in a real browser: the first

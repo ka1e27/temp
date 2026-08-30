@@ -7,7 +7,7 @@
 import { h } from '../ui/dom.js';
 import { compact, rate, duration, percent } from '../ui/format.js';
 import { UNIT_IDS, LOADOUT_TYPES_MAX } from '../content/balance.js';
-import { UNITS_UI, ENDGAME } from '../content/strings.js';
+import { UNITS_UI, ENDGAME, UI } from '../content/strings.js';
 import { RAID, GATE_CLAMP } from '../content/regions.data.js';
 import {
   expeditionSlots, carryComposition, distributeExpedition,
@@ -169,8 +169,12 @@ export function regionBrief(meta, regionId, depth = null) {
         + `${clears} clear${clears === 1 ? '' : 's'}`]] : []),
       ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
       ['Enemy sites', `${region.siteCounts.enemy}`],
-      ['Typical length', `~${region.targetLengthMin} min`],
-      ['Hard cap', duration(region.hardCapMs / 1000)],
+      // A THIRD SLOT IS AN OPTIONAL HINT, rendered as a `title` on both halves
+      // of the row. "Hard cap" was developer jargon in front of a player, one
+      // line under "Typical length" — two numbers that mean opposite things,
+      // neither explained. See UI.timeLimitHint.
+      ['Typical length', `~${region.targetLengthMin} min`, UI.typicalLengthHint],
+      [UI.timeLimit, duration(region.hardCapMs / 1000), UI.timeLimitHint],
       // THE NUMBER THAT DECIDES SEVERAL OF THESE BATTLES, AND IT WAS NEVER SHOWN.
       // `castleGateFrac` is the share of the countryside the throne holds out
       // for, and until now it appeared nowhere before the fight and, in the
@@ -196,8 +200,9 @@ export function briefPanel(brief) {
     h('h2#pb-brief-h', {
       text: brief.incursion ? brief.incursion.label : `Tier ${brief.tier} briefing`,
     }),
-    h('dl.pb-stats', {}, ...brief.rows.flatMap(([k, v]) => [
-      h('dt.label', { text: k }), h('dd.num', { text: v }),
+    h('dl.pb-stats', {}, ...brief.rows.flatMap(([k, v, hint]) => [
+      h('dt.label', { text: k, ...(hint ? { title: hint } : {}) }),
+      h('dd.num', { text: v, ...(hint ? { title: hint } : {}) }),
     ])),
     // The complications are the reason this screen matters on a rung: `thinned`
     // lands a smaller army and `ironwall` makes engines the difference between
