@@ -30,6 +30,7 @@
 import { DIRS } from '../core/hex.js';
 import { recomputeInfluence } from '../battle/influence.js';
 import { perceivedSite, canSee, lastKnownGarrison } from '../battle/vision.js';
+import { isBlocked } from '../battle/occupancy.js';
 import { numStr } from '../ui/format.js';
 import { garrisonLabelY } from './siteGlyphs.js';
 import {
@@ -135,8 +136,34 @@ export const GHOST_ALPHA = 0.42;
  */
 export function computeVeil(state, faction, cols, rows, buf) {
   const out = buf && buf.length === cols * rows ? buf : new Uint8Array(cols * rows);
+  // OUT-OF-PLAY ROCK IS NEVER FOGGED, and that is a correctness fix rather than
+  // a legibility tweak: the veil means "you cannot see what is HERE", and on a
+  // hex that is out of play there is never anything to see. Fogging it hides
+  // the one thing about the board this project says is common knowledge from
+  // tick 0 — CLAUDE.md: "the ground is always visible; the people are not.
+  // Terrain, rivers, the shape mask and the grid draw everywhere from tick 0."
+  //
+  // MEASURED, because "it looks flat" is an impression and this is a number.
+  // Sampling every hex centre off the real background canvas, luminance 0-255:
+  //
+  //     lit  open     n=19   median 68   range 26..126
+  //     dark open     n=69   median 24   range  5..60
+  //     dark ROCK     n=11   median 41   FLAT at 41
+  //
+  // Lit versus unlit is a clean 2.8x, so the fog boundary itself reads fine.
+  // What did NOT read is rock against unlit ground: a constant 41 against a
+  // range that runs to 60, so the two OVERLAP and a player cannot tell the edge
+  // of the map from ground they have not walked. `drawBlocked` paints the
+  // silhouette and `drawVeil` then paints over it.
+  //
+  // It leaks nothing. `grid.blocked` is static, identical for both factions,
+  // in the config from tick 0, and already drawn — this stops it being dimmed,
+  // it does not disclose it. And it is marginally CHEAPER: the veil's single
+  // batched path gets fewer hexes to trace.
   for (let i = 0; i < out.length; i++) {
-    out[i] = canSee(state, faction, hexQ(i, cols), hexRow(i, cols)) ? 0 : 1;
+    const q = hexQ(i, cols);
+    const r = hexRow(i, cols);
+    out[i] = (isBlocked(state, q, r) || canSee(state, faction, q, r)) ? 0 : 1;
   }
   return out;
 }

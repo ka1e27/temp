@@ -4056,6 +4056,41 @@ is bought by about region 8 of 24, so the back half of the campaign has nothing
 new to acquire. **~~There is no keyboard path to the core verb~~** and
 **~~site hit-targets fall to 34px~~** are both CLOSED — see below.
 
+### The veil was painting over the one thing that is common knowledge
+
+**"The ground is always visible; the people are not"** is this file's own rule, and the
+renderer was breaking it: `drawBlocked` paints the shape mask and `drawVeil` then painted
+straight over it. Measured by sampling every hex centre off the real `#board-bg`,
+luminance 0-255, on a fresh riverfen:
+
+```
+                    n    median   range
+lit  open ground   19      68     26..126
+dark open ground   69      24      5..60
+dark ROCK          11      41     flat 41      <- inside the open-ground range
+```
+
+**Lit versus unlit is a clean 2.8x, so the fog boundary itself was never the problem.**
+What did not read was ROCK against unlit ground: a constant 41 against a range running to
+60, so the two OVERLAP and the edge of the map cannot be told from country nobody has
+walked. That is the difference between a board that is 85-90% *unknown* and one that is
+85-90% *featureless*.
+
+`computeVeil` exempts `isBlocked` hexes now. It is a correctness fix rather than a
+legibility tweak: the veil means "you cannot see what is HERE", and on a hex that is out
+of play there is never anything to see. After, rock reads a flat **82** — clear of the
+entire unlit range — so a silhouette is legible from tick 0 exactly as this file already
+claimed it was.
+
+**It discloses nothing and costs nothing.** `grid.blocked` is static, identical for both
+factions, present in the config from tick 0 and already drawn — this stops it being
+dimmed, it does not reveal it. And the veil's single batched path traces FEWER hexes, so
+it is marginally cheaper on the background repaint the fog section warns about.
+
+The negative control is the whole test (`tests/fogrender.test.js`): rock is unveiled AND
+its unblocked neighbour at the same distance from every sightline is still veiled —
+without the second half the assertion passes just as happily on a veil that fogs nothing.
+
 ### 44 IS THE ONE TARGET NUMBER, AND HALF THE HUD WAS EXEMPT FROM IT
 
 `MIN_PICK_PX` (the board), `tools/mobile.mjs` (the audit) and `--hit` (the CSS token)

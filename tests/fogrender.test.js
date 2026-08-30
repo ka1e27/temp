@@ -137,6 +137,30 @@ test('computeVeil marks every hex outside sight, and none inside it', () => {
   assert.equal(veil[hexIndex(15, 0, cols, rows)], 1, 'never scouted, must be veiled');
 });
 
+test('OUT-OF-PLAY ROCK IS NEVER VEILED, however dark the board is', () => {
+  // The veil means "you cannot see what is HERE", and on a hex that is out of
+  // play there is never anything to see. Fogging it hid the one thing this
+  // project says is common knowledge from tick 0 — the shape mask — and it hid
+  // it MEASURABLY: sampled off the real canvas, rock under fog sat at a flat
+  // luminance of 41 while unlit open ground ranged 5..60, so the two OVERLAPPED
+  // and the edge of the map could not be told from ground nobody had walked.
+  //
+  // It discloses nothing: `grid.blocked` is static, identical for both
+  // factions, in the config from tick 0, and already drawn by `drawBlocked`.
+  const s = fixture();
+  const { cols, rows } = s.grid;
+  // Rock on a hex that is otherwise as dark as the board gets — beside the
+  // castle, which the negative control above pins as never seen by anyone.
+  s.grid.blocked = ['14,0'];
+  const veil = computeVeil(s, 'player', cols, rows);
+  assert.equal(veil[hexIndex(14, 0, cols, rows)], 0, 'rock must never be veiled');
+  // NEGATIVE CONTROL, and it is the whole test: its unblocked NEIGHBOUR, the
+  // same distance from every sightline, must still be veiled. Without this the
+  // assertion above passes just as happily on a veil that fogs nothing at all.
+  assert.equal(veil[hexIndex(15, 0, cols, rows)], 1,
+    'open ground at the same distance must still be fogged');
+});
+
 test('drawVeil paints only the fogged hexes, and paints nothing when none are', () => {
   const s = fixture();
   const { cols, rows } = s.grid;

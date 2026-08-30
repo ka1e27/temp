@@ -2235,13 +2235,28 @@ dump; every finding reproduced before it was believed.
       `freeLunchHexes` would spend a campaign-wide balance change on traffic nobody sees.
       The player-facing problem is the narrower one above, and it is render-only.
 
-- [ ] **NOTHING DISTINGUISHES "UNSCOUTED" FROM "NOTHING IS THERE".** 85-90% of the frame
-      is flat near-black on both screenshots taken, which matches the documented opening
-      and does not stop being true mid-battle on a beachhead-sized empire. A new player
-      has no way to tell fog from empty ground, and most of the frame is therefore not
-      information but the absence of it. Cheap partial answer: the board already knows
-      the shape mask and the grid, so out-of-play rock and merely-unlit ground could read
-      differently without revealing anything.
+- [x] ~~**NOTHING DISTINGUISHES "UNSCOUTED" FROM "NOTHING IS THERE".**~~ **THE
+      CRITIC'S OWN PROPOSED FIX WAS THE RIGHT ONE, and measuring it turned a
+      legibility complaint into a correctness bug.** They suggested out-of-play
+      rock and merely-unlit ground should read differently; sampling every hex
+      centre off the real background canvas showed they measurably do not.
+
+      The veil was painted OVER `drawBlocked`, so the shape mask — the one thing
+      this project says is common knowledge from tick 0 — was being dimmed with
+      everything else. `computeVeil` exempts blocked hexes now, because the veil
+      means "you cannot see what is HERE" and on a hex that is out of play there
+      is never anything to see.
+
+      Numbers are in CLAUDE.md. The short version: rock went from overlapping
+      unlit ground to sitting clear of it, so the dark two-thirds of a board now
+      carries readable terrain. It discloses nothing (`grid.blocked` is static,
+      identical for both factions and already drawn) and the veil's batched path
+      traces FEWER hexes, so it is marginally cheaper.
+
+      **Lit-versus-unlit was never the problem** and is left alone — it measures
+      a clean 2.8x. What follows from that is that the remaining half of this
+      finding, if anyone wants it, is about a LIT-and-empty hex versus a lit one
+      with something on it, which is a different question and a much harder one.
 
 - [x] ~~**The alert names a site the board gives no priority to.**~~ **FIXED** — one
       decision (`alarmSite`), two surfaces, four red corner brackets on the named site.
