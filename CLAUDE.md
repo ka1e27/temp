@@ -3291,13 +3291,63 @@ reads `state.events` at all, verified rather than assumed.
 Confirmed in real Chrome on a live gallowmoor board, through the real alert strip:
 `THE HOST MARCHES — 190 closing on your camp, 32s out. Their country is thin behind it.`
 
-**THE `minBodies` FLOOR DOES A SECOND JOB NOBODY DESIGNED IT FOR: IT SPARES THE
-CAMPAIGN OPENER.** Measured over three full riverfen battles, the muster never fires at
-all — the tier-1 enemy cannot raise twenty-four spare bodies inside the window. The
-floor was written to stop the loudest announcement in the game arriving in front of
-eleven militia, and the region where that would have been worst is the one a
-first-timer plays. Worth knowing before anyone lowers it: the number is also the
-tutorial's protection.
+**⚠ THE `minBodies` FLOOR WAS RECORDED HERE AS SPARING THE CAMPAIGN OPENER, AND THAT
+IS TRUE OF THE BOT AND FALSE OF A PLAYER.** The claim was *"measured over three full
+riverfen battles, the muster never fires at all — the tier-1 enemy cannot raise
+twenty-four spare bodies inside the window… the number is also the tutorial's
+protection."* It was measured against the harness bot, which contests the enemy's
+economy from the first think. Re-measured on the same three seeds with **no player
+orders at all**, which is what a first-timer actually does while they read the screen:
+
+```
+riverfen, seeds 1000 / 8919 / 16838      muster        outcome
+harness bot                              never  0/3    win 9.2m, win 11.4m, win 7.3m
+NO ORDERS                                FIRED  3/3    loss 9.9m, timeout, loss 9.4m
+```
+
+**It fires at 7.2m in all three, with 72–94 bodies against a floor of 24** — three to
+four times the number the floor is checking, so `minBodies` never binds and lowering or
+raising it would change nothing. The window is the whole gate: `hardCapMs` 1,026,000 ×
+`atFrac` 0.42 = 430.9s, and the observed fire time is 431s.
+
+**AND IT IS THE CAUSE OF THE DEFEAT, NOT A COINCIDENCE OF IT** — `--nomuster` over the
+same three passive seeds:
+
+```
+muster ON    loss 9.9m  ·  timeout  ·  loss 9.4m      two outright defeats
+muster OFF   timeout    ·  timeout  ·  timeout         the camp survives 3/3
+```
+
+**SO IT IS A PACE GATE WEARING A STRENGTH GATE'S CLOTHES.** What decides whether the
+host is raised is how often the player gives an order, not how strong anybody is
+(riverfen, n=3 a row):
+
+```
+an order every    2s     10s     30s     60s    120s
+muster fires     0/3     0/3     1/3     2/3     2/3
+```
+
+A player deciding where to build, reading a tooltip or hovering a preview is inside the
+30–120s column, and that is the column this fires in.
+
+**Where the tier-1 claim was pointing at something real is that the OPENER is the only
+place the muster is the executioner.** Passive, with the empire a real player would have
+by then (`conqueredBefore`), two seeds a row:
+
+```
+riverfen     muster 7.2m/89     muster 7.2m/72
+ashford      muster 7.2m/160    muster 7.2m/150
+kaldan       CAMP FELL 4.2m     CAMP FELL 3.6m
+gallowmoor   CAMP FELL 6.0m     muster 12.0m/474
+thanescar    CAMP FELL 2.8m     CAMP FELL 5.5m
+widowsgate   muster 14.4m/953   CAMP FELL 5.4m
+```
+
+From tier 2 on the camp is usually gone in **2.8–6.0 minutes**, before the window even
+opens — ordinary pressure, and passive play is supposed to lose. Tier 1 is the one tier
+that survives long enough to be mustered, which is why the loudest announcement in the
+game lands on the first-timer and nobody else. The design question this raises is
+`atFrac`/the tutorial gate, **not** `minBodies`.
 
 Where it does fire, it scales with the ground rather than with a tier table, because it
 draws from what the enemy actually holds:
@@ -3308,6 +3358,11 @@ riverfen (tier 1)       11     22*      5 sites                   17     *under 
 widowsgate (tier 6)     55    174     12 sites                  404
 the Frontier           104    250     12 sites                  277
 ```
+
+**Every row there is against the BOT, including the riverfen asterisk** — a bot that is
+busy taking the enemy's country is a bot whose enemy has little spare. The same board
+with no player orders raises **89**, so read that column as "what the host is worth when
+somebody is fighting back", not as a property of the board.
 
 **THE FRONTIER GETS ONE, AND THAT IS ACCEPTED RATHER THAN OVERLOOKED.** Nothing
 special-cases it: the mode is a `mapGen` swap and every rule below that line is the
