@@ -2116,89 +2116,28 @@ dump; every finding reproduced before it was believed.
       independent finding that widowsgate renders at 34.9 px/hex against
       riverfen's 65.8.
 
-- [ ] **THE MAIN MENU'S ACTION LIST IS BELOW THE FOLD IN PHONE LANDSCAPE.** At a
-      true 391px content height the Record button sits at y=485..529 and
-      `document.elementFromPoint` on its own centre returns NOTHING, so a tap there
-      does not land — measured, and byte-identical with and without the honours
-      change, so it is pre-existing. It is reachable by scrolling `.dialog`, which
-      is why the phone audit's own "content in a scroll container is not stranded"
-      rule would pass it; `tools/mobile.mjs` never visits the menu at all, which is
-      the more interesting half. The drawer half of this is fixed (`openDrawer`);
-      the button half is not.
-
-- [x] ~~**THE CAMPED-DRAG SMOKE STEP STILL FLAKES, about one run in four.**~~
-      **DIAGNOSED — it was never flaky, and the gate is deterministic now.**
-      `smoke.mjs` booted a blank save and the game's boot seed was
-      `Math.random()`, so every run played a different board and every step that
-      picks a fixture out of it was intermittent. `?seed=N` pins the world on a
-      BLANK save only (New Campaign keeps its own randomness — "a new campaign is
-      a new world" is a promise to the player), and the suite prints the seed so a
-      red run is reproducible. Five seeds were compared by how many steps actually
-      RAN, not by how many passed, because a pinned board can quietly stop
-      asserting: 99991 ships at 27 ok and zero skipped steps.
-
-      **The camped-drag failure survives, and that is the point** — see the item
-      immediately below. `SMOKE_SEED=1234` reproduces it every time.
-
-- [x] ~~**A CAMPED ARMY CAN BE CLICKED AND NOT PRESSED, on some boards.**~~
-      **SOLVED, and the cause is one line of output nothing was printing:**
+- [x] ~~**THE MAIN MENU'S ACTION LIST IS BELOW THE FOLD IN PHONE LANDSCAPE.**~~
+      **FIXED — the menu lies down on a short screen, the same answer the HUD
+      dock already gives at this breakpoint and for the same reason: in
+      landscape width is free and HEIGHT is the only thing that costs.** Two
+      columns of actions and a horizontal empire readout under
+      `@media (max-height: 560px)`. Measured at a true 390px content height, on
+      a finished campaign so Abdicate is offered too (the worst case):
 
       ```
-      pressLandsOn=DIV.hud-selection panel is-open
+      before   2 of 7 buttons hittable   Record at y=485..529, elementFromPoint -> nothing
+      after    7 of 7 hittable           last row at y=331..375, every button still 44px
       ```
 
-      Clicking the army SELECTS it, which OPENS THE SITE PANEL, which on some
-      boards lands squarely over the army it just selected. Every press after
-      that hits the plate, `onDown` never runs, and the gesture evaporates one
-      layer above the simulation — no order, no rejection, no error. The step
-      asserted `elementFromPoint` BEFORE the click, so it was measuring a board
-      the click then changed. It presses Escape and re-asserts now, polling for
-      the fade rather than sleeping (the panel keeps its box and stays
-      hit-testable while opacity runs down — the transition trap already filed
-      once for this same element). Three clean runs on the seed that failed four
-      times, and the shipped seed still green.
-
-      **AND MY OWN "DETERMINISTIC" CLAIM WAS WRONG, which is worth more than the
-      fix.** Seed 1234 failed four runs, then passed two, then failed three. The
-      seed pins the BOARD, not the RUN: the battle keeps ticking through every
-      probe round-trip, so anything depending on live state varies with latency.
-      A pinned seed makes a gate reproducible, not deterministic.
-
-      Three probe lessons, all paid for: the click assertion read
-      `view.selectedSquad` without clearing it, so it passed on a leftover
-      selection and proved nothing; the forensic called `board.squadAt`, **which
-      does not exist**, and reported a confident `squadAt->null` that read like a
-      smoking gun for several runs; and every geometric suspect measured innocent
-      (0.4px off a 17px radius, fog gate passed, camera still, no site at either
-      slop) while the answer was not geometry at all. `screens/battle-input.js`
-      now returns `ord` and `battle.js` exposes `__ord`, so a probe can call the
-      REAL picker instead of a replica of it.
-
-- [x] ~~**SELECTING A CAMPED ARMY CAN PUT THE SITE PANEL ON TOP OF IT.**~~
-      **FIXED, and it was one stale premise rather than a layout problem.**
-      `showSquad` anchored the panel to `siteOf(state, squad.to)` under a comment
-      beginning *"A squad stores no position"* — true before the squad-path
-      rewrite, false since. A CAMPED squad has no `to` at all, so the anchor was
-      null, `createFollower.place` returns early on a falsy anchor, and the panel
-      fell back to the stylesheet **with no keep-out box for anything** — which
-      is the very mechanism that stops it covering a SITE you select.
-      `battle-status.js squadAnchor` gives a camped force a synthetic anchor at
-      its own hex carrying exactly the three fields the follower reads (`id`,
-      `hex`, `adj`), so the army gets the same protection a site always had.
-
-      **Verified by DELETING the smoke workaround rather than keeping it.** The
-      step no longer presses Escape to get the panel out of the way; it asserts
-      the army is still on the canvas after the click and FAILS if it is not, so
-      the run now proves the fix instead of routing around it. Clean on 1234
-      (which failed four times), 99991, 7, 42 and 20260829.
-
-      The same stale premise had a second symptom one field along: the subtitle
-      read `null → null` for a camped force. `squadRoute` says where it is
-      holding. `tests/squadanchor.test.js` pins both, three of its six tests
-      negative controls — a marching column must still anchor to its
-      destination, a squad that is nowhere must still yield no anchor, and the
-      anchor id must be stable across frames or the follower re-measures every
-      frame.
+      **Two columns rather than smaller buttons**, because the 44px target
+      minimum is not negotiable and halving the number of ROWS is the only lever
+      that does not touch it. **Only the FIRST action spans**, via
+      `:first-child` rather than a class: the primary is Continue on a save with
+      progress and New Campaign on a fresh one, and naming both spent a whole
+      row on the button the player is not looking for — with both spanning,
+      Abdicate landed at 383..427 and missed. Desktop (1440x900) and portrait
+      (390x844) are untouched, and the boundary (1280x700, vh exactly 560) was
+      checked rather than assumed.
 
 - [ ] **SEVERAL FREQUENTLY-USED HUD BUTTONS ARE 32px TALL ON A DESKTOP SESSION.**
       The coarse-pointer media query is verified working, which is why the phone

@@ -253,3 +253,41 @@
 /* The button becomes a two-part row once it carries a tally. */
 .menu-record-btn { display: flex; justify-content: space-between; gap: var(--s-2); }
 .menu-record-tally { color: var(--c-rank); font-family: var(--font-num); }
+
+/* THE MENU LIES DOWN ON A SHORT SCREEN, the same answer the HUD dock already
+   gives at this breakpoint and for the same reason: in landscape width is free
+   and HEIGHT is the only thing that costs anything.
+
+   MEASURED, at a true 391px content height (a phone in landscape): the six
+   action buttons alone ran 356px, the empire readout another 101px, and the
+   Record button sat at y=485..529 with `document.elementFromPoint` on its own
+   centre returning NOTHING — so a tap there did not land. The dialog scrolls,
+   so it was reachable rather than stranded, which is exactly why the phone
+   audit passed it; `tools/mobile.mjs` never visits the menu at all.
+
+   Two columns of buttons rather than smaller ones: the 44px target minimum is
+   not negotiable, and halving the number of ROWS is the only lever that does
+   not touch it. The primary action spans both, because "Continue" is the one
+   button a returning player is looking for and it should not have to be found
+   among six. The empire readout goes horizontal for the same reason its dock
+   equivalent does — three labelled figures side by side instead of stacked. */
+@media (max-height: 560px) {
+  .menu-actions {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: var(--s-2); align-content: start;
+  }
+  /* THE FIRST ACTION SPANS, whichever it is — `:first-child` rather than a
+     class, because the primary is Continue on a save with progress and New
+     Campaign on a fresh one, and naming both spends a whole row on the button
+     the player is NOT looking for. Measured: with both spanning, Abdicate
+     landed at 383..427 against a 390px viewport and its hit-test missed; with
+     one, the last row sits at 331..375 and all seven buttons are hittable. */
+  .menu-actions > :first-child { grid-column: 1 / -1; }
+  .menu-empire {
+    grid-template-columns: repeat(3, 1fr); gap: 0 var(--s-3);
+    padding-block: var(--s-2);
+  }
+  .menu-empire dt { grid-row: 1; text-align: center; }
+  .menu-empire dd { grid-row: 2; text-align: center; font-size: var(--t-sm); }
+  .dialog { padding: var(--s-4); gap: var(--s-3); }
+}

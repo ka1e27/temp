@@ -4247,11 +4247,18 @@ empty bar.
 **Two things found on the way and NOT fixed here**, both pre-existing and both confirmed
 against HEAD:
 
-- **The main menu's action list is below the fold in phone landscape.** At a true 391px
-  content height the Record button sits at **y=485..529** and `elementFromPoint` returns
-  nothing — identical with and without this change. Reachable by scrolling `.dialog`, so
-  the phone audit's own "content in a scroll container is not stranded" rule passes it, and
-  `tools/mobile.mjs` never visits the menu at all.
+- **The main menu's action list was below the fold in phone landscape — FIXED in the
+  next pass.** At a true 390px content height only 2 of 7 buttons were hittable (Record at
+  y=485..529, `elementFromPoint` returning nothing). The menu now lies down under
+  `@media (max-height: 560px)` — two columns of actions, a horizontal empire readout —
+  and all 7 are hittable with the last row at y=331..375, every button still 44px. **Only
+  the FIRST action spans**, via `:first-child` rather than a class, because the primary is
+  Continue on a save with progress and New Campaign on a fresh one; naming both spent a
+  whole row and left Abdicate at 383..427, missing. Desktop and portrait are untouched and
+  the boundary (vh exactly 560) was checked rather than assumed. Worth knowing: it was
+  reachable by scrolling `.dialog` all along, so the phone audit's own "content in a scroll
+  container is not stranded" rule would have passed it — and `tools/mobile.mjs` never
+  visits the menu at all, which is the more interesting half.
 - **The camped-drag smoke step still flakes**, once in four runs here
   (*"the press found something other than the army the click just selected"*). `smoke.mjs`
   seeds a RANDOM world each run — `newCampaign` takes its seed from `Math.random()` — so
