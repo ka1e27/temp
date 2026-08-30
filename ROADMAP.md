@@ -1944,6 +1944,26 @@ screenshot, and the report separates measured from reasoned throughout.
       the problem: measured 15-125ms typical, which is one sim tick, exactly what the
       10Hz-plus-decoupled-renderer model predicts.
 
+      **⇒ THE HOOK ALREADY EXISTS AND IS DEAD, which is the part worth knowing before
+      anyone starts.** `battle-orders.js push()` emits `ui:command` on every accepted
+      order and **nothing listens to it** — verified across `src/`, `tests/` and
+      `tools/`, not assumed. Two comments in `battle-select.js` copy the selection
+      before iterating because "a `ui:command` listener is allowed to change the
+      selection": defensive code for a consumer that has never existed. So this is a
+      listener away, not a plumbing job.
+
+      **NOT BUILT DELIBERATELY, and the reason is a scope call rather than doubt.**
+      Confirming EVERY order is the chatter `battle-alert.js` spends a whole docblock
+      refusing (it speaks for 2 outcomes out of 929 events on gallowmoor, because "a
+      game that congratulates you 374 times is a game you stop reading"). The finding is
+      about a NEW player's first sends, so the right shape is bounded — the first few
+      accepted orders of a first battle, gated on the same `meta.tutorialSeen` the coach
+      uses, then silent forever. That needs `firstBattle` threaded
+      `battle.js → createBattleHud → wireAlerts`, and `battle-hud.js` currently has FOUR
+      lines under the cap, so it wants a small split first. Cheap, but not free, and the
+      item's own author hedged it ("defensible as don't nag on success") — so it is
+      priced honestly here rather than half-done.
+
 - [x] ~~**THE ONE-LINE ALERT CHANNEL DROPS MORE MESSAGES THE FASTER YOU PLAY.**~~
       **ALREADY FIXED, and this entry was STALE — caught by reading the code
       before building it, which is the fourth stale "still open" entry this

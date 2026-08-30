@@ -102,6 +102,25 @@ export function createOrders(o) {
     hexPos: (q, r, out) => board.hexPos(q, r, out),
   };
 
+  /**
+   * Every accepted order goes through here.
+   *
+   * `ui:command` HAS NO LISTENER ANYWHERE — checked across src/, tests/ and
+   * tools/, not assumed. It is the only signal the HUD gets that an order was
+   * ACCEPTED (a refusal has `battle:command-rejected`, which lights the strip
+   * and shakes a booster button), so success is confirmed only by the squad's
+   * own departure and a 90ms whoosh. Two comments in ./battle-select.js copy
+   * the selection before iterating because "a `ui:command` listener is allowed
+   * to change the selection" — defensive code for a consumer that has never
+   * existed, and correct to keep either way.
+   *
+   * Left wired rather than deleted, and that is a decision: this is the hook a
+   * first-run order confirmation would use, and the finding it would serve is
+   * recorded in ROADMAP.md. Anyone adding that listener should know it will be
+   * the first, and should not assume the silence is an oversight — a game that
+   * acknowledges all of a late battle's orders is the chatter ./battle-alert.js
+   * spends a whole docblock refusing.
+   */
   const push = (c) => {
     getState().commands.push(c);
     view.lastCommand = c;
