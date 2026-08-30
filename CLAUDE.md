@@ -4056,6 +4056,32 @@ is bought by about region 8 of 24, so the back half of the campaign has nothing
 new to acquire. **~~There is no keyboard path to the core verb~~** and
 **~~site hit-targets fall to 34px~~** are both CLOSED — see below.
 
+### 44 IS THE ONE TARGET NUMBER, AND HALF THE HUD WAS EXEMPT FROM IT
+
+`MIN_PICK_PX` (the board), `tools/mobile.mjs` (the audit) and `--hit` (the CSS token)
+all say 44 — and the battle HUD's own 44px rule sat behind `@media (pointer: coarse)`,
+so a **mouse never received it**. Measured at 1440x900, twelve control classes came out
+**32px**: the send-fraction segments, drag mode, pause, the speed slider, the troop
+filter chips, Withdraw and all four build buttons — beside boosters that were correctly
+44. The phone audit passes because it only ever looks at phone metrics.
+
+**It cost two points of board, priced before it was spent**: the dock 91px → 103px,
+board share **85% → 83%** against a 55% floor. Phone is untouched in both orientations
+(it already had 44) — portrait 75%/61%, landscape 73%/58%.
+
+**SCOPED RATHER THAN RAISING THE TOKEN, and that is the load-bearing decision.**
+`--hit-sm` has twelve users across six stylesheets, and one of them is the SITE PANEL,
+which is height-capped on a phone at `min(52vh, 16rem)` and was measured back over its
+board-share floor by exactly that cap — raising the token would have re-opened a fix
+that cost its own pass. `.chip` is scoped to `#hud` because `prebattle-army.js` builds
+booster chips with the same class, and the build rail is named rather than `.hud-build`,
+which the site panel shares.
+
+**And the reason it could arrive at all is that nothing gated it**: `smoke.mjs` now
+fails if any `#hud` control is under 44px on a desktop session. A rule enforced on one
+pointer type and not the other is a rule with a hole in exactly the shape of the
+platform nobody audits.
+
 ### A site is a target as well as a picture, and only one of those scales
 
 `siteShapes.js pickRadius` + `MIN_PICK_PX` (44 — the same number
