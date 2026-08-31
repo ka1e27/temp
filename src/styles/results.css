@@ -97,3 +97,39 @@
 }
 .results-actions .btn { flex: 1; }
 .results-hint { margin: 0; flex: 1; text-align: left; font-size: var(--t-sm); }
+
+/* --- What the battle EARNED you --------------------------------------------
+   Two beats the game has always computed and never said: an honour crossed
+   (twenty thresholds derived off `meta.stats` every tick, announced nowhere)
+   and a new front opened (`WORLD.frontOpened` had zero readers in the tree
+   while a conquest silently turned its neighbours from "???" into names).
+   Below the stat table and above the buttons, because these are things you
+   earned rather than things that happened. */
+/* The card is not a flex column — every block sets its own margins (see
+   `.results-stats` above) — so these do too, or they land flush against the
+   stat table and the buttons. */
+.results-honours {
+  display: flex; flex-direction: column; gap: var(--s-2);
+  margin: var(--s-5) 0 0; padding: 0; list-style: none; text-align: left;
+}
+.results-honours li {
+  display: grid; grid-template-columns: max-content 1fr; column-gap: var(--s-3);
+  align-items: baseline; padding: var(--s-2) var(--s-3);
+  border-left: 2px solid var(--c-gold); background: var(--c-surface-2); border-radius: var(--r-2);
+}
+.results-honour-tag {
+  grid-row: 1 / 3; align-self: center;
+  font-size: var(--t-xs); letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--c-gold);
+}
+.results-honour-title { font-weight: var(--w-bold); color: var(--c-text); }
+.results-honour-note { font-size: var(--t-sm); color: var(--c-text-dim); }
+.results-front {
+  display: flex; gap: var(--s-2); align-items: baseline;
+  margin: var(--s-4) 0 var(--s-5); text-align: left;
+}
+.results-front-tag {
+  font-size: var(--t-xs); letter-spacing: var(--track-label); text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+.results-front-names { font-weight: var(--w-bold); color: var(--c-text); }

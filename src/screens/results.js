@@ -16,6 +16,25 @@ import { applyOutcome } from '../meta/rewards.js';
 import { regionById, isAttackable, canRaid, raidCooldownRemaining } from '../meta/world.js';
 import { nextDepth, planFor } from '../meta/incursion.js';
 import { incomePerSec } from '../meta/idle.js';
+import { honourView } from '../meta/milestones.js';
+import { WORLD } from '../content/strings.js';
+
+/** The ids of every honour already standing. Exported so the diff below is a
+ *  function with a test rather than four lines inside a scene's `enter()`. */
+export const earnedHonourIds = (stats) => new Set(
+  honourView(stats).rows.filter((r) => r.done).map((r) => r.id));
+
+/**
+ * The honours crossed BETWEEN a snapshot and now, in table order.
+ *
+ * Lives on the screen side deliberately. `tests/milestones.test.js` walks the
+ * source and fails if any simulation, meta or harness file imports the honours
+ * table — that is what guarantees an honour can never grant anything and
+ * quietly re-tune twenty-four regions. Announcing a threshold is the right side
+ * of that line; paying one is not.
+ */
+export const honoursSince = (before, stats) => honourView(stats).rows
+  .filter((r) => r.done && !before.has(r.id));
 
 /** Where the rung after this one is fought. Derived, never remembered: the ring
  *  rotates, so the next depth is usually different ground. */
@@ -184,6 +203,14 @@ export function createResultsScene(ctx) {
     enter({ outcome, config }) {
       const meta = ctx.state.meta;
       const before = incomePerSec(meta);
+      // WHAT THIS BATTLE EARNED YOU, snapshotted before the payout moves the
+      // counters. Honours are diffed HERE and not in `meta/rewards.js` on
+      // purpose: `tests/milestones.test.js` walks the source and fails if any
+      // simulation, meta or harness file imports the honours table, which is
+      // what guarantees an honour can never grant anything and quietly re-tune
+      // twenty-four regions. A screen is the right side of that line — it is
+      // announcing a number, not paying one.
+      const hadHonours = earnedHonourIds(meta.stats);
 
       // meta/rewards.js is the sole authority on rewards; the battle engine
       // reported observations and nothing else.
@@ -192,6 +219,15 @@ export function createResultsScene(ctx) {
       });
       const after = applied.incomePerSec;
       const region = regionById(outcome.regionId);
+      // Crossed by THIS battle. `honourView` is a pure read of `meta.stats`, so
+      // the diff is exact rather than a guess at which counter moved.
+      const wonHonours = honoursSince(hadHonours, meta.stats);
+      // A NEW FRONT, which `refreshUnlocks` has always returned and nothing has
+      // ever read. `WORLD.frontOpened` was written for exactly this moment and
+      // had zero readers in the whole tree; meanwhile a conquest silently
+      // turned its neighbours from "???" into names with no comment at all.
+      const fronts = (applied.opened ?? []).map((id) => regionById(id)?.name)
+        .filter(Boolean);
       const copy = resultCopy(outcome, applied, region);
       const reason = resultReason(outcome, config);
 
@@ -212,6 +248,23 @@ export function createResultsScene(ctx) {
           ...statRows(outcome, applied, before, after).flatMap(([k, v]) => [
             h('dt.label', { text: k }), h('dd.num', { text: v }),
           ])),
+
+        // Below the numbers and above the buttons: these are things you EARNED
+        // rather than things that happened, so they read as the last word.
+        // `h()` skips a null child, so a battle that opened nothing and crossed
+        // nothing renders exactly as it did before.
+        wonHonours.length
+          ? h('ul.results-honours', {},
+            ...wonHonours.map((r) => h('li', {},
+              h('span.results-honour-tag', { text: RESULTS.honourEarned }),
+              h('span.results-honour-title', { text: r.title }),
+              h('span.results-honour-note', { text: r.note }))))
+          : null,
+        fronts.length
+          ? h('p.results-front', {},
+            h('span.results-front-tag', { text: WORLD.frontOpened }),
+            h('span.results-front-names', { text: fronts.join(', ') }))
+          : null,
 
         h('div.results-actions', {}, ...actions(outcome, config))));
 

@@ -3760,6 +3760,42 @@ Two audit rules exist so the tool does not argue its own fixes back out: content
 `touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
 by signature rather than by class name.
 
+### What a battle EARNED you, on the screen you are already reading
+
+Two beats the game computed and then swallowed, both now on the results card
+below the stat table and above the buttons.
+
+**Twenty named honours fired in total silence.** `meta/milestones.js` derives
+them off `meta.stats` every time anything asks; nothing announced one, so you
+crossed your thousandth kill and found out only if you later thought to open
+Menu → Record — where an honour earned a second ago is pixel-identical to one
+from three campaigns back.
+
+**And `WORLD.frontOpened` — "A new front has opened:" — had ZERO readers in the
+tree.** `refreshUnlocks` has always returned the newly-opened region ids into
+`summary.opened`, and `worldmap.js` silently redrew the board, so a conquest
+turned its neighbours from `???` into names with no comment of any kind. The one
+sentence written for that moment was never wired to it.
+
+**THE HONOURS DIFF LIVES ON THE SCREEN SIDE, AND A TEST FORCED THAT — correctly.**
+The obvious home is `meta/rewards.js`, where the counters move; putting it there
+turns `tests/milestones.test.js` red, because that test walks the source and
+fails if any simulation, meta or harness file imports the honours table. That
+guard is what makes "an honour pays nothing" structural rather than a promise —
+an honour that granted anything would silently re-tune all twenty-four regions.
+Announcing a threshold is the right side of that line and paying one is not, so
+the snapshot is taken in `results.js` around its own `applyOutcome` call. It is
+the only call site in the tree.
+
+The snapshot is a **Set of ids**, not a count: an honour already standing must
+never be announced a second time, and `tests/earned.test.js` pins exactly that,
+with the negative control that progress SHORT of a threshold announces nothing.
+`earnedHonourIds`/`honoursSince` are exported so the diff is a function with a
+test rather than four lines inside a scene's `enter()`.
+
+Confirmed in a real browser on a won riverfen: `HONOUR EARNED · Blooded · Fight
+ten battles.` and `A NEW FRONT HAS OPENED: Ashford Downs, Ironwood`.
+
 ### An overlay left the whole game behind it tabbable, and a `??` that always fires
 
 **A `keepVisible` OVERLAY LEAVES THE SCENE UNDER IT FULLY MOUNTED.**

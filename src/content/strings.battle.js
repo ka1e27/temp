@@ -59,6 +59,9 @@ export const RESULTS = Object.freeze({
   capitalTitle: 'The Obsidian Throne has fallen',
   capitalBody: 'Their capital is yours — and their homeland is still east of it.'
     + ' A king without a throne keeps fighting where he was born.',
+  /** The tag on an honour crossed by the battle you just fought. Twenty named
+   *  thresholds were computed every tick and announced nowhere. */
+  honourEarned: 'Honour earned',
   campaignTitle: 'The last region is yours',
   campaignBody: 'Twenty-four of twenty-four. There is nothing left of theirs to'
     + ' take: what remains is the ladder, the frontier, and the crown you could'
