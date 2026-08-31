@@ -51,6 +51,18 @@ export const COACH = Object.freeze({
 
 export const RESULTS = Object.freeze({
   win: 'Region conquered',
+  // THE TWO MOMENTS THE CAMPAIGN IS BUILT TOWARD. Both used to print the same
+  // sentence as an empty tier-1 farm — "Your empire grows, and so does its
+  // income." The capital is deliberately NOT an ending: six regions sit east of
+  // it in the enemy's own homeland, and saying so is the whole point of giving
+  // it a line.
+  capitalTitle: 'The Obsidian Throne has fallen',
+  capitalBody: 'Their capital is yours — and their homeland is still east of it.'
+    + ' A king without a throne keeps fighting where he was born.',
+  campaignTitle: 'The last region is yours',
+  campaignBody: 'Twenty-four of twenty-four. There is nothing left of theirs to'
+    + ' take: what remains is the ladder, the frontier, and the crown you could'
+    + ' set down to begin again.',
   loss: 'Defeat',
   timeout: 'Time expired',
   retreat: 'Withdrawn',

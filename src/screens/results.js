@@ -49,6 +49,17 @@ export function resultCopy(outcome, applied, region) {
     if (applied?.firstConquest) {
       return { title: `${name} is yours`, body: COACH.firstIncome };
     }
+    // ...AND THE TWO MOMENTS AT THE OTHER END. Ordered campaign-complete FIRST:
+    // the last region is not the capital, so the two can never both be true
+    // today — but the order says which one wins if a future table ever makes
+    // the capital the finale, and "you have finished" outranks "you took a
+    // city" either way.
+    if (applied?.campaignDone) {
+      return { title: RESULTS.campaignTitle, body: RESULTS.campaignBody };
+    }
+    if (applied?.capital) {
+      return { title: RESULTS.capitalTitle, body: RESULTS.capitalBody };
+    }
     return { title: `${name} is yours`, body: 'Your empire grows, and so does its income.' };
   }
   if (outcome.result === 'retreat') {

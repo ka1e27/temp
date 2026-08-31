@@ -14,7 +14,7 @@
 
 import { assertBattleOutcome } from '../battle/contract.js';
 import {
-  REGION_BY_ID, FIRST_CLEAR_BONUS_SECONDS, RAID, HELD_FIELD,
+  REGION_BY_ID, FIRST_CLEAR_BONUS_SECONDS, RAID, HELD_FIELD, CAPITAL_ID, REGION_IDS,
 } from '../content/regions.data.js';
 import { metaOf, markDirty } from '../core/store.js';
 import {
@@ -201,6 +201,17 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
      *  quiet part out loud on exactly this one — that the region now pays while
      *  you are not playing — because nothing else in the game ever states it. */
     firstConquest: false,
+    /** THE TWO MOMENTS THE CAMPAIGN IS BUILT TOWARD, and neither had a word of
+     *  its own: taking the enemy's capital, and finishing all twenty-four.
+     *  `resultCopy` had exactly three branches — incursion, raid, first
+     *  conquest — so an empty tier-1 farm and the Obsidian Throne printed the
+     *  identical sentence, and completing the game was a stat line reading
+     *  24 / 24 beside Treasury. Computed HERE rather than in the screen because
+     *  this is where `meta` is, and because a screen that re-derived "have I
+     *  finished" would be a second implementation of the rule the endgame
+     *  gates already use. */
+    capital: false,
+    campaignDone: false,
     /** A timeout the player LED on territory, paid a share of what taking the
      *  ground would have been worth. Never true on a win — see `heldFieldPay`. */
     heldField: false,
@@ -274,7 +285,10 @@ export function applyOutcome(metaState, config, outcome, { now = 0, bus, state }
     markConquered(meta, regionId, { now, durationMs });
     summary.conquered = true;
     summary.newBest = true;
-    summary.firstConquest = regionsConquered(meta) === 1;
+    const taken = regionsConquered(meta);
+    summary.firstConquest = taken === 1;
+    summary.capital = regionId === CAPITAL_ID;
+    summary.campaignDone = taken === REGION_IDS.length;
     summary.crowns = firstClearBonus(region);
     summary.relics = grantRelics(meta, conquestRelics(region), 'conquest', bus);
     summary.incomeAdded = region.rewardPerSec;

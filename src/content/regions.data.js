@@ -255,5 +255,14 @@ export const totalSites = (region) =>
  *  curve, and three more at the same rate is the rest of it. Nothing reads this
  *  total as a budget — `meta/rewards.js` `raidLump` is denominated in seconds of
  *  EMPIRE income, so raids stay stage-invariant however large it gets. */
+/** THE ENEMY'S CAPITAL, named once so three surfaces cannot disagree about it.
+ *  Region 18 of 24: the campaign does NOT end here — six more regions sit east
+ *  of the throne in the enemy's own homeland — and that is exactly why it needs
+ *  saying out loud. Taking it used to print the same sentence as an empty
+ *  tier-1 farm. Derived nowhere: "which region is the capital" is a fact about
+ *  the fiction, not something to infer from a tier boundary that a later pass
+ *  could move underneath it. */
+export const CAPITAL_ID = 'obsidian';
+
 export const fullConquestIncome = () =>
   REGIONS.reduce((a, r) => a + r.rewardPerSec, 0);
