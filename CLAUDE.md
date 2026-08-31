@@ -3801,6 +3801,15 @@ Three things fixed it, in increasing order of how much they bought:
   to trip the fade, so the bottom control sat permanently half-dimmed and read
   as broken.
 
+**A RESIZE IS NOT THE ONLY WAY THE SHORTFALL MOVES**, and a listener-only fade
+missed the case a critic found by playing: arming the withdraw confirm inserts a
+transient hint ABOVE the rails in the same flex column, pushing them down and
+re-clipping the bottom card — with no resize event anywhere, so the fade went on
+saying "it fits" while a control sat out of reach. `watchOverflow` carries a
+`ResizeObserver` on the rails themselves, which catches every cause rather than
+the ones anybody thought of. Measured: resting `over=1px fade=false`, withdraw
+armed `over=49px fade=true`.
+
 **After: 1440x900 (the smoke default) clips nothing and shows no fade.**
 1280x800 still clips ONE booster and is left there deliberately — the fade,
 the wheel and the `B` hotkey all reach it, and closing the remaining ~27px means

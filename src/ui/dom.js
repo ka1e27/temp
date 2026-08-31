@@ -184,8 +184,17 @@ export function watchOverflow(els) {
   sync();
   window.addEventListener('resize', sync);
   for (const el of list) el.addEventListener('scroll', sync, { passive: true });
+  // ...AND A RESIZE IS NOT THE ONLY WAY THE SHORTFALL MOVES. Measured: arming
+  // the withdraw confirm inserts a transient hint ABOVE the rails in the same
+  // flex column, which pushes them down and re-clips the bottom card — with no
+  // resize event anywhere, so a listener-only version went on showing "it
+  // fits" while a control sat out of reach. A ResizeObserver on the rails
+  // themselves catches every cause, including the ones nobody has thought of.
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(sync) : null;
+  for (const el of list) ro?.observe(el);
   return () => {
     window.removeEventListener('resize', sync);
     for (const el of list) el.removeEventListener('scroll', sync);
+    ro?.disconnect();
   };
 }
