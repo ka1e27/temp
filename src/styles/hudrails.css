@@ -1,0 +1,93 @@
+/* The battle HUD's two RAILS — the left column of troop filters and the right
+   column of boosters and build buttons — plus the overflow affordance that
+   keeps a clipped card from being drawn-but-unclickable.
+   Split out of hud.css at the 400-line cap along the seam that costs nothing:
+   nothing in here is referenced by the corners, the readouts or the dock, and
+   the one rule that spans both files (`.is-docked .hud-rail`) already lives in
+   hud.responsive.css, which owns the docked layout. Loaded straight after
+   hud.css in index.html, so specificity and order are unchanged. */
+
+/* --- Left rail ------------------------------------------------------------
+   Four cards along the bottom was too many, and the two that moved here are the
+   two you touch least: the troop filter is a standing preference you set once,
+   and a booster is fired a handful of times a battle. What stayed at the bottom
+   is what changes constantly — send strength, what a drag means, and speed.
+
+   A COLUMN costs board WIDTH rather than board height, which is the right trade
+   on both screens this has to work on: a phone is tall and narrow, a laptop is
+   wide and short. It scrolls rather than growing, so a longer roster cannot push
+   it off the top and bottom of a short viewport the way the dock once did.
+
+   Vertically centred and pointer-events only on the cards, so the empty rail
+   above and below them stays a part of the board you can drag through. */
+.hud-rail {
+  display: flex; flex-direction: column; align-items: stretch;
+  gap: var(--s-3); min-height: 0;
+  overflow-y: auto; overscroll-behavior-y: contain;
+  padding: 2px;
+}
+/* A CLIPPED RAIL MUST LOOK CLIPPED. This hid its scrollbar outright, which is
+   only safe while the rail always fits — and it does not: measured, the
+   top-right column is 641px against 657px of content at 1440x900 and 541
+   against 641 at 1280x800, so flex shrinks both rails and each silently clips
+   its last card. The 5th booster was drawn, looked live, sat at a full 44px and
+   passed its click to the canvas, its centre being outside the scroll box. No
+   size audit sees that, and nor did the smoke gate, which hit-tested
+   `querySelector` — the FIRST booster — and never the fifth. `.pb-body`'s
+   treatment: a JS-toggled mask (absent when it fits, so never a lie) plus a
+   real scrollbar where one is drawn. No `scrollbar-gutter: stable` unlike
+   `.pb-body` — overlay scrollbars are 0px here, so a gutter would spend board
+   width every session preventing a jump that cannot happen. */
+.hud-rail { scrollbar-width: thin; }
+.hud-rail::-webkit-scrollbar { width: 8px; }
+.hud-rail::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-line) 80%, transparent);
+  border-radius: var(--r-pill);
+}
+.hud-rail.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+/* ...AND THE COLUMN EARNS ITS HEIGHT BACK, because a fade only makes the
+   shortfall discoverable and still leaves a player scrolling to fire a booster.
+   These two captions are the cheapest ~50px in the corner and the most
+   redundant text in the HUD — a booster reads "Z rally", a build button reads
+   "FARM · 200g · 25s". Hidden the `.sr-only` way, so it is still announced, and
+   scoped to the RAILED right column because the bottom row's identical captions
+   label bare percentages. After: 1440x900 clips nothing, 1280x800 clips one. */
+.is-railed .hud-tr .hud-rail .hud-group-label {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: 0;
+  border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+/* The last 7px. With the captions gone the right column overran by 6-7px at
+   1440x900 — not enough to put a booster out of reach, but enough to trip the
+   fade, so the bottom control sat permanently half-dimmed and read as broken.
+   The column's own gaps are the cheapest place to find it: three of them at
+   12px, and 8px is still a clear separation between cards that already carry
+   their own borders. Scoped to the railed RIGHT column, which is the only one
+   that runs out of height — the left rail measures 0px of overflow. */
+.is-railed .hud-tr { gap: var(--s-2); }
+.hud-rail .hud-group { flex: 0 0 auto; }
+/* One column of controls, not a wrapped grid: the rail is as wide as its widest
+   chip and every item is in the same place every time. Only while the rail IS a
+   rail — when the HUD is docked these cards are reparented into the dock and go
+   back to being ordinary horizontal rows. `.is-railed` is set by battle-hud.js
+   `placeRails`, which owns that decision; see hud.responsive.css for why it is a
+   class and not a breakpoint. */
+.is-railed .hud-rail .hud-group-row { flex-direction: column; align-items: stretch; }
+
+/* Send / Rally. `.seg` already carries the segmented look; this one only has to
+   be wide enough for a word rather than a percentage. */
+.hud-dragmode { min-width: 62px; }
+
+/* --- Build rail -------------------------------------------------------
+   `.hud-build` itself (min-height, disabled, armed) is still declared in
+   screens.css, where it shipped as a full-width row inside the site panel —
+   the button's own look does not change now that a rail hosts it, only its
+   address. `align-items: stretch` on the railed rule above already makes it
+   full width in a column; this only sets a floor for the DOCKED, horizontal
+   case, where three buttons in one scrolling card must not crush down to
+   their own text. */
+.hud-rail-build .hud-build { min-width: 132px; text-align: left; }
+

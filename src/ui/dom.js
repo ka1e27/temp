@@ -160,3 +160,32 @@ export function createDisposer() {
 export function moreBelow({ scrollHeight = 0, clientHeight = 0, scrollTop = 0 } = {}) {
   return scrollHeight - clientHeight - scrollTop > 4;
 }
+
+/**
+ * Keep a `has-more` fade in step with a set of scroll containers, and hand back
+ * the disposer.
+ *
+ * Lives beside `moreBelow` because it is the same concern one layer up, and it
+ * is shared because the failure it prevents is not a niche one: a container
+ * that clips its last child leaves that child DRAWN BUT UNCLICKABLE, since the
+ * click lands wherever the clipped pixels fall through to. The battle HUD's
+ * rails hit exactly that — a booster at a full 44px whose press reached the
+ * canvas — and the loadout screen hit it before them.
+ *
+ * `resize` is a required trigger rather than a nicety: the shortfall is a
+ * function of viewport height, so a window the player drags crosses the
+ * boundary with nothing else re-rendering.
+ */
+export function watchOverflow(els) {
+  const list = els.filter(Boolean);
+  const sync = () => {
+    for (const el of list) el.classList.toggle('has-more', moreBelow(el));
+  };
+  sync();
+  window.addEventListener('resize', sync);
+  for (const el of list) el.addEventListener('scroll', sync, { passive: true });
+  return () => {
+    window.removeEventListener('resize', sync);
+    for (const el of list) el.removeEventListener('scroll', sync);
+  };
+}

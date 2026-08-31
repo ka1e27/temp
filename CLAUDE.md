@@ -3760,6 +3760,56 @@ Two audit rules exist so the tool does not argue its own fixes back out: content
 `touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
 by signature rather than by class name.
 
+### A rail that runs out of height draws a control you cannot press
+
+`.hud-tr` is the right-hand column: clock, Withdraw, the boosters rail, the build
+rail. It is bounded to the space above the dock, and the two rails are
+`overflow-y: auto` — so when the column runs short, flex shrinks them and each
+**silently clips its last card**. Both hid their scrollbars outright, so there
+was no affordance at all. Measured:
+
+```
+window      corner   content needs   clipped     result
+1440x900     641px       657px       43 + 36    tithe DEAD (click -> canvas)
+1280x800     541px       641px       89 + 74    fortify AND tithe DEAD
+1600x1000    741px       657px        none      fine
+```
+
+**The clipped button is drawn, looks live and is a full 44px** — its CENTRE is
+simply outside the scroll box, so `elementFromPoint` returns the canvas and the
+press does nothing. A size audit cannot see this, and neither could the smoke
+gate: `runHud` passed each class to `h.hitPoint`, which is `querySelector`, so
+it proved booster **#1** was reachable and never asked about #5. That gate now
+hit-tests every `#hud` control individually, which is the assertion that would
+have caught it.
+
+Three things fixed it, in increasing order of how much they bought:
+
+- **`ui/dom.js watchOverflow`** — `.pb-body`'s `has-more` fade, toggled from JS
+  (absent when everything fits, so it is never a lie) plus a real scrollbar
+  where one is drawn. Verified: the fade appears, a wheel over the rail scrolls
+  it, the fade clears at the end, and the clipped booster becomes hittable.
+  **A fade only makes the shortfall discoverable, though** — scrolling a rail to
+  fire a booster mid-battle is not a control, so it is the floor, not the fix.
+- **The two rail captions are `.sr-only` in the railed right column.** They are
+  the most redundant text in the HUD — a booster reads `Z rally`, a build button
+  reads `FARM · 200g · 25s` — and worth ~50px. Still announced, so nothing is
+  lost to a screen reader; scoped to the right column because the bottom row's
+  identical captions label bare percentages and are load-bearing there.
+- **`.is-railed .hud-tr` gap 12px → 8px**, worth the last 7px. Without it the
+  column overran by 6-7px: not enough to put anything out of reach, but enough
+  to trip the fade, so the bottom control sat permanently half-dimmed and read
+  as broken.
+
+**After: 1440x900 (the smoke default) clips nothing and shows no fade.**
+1280x800 still clips ONE booster and is left there deliberately — the fade,
+the wheel and the `B` hotkey all reach it, and closing the remaining ~27px means
+relocating the build rail, which is a layout decision rather than a bug fix.
+
+`hud.css` hit the 400-line cap on the way and the rails moved to
+`styles/hudrails.css`, loaded straight after it so order and specificity are
+unchanged.
+
 ### The site panel is CAPPED, not trimmed — and landscape is a different problem
 
 The audit's step 6 (a site panel open at 390x844) read **54% against its own 55% floor**,

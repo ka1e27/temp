@@ -169,8 +169,13 @@ no contract risk — and it gives recommendation 1's waves a face.
 **6. Ship the eight existing incursion mutators into first-time tier-3+ regions** (the
 already-scoped C1). New call site for tested infrastructure.
 
-**7. Fix the dead booster and the overflowing build rail** (D7), and add the hittability
-assertion to the smoke gate that would have caught it.
+**7. ~~Fix the dead booster and the overflowing build rail~~ (D7)** — **DONE.** The smoke
+gate now hit-tests every `#hud` control rather than the first of each class; the rails
+got `.pb-body`'s fade via a shared `ui/dom.js watchOverflow`; the two redundant rail
+captions went `.sr-only` and the right column's gaps came down. 1440x900 clips nothing
+and shows no fade; 1280x800 still clips one booster, reachable by fade, wheel and
+hotkey, and closing the last ~27px is a layout decision rather than a bug fix. Full
+numbers in CLAUDE.md.
 
 ---
 

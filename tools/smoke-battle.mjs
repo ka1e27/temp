@@ -79,21 +79,42 @@ export async function runHud(h, step, note) {
   // Measured before the fix: twelve control classes at 32px — the send
   // fraction, drag mode, pause, the speed slider, the troop chips, Withdraw and
   // all four build buttons — beside boosters that were correctly 44.
-  const small = await h.page.eval((min) => {
-    const out = [];
+  //
+  // ...AND EVERY ONE OF THEM, NOT THE FIRST OF EACH CLASS. `hitPoint` takes a
+  // selector and `querySelector` answers with the FIRST match, so the loop
+  // above proves booster #1 is reachable and says nothing about booster #5 —
+  // which is exactly where the defect was. Measured at 1440x900: the top-right
+  // HUD column is 641px tall against 657px of content, and the two scrolling
+  // rails absorb the 16px shortfall by CLIPPING their last items with their
+  // scrollbars hidden, so `tithe` was drawn, looked live, and passed its click
+  // through to the canvas. At 1280x800 the shortfall is 100px and two boosters
+  // were dead. A size check cannot see this: the button is a full 44px, it is
+  // simply not where it appears to be.
+  const bad = await h.page.eval((min) => {
+    const small = []; const dead = [];
     for (const el of document.querySelectorAll('#hud button, #hud input')) {
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) continue;
       if (getComputedStyle(el).visibility === 'hidden') continue;
-      if (r.height < min) out.push(`${el.className || el.tagName} ${Math.round(r.height)}px`);
+      const name = `${el.className || el.tagName}`.split(' ')[0];
+      if (r.height < min) small.push(`${name} ${Math.round(r.height)}px`);
+      const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+      const hit = document.elementFromPoint(x, y);
+      if (!(hit === el || el.contains(hit) || hit?.contains(el))) {
+        dead.push(`${name}("${el.textContent.trim().slice(0, 12)}")`);
+      }
     }
-    return [...new Set(out)];
+    return { small: [...new Set(small)], dead: [...new Set(dead)] };
   }, 44);
-  if (small.length) {
-    throw new Error(`${small.length} HUD control(s) under 44px on a desktop session: `
-      + small.slice(0, 6).join(', '));
+  if (bad.small.length) {
+    throw new Error(`${bad.small.length} HUD control(s) under 44px on a desktop session: `
+      + bad.small.slice(0, 6).join(', '));
   }
-  step('HUD controls hittable, and all >= 44px');
+  if (bad.dead.length) {
+    throw new Error(`${bad.dead.length} HUD control(s) drawn but not clickable `
+      + `(the click lands on something else): ${bad.dead.slice(0, 6).join(', ')}`);
+  }
+  step('HUD controls hittable, all >= 44px, and none clipped out of reach');
 }
 
 /** Step 4. The simulation runs, and speed actually changes it.

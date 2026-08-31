@@ -204,49 +204,6 @@
 }
 .hud-group-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 
-/* --- Left rail ------------------------------------------------------------
-   Four cards along the bottom was too many, and the two that moved here are the
-   two you touch least: the troop filter is a standing preference you set once,
-   and a booster is fired a handful of times a battle. What stayed at the bottom
-   is what changes constantly — send strength, what a drag means, and speed.
-
-   A COLUMN costs board WIDTH rather than board height, which is the right trade
-   on both screens this has to work on: a phone is tall and narrow, a laptop is
-   wide and short. It scrolls rather than growing, so a longer roster cannot push
-   it off the top and bottom of a short viewport the way the dock once did.
-
-   Vertically centred and pointer-events only on the cards, so the empty rail
-   above and below them stays a part of the board you can drag through. */
-.hud-rail {
-  display: flex; flex-direction: column; align-items: stretch;
-  gap: var(--s-3); min-height: 0;
-  overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none;
-  padding: 2px;
-}
-.hud-rail::-webkit-scrollbar { display: none; }
-.hud-rail .hud-group { flex: 0 0 auto; }
-/* One column of controls, not a wrapped grid: the rail is as wide as its widest
-   chip and every item is in the same place every time. Only while the rail IS a
-   rail — when the HUD is docked these cards are reparented into the dock and go
-   back to being ordinary horizontal rows. `.is-railed` is set by battle-hud.js
-   `placeRails`, which owns that decision; see hud.responsive.css for why it is a
-   class and not a breakpoint. */
-.is-railed .hud-rail .hud-group-row { flex-direction: column; align-items: stretch; }
-
-/* Send / Rally. `.seg` already carries the segmented look; this one only has to
-   be wide enough for a word rather than a percentage. */
-.hud-dragmode { min-width: 62px; }
-
-/* --- Build rail -------------------------------------------------------
-   `.hud-build` itself (min-height, disabled, armed) is still declared in
-   screens.css, where it shipped as a full-width row inside the site panel —
-   the button's own look does not change now that a rail hosts it, only its
-   address. `align-items: stretch` on the railed rule above already makes it
-   full width in a column; this only sets a floor for the DOCKED, horizontal
-   case, where three buttons in one scrolling card must not crush down to
-   their own text. */
-.hud-rail-build .hud-build { min-width: 132px; text-align: left; }
-
 /* --- Segmented controls: strength, and battle speed ---------------------- */
 
 .seg {

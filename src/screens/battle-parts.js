@@ -7,7 +7,7 @@
 // createBattleHud's own construction — which is what let updatePreview move
 // here without dragging its caller's whole closure along with it.
 
-import { h, mount, clear, bindClass } from '../ui/dom.js';
+import { h, mount, clear, bindClass, watchOverflow } from '../ui/dom.js';
 // `percent` was used by renderCaveats and never imported, so the "walls 62% on
 // arrival" caveat threw a ReferenceError on every assault against a damaged wall
 // — the one preview line that only appears mid-siege, which is why no screenshot
@@ -232,7 +232,7 @@ export function placeRails(el) {
     ? window.matchMedia('(min-width: 721px) and (min-height: 561px)') : null;
   const docRoot = typeof document !== 'undefined' ? document.documentElement : null;
   const rightRails = [el.right, el.build].filter(Boolean);
-
+  let unwatch = () => {}; // clipped card = drawn but UNCLICKABLE; see watchOverflow
   function place() {
     const railed = !railable || railable.matches;
     docRoot?.classList.toggle('is-railed', railed);
@@ -243,14 +243,15 @@ export function placeRails(el) {
     } else {
       mount(el.dock, el.rail, ...rightRails);
     }
+    unwatch(); unwatch = watchOverflow([el.rail, ...rightRails]);
   }
   place();
   railable?.addEventListener('change', place);
-
   // The classes are global, so they have to come off with the scene or the
   // world map inherits a battle HUD's layout mode.
   return () => {
     railable?.removeEventListener('change', place);
+    unwatch();
     docRoot?.classList.remove('is-railed', 'is-docked');
   };
 }
