@@ -55,11 +55,27 @@ export const BEATS = Object.freeze([
     // reason `drag` does: it is an instruction, not a statement. A player whose
     // first drag lands ON a building sees it only for the seconds their column
     // is in the air, which is right — it names what is about to happen.
+    // ...AND IT MUST NOT ASK FOR A BUILDING THE PLAYER CANNOT SEE. Measured on
+    // the campaign opener: 0 of 11 non-player sites are known at tick 0, so
+    // this line named an action fog makes impossible and then held for the rest
+    // of the battle — the board sat unchanged from t=120 to t=421 while it
+    // asked. `scout` is the rung in front of it, teaching the thing that IS
+    // available and that actually solves the problem, since a column lights and
+    // remembers what it passes. The pair is a split on ONE signal rather than a
+    // timer, for the reason every other beat here is: it is an instruction.
+    id: 'scout',
+    text: COACH.scout,
+    hold: HOLD.teaching,
+    after: 'drag',
+    when: (s) => s.sentSquad && !s.knowsTarget,
+    until: (s) => s.knowsTarget,
+  },
+  {
     id: 'tookGround',
     text: COACH.tookGround,
     hold: HOLD.teaching,
     after: 'drag',
-    when: (s) => s.sentSquad,
+    when: (s) => s.sentSquad && s.knowsTarget,
     until: (s) => !!(s.siegeBegun || s.captured),
   },
   {

@@ -54,6 +54,15 @@ export function emptyLatch() {
     tookStronghold: false,
     siegeStalled: false,
     lostSite: false,
+    // IS THERE ANYTHING TO ATTACK YET? Measured on the campaign opener: at tick
+    // 0 the player knows ZERO of eleven non-player sites, because fog hides
+    // site EXISTENCE and a beachhead of three lights ~28 hexes of 192. The beat
+    // after the first march told them to "drag onto a building" regardless, so
+    // the one instruction on screen named an action the fog made impossible,
+    // and it held for the rest of the battle. Latched like the rest, and
+    // honestly so: `state.seen` only ever grows, so knowing a target is
+    // monotonic — this cannot flap back to false and re-teach a solved lesson.
+    knowsTarget: false,
   };
 }
 
@@ -102,6 +111,10 @@ export function observeState(latch, battle) {
     latch.sentSquad = true;
   }
   if (!latch.castleAdjacent && castleTouchesPlayer(battle)) latch.castleAdjacent = true;
+  if (!latch.knowsTarget) {
+    latch.knowsTarget = !!battle.sites?.some((s) => s.owner !== 'player'
+      && siteKnown(battle, 'player', s));
+  }
   // Does this region's throne HAVE a gate? Read rather than assumed, because
   // `castleGateFrac` is 0 on the campaign opener and the beat that describes
   // the gate used to fire there anyway. Not latched: a rule of the region, so
@@ -157,6 +170,12 @@ export function readSignals({ battle = null, meta = null, latch = emptyLatch() }
     tookStronghold: !!latch.tookStronghold,
     siegeStalled: !!latch.siegeStalled,
     lostSite: !!latch.lostSite,
+    // ...AND THE WARNING ABOVE CAUGHT ITS NEXT VICTIM IMMEDIATELY. `knowsTarget`
+    // was latched correctly and not published here, so every reader saw
+    // `undefined`, `!s.knowsTarget` was true forever, and the scout line fired
+    // on a board where the throne was plainly known. Latching and publishing
+    // are two steps and only one of them is where the bug shows up.
+    knowsTarget: !!latch.knowsTarget,
     tutorialSeen: !!meta?.tutorialSeen,
   };
 }

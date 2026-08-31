@@ -12,6 +12,13 @@
 
 export const COACH = Object.freeze({
   drag: 'Drag from your camp across the map. Your troops march the road you draw.',
+  // WHAT A COLUMN IS FOR, BEFORE THERE IS ANYTHING TO ATTACK. Measured on the
+  // opener: the player knows 0 of 11 non-player sites at tick 0, so the beat
+  // below named a building that is not on their board. This one asks for the
+  // thing that IS possible, and it is the true rule of the fog layer — a
+  // marching column lights the ground it crosses and REMEMBERS it.
+  scout: 'Nothing of theirs is on your map yet. March past the dark ground —'
+    + ' what your troops walk by, they remember.',
   // The rung that was missing; coach.data.js says what went wrong without it.
   tookGround: "Marching holds ground — it doesn't claim it. Drag onto a building"
     + ' to take one.',

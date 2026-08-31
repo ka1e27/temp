@@ -71,7 +71,10 @@ test('the whole tutorial fires, each beat exactly once, in order', () => {
   // `after`/`when` and is asserted directly below.
   // `tookGround` sits between the gesture and the siege: it fires the moment a
   // column exists and retires the moment one attacks something, which in this
-  // fixture is the very next step.
+  // fixture is the very next step. Its sibling `scout` does NOT appear, and
+  // that is the assertion doing the work — this fixture's player has already
+  // seen the throne, so the pair correctly resolves to the half that can name
+  // a building rather than the half that teaches how to find one.
   assert.deepEqual(fired,
     ['drag', 'tookGround', 'fieldWon', 'captured', 'gold100', 'takeCastle']);
 
@@ -92,10 +95,11 @@ test('a beat never fires twice even if its condition keeps re-arriving', () => {
   // `notReached` is derived so a beat added later cannot silently break a test
   // that was never about it — the fixture below produces no stronghold capture,
   // no stalled siege, no lost site and no ram money.
-  // `tookGround` joins them: this fixture notes no `squad-sent` and its battle
-  // stub holds no squads, so the player has never marched anywhere.
+  // `tookGround` and its sibling `scout` join them: this fixture notes no
+  // `squad-sent` and its battle stub holds no squads, so the player has never
+  // marched anywhere and neither half of the after-the-march pair is reachable.
   const notReached = ['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat',
-    'firstIncome', 'tookGround'];
+    'firstIncome', 'tookGround', 'scout'];
   assert.deepEqual(m.pending.filter((id) => !notReached.includes(id)),
     // `takeCastleOpen` stays pending forever here and that is correct: this
     // fixture is a GATED region, and exactly one of the castle pair can ever
@@ -141,9 +145,11 @@ test('a prerequisite that never arrives blocks only its own dependants', () => {
   assert.deepEqual(
     m.pending.filter((id) => !['strongholdTaken', 'siegeStalled', 'buildRams', 'retreat', 'firstIncome'].includes(id)),
     // Both castle beats are pending: `pending` means "has not fired", and
-    // exactly one of the pair is reachable in any one battle. `tookGround` is
-    // pending for a plainer reason — this player has not marched anywhere.
-    ['tookGround', 'fieldWon', 'captured', 'gold100', 'takeCastle', 'takeCastleOpen'],
+    // exactly one of the pair is reachable in any one battle. `tookGround` and
+    // `scout` are pending for a plainer reason — this player has not marched
+    // anywhere, and they are the two halves of the beat that follows a march.
+    ['scout', 'tookGround', 'fieldWon', 'captured', 'gold100', 'takeCastle',
+      'takeCastleOpen'],
   );
 });
 
@@ -160,14 +166,33 @@ test('A PLAYER WHO DOES EXACTLY WHAT THEY ARE TOLD IS STILL BEING TAUGHT', () =>
   // structurally it says nothing for the rest of the BATTLE. The instruction was
   // rewritten to teach the ground when unscouted neutrals stopped being visible,
   // and the rung it used to lead into was never replaced.
-  const m = createCoachMachine();
+  //
+  // ...AND IT MUST NOT ASK FOR SOMETHING THE BOARD DOES NOT CONTAIN. This
+  // asserted `/building/i` unconditionally, which quietly assumed a target is
+  // always known — and on the real campaign opener ZERO of eleven non-player
+  // sites are known at tick 0, so the line named an action fog makes
+  // impossible. The property is therefore split rather than relaxed: whatever
+  // the copy, the beat after a march has to ask for something the player can
+  // actually do FROM HERE. Both halves, so a regression either way fails.
+  const afterMarch = (b) => {
+    const m = createCoachMachine();
+    assert.equal(m.step(b, null).id, 'drag');
+    // They march. That is the whole of what they were asked to do.
+    m.note('squad-sent', { owner: 'player' });
+    const next = m.step(b, null);
+    assert.ok(next, 'a player who obeyed the only instruction on screen is told nothing more');
+    return next;
+  };
+  // Nothing of theirs on the map: it must teach the thing that FINDS one, and
+  // must not name a building.
+  const blind = afterMarch(battle({ seen: { player: {}, enemy: {} } }));
+  assert.doesNotMatch(blind.text, /building/i,
+    `with 0 known enemy sites the beat still names a building: "${blind.text}"`);
+  assert.match(blind.text, /march|walk|map/i,
+    `with nothing known the beat must point at scouting, got: "${blind.text}"`);
+  // A target IS known: now it may name one, and must.
   const b = battle();
-  assert.equal(m.step(b, null).id, 'drag');
-  // They march. That is the whole of what they were asked to do.
-  m.note('squad-sent', { owner: 'player' });
-  const next = m.step(b, null);
-  assert.ok(next, 'a player who obeyed the only instruction on screen is told nothing more');
-  // ...and what they are told has to name the thing they have not done yet.
+  const next = afterMarch(b);
   assert.match(next.text, /building/i,
     `the beat after a march must point at a target, got: "${next.text}"`);
   // It is an INSTRUCTION, so it waits to be obeyed rather than timing out —
@@ -357,6 +382,11 @@ test('the drag beat retires itself once a squad is in flight', () => {
   b.squads = [{ id: 1, owner: 'player', from: 'camp', to: 'nf01' }];
   m.observe(b);
   assert.equal(m.retired(dragBeat, b, null), true);
-  // A beat with no `until` is never retired early.
-  assert.equal(m.retired(BEATS[1], b, null), false);
+  // A beat with no `until` is never retired early. FOUND rather than indexed:
+  // this read `BEATS[1]`, which happened to have no `until` until a beat was
+  // inserted at that position, at which point the assertion silently changed
+  // what it was testing. The property is "has no `until`", so ask for that.
+  const noUntil = BEATS.find((x) => !x.until);
+  assert.ok(noUntil, 'no beat without an `until` to test the negative case with');
+  assert.equal(m.retired(noUntil, b, null), false);
 });

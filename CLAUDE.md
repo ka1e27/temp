@@ -3892,6 +3892,46 @@ is an instruction, not a statement.
 **Pinned as a PROPERTY, not as a beat list** — the beat after a march must name a target
 and must not expire on a clock — so a rewrite with different copy cannot reopen it.
 
+**AND THE RUNG THAT REPLACED IT ASKED FOR SOMETHING THE FOG FORBIDS.**
+`COACH.tookGround` — *"Marching holds ground — it doesn't claim it. Drag onto a
+building to take one."* — fires the moment a column exists. Measured on the
+opener: **the player knows 0 of 11 non-player sites at tick 0**, so the one
+instruction on screen named a building that is not on their board, and it held
+for the rest of the battle (the board did not change from t=120 to t=421 while
+it asked). The beat is a PAIR now, split on one signal:
+
+```
+after the march, nothing known   COACH.scout       "Nothing of theirs is on your
+                                                    map yet. March past the dark
+                                                    ground — what your troops
+                                                    walk by, they remember."
+after the march, a target known  COACH.tookGround  ...drag onto a building.
+```
+
+`scout` teaches the thing that is both possible and the actual answer, since a
+column lights and REMEMBERS what it passes. Confirmed in a real browser end to
+end: the opener shows `drag`, the march shows `scout` at 0 known sites, and the
+line becomes `tookGround` the moment the count reaches 1.
+
+**`knowsTarget` IS LATCHED AND HAD TO BE PUBLISHED, and forgetting the second
+half cost a test run.** `emptyLatch`/`observeState` set it correctly and
+`readSignals` did not forward it, so every `when` read `undefined`, `!knowsTarget`
+was true forever, and `scout` fired on a board where the throne was plainly
+known. That is verbatim the bug the comment block in `readSignals` already warns
+about for `tookStronghold`/`siegeStalled`/`lostSite` — **latching and publishing
+are two steps and only the second one is where it shows up.** Latching is honest
+here for the same reason it is elsewhere: `state.seen` only ever grows, so
+knowing a target is monotonic and cannot flap back and re-teach a solved lesson.
+
+Two test repairs came with it, and both are the house rule rather than a
+relaxation. `A PLAYER WHO DOES EXACTLY WHAT THEY ARE TOLD` asserted
+`/building/i` unconditionally, which silently assumed a target is always known —
+it now asserts BOTH halves (blind: must not name a building, must point at
+scouting; sighted: must name one). And `the drag beat retires itself` tested
+"a beat with no `until`" by writing `BEATS[1]`, so inserting a beat at that
+index changed what it was testing without failing; it finds one by predicate
+now.
+
 ### ...and "the coach mark never advances" was a probe artefact, twice over
 
 The advance works: measured on a fresh save in a real browser, the strip retires within
