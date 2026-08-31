@@ -3760,6 +3760,52 @@ Two audit rules exist so the tool does not argue its own fixes back out: content
 `touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
 by signature rather than by class name.
 
+### An overlay left the whole game behind it tabbable, and a `??` that always fires
+
+**A `keepVisible` OVERLAY LEAVES THE SCENE UNDER IT FULLY MOUNTED.**
+`core/scenes.js` only stops it SIMULATING and RENDERING, and it is a pure module
+that may not touch the DOM at all — so nothing took the background out of the
+tab order. Measured at every window size: with the main menu open, Tab past its
+five controls reached `body`, then the world map's own buttons, then **all
+twenty-four region hexes in turn**, every one focusable and live behind the
+scrim. Enter attacked a region through a dialog the player was looking at.
+`ui/dom.js inertSiblings` marks the prior siblings `inert` on mount and clears
+them on the returned disposer, which is the existing `enter()` contract; `inert`
+rather than `aria-hidden` plus a focus trap because one attribute removes the
+subtree from the tab order, the accessibility tree and hit-testing at once.
+Verified: the world map's root reads `inert=true` and thirty Tab presses never
+leave the dialog.
+
+**`Element.focus()` RETURNS `undefined`, SO `a?.focus() ?? b.focus()` ALWAYS
+RUNS BOTH.** `incursion.js` opened with exactly that, so `close.focus()` stole
+focus back on every open — measured, `activeElement` was `.shop-close` every
+time and never the `.inc-go` the line was written to focus. Pick the element,
+then focus once.
+
+**AND THE MAIN MENU AMBUSHED THE FIRST LOOK AT THE CAMPAIGN MAP.**
+`session.booted` gates a once-per-session boot decision and was latched inside
+the two scenes that can make it — but the fresh-save path slips between them:
+the menu routes straight into region 1 without the world map ever being entered,
+so the gate was still unarmed when the player first reached the map, after their
+first battle. `isFreshCampaign` reads `stats.battles`, and **a withdrawal alone
+makes that 1**, so the gate resolved to "menu" and a HEX DOMINION dialog covered
+the map at the one moment a new player most wants to look at it. Reproduced with
+plain clicks; `booted` measured `false` while the first battle was already
+running. It is set in `main.js` now, at the only place that knows a boot
+happened, rather than asking two scenes to agree.
+
+**A CONTRAST FINDING THAT DID NOT SURVIVE ITS OWN MEASUREMENT, worth recording
+because the method is the lesson.** The same audit reported the selected hex's
+labels at 2.05:1 and 1.07:1 — "the only genuinely bad contrast failure in the
+product". It sampled `getComputedStyle(hex).backgroundColor`, which is the RING:
+`.wm-hex`'s two pseudo-elements are inset and paint the interior the text
+actually sits on. Sampling the rendered PIXELS, the backdrop is the region fill
+and the name reads **6.96:1**, comfortably passing. What is real is smaller: the
+tier sub-label at **3.15:1** against the 4.5 a 12px label needs, fixed by
+matching the name's colour. **A composited backdrop is not an ancestor's
+declared colour** — and a claim that reproduces an exact wrong number is still
+wrong.
+
 ### The sound mix: 87.5% of it was the least important thing in the game
 
 Measured by hooking the real bus for 90 seconds of light tier-1 play and

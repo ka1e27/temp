@@ -198,3 +198,31 @@ export function watchOverflow(els) {
     ro?.disconnect();
   };
 }
+
+/**
+ * Make everything ALREADY MOUNTED beside `el` inert, and hand back the restore.
+ *
+ * An overlay scene that declares `keepVisible` leaves the scene under it fully
+ * mounted — `core/scenes.js` only stops it SIMULATING and RENDERING, and it is
+ * a pure module that may not touch the DOM at all, so nothing was taking the
+ * background out of the tab order. Measured: with the main menu open, Tab past
+ * its five controls reached `body`, then the world map's own buttons, then all
+ * twenty-four region hexes in turn — every one focusable and live behind the
+ * scrim, so Enter attacked a region through a dialog the player was looking at.
+ *
+ * `inert` rather than `aria-hidden` + a focus trap: one attribute removes the
+ * subtree from the tab order, from the accessibility tree and from hit-testing
+ * at once, so there is one rule to get right instead of three that must agree.
+ * Only PRIOR siblings are touched, so an overlay pushed on top of this one is
+ * unaffected, and the restore only clears what it set — a sibling that was
+ * already inert for its own reasons stays that way.
+ */
+export function inertSiblings(el) {
+  const marked = [];
+  for (const sib of el.parentElement?.children ?? []) {
+    if (sib === el || sib.inert) continue;
+    sib.inert = true;
+    marked.push(sib);
+  }
+  return () => { for (const sib of marked) sib.inert = false; };
+}

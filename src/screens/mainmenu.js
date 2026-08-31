@@ -14,7 +14,7 @@
 // object at boot, so swapping `ctx.state` for a new object would leave idle
 // income and autosave pointed at the old one forever.
 
-import { h, clear, mount, bindText } from '../ui/dom.js';
+import { h, clear, mount, bindText, inertSiblings } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, SAVE, ENDGAME } from '../content/strings.js';
 import { renderSettings } from './mainmenu-settings.js';
@@ -102,6 +102,9 @@ export function createMainMenuScene(ctx) {
             h('span', {}, h('kbd', { text: 'Enter' }), ' continue')))));
 
       mount(ctx.root, root);
+      // The scene under a `keepVisible` overlay stays MOUNTED and therefore
+      // stays tabbable — see `ui/dom.js inertSiblings`.
+      const unInert = inertSiblings(root);
       renderActions();
       stats.update();
       if (params?.blocked) {
@@ -130,6 +133,7 @@ export function createMainMenuScene(ctx) {
       timer = setInterval(() => stats.update(), 1000);
 
       return [
+        unInert,
         offInstall,
         () => clearInterval(timer),
         () => document.removeEventListener('keydown', onKey),

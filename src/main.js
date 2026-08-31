@@ -155,6 +155,18 @@ if (interrupted.ok) {
     backup: boot.blocked ? loadBackup(storage, { now: Date.now() }) : null,
   });
 }
+// THE BOOT DECISION HAS NOW BEEN MADE, whichever branch made it. It used to be
+// latched inside the two scenes that can make it, and the fresh-save path slips
+// between them: the menu routes straight into region 1 without the world map
+// ever being entered, so `worldmap.enter()`'s once-per-session gate was still
+// unarmed when the player reached the map for the FIRST time, after their first
+// battle. `isFreshCampaign` reads `stats.battles`, and a withdrawal alone makes
+// that 1 — so the gate resolved to "menu" and the main menu ambushed the map at
+// the one moment a new player most wants to look at it. Reproduced with plain
+// clicks: cold boot, withdraw, "To the map", and a HEX DOMINION dialog covers
+// the campaign. Set HERE because this is the only place that knows a boot
+// happened at all, rather than asking two scenes to agree about it.
+state.session.booted = true;
 loop.start();
 
 // Long absences are handled by the closed-form offline calculation, never by

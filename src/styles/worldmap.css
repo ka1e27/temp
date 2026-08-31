@@ -137,6 +137,15 @@
   font: var(--w-bold) var(--t-sm) / 1 var(--font-num);
   color: var(--c-text-dim); letter-spacing: 0.06em; text-align: center;
 }
+/* THE SUB-LABEL GOES BRIGHT ON THE HEX YOU ARE LOOKING AT. `--c-text-dim` is
+   chosen against the dark PLATE, and a selected hex is not one: measured off
+   rendered pixels the tier label reads 3.15:1 against the 4.5 a 12px label
+   needs, where the name beside it reads 6.96:1. (An audit called the pair
+   2.05:1 / 1.07:1 from `getComputedStyle(hex).backgroundColor` — but that is
+   the RING; the inset pseudo-elements paint the interior the text sits on.
+   Sample pixels: a composited backdrop is not a declared colour.) */
+.wm-hex.is-selected .wm-tier,
+.wm-hex:focus-visible .wm-tier { color: var(--c-text); }
 /* The non-colour channel: every state also reads as a word. */
 .wm-tier::after {
   display: block; margin-top: var(--s-1); color: var(--state);

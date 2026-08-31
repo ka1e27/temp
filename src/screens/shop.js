@@ -6,7 +6,7 @@
 // place: a full re-render four times a second would throw focus off whatever
 // button the keyboard is on, which is the same bug the world map's detail panel
 // had. Only a PURCHASE rebuilds the list.
-import { h, clear, mount, bindText } from '../ui/dom.js';
+import { h, clear, mount, bindText, inertSiblings } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, SHOP } from '../content/strings.js';
 import { shopListing, buy, canBuy, spendAll, buyN, suggestedBuy } from '../meta/upgrades.js';
@@ -95,6 +95,9 @@ export function createShopScene(ctx) {
         role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'shop-title',
       }, header, listRoot));
       mount(ctx.root, root);
+      // The scene under a `keepVisible` overlay stays MOUNTED and therefore
+      // stays tabbable — see `ui/dom.js inertSiblings`.
+      const unInert = inertSiblings(root);
 
       render();
       close.focus();
@@ -104,6 +107,7 @@ export function createShopScene(ctx) {
       const timer = setInterval(tick, 250);
 
       return [
+        unInert,
         () => clearInterval(timer),
         () => document.removeEventListener('keydown', onKey),
         () => root?.remove(),

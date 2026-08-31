@@ -11,7 +11,7 @@
 // meta/rewards.js `previewReward` — the screen computes nothing. A rung is a pure
 // function of its depth, so what this panel promises and what the battle actually
 // builds cannot drift.
-import { h, clear, mount, bindText } from '../ui/dom.js';
+import { h, clear, mount, bindText, inertSiblings } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, ENDGAME } from '../content/strings.js';
 import { incursionView } from '../meta/incursion.js';
@@ -67,9 +67,16 @@ export function createIncursionScene(ctx) {
         close),
       body));
       mount(ctx.root, root);
+      // The scene under a `keepVisible` overlay stays MOUNTED and therefore
+      // stays tabbable — see `ui/dom.js inertSiblings`.
+      const unInert = inertSiblings(root);
 
       render();
-      root.querySelector('.inc-go')?.focus() ?? close.focus();
+      // `Element.focus()` returns undefined ALWAYS, so `a?.focus() ?? b.focus()`
+      // ran the fallback on every open regardless of whether the first target
+      // existed — measured, `activeElement` was `.shop-close` every time and
+      // never `.inc-go`. Pick the element first, then focus once.
+      (root.querySelector('.inc-go') ?? close).focus();
 
       const onKey = (e) => { if (e.key === 'Escape') ctx.scenes.pop(); };
       document.addEventListener('keydown', onKey);
@@ -78,6 +85,7 @@ export function createIncursionScene(ctx) {
       const timer = setInterval(() => setCrowns(compact(meta().crowns)), 250);
 
       return [
+        unInert,
         () => clearInterval(timer),
         () => document.removeEventListener('keydown', onKey),
         () => root?.remove(),
