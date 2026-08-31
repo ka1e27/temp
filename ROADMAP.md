@@ -10,6 +10,170 @@ or explicitly flagged as an opinion.
 
 ---
 
+## ⇒ NEWEST: THE DESIGN REVIEW — the game, not the code
+
+Played cold in a real browser on the smoke seed (99991), plus a genre study of
+comparables. The engineering review above (R1–R9) asks "is it correct". This asks
+"is it any good", and the answer is that it is an **excellent systems toy with no
+dramatic structure**. Every finding below is measured or screenshotted.
+
+### D1. The first five minutes are the worst five minutes, and they are measured
+
+Cold boot, do the one thing the tutorial teaches (drag from the camp), then watch —
+which is what a first-timer does while reading. Every column is from the live game:
+
+```
+  t     gold  troops  known  attackable  build buttons   sites
+ 30      250      29      1           1   2/4 disabled   3v6
+ 61      200      40      1           1   2/4 disabled   3v7
+120       28      68      2           2   4/4 disabled   2v8
+181        0      86      2           2   4/4 disabled   2v8
+240        0     101      2           2   4/4 disabled   2v8
+301        0     116      2           2   4/4 disabled   2v8
+421      240     130      2           2   2/4 disabled   2v8
+```
+
+**The board does not change from t=120 to t=421.** Five minutes, no site changes hands.
+The player accumulates **130 troops with two things to attack and nothing to spend gold
+on**, and the coach spends the whole time saying *"Marching holds ground — it doesn't
+claim it. Drag onto a building to take one"* — on a board with, measured at tick 0,
+**zero known non-player buildings of eleven**. The instruction is not merely unhelpful,
+it names an action the fog makes impossible.
+
+**The control says this is a teaching failure, not a balance one.** The harness bot on
+the same region and seed wins at 8.5m, peaks at **710 gold**, builds **4 sites**, and
+can afford a farm 49% of the time. It keeps its troop count LOW (19–40) because it
+spends troops on captures. So the difference between the good game and the dead one is
+entirely *"did you find something to attack in the first minute"*, and nothing teaches
+or signals that.
+
+*(A correction worth recording: an earlier probe read gold as `faction.gold`, which does
+not exist — the field is `goldCg`, in centigold — so `?? 0` reported a confident zero for
+every faction at every tick. The bot-has-no-gold-either reading that produced was wrong.
+Assert the instrument.)*
+
+### D2. Nothing on screen says you are losing
+
+At t=181 above: two sites against eight, gold zero, every build button dead, 130 troops
+standing still. The alert strip is **empty**. The only signal is `SITES 2 v 8` in small
+grey type in a corner, and a gold figure that reads `0` in the same weight it read `298`.
+A player cannot tell a stalled game from a healthy one, so they cannot learn.
+
+### D3. The map you are conquering is invisible until you have conquered it
+
+Fresh save: **23 of 24 regions read `??? / LOCKED`**. There is no destination, no enemy
+capital to march toward, no shape to the world — the campaign's "sense of place" is a
+grid of grey question marks with a single red hex.
+
+Seed the campaign complete and the *same screen* is the best in the game: green hexes
+with gold borders, real names (Highmarch, The Sunder, Blackspire, Greywater Fen),
+`TREASURY 903K`, `INCOME +956.0/s`. **The entire emotional payoff of an idle game — look
+at what I have accumulated — is withheld for the several hours it takes to earn it.**
+
+Each region also carries genuinely good flavour text (*"Flooded lowlands: two neutral
+farms sit in the open and the enemy is slow to claim them"*) which appears in exactly one
+place, in a side panel, one region at a time.
+
+### D4. The shop is the main return-visit surface and it is a spreadsheet
+
+Six rows, each a title, a sentence and a price. The writing is excellent (*"A bigger
+army, not a bigger treasury"*). What is missing is everything an idle game's shop is
+FOR: no current level on the row, no next-level effect, and — the big one — **no "you
+can afford this in 4 minutes"**, which the game knows exactly and never says. For a
+game whose pitch is that it pays you while you are away, the screen you return to
+cannot tell you what the waiting bought.
+
+### D5. The enemy is weather, not an opponent
+
+Measured earlier (R1): 105 columns a minute at a median size of two, and the ordinary
+attack phase can pool 16 troops against a 59-defender camp. It has no name, no
+personality, and exactly one decisive act per battle. This is why 93% of all failures
+are timeouts: the player usually cannot lose, they run out of clock.
+
+**Two independent lines of reasoning converge on the same fix.** A genre study of how
+strategy games make a weak AI feel threatening found the same answer four times over —
+AI War's AI-Progress countdown waves, They Are Billions' ten scheduled and pre-announced
+hordes, Kingdom Two Crowns' nightly wave, Dune II's scripted attack timers. **None of
+them made the tactical AI smarter; all of them manufactured telegraphed spikes at the
+strategic layer.** This project already built exactly one such spike (`setpiece.js`, the
+muster) and its own record shows it is "the one thing the enemy does that you have to
+answer". It fires **once**.
+
+And the alternative is already disproven here: `tools/simpool.js` taught concentration
+and moved nothing (25%/33% and 27%/23%, opposite signs) because "the force never
+exists". Two measurements agreeing that organic massing is a dead end.
+
+### D6. There is nobody in this world
+
+No named characters anywhere — grep confirms. The enemy Marshal is a `banner` field. The
+player is nobody. Over a 315-minute campaign, no one ever speaks, is named, or is
+remembered. Universal Paperclips is the standing proof that this costs an artist
+nothing: it is a text UI with one of the genre's most-cited narratives.
+
+### D7. Smaller, but real — controls that are visible and dead
+
+Measured across window sizes, on the battle HUD:
+
+```
+window        boosters unclickable    build rail overflows its panel
+1440x900      1 of 5 (tithe)          by 21px
+1280x800      2 of 5 (fortify,tithe)  by 63px
+1600x1000     0                       fits
+1920x1080     0                       fits
+```
+
+The rails are `overflow-y: auto`, and this platform draws **0px overlay scrollbars** —
+the exact trap this project already documented for the loadout screen. So the control is
+visible, looks live, and the click falls through to the canvas and does nothing. 1440×900
+is the smoke suite's own default window.
+
+### What is genuinely good, and should not be touched
+
+- **The pre-commit preview** (`2 troops → nf04 · LOSE FIELD · AP 9.0 / DP 16.5 · Send
+  more, or change what you are sending`) is honest, exact and actionable.
+- **The world-map detail panel** is the best-designed thing in the game: income if
+  taken, enemy strength, board size, typical length, and a plain consequence sentence.
+- **The writing**, everywhere it appears.
+- **The sound**: ten cues, every one synthesized from oscillators, no asset files, no
+  dependency. Correct scope for this project.
+- **The information design under pressure** — alert strip, bearing needle, coach
+  chevron — all verified accurate and correctly placed.
+
+### Ranked recommendations
+
+**1. Make the muster a schedule, not a single event.** Two to four escalating,
+telegraphed waves per battle instead of one. It is the only item aimed at the measured
+defect, ~90% of the infrastructure exists (`musterSources`, the ETA, the fog-safe
+alert), and it is what AI War/They Are Billions/Kingdom all do. Needs a
+`CONTRACT_VERSION` bump (same category as v13) and bisection at n≥96. Plausible side
+benefit already recorded for C1: a harder fight can *shorten* a battle, which is the
+other side of the 93%-timeout coin.
+
+**2. Fix the opening's first ninety seconds.** Give the player one known target at tick
+0 — or have the coach teach *march-to-reveal* rather than "drag onto a building" — and
+make gold-at-zero-with-troops-climbing say something out loud. D1 and D2 are one bug
+with two symptoms and they are the difference between a player who learns the game and
+one who watches a frozen board for five minutes.
+
+**3. Show the campaign map you are fighting for.** Names and terrain on unconquered
+regions instead of `???`, and the enemy capital visible from region 1. This is the
+cheapest large win in the game: the good version of the screen already exists and is
+merely gated.
+
+**4. Put a level, a next-effect and a time-to-afford on every shop row.** All three
+numbers already exist.
+
+**5. Name the Marshal, and let abdication retire him.** Pure content, no engine change,
+no contract risk — and it gives recommendation 1's waves a face.
+
+**6. Ship the eight existing incursion mutators into first-time tier-3+ regions** (the
+already-scoped C1). New call site for tested infrastructure.
+
+**7. Fix the dead booster and the overflowing build rail** (D7), and add the hittability
+assertion to the smoke gate that would have caught it.
+
+---
+
 ## ⇒ NEWEST: THE FULL GAME REVIEW — one defect outranks the re-tune
 
 Four lenses (core loop, onboarding, engineering health, progression). Every number
