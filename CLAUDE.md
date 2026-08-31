@@ -3760,6 +3760,43 @@ Two audit rules exist so the tool does not argue its own fixes back out: content
 `touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
 by signature rather than by class name.
 
+### The sound mix: 87.5% of it was the least important thing in the game
+
+Measured by hooking the real bus for 90 seconds of light tier-1 play and
+replaying `sound.js`'s own per-cue gap logic. **88 cues played and 77 of them
+were `train`** — "a unit finished training", about once every 1.2s, forever —
+against four clashes, four sieges, two sends and one site lost. It was already
+the quietest cue in the table by a factor of three, so volume was not the lever:
+the GAP was, and at 110ms it never once bound against a stream arriving every
+1200ms. It is 2000ms now. (`train`/`send` counts are exact because both are
+owner-filtered and so always audible to the player; `clash`/`siege` are upper
+bounds, since real playback also needs fog visibility — so train's true share is
+if anything higher than 87.5%.)
+
+**A THRONE SOUNDED EXACTLY LIKE AN EMPTY FARM.** `cueFor` had no branch on
+`ev.kind` for `site-captured`, while the BURST has scaled by `siteTier` since
+the fx pass — measured, a castle's ring is ~5× a farm's and carries a second
+delayed ring that only tier ≥2 sites get. The ears were simply never given the
+table the eyes have. One extra cue (`takenBig`, for `camp` and `castle`) rather
+than a per-kind table, because the ear resolves "big" and "not big" and would
+not thank you for five.
+
+**AND A REFUSED ORDER MADE NO SOUND AT ALL**, which matters because it is the
+first thing a new player meets: every building is fog-gated at tick 0, so a drag
+onto one is downgraded to a bare-hex march and refused (`marchorders.js`). The
+whole response was a small text pill — no cue, and the shake was wired to the
+booster rail alone, so the most likely rejection in the game moved nothing.
+`refused` is low and short (this is "no", not an alarm), and the STRIP shakes,
+because the strip is what carries the words. Re-triggering a CSS animation needs
+the class off, a reflow read, then on — one forced layout, on an event that only
+fires when the player has just been told no.
+
+Confirmed in a real browser: dragging from the camp onto a neutral farm's own
+tile gives `rejected:occupied-hex`, the strip reads *"Something unscouted is
+standing there. March beside it."*, and `is-rejected` is on the element. Pinned
+by mapping assertions with a negative control — an enemy taking NEUTRAL ground
+is still silent.
+
 ### A rail that runs out of height draws a control you cannot press
 
 `.hud-tr` is the right-hand column: clock, Withdraw, the boosters rail, the build

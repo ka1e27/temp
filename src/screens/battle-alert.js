@@ -288,6 +288,19 @@ export function wireAlerts(o) {
     alert.show(rejectionText(ev, getState()), t);
     const i = ev?.cmd?.t === 'BOOSTER' ? boosterIds.indexOf(ev.cmd.id) : -1;
     if (i >= 0) { onShake(i, t + 420); boostShake[i](true); }
+    // ...AND EVERY OTHER REFUSAL SHOOK NOTHING. The shake was wired to the
+    // booster rail alone, so the rejection a new player is most likely to meet
+    // — a drag onto a building, which is fog-gated at tick 0 and therefore
+    // downgraded to a bare-hex march and refused — produced a small text pill
+    // and no other signal at all. The strip itself is what carries the words,
+    // so the strip is what moves. Re-triggering a CSS animation needs the
+    // class off, a reflow read, then on; it is one forced layout on an event
+    // that fires when the player has just been told "no".
+    else if (alert.el) {
+      alert.el.classList.remove('is-rejected');
+      void alert.el.offsetWidth;
+      alert.el.classList.add('is-rejected');
+    }
   }));
   off(bus.on('ui:armed-booster', (id) => alert.hold(id ? aiming(id) : '')));
 

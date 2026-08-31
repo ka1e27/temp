@@ -38,7 +38,22 @@ const CUES = Object.freeze({
   taken:    { kind: 'chord', wave: 'triangle', f0: 392, f1: 587, dur: 0.26, gain: 0.18, gap: 120 },
   lost:     { kind: 'tone', wave: 'sawtooth', f0: 300, f1: 150, dur: 0.30, gain: 0.20, gap: 120,
               lp: 800 },
-  train:    { kind: 'tone', wave: 'sine', f0: 1046, f1: 1046, dur: 0.025, gain: 0.035, gap: 110 },
+  // MEASURED AT 87.5% OF EVERY SOUND THE GAME MAKES. Hooking the real bus for
+  // 90 seconds of light tier-1 play and replaying this table's own gap logic:
+  // 88 cues played, 77 of them this one, roughly one every 1.2s forever, while
+  // the whole rest of the battle — four clashes, four sieges, two sends, one
+  // site lost — made up the other 11. It was already the quietest cue here by
+  // a factor of three, so volume was not the lever; the gap was, and at 110ms
+  // it never once bound against an event stream arriving every 1200ms.
+  train:    { kind: 'tone', wave: 'sine', f0: 1046, f1: 1046, dur: 0.025, gain: 0.035, gap: 2000 },
+  // A REFUSED ORDER MADE NO SOUND AT ALL, and it is the first thing a new
+  // player meets: every building is fog-gated at tick 0, so a drag onto one is
+  // downgraded to a bare-hex march and refused. The only feedback was a small
+  // text pill. Low and short — this is "no", not an alarm.
+  refused:  { kind: 'tone', wave: 'square', f0: 220, f1: 165, dur: 0.09, gain: 0.09, gap: 220 },
+  // ...AND A THRONE SOUNDED EXACTLY LIKE AN EMPTY FARM. The BURST already
+  // scales by site tier and the ears were never given the same table.
+  takenBig: { kind: 'arp', wave: 'triangle', notes: [392, 523, 659], dur: 0.16, gain: 0.20, gap: 120 },
   win:      { kind: 'arp', wave: 'triangle', notes: [392, 494, 587, 784], dur: 0.12, gain: 0.16, gap: 0 },
   defeat:   { kind: 'arp', wave: 'triangle', notes: [392, 330, 262, 196], dur: 0.14, gain: 0.16, gap: 0 },
   ui:       { kind: 'tone', wave: 'sine', f0: 660, f1: 880, dur: 0.05, gain: 0.05, gap: 40 },
@@ -47,6 +62,9 @@ const CUES = Object.freeze({
   // is a texture telling you a column is under fire, not an event.
   volley:   { kind: 'noise', f0: 2200, f1: 1400, dur: 0.05, gain: 0.05, q: 2.0, gap: 500 },
 });
+
+/** The two kinds that end a battle if they change hands. */
+const BIG_SITES = new Set(['camp', 'castle']);
 
 /** Which sim event maps to which cue, and when it is worth a sound at all. */
 function cueFor(ev) {
@@ -58,8 +76,12 @@ function cueFor(ev) {
     case 'tower-fired': return ev.owner === 'player' ? 'volley' : null;
     case 'siege-begun': return 'siege';
     case 'units-trained': return ev.owner === 'player' ? 'train' : null;
+    case 'command-rejected': return 'refused';
     case 'site-captured':
-      if (ev.to === 'player') return 'taken';
+      // A camp or a castle is the win/lose condition; everything else is
+      // country. One extra cue rather than a per-kind table, because the ear
+      // resolves "big" and "not big" and would not thank us for five.
+      if (ev.to === 'player') return BIG_SITES.has(ev.kind) ? 'takenBig' : 'taken';
       return ev.from === 'player' ? 'lost' : null;
     case 'battle-ended': return ev.status === 'win' ? 'win' : 'defeat';
     default: return null;
