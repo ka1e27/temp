@@ -185,6 +185,21 @@ Four lenses (core loop, onboarding, engineering health, progression). Every numb
 below was taken today against the real pipeline, and every reviewer claim repeated
 here was re-verified with a negative control before it was written down.
 
+### ⇒ SHIPPED SO FAR AGAINST THIS LIST
+
+D7 rails (controls drawn but unpressable) ✅ · the tutorial's impossible
+instruction, D1's teaching half ✅ · the sound mix and refusal feedback ✅ ·
+modal focus-trapping plus two focus bugs ✅ · the campaign's big moments — the
+capital and the 24/24 finale — ✅, pinned against the real `applyOutcome`.
+
+**One audit finding was checked and STRUCK.** The UI pass reported the selected
+world-map hex's labels at 2.05:1 and 1.07:1, "the only genuinely bad contrast
+failure in the product". It sampled `getComputedStyle(hex).backgroundColor`,
+which is the RING — the two inset pseudo-elements paint the interior the text
+actually sits on. Sampled from rendered pixels the name reads **6.96:1**. What
+was real is the tier sub-label at **3.15:1**, now fixed. Sample pixels: a
+composited backdrop is not an ancestor's declared colour.
+
 ### R1. The enemy concentrates force exactly once per battle, and it kills beginners
 
 **These are one finding seen from two ends, and neither end is in CLAUDE.md.**
