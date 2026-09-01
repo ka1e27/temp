@@ -3,6 +3,8 @@
 // drawer and the lifetime record.
 
 /** Step 8. Leave the battle and walk the meta screens. */
+import { assertTargets } from './smoke-battle.mjs';
+
 export async function runMeta(page, h, step, note, OUT, REGIONS) {
   await page.eval(() => { window.__game.state.battle.status = 'retreat'; });
   await page.sleep(1200);
@@ -59,6 +61,11 @@ export async function runMeta(page, h, step, note, OUT, REGIONS) {
   });
   if (!onScreen) throw new Error('not one region hex is fully on screen');
   await h.hitPoint('.wm-hex[data-smoke="1"]', `the region hex "${onScreen}"`);
+  // The 44px floor OUTSIDE `#hud`, which the battle sweep cannot reach at all.
+  // `.wm-recentre` — the one control that exists to rescue a lost player — was
+  // 64x32 on a mouse session, with the 44px rule for it sitting behind
+  // `@media (pointer: coarse)`.
+  await assertTargets(page, '.screen', 'the world map');
   step(`world map: ${wm.hexes} regions all named, ${wm.campaign} taken, `
     + `objective ${wm.capital}, treasury ${wm.crowns}`);
   await page.screenshot(`${OUT}/03-worldmap.png`);

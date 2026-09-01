@@ -43,6 +43,8 @@ const ui = (page) => page.eval(() => {
   };
 });
 
+import { assertTargets } from './smoke-battle.mjs';
+
 export async function runKeyboard(page, step, note) {
   const before = await ui(page);
   if (before.mine < 2) { note('fewer than two player sites for the keyboard walk'); return; }
@@ -64,6 +66,12 @@ export async function runKeyboard(page, step, note) {
   const open = await ui(page);
   if (!open.panelOpen) throw new Error('cycling selected a site but the panel never opened');
   if (!open.selection.length) throw new Error('cycling moved the cursor without selecting');
+  // WITH THE PANEL OPEN, which is the only moment `.hud-upgrade` exists — and
+  // therefore the only moment the 44px gate can see it. It sat at 230x32 on
+  // every desktop width for the life of the site panel, because the size sweep
+  // in runHud runs with nothing selected and the phone audit is the only other
+  // thing that measures. A gate that cannot reach the defect reports green.
+  await assertTargets(page, '#hud', 'the battle HUD with a site panel open');
   step(`keyboard: ']' walked all ${before.mine} owned sites and opened the panel`);
 
   // 2. AND FOCUS FOLLOWS, or the panel it just opened is twelve-plus Tab stops

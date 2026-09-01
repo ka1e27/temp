@@ -3904,6 +3904,80 @@ builder owns a row. `watched` is handed in as a **getter** rather than as the ar
 because `render()` re-points its own — a reference captured once would leave the tick
 walking rows that have left the document.
 
+## The 44px floor had three holes, and the contrast headline was wrong twice
+
+**A CONTRAST FINDING THIS FILE ALREADY STRUCK ONCE CAME BACK, AND IT IS STILL WRONG.** The
+claim was that the selected world-map hex measures **2.05:1** on its name and **1.07:1** on
+its tier, "the only genuinely bad contrast failure in the product", with the focus ring's
+lighter fill dropping the name to 1.39. Re-measured by a method that reads BOTH colours out
+of rendered pixels — the mode of the element's own box is the backdrop, the pixel furthest
+from it in luminance is the glyph — nothing needs fixing:
+
+```
+selected hex name   6.72     locked hex name    6.46     panel stat label   5.39
+selected hex tier   6.16     objective strip    7.37     flavour            5.39
+focused hex name    6.72     upgrade button     6.93     treasury label     5.40
+focused hex tier    6.16     hud group label    5.41
+```
+
+**And `--c-text-dim` reads 5.39–5.41, not the claimed 4.48**, on every label that carries
+it. Both numbers came from compositing a declared `backgroundColor` rather than sampling
+what is on screen — the same mistake, in the same place, a second time.
+
+**MY OWN FIRST PROBE MADE A THIRD VERSION OF IT**, which is why the method above is written
+down rather than the numbers. Sampling "the pixel 1.5px inside the element's top edge" as
+the backdrop lands *inside a glyph* for tightly-boxed inline text, and it reported the HUD's
+group label at 1.19 and the treasury label at 2.99 — both false, both plausible. **Take the
+mode of the box; do not pick a point.**
+
+**WHAT IS REAL IS THE TARGET SIZES, AND THERE WERE THREE.** Measured on a mouse session,
+`?dev=1` off (the dev overlay's own 21×26 button is not a shipped control):
+
+```
+.btn.hud-upgrade    230x32   every width — the most-clicked control in the scene
+.seg / .hud-pause    38x44   at <=1320px, so 1280x800 and 1024x768
+.wm-recentre         64x32   every width
+```
+
+Every one is the **same hole the HUD rails had**: a 44px rule sitting behind
+`@media (pointer: coarse)`, so the phone audit — the only thing that measures — was the one
+case it was already right for. `.seg`'s own neighbouring comment says *"a segment is already
+44 wide on a desktop"*; below 1320 it was not.
+
+**THE COST WAS MEASURED BEFORE IT WAS SPENT**, against the parent commit in a worktree:
+
+```
+window       board share before -> after
+1440x900          65%  ->  65%
+1280x800          59%  ->  58%
+1024x768          50%  ->  49%
+```
+
+One point at the two narrow sizes and nothing at the default. Worth recording separately:
+**1024x768 sits at 49% against the 55% floor and did before this change too** — `tools/
+mobile.mjs` only ever visits phone metrics, so no gate has ever looked at a small laptop.
+
+### The gate could not see two of the three, and the third was invisible to it
+
+`smoke.mjs`'s HUD sweep checked **height only**, which is exactly how `.seg` sat at 38×44
+in plain sight. And it scans `#hud` with **nothing selected**, so `.hud-upgrade` does not
+exist yet at that moment and `.wm-recentre` is not in `#hud` at all. A gate that cannot
+reach where the defect is reports green.
+
+`assertTargets(page, root, label)` is the shared check now: both axes, called again from
+the keyboard step (the only moment a site panel is open) and once on the world map. Its
+negative control was run — putting `.hud-upgrade` back to `--hit-sm` fails the suite with
+*"1 control(s) under 44px in the battle HUD with a site panel open: btn 230x32"*.
+
+**IT CAUGHT A TRANSITION FRAME ON ITS FIRST RUN, and that is now designed for.**
+`getBoundingClientRect` returns the VISUAL box, so a control mid-animation measures at
+whatever frame it is on: the training chips scale up from 0.6 and read **26×26 for about
+200ms** before settling at a full 44. That transient has now fooled a measurement in this
+project three times — `tools/mobile.mjs` reported it as a layout failure under load, and
+this gate reported it as one on an idle box. `assertTargets` takes **two samples 400ms
+apart and only reports what is small in both**; a single sample would make the suite
+intermittently red for a control that is correct.
+
 ## The war has a face, and it cost the balance table nothing
 
 **MEASURED before this: over a ~315-minute campaign nobody in this game was named, nobody

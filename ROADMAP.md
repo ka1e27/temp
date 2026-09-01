@@ -261,13 +261,22 @@ instruction, D1's teaching half ✅ · the sound mix and refusal feedback ✅ ·
 modal focus-trapping plus two focus bugs ✅ · the campaign's big moments — the
 capital and the 24/24 finale — ✅, pinned against the real `applyOutcome`.
 
-**One audit finding was checked and STRUCK.** The UI pass reported the selected
-world-map hex's labels at 2.05:1 and 1.07:1, "the only genuinely bad contrast
-failure in the product". It sampled `getComputedStyle(hex).backgroundColor`,
-which is the RING — the two inset pseudo-elements paint the interior the text
-actually sits on. Sampled from rendered pixels the name reads **6.96:1**. What
-was real is the tier sub-label at **3.15:1**, now fixed. Sample pixels: a
-composited backdrop is not an ancestor's declared colour.
+**One audit finding was checked and STRUCK — TWICE, because it came back.** The
+UI pass reported the selected world-map hex's labels at 2.05:1 and 1.07:1, "the
+only genuinely bad contrast failure in the product". It sampled
+`getComputedStyle(hex).backgroundColor`, which is the RING — the two inset
+pseudo-elements paint the interior the text actually sits on. Sampled from
+rendered pixels the name reads **6.96:1**. What was real is the tier sub-label
+at **3.15:1**, now fixed.
+
+Re-filed later with the same numbers plus a claim that `--c-text-dim` measures
+4.48:1, and re-measured by a stricter method (the MODE of an element's box is
+the backdrop, the pixel furthest from it in luminance is the glyph — no declared
+colour used at all): selected name **6.72**, tier **6.16**, focused hex the
+same, and every `--c-text-dim` label **5.39–5.41**. Nothing to fix. What was real
+in that filing is three target sizes, now closed. Sample pixels, and take the
+MODE — my own first probe picked a point 1.5px inside the top edge, landed
+inside a glyph, and produced a third wrong set of numbers.
 
 ### R1. The enemy concentrates force exactly once per battle, and it kills beginners
 

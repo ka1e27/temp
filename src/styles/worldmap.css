@@ -117,7 +117,12 @@
 /* Never lost: one press puts whatever you can act on back in the middle. */
 .wm-recentre {
   position: absolute; left: var(--s-3); bottom: var(--s-3); z-index: 3;
-  padding: var(--s-2) var(--s-3); min-height: var(--hit-sm); font-size: var(--t-xs);
+  /* `--hit`, not `--hit-sm`: it was 64x32 on a mouse session with the 44px
+     rule sitting in worldmap.responsive.css behind `(pointer: coarse)`. Same
+     hole as `.hud-upgrade` and the HUD rails before it. It floats over the
+     board, so the twelve pixels come out of the map — a trade worth making
+     for the one control that exists to rescue a lost player. */
+  padding: var(--s-2) var(--s-3); min-height: var(--hit); font-size: var(--t-xs);
 }
 
 /* ONE transformed layer carries all eighteen plates. --wm-x/--wm-y/--wm-z are

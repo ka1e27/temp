@@ -172,7 +172,15 @@
    it is gold this action spends. Ghost/ordinary while unaffordable — the
    colour itself is the affordability tell, same channel the treasury already
    uses for a healthy vs. draining rate. */
-.hud-upgrade { min-height: var(--hit-sm); font-size: var(--t-sm); font-weight: var(--w-bold); }
+/* THE MOST-CLICKED CONTROL IN THE SCENE GETS THE FULL TARGET, ON EVERY POINTER.
+   It was `--hit-sm` with the 44px rule below it behind `(pointer: coarse)` —
+   measured at 230x32 on a mouse session at every width. That is the same hole
+   the HUD rails already had: a target rule enforced on one pointer type and not
+   the other, where the phone audit is the only thing that looks and the phone
+   is the one case it was already right for. The site panel is height-CAPPED on
+   a small screen (see below), so this is raised here and the cap is what the
+   phone layout still answers to. */
+.hud-upgrade { min-height: var(--hit); font-size: var(--t-sm); font-weight: var(--w-bold); }
 .hud-upgrade:not(.is-disabled) {
   background: color-mix(in srgb, var(--c-gold) 20%, var(--c-surface-2));
   border-color: color-mix(in srgb, var(--c-gold) 50%, transparent);
@@ -183,10 +191,13 @@
 }
 .hud-upgrade.is-disabled { opacity: 0.45; }
 
-/* Touch: compact desktop metrics grow to a real thumb target. Moved here with
-   the controls they size — the rule and the control belong in one file. */
+/* Touch: the two that are still compact grow to a real thumb target. Moved
+   here with the controls they size — the rule and the control belong in one
+   file. `.hud-upgrade` is no longer among them: it is 44 on every pointer now,
+   because a rule enforced on one pointer type is a rule with a hole in exactly
+   the shape of the platform nobody audits. */
 @media (pointer: coarse) {
-  .hud-upgrade, .hud-recruit, .hud-build { min-height: var(--hit); }
+  .hud-recruit, .hud-build { min-height: var(--hit); }
 }
 
 /* THE PANEL'S HEIGHT IS BOUNDED ON A SMALL SCREEN, and it is a cap rather than

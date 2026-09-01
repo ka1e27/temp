@@ -97,7 +97,12 @@ export async function runHud(h, step, note) {
       if (!r.width || !r.height) continue;
       if (getComputedStyle(el).visibility === 'hidden') continue;
       const name = `${el.className || el.tagName}`.split(' ')[0];
-      if (r.height < min) small.push(`${name} ${Math.round(r.height)}px`);
+      // BOTH AXES. This checked HEIGHT alone, which is how `.seg` sat at
+      // 38x44 below 1320px — the send fractions, the drag mode and pause, all
+      // six pixels under the floor, invisible to the one gate that looks.
+      if (r.height < min || r.width < min) {
+        small.push(`${name} ${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
       const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
       const hit = document.elementFromPoint(x, y);
       if (!(hit === el || el.contains(hit) || hit?.contains(el))) {
@@ -115,6 +120,49 @@ export async function runHud(h, step, note) {
       + `(the click lands on something else): ${bad.dead.slice(0, 6).join(', ')}`);
   }
   step('HUD controls hittable, all >= 44px, and none clipped out of reach');
+}
+
+/**
+ * The same floor, anywhere. Exported because the check above only ever ran on
+ * `#hud` with nothing selected, so two of the three controls that were UNDER it
+ * were structurally out of scope: `.hud-upgrade` only exists while a site panel
+ * is open, and `.wm-recentre` is not in `#hud` at all. A gate that cannot see
+ * where the defect is, is a gate that reports green.
+ *
+ * Sizes only — the hit test above needs `#hud`'s own pointer-events rules to
+ * mean anything, and a meta screen is an ordinary DOM tree.
+ *
+ * TWO SAMPLES, AND ONLY WHAT IS SMALL IN BOTH. `getBoundingClientRect` returns
+ * the VISUAL box, so a control mid-transition measures at whatever frame it is
+ * on: the training chips scale up from 0.6 and read 26x26 for about 200ms
+ * before settling at a full 44. That transient has now fooled a measurement in
+ * this project three times — `tools/mobile.mjs` reported it as a layout failure
+ * under load, and this gate caught it on its first run. A single sample here
+ * would make the whole suite intermittently red for a control that is correct.
+ */
+export async function assertTargets(page, root, label) {
+  const probe = () => page.eval((sel, min) => {
+    const out = [];
+    for (const el of document.querySelectorAll(`${sel} button, ${sel} input`)) {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      if (!r.width || !r.height || cs.visibility === 'hidden' || cs.display === 'none') continue;
+      if (r.height < min || r.width < min) {
+        out.push(`${`${el.className || el.tagName}`.split(' ')[0]} `
+          + `${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
+    }
+    return [...new Set(out)];
+  }, root, 44);
+
+  const first = new Set(await probe());
+  await page.sleep(400);
+  const small = (await probe()).filter((s) => first.has(s.split(' ')[0])
+    || [...first].some((f) => f.split(' ')[0] === s.split(' ')[0]));
+  if (small.length) {
+    throw new Error(`${small.length} control(s) under 44px in ${label}: ${small.join(', ')}`);
+  }
+  return small.length;
 }
 
 /** Step 4. The simulation runs, and speed actually changes it.

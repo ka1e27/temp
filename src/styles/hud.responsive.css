@@ -15,7 +15,14 @@
   .hud-gold .hud-value { font-size: var(--t-xl); }
   .hud-dock { gap: var(--s-4) var(--s-4); }
   .hud-group { padding: var(--s-2) var(--s-3); }
-  .seg { min-width: 38px; }
+  /* NOT below the target floor. This read `38px`, which put every segment —
+     the send fractions, the drag mode, pause — six pixels under the 44 the
+     rest of the HUD is held to, on any window narrower than 1320. The rule
+     below this block says in so many words that "a segment is already 44 wide
+     on a desktop"; at 1280x800 it was not. The dock WRAPS rather than
+     overflowing, so the cost of holding the floor here is at most a dock row,
+     and board share was measured before and after. */
+  .seg { min-width: var(--hit); }
   .chip { padding: var(--s-1) var(--s-2); }
   .hud-preview { max-width: min(520px, 58vw); }
 }

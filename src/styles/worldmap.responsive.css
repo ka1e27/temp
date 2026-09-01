@@ -96,8 +96,8 @@
   .wm-treasury > :nth-child(10) { grid-area: 4 / 2; }
 }
 
-/* Touch: compact desktop metrics grow to a real thumb target. */
-@media (pointer: coarse) {
-  .wm-recentre { min-height: var(--hit); }
-}
+/* Touch used to be the only place `.wm-recentre` reached 44px; it is 44 on
+   every pointer now (see worldmap.css), so this block has nothing left to do.
+   Kept as a note rather than an empty rule: the next control added to this
+   screen should be sized in worldmap.css, not here. */
 
