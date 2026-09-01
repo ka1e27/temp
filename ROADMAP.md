@@ -210,8 +210,19 @@ moment anything was bought, in CLAUDE.md.
 **5. Name the Marshal, and let abdication retire him.** Pure content, no engine change,
 no contract risk — and it gives recommendation 1's waves a face.
 
-**6. Ship the eight existing incursion mutators into first-time tier-3+ regions** (the
-already-scoped C1). New call site for tested infrastructure.
+**6. ~~Ship the eight existing incursion mutators into first-time tier-3+ regions~~ —
+ALREADY DONE, and this line was STALE when it was written.** C1 shipped
+`campaignTwistPlan` (`meta/incursion.js`), `CAMPAIGN_TWIST.fromIndex` is 9, and every
+region from gallowmoor on carries a hand: one mutator at tiers 3–4, two at 5–6. Verified
+live rather than by reading the call site — `buildBattleConfig` for gallowmoor comes back
+with `enemy.unitDefMult` **1.88** against saltmere's 1.50, which is `bulwark` applied, and
+`rules.incursion` is null so it is paid as an ordinary conquest.
+
+Seven of the eight are dealt; `sealed` is excluded on purpose (0.72 exceeds `GATE_CLAMP`'s
+0.60 ceiling, which cost a whole pass to establish). **The audit is the deliverable here:**
+a to-do list that describes shipped work as pending sends the next reader to build it
+twice, which is the failure CLAUDE.md records under "Still open" — three stale entries in
+eight, now four.
 
 **7. ~~Fix the dead booster and the overflowing build rail~~ (D7)** — **DONE.** The smoke
 gate now hit-tests every `#hud` control rather than the first of each class; the rails
