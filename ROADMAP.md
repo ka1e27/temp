@@ -52,12 +52,36 @@ not exist — the field is `goldCg`, in centigold — so `?? 0` reported a confi
 every faction at every tick. The bot-has-no-gold-either reading that produced was wrong.
 Assert the instrument.)*
 
-### D2. Nothing on screen says you are losing
+### D2. ~~Nothing on screen says you are losing~~ — STRUCK, my own measurement error
 
-At t=181 above: two sites against eight, gold zero, every build button dead, 130 troops
-standing still. The alert strip is **empty**. The only signal is `SITES 2 v 8` in small
-grey type in a corner, and a gold figure that reads `0` in the same weight it read `298`.
-A player cannot tell a stalled game from a healthy one, so they cannot learn.
+**This was wrong and the correction is the useful part.** I sampled the alert strip at
+t=60/180/300 and found it empty each time, and concluded the game says nothing. The strip
+is TRANSIENT. Watching it with a MutationObserver over the same passive run instead of
+sampling it, the game says a great deal, and says it well:
+
+```
+ATTACKED — farm will fall
+UNDER SIEGE — farm
+LOST — farm taken
+THE COUNTRY IS STARVING — farms pay a quarter less until ground changes hands. Both sides.
+STALLED — no ground has changed hands in 3 minutes. Withdraw costs nothing but the time
+          already spent.
+THE COUNTRY IS SPENT — half income, walls no longer repair at all, and troops cost double
+          to train. Take something or withdraw.
+STALLED — no ground has changed hands in 5 minutes. …
+THE HOST MARCHES — 94 closing on your camp, 12s out. Their country is thin behind it.
+ATTACKED — camp will fall  /  UNDER SIEGE — camp
+```
+
+Both attrition rungs, both stalemate warnings, the muster and every site event fire
+correctly and in the right order. **A probe that samples a transient surface at three
+instants is measuring nothing** — the same lesson this file already records for the site
+panel reporting `display: flex` at opacity 0.00016.
+
+What survives is narrower and is NOT a missing-signal problem: the strip is the only place
+these land, so a player looking at the board misses them, and gold pinned at zero while an
+idle army grows is never called out as the specific thing that is wrong. Neither is
+"nothing says you are losing".
 
 ### D3. The map you are conquering is invisible until you have conquered it
 

@@ -3760,6 +3760,23 @@ Two audit rules exist so the tool does not argue its own fixes back out: content
 `touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
 by signature rather than by class name.
 
+### A struck finding: the alert strip DOES say you are losing
+
+A design pass recorded that a losing battle is silent — two sites against eight, gold
+zero, every build button dead, and an empty alert strip. **The strip is TRANSIENT and it
+was sampled at three instants.** Watched with a MutationObserver over the same passive
+riverfen instead, it fires all of this, in order: `ATTACKED — farm will fall`, `UNDER
+SIEGE — farm`, `LOST — farm taken`, `THE COUNTRY IS STARVING`, `STALLED — no ground has
+changed hands in 3 minutes`, `THE COUNTRY IS SPENT`, `STALLED — …in 5 minutes`, `THE HOST
+MARCHES — 94 closing on your camp, 12s out`, then `ATTACKED`/`UNDER SIEGE` on the camp.
+
+Both attrition rungs, both stalemate warnings and the muster all arrive correctly. **A
+probe that samples a transient surface at three instants is measuring nothing** — the same
+lesson already recorded for the site panel reporting `display: flex` at opacity 0.00016.
+What is left is narrower: every one of these lands in one place, so a player watching the
+board misses them, and gold pinned at zero beside a growing idle army is never named as
+the thing that is wrong.
+
 ### The game stopped telling players how it is QA'd
 
 `screens/worldmap-autobattle.js` shipped this under a region's flavour text:
