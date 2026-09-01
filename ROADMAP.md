@@ -207,8 +207,22 @@ button — and rendered `Affordable in ~Infinitys` on a fresh save, where income
 Both fixed; full write-up, including the free-variable bug that made the shop go blank the
 moment anything was bought, in CLAUDE.md.
 
-**5. Name the Marshal, and let abdication retire him.** Pure content, no engine change,
-no contract risk — and it gives recommendation 1's waves a face.
+**5. ~~Name the Marshal, and let abdication retire him.~~ DONE.** Every region has a named
+defender, and the title is real information rather than flavour: below tier 4 a
+**Castellan** holds the throne and its garrison fights at face value, from tier 4 a
+**Marshal** does and the banner is worth +25%/+40%. It reaches the loadout brief, the
+muster alert ("CASTELLAN SALLOW'S HOST MARCHES") and the abdication drawer.
+
+Balance-neutral, proved rather than argued: 72 real `buildBattleConfig` outputs digest
+byte-identically to the parent commit, and a test walks `src/battle`, `src/core` and
+`tools` for any import of the name table. Abdication genuinely retires all twenty-four,
+because a commander is a pure function of `(region, resets)`.
+
+Two defects came out of it, both found by looking rather than by a test: the loadout brief
+styled its hero figure by POSITION, so one inserted row put a name in display red and
+demoted the difficulty; and one extra line in the abdication drawer pushed the menu's
+action buttons to y=-12, where they were drawn, live-looking and unclickable. Both written
+up in CLAUDE.md.
 
 **6. ~~Ship the eight existing incursion mutators into first-time tier-3+ regions~~ —
 ALREADY DONE, and this line was STALE when it was written.** C1 shipped

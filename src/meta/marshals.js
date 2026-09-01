@@ -12,6 +12,10 @@
 // randomness — `withEnemyMarshal` is deterministic by construction because a
 // difficulty grant that moved with the map seed would make a region's win rate
 // unmeasurable.
+import { createRng, deriveSeed } from '../core/rng.js';
+import { MARSHAL_NAMES, COMMANDER_TITLES, NAME_SEED } from '../content/marshals.data.js';
+import { REGION_IDS } from '../content/regions.data.js';
+import { ENEMY_MARSHALS_BY_TIER } from '../content/regions.rules.js';
 
 /**
  * THE MARSHAL YOU BOUGHT TURNS UP, and it does not cost you eight militia.
@@ -110,4 +114,73 @@ export function withEnemyMarshal(sites, unlockedUnits, count = 1) {
   return sites.map((s) => (chosen.has(s.id)
     ? { ...s, garrison: { ...s.garrison, marshal: 1 } }
     : s));
+}
+
+// ---------------------------------------------------------------------------
+// WHO HOLDS THIS THRONE. Decoration, and deliberately kept on this side of the
+// seam: the name is resolved here, from meta, and handed to a SCREEN as a
+// string. Nothing about it reaches `battle/`, nothing joins `BattleConfig`, and
+// no measured number can move — the same argument the doctrine picker makes
+// for being content rather than engine, one step further out.
+// ---------------------------------------------------------------------------
+
+/**
+ * The enemy commander of one region, as a name and a title.
+ *
+ * A PURE FUNCTION OF `(regionId, resets)`, so the same region always has the
+ * same commander within one campaign and a NEW generation of them after an
+ * abdication — which is the retirement made mechanical rather than announced.
+ * Nothing is stored: same rule as `campaignReplayPlan` and the incursion
+ * ladder, and for the same reason. A persisted name is a second copy of a fact
+ * that can be derived, and a second copy is a thing to keep in step.
+ *
+ * THE DRAW IS A ROTATION OVER ONE SEEDED SHUFFLE, not a sample per region.
+ * `campaignTwistPlan` already records what independent samples do — three
+ * consecutive regions came out identical — and a repeated NAME reads worse than
+ * a repeated mutator, because a name is the one thing a player is certain is
+ * unique. There are more houses than regions, so a collision inside one
+ * campaign is impossible by construction rather than unlikely.
+ *
+ * @param {object} region a row from `REGIONS`
+ * @param {number} resets how many times the player has abdicated
+ * @returns {?{title:string, house:string, short:string, full:string,
+ *   marshal:boolean}}
+ */
+export function commanderFor(region, resets = 0) {
+  if (!region) return null;
+  const idx = REGION_IDS.indexOf(region.id);
+  if (idx < 0) return null;                 // the Frontier has no country to hold
+
+  const r = Math.max(0, Math.floor(resets));
+  const houses = shuffled(MARSHAL_NAMES.house, r, 'house');
+  const given = shuffled(MARSHAL_NAMES.given, r, 'given');
+  const house = houses[idx % houses.length];
+  // A different stride through the given names, so "Aldric Vane" and "Aldric
+  // Harrow" cannot land on neighbouring regions and read as one person.
+  const first = given[(idx * 5 + r) % given.length];
+
+  // THE TITLE IS EARNED, not decorative — see content/marshals.data.js. A
+  // region below tier 4 fields no marshal at all, so calling its defender one
+  // would spend the word exactly where it has to keep its meaning.
+  const marshal = (ENEMY_MARSHALS_BY_TIER[region.tier - 1] ?? 0) > 0;
+  const title = marshal ? COMMANDER_TITLES.marshal : COMMANDER_TITLES.castellan;
+  // `short` is title + house, for the alert strip: a line that has to carry a
+  // headcount and an ETA has no room for three words of name, and the house is
+  // the half that is unique within a campaign anyway.
+  return {
+    title, house, marshal,
+    short: `${title} ${house}`,
+    full: `${title} ${first} ${house}`,
+  };
+}
+
+/** One shuffle per (resets, list), derived rather than stored. */
+function shuffled(list, resets, tag) {
+  const out = list.slice();
+  const rng = createRng(deriveSeed(NAME_SEED + resets, tag));
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = rng.int(0, i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }

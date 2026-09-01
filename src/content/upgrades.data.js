@@ -177,7 +177,7 @@ export const UPGRADES = Object.freeze([
   // one free on every landing, outside the budget, and more can be commissioned
   // for gold at any site that trains.
   U('unlockMarshal', 'unlocks', 'Marshal', 1, 4000, 1, [unlock('unit', 'marshal')],
-    'One rides free with every expedition: +25% to his whole army, +40% training.'),
+    'One rides free with every expedition: +25% to that whole army, +40% training.'),
   // The three specialists. Each one buys a VERB rather than a stat line, and
   // each is priced where the problem it answers first appears: outriders when
   // the maps start being mostly unclaimed, halberds when castles start being

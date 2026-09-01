@@ -58,7 +58,7 @@ export const RESULTS = Object.freeze({
   // it a line.
   capitalTitle: 'The Obsidian Throne has fallen',
   capitalBody: 'Their capital is yours — and their homeland is still east of it.'
-    + ' A king without a throne keeps fighting where he was born.',
+    + ' A crown without a throne keeps fighting on the ground it was born on.',
   /** The tag on an honour crossed by the battle you just fought. Twenty named
    *  thresholds were computed every tick and announced nowhere. */
   honourEarned: 'Honour earned',
@@ -133,14 +133,25 @@ export const RESULTS = Object.freeze({
    * handlers around it in screens/battle-alert.js already have, and it matters
    * because the event bus is emitted regardless of fog.
    */
-  muster: (bodies, seconds, wave = 1, waves = 1) => {
+  muster: (bodies, seconds, wave = 1, waves = 1, who = '') => {
     // ESCALATING, because the schedule is only legible as a schedule if the
     // lines differ: three identical announcements read as the same alert
     // repeating, which is a bug rather than a rising tide. The last one is
     // named as the last, so a player who has held twice knows what holding a
     // third time is worth.
-    const head = wave >= waves ? 'THE LAST HOST MARCHES'
-      : wave > 1 ? 'ANOTHER HOST MARCHES' : 'THE HOST MARCHES';
+    // NAMED WHERE THERE IS A NAME. The commander is resolved on the meta side
+    // and handed in as a string (meta/marshals.js `commanderFor`), so nothing
+    // about this crosses the contract — and it falls back to the anonymous
+    // line, because the Frontier has no region row and therefore no commander.
+    // Two phrasings rather than one with a name slot: "THE LAST HOST OF
+    // MARSHAL MARLOWE MARCHES" is grammatical and unreadable at a glance, and
+    // this line is read in the two seconds before a wave lands.
+    const name = who ? who.toUpperCase() : '';
+    const head = name
+      ? (wave >= waves ? `${name}'S LAST HOST`
+        : wave > 1 ? `${name} MARCHES AGAIN` : `${name}'S HOST MARCHES`)
+      : (wave >= waves ? 'THE LAST HOST MARCHES'
+        : wave > 1 ? 'ANOTHER HOST MARCHES' : 'THE HOST MARCHES');
     // The counter-play hint is on every wave, because it is true on every wave
     // and it is the whole point of the mechanic — but it sharpens, since by the
     // third the enemy really has committed everything.

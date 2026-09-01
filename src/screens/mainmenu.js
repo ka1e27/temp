@@ -14,7 +14,7 @@
 // object at boot, so swapping `ctx.state` for a new object would leave idle
 // income and autosave pointed at the old one forever.
 
-import { h, clear, mount, bindText, inertSiblings } from '../ui/dom.js';
+import { h, clear, mount, bindText, inertSiblings, revealWithin } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, SAVE, ENDGAME } from '../content/strings.js';
 import { renderSettings } from './mainmenu-settings.js';
@@ -281,8 +281,12 @@ export function createMainMenuScene(ctx) {
    * the drawer's own top to the container's top is what buys it the full
    * height. `preventScroll` then stops the focus undoing it.
    */
+  /** Reveal the drawer without scrolling the action list off the top — see
+   *  ui/dom.js `revealWithin` for the measurement that made that a rule. The
+   *  `preventScroll` is load-bearing: a focused element gets scrolled into view
+   *  by the minimal amount, which would undo the clamp. */
   function openDrawer(target) {
-    drawer.scrollIntoView?.({ block: 'start' });
+    revealWithin(drawer.parentElement, drawer);
     target?.focus?.({ preventScroll: true });
   }
 

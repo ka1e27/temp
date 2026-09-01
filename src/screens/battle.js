@@ -12,6 +12,9 @@ import { buildBattleConfig } from '../meta/modifiers.js';
 import { generateBattleMap } from '../battle/mapgen.js';
 import { generateFrontierMap } from '../battle/frontier.js';
 import { FRONTIER_ID } from '../content/endless.data.js';
+import { REGION_BY_ID } from '../content/regions.data.js';
+import { commanderFor } from '../meta/marshals.js';
+import { legacyResets } from '../meta/legacy.js';
 import { createBattleView } from '../render/battleView.js';
 import { setRiverLayer } from '../render/hexRenderer.js';
 import { createFx, fxFromEvent } from '../render/fx.js';
@@ -185,6 +188,13 @@ export function createBattleScene(ctx) {
         // The player's saved pace. A preference, not battle state, so it
         // rides meta rather than the BattleConfig.
         initialSpeed: ctx.state?.meta?.settings?.defaultSpeed ?? 1,
+        // WHO HOLDS THIS COUNTRY, resolved on the META side and handed over as
+        // a plain string — the same argument `initialSpeed` above makes, and
+        // the reason this could ship without touching `contract.js`. It is
+        // decoration: the alert strip interpolates it and nothing else reads
+        // it, so no measured number can move. Null on the Frontier, which has
+        // no region row, and the copy falls back to "THE HOST" for it.
+        foeName: commanderFor(REGION_BY_ID[regionId], legacyResets(ctx.state))?.short,
         // THE IDLE HALF, VISIBLE WHILE THE REAL-TIME HALF RUNS. The battle
         // screen never mentioned crowns at all, so the game's own one-line
         // pitch was unobservable for the 8-20 minutes a battle lasts. Read

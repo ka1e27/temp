@@ -59,6 +59,11 @@ export const UI = Object.freeze({
   attack: 'Attack',
   raid: 'Raid',
   locked: 'Locked',
+  /** The title is the information, and it is worth explaining once rather than
+   *  making a player infer it from a flavour line two tiers ago. See
+   *  content/marshals.data.js for why there are exactly two. */
+  commanderHint: 'A Marshal fields a banner: the throne\u2019s garrison fights 25% harder'
+    + ' and trains 40% faster. A Castellan does not.',
   conquered: 'Conquered',
   cooldown: 'Recovering',
   back: 'Back',
@@ -155,7 +160,7 @@ export const UNITS_UI = Object.freeze({
     name: 'Marshal',
     role: 'Commander',
     desc: 'One per site. Every troop standing with it fights 25% harder and '
-      + 'the site he stands in trains 40% faster. One rides free with '
+      + 'the site it holds trains 40% faster. One rides free with '
       + 'every expedition once unlocked; commission more in battle for gold.',
   }),
 });
@@ -206,79 +211,6 @@ export const WORLD = Object.freeze({
   // see meta/world.js `campaignGap`. Names the cost and leaves the choice.
   aheadOfSchedule: 'This lies deeper than your empire has reached. Expect to be'
     + ' badly outmatched — take the regions behind it first, or bring everything.',
-});
-
-/**
- * The endless ladder and the reset. Same rule as everything else here: state the
- * RULE. A player deciding whether to abdicate is deciding about numbers, so the
- * copy says what is kept and what is lost rather than dressing it up as a story.
- */
-export const ENDGAME = Object.freeze({
-  frontierTitle: 'The Frontier',
-  frontierLocked: 'Take four regions to open the frontier.',
-  frontierHint: 'One enormous map, and no end to it but the one you choose. The'
-    + ' country gets harder the further out you walk — push on for the deep'
-    + ' ground, or withdraw and bank what you hold.',
-  incursionTitle: 'Incursions',
-  incursionLocked: 'Take every region to open the endless ladder.',
-  incursionHint: 'One battle per rung, on ground you already hold. Win and the next'
-    + ' rung is harder; lose and nothing changes but the boosters you fired.',
-  incursionDepth: (n) => `Depth ${n}`,
-  incursionCleared: (n) => (n > 0 ? `Deepest cleared: ${n}` : 'Nothing cleared yet'),
-  incursionGo: 'Begin incursion',
-  mutatorsNone: 'No complications at this depth.',
-  mutatorsTitle: 'Complications',
-  abdicateTitle: 'Abdicate',
-  abdicateLocked: 'Available once you have taken every region.',
-  abdicateHint: 'End this empire. Crowns, upgrades and boosters go back to nothing — you'
-    + ' keep your legacy, your records and the ladder you have climbed, and the next'
-    + ' campaign opens with ground you no longer have to take twice.',
-  abdicateGo: 'Abdicate and begin again',
-  abdicateConfirm: 'This cannot be undone. Abdicate?',
-  legacyTitle: 'Legacy',
-  legacyNone: 'No legacy yet. Finish a campaign and abdicate to earn some.',
-  legacyHeld: (n) => `${n} legacy`,
-  legacyWorth: 'Every point is permanent, applies to every run, and is never spent.',
-});
-
-/** The lifetime record drawer (screens/mainmenu-record.js). Labels only — every
- *  number behind them comes from meta/record.js, which is where the arithmetic
- *  is documented and tested. */
-export const RECORD = Object.freeze({
-  title: 'Record',
-  hint: 'Every battle you have fought, on this empire and every one before it.',
-  empty: 'Nothing to show yet — fight a battle and this fills in.',
-  survives: 'Records are kept through abdication. They are the one thing a new'
-    + ' campaign never takes back.',
-  warTitle: 'War',
-  winRate: 'Win rate',
-  battles: 'Battles fought',
-  wins: 'Won',
-  losses: 'Lost',
-  withdrawals: 'Withdrawn from',
-  raids: 'Regions re-raided',
-  incursions: 'Incursion rungs cleared',
-  troopsTitle: 'Troops',
-  killRatio: 'Killed per lost',
-  killed: 'Enemy troops killed',
-  lost: 'Own troops lost',
-  timeTitle: 'Time',
-  // Named as a share of TIME, because that is what is counted — see
-  // meta/record.js `awayShare` on why this is not an income share.
-  awayShare: 'Earned while away',
-  played: 'Time in the game',
-  away: 'Time credited away',
-  purseTitle: 'Purse',
-  crownsEarned: 'Crowns earned',
-  crownsSpent: 'Crowns spent',
-  relicsEarned: 'Relics earned',
-  relicsSpent: 'Relics spent',
-  // HONOURS — see content/milestones.data.js. Named goals over the same
-  // counters, and the reason the drawer is worth opening in the back half of a
-  // campaign whose last unlock arrives at region 8 of 24.
-  honoursTitle: 'Honours',
-  honoursEarned: 'Earned:',
-  honoursAll: 'Every honour earned. There is nothing left to prove.',
 });
 
 export const SHOP = Object.freeze({
@@ -390,3 +322,8 @@ export const SAVE = Object.freeze({
 // note at the top of that file. Re-exported so every existing
 // `import { COACH, RESULTS } from './strings.js'` keeps working.
 export { COACH, RESULTS } from './strings.battle.js';
+
+// The endgame drawers and the lifetime record live in strings.meta.js — see
+// the note at the top of that file. Re-exported so every existing
+// `import { ENDGAME, RECORD } from './strings.js'` keeps working.
+export { ENDGAME, RECORD } from './strings.meta.js';

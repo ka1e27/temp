@@ -238,6 +238,7 @@ export function createBattleHud(o) {
   if (bus) {
     wireAlerts({
       bus, off, alert, getState, boosterIds, boostShake, aiming: AIMING,
+      foeName: o.foeName,
       onShake: (i, until) => { shaken = i; shakeUntil = until; },
       // WHICH SITE THE ALERT MEANT, onto `view` for the board to draw. The
       // timer lives here rather than in the renderer for the same reason

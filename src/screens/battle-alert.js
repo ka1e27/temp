@@ -265,8 +265,12 @@ export function alarmSite(tone, siteId) {
  *
  * @param {{bus:object, off:Function, alert:object, getState:()=>object,
  *          boosterIds:string[], boostShake:Function[], aiming:(id:string)=>string,
- *          onShake:(i:number, until:number)=>void,
+ *          onShake:(i:number, until:number)=>void, foeName?:string,
  *          onFlag?:(siteId:string, until:number)=>void}} o
+ *   `foeName` is the enemy commander, ALREADY RESOLVED — a plain string, so
+ *   this file never has to reach meta and no name has to cross the contract.
+ *   Absent for the Frontier, which has no region row to hold a commander, and
+ *   the copy falls back to the anonymous line for it.
  */
 export function wireAlerts(o) {
   const { bus, off, alert, getState, boosterIds, boostShake, aiming, onShake } = o;
@@ -347,7 +351,7 @@ export function wireAlerts(o) {
   // player can see and `fxVisible` gates only the burst and the sound.
   off(bus.on('battle:enemy-muster', (ev) => {
     const secs = Math.max(1, Math.round(((ev.arriveTick ?? 0) - (ev.tick ?? 0)) / TICK_HZ));
-    say(RESULTS.muster(ev.bodies ?? 0, secs, ev.wave ?? 1, ev.waves ?? 1),
+    say(RESULTS.muster(ev.bodies ?? 0, secs, ev.wave ?? 1, ev.waves ?? 1, o.foeName),
       'danger', ev.siteId);
   }));
 

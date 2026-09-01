@@ -79,11 +79,22 @@
 }
 .pb-stats dt:first-of-type, .pb-stats dd:first-of-type { border-top: 0; }
 /* What you are walking into (difficulty) and what it pays (last row) are the
-   two facts the loadout is weighed against. */
-.pb-stats dd:first-of-type {
+   two facts the loadout is weighed against.
+   NAMED, NOT COUNTED. This was `dd:first-of-type`, which was true while
+   difficulty was the first row and became false the moment "Defended by" went
+   above it — a commander's name rendered in enemy red at display size while
+   the multiplier dropped to body text. Same defect, same fix and same file
+   pairing as worldmap-detail.js's `data-stat`. */
+.pb-stats dd[data-stat='difficulty'] {
   font: var(--w-bold) var(--t-lg) / 1.2 var(--font-num); color: var(--c-enemy);
 }
 .pb-stats dd:last-of-type { color: var(--c-gold); font-weight: var(--w-bold); }
+/* The commander is CONTEXT, not a figure to weigh — modest, and in the enemy
+   hue only enough to say whose country this is. */
+.pb-stats dd[data-stat='commander'] {
+  color: color-mix(in srgb, var(--c-enemy) 78%, var(--c-text));
+  font-family: var(--font); font-weight: var(--w-bold);
+}
 
 /* Slots spent against slots granted is what the whole panel is about: it is
    what makes a marshal a decision instead of a free pick. */

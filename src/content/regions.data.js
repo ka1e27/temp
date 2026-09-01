@@ -160,7 +160,7 @@ export const REGIONS = Object.freeze([
   T('ironcrown', 'Ironcrown', 4, [4, 0],
     ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
     5.00, 17, 13, [[2, 4, 7], 19, 4], 2.14, 0.6, 40.8, 14.5,
-    'A Marshal holds the throne. His guard fights harder than its numbers say,'
+    'A Marshal holds the throne. That guard fights harder than its numbers say,'
     + ' and the gate refills faster than you can empty it.',
     'choke'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1],

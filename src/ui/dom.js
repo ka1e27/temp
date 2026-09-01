@@ -226,3 +226,28 @@ export function inertSiblings(el) {
   }
   return () => { for (const sib of marked) sib.inert = false; };
 }
+
+/**
+ * Scroll `box` so `el` is as visible as it can be, WITHOUT scrolling past its
+ * top — so whatever sits above it stays reachable.
+ *
+ * `el.scrollIntoView({block: 'start'})` pins the element's top to the
+ * container's, which is right for a panel that opened below the fold and wrong
+ * the moment the thing above it is a control. Measured on the main menu after
+ * ONE line joined a drawer: the six action buttons went above the viewport, the
+ * Record button landed at y=-12, and a real click on it hit the overlay —
+ * drawn, live-looking and unreachable, the same class of defect as a rail that
+ * clips a booster out of reach.
+ *
+ * The rule is one clamp: scroll the minimum that brings the element's BOTTOM
+ * into view, never further than its top. Something that already fits scrolls
+ * not at all.
+ *
+ * Callers that follow this with `focus()` must pass `preventScroll: true`, or
+ * the browser's own minimal scroll-into-view undoes the clamp.
+ */
+export function revealWithin(box, el) {
+  if (!box || !el?.offsetHeight) { el?.scrollIntoView?.({ block: 'start' }); return; }
+  const needed = el.offsetTop + el.offsetHeight - box.clientHeight;
+  box.scrollTop = Math.max(0, Math.min(needed, el.offsetTop));
+}

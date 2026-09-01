@@ -70,6 +70,10 @@ export function renderAbdicate(drawer, ctx, { onDone, onCancel }) {
       ...row('Next run opens with', `${headStartFor(view.resets + 1)} regions`)),
     held,
     h('p.set-note.dim', { text: ENDGAME.legacyWorth }),
+    // The retirement, which is a real consequence rather than a flourish: the
+    // enemy's commanders are derived from `(region, resets)`, so this button
+    // genuinely replaces every one of them. See meta/marshals.js `commanderFor`.
+    h('p.set-note.dim', { text: ENDGAME.abdicateOfficers }),
     h('div.row', {},
       h('button.btn.primary.menu-abdicate-go', {
         type: 'button', text: ENDGAME.abdicateGo,

@@ -3904,6 +3904,78 @@ builder owns a row. `watched` is handed in as a **getter** rather than as the ar
 because `render()` re-points its own — a reference captured once would leave the tick
 walking rows that have left the document.
 
+## The war has a face, and it cost the balance table nothing
+
+**MEASURED before this: over a ~315-minute campaign nobody in this game was named, nobody
+spoke, and nobody was remembered.** The enemy Marshal — the one thing the enemy does that
+a player has to answer — was a `banner` field and an anonymous "the host".
+
+`content/marshals.data.js` + `meta/marshals.js commanderFor(region, resets)`. Every region
+has a defender, named, and the name reaches exactly three surfaces: the loadout brief
+(*Defended by · Castellan Wren Sallow*), the muster alert (*CASTELLAN SALLOW'S HOST
+MARCHES*), and the abdication drawer, which now says what abdicating does to them.
+
+**THE TITLE IS EARNED, AND THAT IS THE ONE PIECE OF REAL INFORMATION IN IT.**
+`ENEMY_MARSHALS_BY_TIER` is `[0,0,0,1,1,2]`, so a region below tier 4 fields no marshal at
+all: its throne is held by a **Castellan** and its garrison fights at face value, and from
+tier 4 a **Marshal** holds it and the banner is real (+25% to the stack, +40% training). A
+single title for both would spend the word exactly where it has to mean something.
+
+**PROVABLY BALANCE-NEUTRAL, AND PROVED RATHER THAN ARGUED.** A name is resolved on the
+META side and handed to a SCREEN as a string — the same argument `initialSpeed` already
+makes for riding meta rather than the `BattleConfig` — so nothing crosses `contract.js` and
+`CONTRACT_VERSION` does not move. Verified two ways: **72 real `buildBattleConfig` outputs
+(24 regions × 3 seeds) digest byte-identically** to the parent commit, and
+`tests/marshalname.test.js` walks `src/battle`, `src/core` and `tools` for any import of
+the name table and fails if one appears. Its negative control was run — importing
+`MARSHAL_NAMES` into `battle/setpiece.js` turns it red.
+
+**THE DRAW IS A ROTATION OVER ONE SEEDED SHUFFLE**, the construction `campaignTwistPlan`
+already uses and for a sharper reason: a repeated MUTATOR reads as sameness, a repeated
+NAME reads as a bug. There are more houses than regions, so a collision inside one campaign
+is impossible by construction rather than unlikely, and the test asserts both.
+
+**ABDICATION RETIRES THE WHOLE OFFICER CORPS, and that is real rather than announced.** A
+commander is a pure function of `(region, resets)`, so ending a run genuinely replaces every
+one of them — twenty-four for twenty-four, asserted. Nothing is stored: same rule as the
+incursion ladder's `cleared` and `campaignReplayPlan`, and for the same reason.
+
+**No pronouns anywhere.** The table is a mix, the game never needs to say which, and the
+two player-facing "he"s that predated it (the Marshal's own unit description and
+Ironcrown's flavour) are gone — a named, mixed cast makes a generic "he" wrong rather than
+merely lazy.
+
+### ...and inserting one row proved the loadout brief counted to its hero figure
+
+`prebattle.css` styled the DIFFICULTY as the panel's hero figure by POSITION —
+`.pb-stats dd:first-of-type` — which was true while difficulty was the first row and false
+the instant anything went above it. **A screenshot caught it and no test could have**: the
+commander's NAME rendered in enemy red at display size while the multiplier the loadout is
+actually weighed against dropped to body text. Both rows were present, both were correct,
+and the emphasis was on the wrong one.
+
+That is verbatim the defect `worldmap-detail.js` already carries a paragraph about, in the
+sibling file, found the same way. `data-stat` names the row; `tests/marshalname.test.js`
+asserts that any surviving `dd:first-of-type` rule carries no `color` or `font`.
+
+### ...and ONE extra line put a live control out of reach
+
+Adding a sentence to the abdication drawer made `tools/smoke.mjs` fail two steps later on
+the RECORD drawer, reproducibly on an idle box. `openDrawer` used
+`scrollIntoView({block: 'start'})`, which pins the drawer's top to the container's — the
+fix for a drawer opening below the fold, and the thing that throws the menu's six action
+buttons above the viewport once a drawer is tall. Measured: **the Record button at y=-12,
+and a real click on it landing on the overlay.** Drawn, live-looking, unreachable — the
+same class as the rail that clipped a booster, and against the menu's own stated intent
+that the actions stay on screen so you can switch drawers.
+
+`ui/dom.js revealWithin` is the rule, beside `watchOverflow` and `inertSiblings` because it
+is the same kind of thing: **scroll the minimum that brings the element's bottom into view,
+never further than its top.** A drawer that fits scrolls not at all. Measured after: all
+three drawers fully visible with Close hittable AND the Record button at y=58/69/93, which
+is strictly better than before on both axes. `preventScroll` on the focus call is
+load-bearing — a browser's own minimal scroll-into-view would undo the clamp.
+
 ## The campaign map: 23 of 24 plates said nothing, and the secret was already out
 
 **MEASURED on a fresh save: the world map showed twenty-three of twenty-four regions as

@@ -19,6 +19,7 @@ import {
   planFor, MUTATOR_BY_ID, campaignReplayPlan, campaignTwistPlan, incursionRules,
 } from '../meta/incursion.js';
 import { legacyResets } from '../meta/legacy.js';
+import { commanderFor } from '../meta/marshals.js';
 import { previewReward } from '../meta/rewards.js';
 import { specialistCallouts } from '../meta/specialists.js';
 
@@ -137,6 +138,10 @@ export function regionBrief(meta, regionId, depth = null) {
   // `effectiveEnemyMult` at a rung, which the comment above already fixes.
   // `incursionRules` is asked rather than re-derived, so there is one owner of
   // the ceiling arithmetic.
+  // The enemy's own commander for this region — see meta/marshals.js
+  // `commanderFor`. Decoration, and a pure function of (region, resets), so a
+  // second run of the campaign is fought against a new generation of them.
+  const commander = commanderFor(region, legacyResets(meta));
   const gateFrac = plan
     ? (incursionRules({ castleGateFrac: region.castleGateFrac ?? 0 }, plan).castleGateFrac ?? 0)
     : GATE_CLAMP(region.castleGateFrac ?? 0);
@@ -164,7 +169,17 @@ export function regionBrief(meta, regionId, depth = null) {
     // archers are never among them.
     callouts: specialistCallouts(meta, region),
     rows: [
-      ['Difficulty', `x${mult.toFixed(2)}`],
+      // WHO YOU ARE FIGHTING, at the top, because it is the only row here that
+      // is a fact about a PERSON rather than about the ground — and because it
+      // is what makes the muster alert a callback rather than a cold
+      // introduction ("MARSHAL MARLOWE'S HOST MARCHES" means something only if
+      // you were told, twenty minutes earlier, whose country this is). The
+      // TITLE is the information: `Marshal` means this throne fields a banner
+      // and refills 40% faster, `Castellan` means it does not. Absent on an
+      // incursion, whose arena is a rung rather than a country.
+      ...(!plan && commander
+        ? [['Defended by', commander.full, UI.commanderHint, 'commander']] : []),
+      ['Difficulty', `x${mult.toFixed(2)}`, null, 'difficulty'],
       ...(raidEscalation ? [['Raid escalation', `x${raidEscalation.toFixed(2)} from `
         + `${clears} clear${clears === 1 ? '' : 's'}`]] : []),
       ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
@@ -200,9 +215,18 @@ export function briefPanel(brief) {
     h('h2#pb-brief-h', {
       text: brief.incursion ? brief.incursion.label : `Tier ${brief.tier} briefing`,
     }),
-    h('dl.pb-stats', {}, ...brief.rows.flatMap(([k, v, hint]) => [
-      h('dt.label', { text: k, ...(hint ? { title: hint } : {}) }),
-      h('dd.num', { text: v, ...(hint ? { title: hint } : {}) }),
+    // `stat` IS LOAD-BEARING, and a screenshot is what proved it. prebattle.css
+    // styled the DIFFICULTY as this panel's hero figure by position —
+    // `dd:first-of-type` — which was right while difficulty was the first row
+    // and wrong the instant anything went above it: adding "Defended by" put a
+    // commander's NAME in enemy red at display size while the multiplier the
+    // loadout is actually weighed against dropped to body text. That is
+    // verbatim the defect worldmap-detail.js already carries a paragraph about,
+    // in the sibling file, found the same way. Positional selectors over a list
+    // that can change length are the bug; naming the row is the fix.
+    h('dl.pb-stats', {}, ...brief.rows.flatMap(([k, v, hint, stat]) => [
+      h('dt.label', { text: k, ...(hint ? { title: hint } : {}), ...(stat ? { 'data-stat': stat } : {}) }),
+      h('dd.num', { text: v, ...(hint ? { title: hint } : {}), ...(stat ? { 'data-stat': stat } : {}) }),
     ])),
     // The complications are the reason this screen matters on a rung: `thinned`
     // lands a smaller army and `ironwall` makes engines the difference between
