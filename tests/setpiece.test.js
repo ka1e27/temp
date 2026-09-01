@@ -20,26 +20,41 @@ import { step } from '../src/battle/sim.js';
 import { REGION_IDS } from '../src/content/regions.data.js';
 import { TICK_HZ } from '../src/core/loop.js';
 
-/** A real battle, wound forward to inside the muster window with nobody
- *  playing — so the enemy has developed and the player has not interfered. */
-function boardAt(region, before, frac = 0.45) {
+/** A real battle, wound forward to inside a muster window with nobody playing —
+ *  so the enemy has developed and the player has not interfered. Defaults to
+ *  the MIDDLE of whichever wave is next, rather than a hardcoded fraction: the
+ *  windows moved once already when the single shot became a schedule, and a
+ *  literal here is a test that silently stops being inside the thing it tests. */
+function boardAt(region, before, waveIndex = 0) {
   const b = startRun(region, 1000, REGION_IDS.slice(0, before), 10, {});
-  const to = Math.round(b.rules.hardCapTicks * frac);
-  b.tick = to;
+  b.ai.musterWave = waveIndex;
+  const w = MUSTER.waves[waveIndex];
+  b.tick = Math.round(b.rules.hardCapTicks * (w.at + w.span / 2));
   return b;
 }
 
-test('the window is derived from the region, not from a per-row table', () => {
+test('every window is derived from the region, not from a per-row table', () => {
   const b = boardAt('gallowmoor', 9);
-  const w = musterWindow(b);
-  assert.ok(w.from > 0 && w.to > w.from);
-  assert.equal(w.from, Math.round(b.rules.hardCapTicks * MUSTER.atFrac));
-  // It must land INSIDE the battle, not past its own cap — a set-piece
-  // scheduled after the hard cap is one that can never happen.
-  assert.ok(w.to < b.rules.hardCapTicks, 'the window closes after the battle does');
-  // ...and comfortably after the slowest tier's warm-up (255s), or the host is
-  // drawn from a country that has not developed yet.
-  assert.ok(w.from > 255 * TICK_HZ, `opens at ${w.from / TICK_HZ}s, inside warm-up`);
+  for (let i = 0; i < MUSTER.waves.length; i++) {
+    b.ai.musterWave = i;
+    const w = musterWindow(b);
+    assert.equal(w.index, i);
+    assert.ok(w.from > 0 && w.to > w.from, `wave ${i + 1} has an empty window`);
+    assert.equal(w.from, Math.round(b.rules.hardCapTicks * MUSTER.waves[i].at));
+    // Every window must land INSIDE the battle: one scheduled past the cap can
+    // never happen, and the last one must leave time to be ANSWERED, which is
+    // the whole reason the old `lastFrac` existed.
+    assert.ok(w.to < b.rules.hardCapTicks * 0.85,
+      `wave ${i + 1} closes at ${(w.to / b.rules.hardCapTicks).toFixed(2)} of the cap`);
+  }
+  // The FIRST window opens comfortably after the slowest tier's warm-up (255s),
+  // or the opening host is drawn from a country that has not developed yet.
+  b.ai.musterWave = 0;
+  const first = musterWindow(b);
+  assert.ok(first.from > 255 * TICK_HZ, `opens at ${first.from / TICK_HZ}s, inside warm-up`);
+  // ...and the schedule is spent rather than wrapping.
+  b.ai.musterWave = MUSTER.waves.length;
+  assert.equal(musterWindow(b), null, 'the schedule wrapped instead of ending');
 });
 
 test('the host is gathered from the WHOLE map, not the camp\'s neighbours', () => {
@@ -64,15 +79,58 @@ test('the host is gathered from the WHOLE map, not the camp\'s neighbours', () =
   }
 });
 
-test('it fires once, and the second call is a no-op', () => {
+test('a wave fires once, and the next one is not due yet', () => {
   const b = boardAt('gallowmoor', 9);
   const out = [];
-  const first = muster(b, out, new Set());
-  assert.equal(first, true, 'the set-piece never fired on a developed board');
+  assert.equal(muster(b, out, new Set()), true, 'the set-piece never fired on a developed board');
   assert.ok(b.ai.musterTick > 0);
+  assert.equal(b.ai.musterWave, 1, 'the schedule did not advance');
   const n = out.length;
-  assert.equal(muster(b, out, new Set()), false, 'it fired twice');
+  // Same tick, same wave index: the next window has not opened, so nothing.
+  assert.equal(muster(b, out, new Set()), false, 'a wave fired twice in one window');
   assert.equal(out.length, n, 'a refused muster still pushed orders');
+});
+
+test('THE SCHEDULE: three waves, in order, each bigger than the last', () => {
+  // The whole point of the change. One scripted commitment left 93% of every
+  // non-win a TIMEOUT, because the ordinary attack phase cannot mass and one
+  // moment is not enough weather to decide a battle.
+  const b = boardAt('gallowmoor', 9);
+  const fired = [];
+  for (let i = 0; i < MUSTER.waves.length; i++) {
+    const w = MUSTER.waves[i];
+    b.tick = Math.round(b.rules.hardCapTicks * (w.at + w.span / 2));
+    const out = [];
+    assert.equal(muster(b, out, new Set()), true, `wave ${i + 1} never fired`);
+    const ev = b.events.filter((e) => e.type === EVENTS.ENEMY_MUSTER).at(-1);
+    assert.equal(ev.wave, i + 1, 'a wave announced the wrong number');
+    assert.equal(ev.waves, MUSTER.waves.length);
+    fired.push(ev.bodies);
+  }
+  assert.equal(b.ai.musterWave, MUSTER.waves.length, 'the schedule did not run out');
+  // ...and it is genuinely SPENT: no fourth wave at any later tick.
+  b.tick = b.rules.hardCapTicks - 1;
+  assert.equal(muster(b, [], new Set()), false, 'a fourth wave fired');
+  // Each wave commits a larger SHARE, which is what makes the last one read as
+  // the enemy emptying its country rather than as the first one again.
+  for (let i = 1; i < MUSTER.waves.length; i++) {
+    assert.ok(MUSTER.waves[i].commit > MUSTER.waves[i - 1].commit,
+      'the schedule does not escalate');
+    assert.ok(MUSTER.waves[i].minBodies >= MUSTER.waves[i - 1].minBodies,
+      'a later wave has a lower floor than an earlier one');
+  }
+  assert.ok(fired.every((n) => n > 0));
+});
+
+test('a window that closes without a host advances to the NEXT wave', () => {
+  // An enemy too thin at minute six is not owed that moment at minute twelve;
+  // it is owed the bigger one the schedule says comes next. Without this the
+  // index sticks and the whole rest of the ladder never fires.
+  const b = boardAt('riverfen', 0);
+  b.ai.musterWave = 0;
+  b.tick = Math.round(b.rules.hardCapTicks * (MUSTER.waves[0].at + MUSTER.waves[0].span)) + 1;
+  assert.equal(muster(b, [], new Set()), false);
+  assert.equal(b.ai.musterWave, 1, 'a lapsed window did not advance the schedule');
 });
 
 test('...and every order in it is one synchronized wave at the camp', () => {
@@ -97,7 +155,11 @@ test('it announces itself with BOTH numbers a player needs', () => {
   assert.equal(muster(b, [], new Set()), true);
   const ev = b.events.find((e) => e.type === EVENTS.ENEMY_MUSTER);
   assert.ok(ev, 'the set-piece fired silently');
-  assert.ok(ev.bodies >= MUSTER.minBodies, `announced ${ev.bodies} bodies`);
+  assert.ok(ev.bodies >= MUSTER.waves[0].minBodies, `announced ${ev.bodies} bodies`);
+  // WHICH of the schedule this is, so the alert can escalate its language and a
+  // reader can tell the third host from the first without re-deriving a window.
+  assert.equal(ev.wave, 1);
+  assert.equal(ev.waves, MUSTER.waves.length);
   assert.ok(ev.arriveTick > ev.tick, 'it announced an arrival in the past');
   // The WARNING IS THE TRAVEL TIME. A host that lands the instant it is
   // announced cannot be answered, which is the whole feature.
@@ -138,12 +200,28 @@ test('a thin enemy raises no host, and does NOT burn its one chance', () => {
   assert.equal(b.ai.musterTick, 0, 'a failed muster latched anyway');
 });
 
-test('outside the window nothing happens, at either end', () => {
-  for (const frac of [0.1, 0.95]) {
-    const b = boardAt('gallowmoor', 9, frac);
-    assert.equal(muster(b, [], new Set()), false, `fired at ${frac} of the cap`);
-    assert.equal(b.ai.musterTick, 0);
-  }
+test('outside the window nothing happens, and only the LATE end burns a wave', () => {
+  const waves = MUSTER.waves;
+
+  // TOO EARLY. Nothing fires and — the half worth asserting — the index does
+  // NOT move: a think before the first window must not spend a wave the enemy
+  // never got, or the schedule would be exhausted by the opening minute.
+  const early = boardAt('gallowmoor', 9);
+  early.tick = Math.round(early.rules.hardCapTicks * (waves[0].at - 0.05));
+  assert.equal(muster(early, [], new Set()), false, 'fired before the first window');
+  assert.equal(early.ai.musterTick, 0);
+  assert.equal(early.ai.musterWave, 0, 'an early think burned a wave');
+
+  // TOO LATE, on the last wave. Nothing fires, and the index advances PAST the
+  // schedule so `musterWindow` answers null rather than retrying the same
+  // window for the rest of the battle.
+  const late = boardAt('gallowmoor', 9, waves.length - 1);
+  const last = waves[waves.length - 1];
+  late.tick = Math.round(late.rules.hardCapTicks * (last.at + last.span + 0.02));
+  assert.equal(muster(late, [], new Set()), false, 'fired after the last window');
+  assert.equal(late.ai.musterTick, 0);
+  assert.equal(late.ai.musterWave, waves.length, 'a lapsed window did not retire');
+  assert.equal(musterWindow(late), null);
 });
 
 test('--nomuster reverts it completely', () => {
@@ -157,7 +235,7 @@ test('--nomuster reverts it completely', () => {
 });
 
 test('the contract is bumped, and here is the blob that proves it was needed', () => {
-  assert.equal(CONTRACT_VERSION, 13);
+  assert.equal(CONTRACT_VERSION, 14);
 
   const b = boardAt('gallowmoor', 9);
   assert.equal(muster(b, [], new Set()), true);
@@ -170,13 +248,17 @@ test('the contract is bumped, and here is the blob that proves it was needed', (
   assert.equal(resumed.ai.musterTick, b.ai.musterTick);
   assert.equal(muster(resumed, [], new Set()), false, 'a resumed board mustered twice');
 
-  // ...and the same blob in its v12 SHAPE — no latch at all, which is what a
-  // save written before this pass looks like. It raises a SECOND host. This is
-  // the failure CONTRACT_VERSION exists to discard, asserted rather than argued:
-  // the number tracks what the engine DOES with a blob, not its field list.
-  const v12 = JSON.parse(JSON.stringify(b));
-  delete v12.ai.musterTick;
-  assert.equal(muster(v12, [], new Set()), true,
-    'a v12-shaped blob did NOT double-fire — if this is now false the bump may be'
-    + ' unnecessary, which is a finding rather than a passing test');
+  // ...and the same blob in its v13 SHAPE — `musterTick` and NO `musterWave`,
+  // which is exactly what a save written before this pass looks like. The
+  // missing index reads as 0, so wave ONE is due again at a tick still inside
+  // its own window, and the enemy raises a second host of the wave it already
+  // spent. That is the engine stepping a blob differently rather than merely
+  // reading a missing field, which is what the number tracks — asserted rather
+  // than argued.
+  const v13 = JSON.parse(JSON.stringify(b));
+  delete v13.ai.musterWave;
+  assert.equal(v13.ai.musterTick, b.ai.musterTick, 'the v13 blob lost the wrong field');
+  assert.equal(muster(v13, [], new Set()), true,
+    'a v13-shaped blob did NOT re-raise wave 1 — if this is now false the bump may'
+    + ' be unnecessary, which is a finding rather than a passing test');
 });

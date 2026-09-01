@@ -135,7 +135,7 @@ import {
  * event costs nothing, because nothing in `battle/` or `tools/` reads
  * `state.events` at all: the only reference is the clear at the top of `step`.
  */
-export const CONTRACT_VERSION = 13;
+export const CONTRACT_VERSION = 14;
 
 /** Booster ids the battle engine knows how to run. */
 export const BOOSTER_IDS = ['rally', 'march', 'bombard', 'fortify', 'tithe'];

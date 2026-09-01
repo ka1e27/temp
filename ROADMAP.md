@@ -165,13 +165,16 @@ is the smoke suite's own default window.
 
 ### Ranked recommendations
 
-**1. Make the muster a schedule, not a single event.** Two to four escalating,
-telegraphed waves per battle instead of one. It is the only item aimed at the measured
-defect, ~90% of the infrastructure exists (`musterSources`, the ETA, the fog-safe
-alert), and it is what AI War/They Are Billions/Kingdom all do. Needs a
-`CONTRACT_VERSION` bump (same category as v13) and bisection at n≥96. Plausible side
-benefit already recorded for C1: a harder fight can *shorten* a battle, which is the
-other side of the 93%-timeout coin.
+**1. ~~Make the muster a schedule, not a single event.~~ DONE.** Three escalating,
+individually-announced waves at 0.30 / 0.50 / 0.70 of the hard cap, tried in order off
+`state.ai.musterWave`; `CONTRACT_VERSION` 13 → 14, because a v13 blob reads the missing
+index as 0 and re-raises the wave it already spent. **Measured against `--nomuster` on
+four rows (tiers 1/3/5/6), and it did what it was aimed at**: the number of non-wins is
+unchanged (79 against 80) and sixteen of them changed kind — timeouts 74 → 59, defeats
+5 → 21, so the timeout share of every failure goes 94% → 74%. Win rates moved
+−2/−2/+2/−4, inside the noise at their sample sizes, and all four rows stay in band, so
+no dial moved. Full numbers and the tier-1 reversal (the opener now beats the BOT and
+not a passive player) are in CLAUDE.md under "The muster".
 
 **2. Fix the opening's first ninety seconds.** Give the player one known target at tick
 0 — or have the coach teach *march-to-reveal* rather than "drag onto a building" — and

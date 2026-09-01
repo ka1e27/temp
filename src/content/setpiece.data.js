@@ -35,9 +35,24 @@
 //    the enemy has just emptied its own country and go and take it. The second
 //    is not scripted — it falls out of `launch()` debiting every source.
 //
-// 3. ONCE. `state.ai.musterTick` is written when it fires and checked before it
-//    can fire again. A set-piece that repeats is a phase, and a phase is the
-//    grinder this exists to interrupt.
+// 3. A SCHEDULE, NOT A PHASE, AND NOT A SINGLE SHOT EITHER. `state.ai.musterWave`
+//    is the index of the next wave due; a wave that fires advances it and can
+//    never fire twice. Firing ONCE per battle was the first cut and it left the
+//    diagnosis half-answered: 93% of every non-win in this campaign is a
+//    TIMEOUT rather than a defeat, because the ordinary attack phase cannot
+//    mass (measured: 122 enemy troops across 8 sites pooling 16 against a
+//    59-defender camp), so the enemy is weather and one scripted moment is not
+//    enough weather to decide anything. Three widely-spaced, escalating,
+//    individually-announced commitments is still not a phase — the grinder runs
+//    at about one field battle a SECOND, and three events in twenty minutes
+//    cannot be mistaken for it.
+//
+//    This is what AI War, They Are Billions, Kingdom Two Crowns and Dune II all
+//    do, and none of them made the tactical AI smarter: they manufactured
+//    telegraphed spikes at the strategic layer. The alternative is disproven
+//    here — `tools/simpool.js` taught the harness to concentrate and moved
+//    nothing (25%/33% and 27%/23%, opposite signs), because "the force never
+//    exists".
 //
 // 4. IT MUST BE A HOST OR IT MUST NOT HAPPEN. `minBodies` is what stops the
 //    loudest announcement in the game arriving in front of eleven militia. If
@@ -52,27 +67,34 @@
 //    second table to keep in step.
 
 export const MUSTER = Object.freeze({
-  /** Earliest, as a fraction of `rules.hardCapTicks`. Comfortably past every
-   *  tier's `warmupSec` (90-255s) so the host is drawn from a country that has
-   *  actually developed, and well before the cap so there is a battle left to
-   *  fight afterwards. */
-  atFrac: 0.42,
-
-  /** Latest. Past this the moment has gone: a host that lands with three
-   *  minutes on the clock cannot be answered either way, so it would be a
-   *  difficulty spike wearing a set-piece's clothes. If the enemy has not
-   *  raised one by here, this battle simply does not have a muster in it. */
-  lastFrac: 0.72,
-
-  /** Share of each contributing site's SPARE garrison — spare meaning above
-   *  `floorFor`, because it goes through the same `sourceFrom` every other
-   *  phase uses. High on purpose: the whole point is a commitment, and the
-   *  counter-play in rule 2 only exists if their country is genuinely thin
-   *  afterwards. */
-  commit: 0.75,
-
-  /** Below this it is a rumour, not a host — see rule 4. */
-  minBodies: 24,
+  /**
+   * THE SCHEDULE. Each wave owns a window `[at, at + span]` as a fraction of
+   * `rules.hardCapTicks`, and they are tried in order.
+   *
+   * `at` 0.30 is comfortably past every tier's `warmupSec` (90-255s), so even
+   * the first host is drawn from a country that has actually developed. The
+   * last window closes at 0.82, leaving nearly a fifth of the clock — a host
+   * that lands with no time to answer is a difficulty spike wearing a
+   * set-piece's clothes, which is what `lastFrac` 0.72 protected before.
+   *
+   * `commit` and `minBodies` both ESCALATE. The first wave is a raid the player
+   * can absorb; the third is the enemy emptying its country, and it should feel
+   * like a different event rather than the same one again. The rising floor is
+   * the other half of that: a late wave that could only scrape together
+   * eighteen bodies is not the climax this schedule is promising, and it is
+   * better skipped than announced.
+   *
+   * Each `span` is deliberately WIDE (12% of the cap, 2-3 minutes). A wave does
+   * not latch on failure, so a thin enemy keeps trying across its whole window
+   * — an enemy that is poor at minute six and rich at minute nine still gets
+   * its moment, which is the rule the one-shot version already had and the one
+   * most easily lost in a rewrite.
+   */
+  waves: Object.freeze([
+    Object.freeze({ at: 0.30, span: 0.12, commit: 0.55, minBodies: 18 }),
+    Object.freeze({ at: 0.50, span: 0.12, commit: 0.70, minBodies: 24 }),
+    Object.freeze({ at: 0.70, span: 0.12, commit: 0.85, minBodies: 30 }),
+  ]),
 
   /** How many sites feed it. Deliberately far above `AI.maxSources` (3), which
    *  bounds an ORDINARY assault's search: this is the one moment the enemy is

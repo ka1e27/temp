@@ -317,8 +317,9 @@ export function think(state) {
   const guarded = homeGuard(state, out, busy);
   freeLunch(view, knobs, out, busy, taken);
   defend(view, knobs, out, busy, guarded);
-  // THE SET-PIECE, once per battle — battle/setpiece.js. Placed HERE and not
-  // earlier: the household guard and any site fighting off its own attack have
+  // THE SET-PIECE — battle/setpiece.js, three escalating waves on a schedule
+  // and at most one per think. Placed HERE and not earlier: the household
+  // guard and any site fighting off its own attack have
   // already taken their troops off the board, so the host is drawn from what is
   // genuinely spare. Placed here and not LATER because it is a commitment — it
   // gets first refusal on the surplus, ahead of the routine assault scan, or on

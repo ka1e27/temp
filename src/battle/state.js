@@ -300,16 +300,21 @@ export function createBattleState(config) {
      *  so a listener can never mutate state mid-iteration. */
     events: [],
 
-    // `musterTick` is the set-piece's one-shot latch — 0 until the enemy has
-    // committed its host, the tick it did so afterwards (battle/setpiece.js).
-    // It is what CONTRACT_VERSION 13 is for: a v12 blob reads it as undefined,
-    // which is the RIGHT default for a battle that never had one and the wrong
-    // one for a battle resumed after its muster already landed — that board
-    // gets a SECOND host, which is the engine stepping a blob differently
-    // rather than merely reading a missing field.
+    // `musterWave` is the index of the next set-piece wave due, and it is what
+    // CONTRACT_VERSION 14 is for. The muster fires on a SCHEDULE now
+    // (content/setpiece.data.js `MUSTER.waves`), so a v13 blob — which carries
+    // only the old one-shot `musterTick` — reads the index as undefined, falls
+    // back to 0, and re-opens wave 1 on a board that has already been through
+    // it. That is the engine stepping a blob differently rather than merely
+    // reading a missing field, which is exactly what this number tracks; it is
+    // the same shape as v13 itself, one schedule later.
+    //
+    // `musterTick` stays: it is the tick of the LAST wave to launch, which is
+    // what the HUD and the harness's answer read, and keeping it means the
+    // field they consume did not change meaning underneath them.
     ai: {
       nextThinkTick: 0, activeAttacks: [], srcCooldown: {},
-      learnedPlayerComp: emptyComp(), musterTick: 0,
+      learnedPlayerComp: emptyComp(), musterTick: 0, musterWave: 0,
     },
     boosters: makeBoosters(config.boosters),
 

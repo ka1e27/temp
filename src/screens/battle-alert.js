@@ -347,7 +347,8 @@ export function wireAlerts(o) {
   // player can see and `fxVisible` gates only the burst and the sound.
   off(bus.on('battle:enemy-muster', (ev) => {
     const secs = Math.max(1, Math.round(((ev.arriveTick ?? 0) - (ev.tick ?? 0)) / TICK_HZ));
-    say(RESULTS.muster(ev.bodies ?? 0, secs), 'danger', ev.siteId);
+    say(RESULTS.muster(ev.bodies ?? 0, secs, ev.wave ?? 1, ev.waves ?? 1),
+      'danger', ev.siteId);
   }));
 
   off(bus.on('battle:attrition-stage', (ev) => {

@@ -57,10 +57,27 @@ export function musterSources(state, target, busy) {
 
 /** The window, in ticks, derived from this region's own hard cap — see rule 5
  *  in the data table for why there is no per-region column. */
+/**
+ * The wave due right now, or null.
+ *
+ * Waves are tried IN ORDER off `state.ai.musterWave`, never by scanning for
+ * whichever window happens to contain the tick: a battle that runs long must
+ * not be able to skip wave 2 and open with wave 3, and one that is paused
+ * across a window boundary must not fire two in the same second. The index
+ * only ever advances, and only on a wave that actually launched.
+ */
 export function musterWindow(state) {
   const cap = state.rules?.hardCapTicks ?? 0;
   if (!(cap > 0)) return null;
-  return { from: Math.round(cap * MUSTER.atFrac), to: Math.round(cap * MUSTER.lastFrac) };
+  const i = state.ai?.musterWave ?? 0;
+  const w = MUSTER.waves[i];
+  if (!w) return null;
+  return {
+    index: i,
+    wave: w,
+    from: Math.round(cap * w.at),
+    to: Math.round(cap * (w.at + w.span)),
+  };
 }
 
 /**
@@ -78,29 +95,37 @@ export function musterWindow(state) {
  */
 export function muster(state, out, busy) {
   if (state.ai.noMuster) return false;
-  // ONCE. See rule 3 — a set-piece that repeats is just another phase.
-  if (state.ai.musterTick) return false;
   const win = musterWindow(state);
-  if (!win || state.tick < win.from || state.tick > win.to) return false;
+  // Past the last wave, or between two windows. `musterWindow` answers null
+  // once the schedule is spent, so there is no separate "done" flag to keep in
+  // step with the index.
+  if (!win) return false;
+  if (state.tick < win.from) return false;
+  // THE WINDOW CLOSED WITHOUT A HOST. Advance so the NEXT wave is due rather
+  // than retrying this one forever — an enemy too thin at minute six is not
+  // owed that moment at minute twelve, it is owed the bigger one the schedule
+  // says comes next.
+  if (state.tick > win.to) { state.ai.musterWave = win.index + 1; return false; }
 
   const camp = state.sites.find((s) => s.kind === 'camp' && s.owner === FOE);
   if (!camp) return false;
 
   const sources = musterSources(state, camp, busy);
   if (!sources.length) return false;
-  const host = poolOf(sources, MUSTER.commit);
+  const host = poolOf(sources, win.wave.commit);
   const bodies = total(host);
   // A HOST OR NOTHING. Below the floor this returns false WITHOUT setting
   // `musterTick`, so the enemy keeps trying on every think until the window
   // closes — an enemy that is thin at minute eight and rich at minute eleven
   // still gets its moment. A one-shot check at the opening tick would silently
   // spend the whole feature on whichever think happened to land first.
-  if (bodies < MUSTER.minBodies) return false;
+  if (bodies < win.wave.minBodies) return false;
 
-  const arriveTick = launch(state, out, sources, camp, MUSTER.commit, busy);
+  const arriveTick = launch(state, out, sources, camp, win.wave.commit, busy);
   if (!arriveTick) return false;
 
   state.ai.musterTick = state.tick;
+  state.ai.musterWave = win.index + 1;
   pushEvent(state, EVENTS.ENEMY_MUSTER, {
     siteId: camp.id,
     // `to` rather than a `defender` field, because `render/fog.js fxVisible`
@@ -112,6 +137,10 @@ export function muster(state, out, busy) {
     bodies,
     sources: sources.length,
     arriveTick,
+    // Which of the schedule this is, so the alert can escalate its language and
+    // a test can tell wave 3 from wave 1 without re-deriving the window.
+    wave: win.index + 1,
+    waves: MUSTER.waves.length,
   });
   return true;
 }

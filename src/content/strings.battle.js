@@ -133,8 +133,22 @@ export const RESULTS = Object.freeze({
    * handlers around it in screens/battle-alert.js already have, and it matters
    * because the event bus is emitted regardless of fog.
    */
-  muster: (bodies, seconds) => `THE HOST MARCHES — ${bodies} closing on your camp,`
-    + ` ${seconds}s out. Their country is thin behind it.`,
+  muster: (bodies, seconds, wave = 1, waves = 1) => {
+    // ESCALATING, because the schedule is only legible as a schedule if the
+    // lines differ: three identical announcements read as the same alert
+    // repeating, which is a bug rather than a rising tide. The last one is
+    // named as the last, so a player who has held twice knows what holding a
+    // third time is worth.
+    const head = wave >= waves ? 'THE LAST HOST MARCHES'
+      : wave > 1 ? 'ANOTHER HOST MARCHES' : 'THE HOST MARCHES';
+    // The counter-play hint is on every wave, because it is true on every wave
+    // and it is the whole point of the mechanic — but it sharpens, since by the
+    // third the enemy really has committed everything.
+    const tail = wave >= waves ? 'Everything they have left is in it.'
+      : wave > 1 ? 'Their country is thinner still behind it.'
+        : 'Their country is thin behind it.';
+    return `${head} — ${bodies} closing on your camp, ${seconds}s out. ${tail}`;
+  },
   incomeNow: 'Income now',
   bestTime: 'Best time',
   // WHY, not just WHAT. Every one of these is derivable from the outcome the

@@ -163,18 +163,27 @@ mechanically. This is what lets the whole simulation run headless with zero mock
 `meta/modifiers.js → BattleConfig → battle/state.js`, and
 `battle/outcome.js → BattleOutcome → meta/rewards.js`. Both directions are validated at
 runtime by `assertBattleConfig` / `assertBattleOutcome`. Changing a field means bumping
-`CONTRACT_VERSION` (currently **13**) — which is also what makes `meta/resume.js` discard a
+`CONTRACT_VERSION` (currently **14**) — which is also what makes `meta/resume.js` discard a
 mid-battle blob whose shape the current engine would step wrongly. **Read the version off
 `contract.js`, not off this line**: it said 10 for a whole release after v11 shipped, which
 is the same staleness this file warns about at "Still open".
 
+**v14 IS THE SET-PIECE BECOMING A SCHEDULE, and it is the v8 lesson a SIXTH time.**
+`state.ai` gained `musterWave`, the index of the next of three escalating waves
+(`battle/setpiece.js`) — and no CONFIG field moved. A v13 blob reads the missing index as
+**0**, which is the RIGHT-LOOKING default and the wrong one: wave one is due again at a
+tick still inside its own window, so the enemy raises the host it already spent. Note the
+failure is worse than v13's because the default is plausible — this is the shape to watch
+for whenever a new field's zero value is also a legal value.
+
 **v13 IS THE SET-PIECE, and it is the v8 lesson a FIFTH time.** `state.ai` gained
-`musterTick`, the latch that says whether the enemy has already committed its one host
+`musterTick`, the latch that says whether the enemy has already committed a host
 (`battle/setpiece.js`) — and no CONFIG field moved, again. A v12 blob resumed AFTER its
 muster landed reads the latch as undefined, sits inside the window, and raises a second
 host, which is the engine stepping a blob differently rather than merely reading a
 missing field. The `ENEMY_MUSTER` event that ships beside it needed no bump of its own:
-nothing in `battle/` or `tools/` reads `state.events` at all.
+nothing in `battle/` or `tools/` reads `state.events` at all — still true at v14, where
+the event merely grew `wave`/`waves` fields for the alert and the tests.
 
 **v12 is the v8 lesson a FOURTH time, and by now that is the pattern rather than the
 exception.** A field battle takes `MELEE.seconds` (see "A fight takes time" below), so a
@@ -3199,15 +3208,99 @@ Confirmed in real Chrome, driven to the actual results screen: `You held the fie
 
 ## The muster: the one thing the enemy does that you have to answer
 
-`content/setpiece.data.js` + `battle/setpiece.js`, one phase of `think()`, once per
-battle. It exists because of a measurement this file already carries: on gallowmoor the
-enemy sends **2,114 columns in twenty minutes at a median size of two**, about one field
-battle a second, forever. It is not making bigger decisions as difficulty rises; it is
-making vastly more, equally tiny ones — and a permanent grinder is hard to tune precisely
-because nothing that happens in it is decisive.
+`content/setpiece.data.js` + `battle/setpiece.js`, one phase of `think()`. It exists
+because of a measurement this file already carries: on gallowmoor the enemy sends **2,114
+columns in twenty minutes at a median size of two**, about one field battle a second,
+forever. It is not making bigger decisions as difficulty rises; it is making vastly more,
+equally tiny ones — and a permanent grinder is hard to tune precisely because nothing
+that happens in it is decisive.
 
-So once per battle it stops grinding and commits: the spare from up to twelve sites, in
-ONE synchronized wave, aimed at the player's camp, announced out loud.
+So three times a battle it stops grinding and commits: the spare from up to twelve sites,
+in ONE synchronized wave, aimed at the player's camp, announced out loud.
+
+### It is a SCHEDULE, and one shot was not enough weather to decide anything
+
+The first cut fired **once**, and it left the diagnosis half-answered. The problem this
+feature exists to attack is that **93% of every non-win in this campaign is a TIMEOUT
+rather than a defeat** — the enemy is weather, and one scripted moment in twenty minutes
+is not enough weather to decide a battle. `MUSTER.waves` is three windows tried in order
+off `state.ai.musterWave`:
+
+```
+wave   window (fraction of hardCapTicks)   commit   minBodies
+  1              0.30 .. 0.42               0.55        18
+  2              0.50 .. 0.62               0.70        24
+  3              0.70 .. 0.82               0.85        30
+```
+
+**IT IS STILL NOT A PHASE, and that is the line the schedule has to stay on the right
+side of.** The grinder runs at about one field battle a SECOND; three announced,
+minutes-apart commitments cannot be mistaken for it. `commit` and `minBodies` both
+escalate on purpose — the first wave is a raid a player absorbs, the third is the enemy
+emptying its country, and the rising floor is what stops a late wave being announced as
+the climax when it could only scrape together eighteen bodies.
+
+**THE INDEX ADVANCES ON A LAPSE, NOT ONLY ON A FIRE**, and getting that wrong is the
+difference between a schedule and a retry loop: an enemy too thin at minute six is not
+owed that moment at minute twelve, it is owed the bigger one that comes next. Within a
+window nothing latches, which is the rule the one-shot version already had and the one
+most easily lost in a rewrite — an enemy poor at minute six and rich at minute nine still
+gets its wave. `musterWindow` answers null once the index passes the last wave, so there
+is no separate "done" flag to keep in step with it.
+
+**AND THE ANNOUNCEMENT ESCALATES, because three identical alerts read as one alert
+repeating — a bug rather than a rising tide.** `RESULTS.muster` takes the wave and the
+count: `THE HOST MARCHES` → `ANOTHER HOST MARCHES` → `THE LAST HOST MARCHES`, with the
+counter-play hint sharpening from *"Their country is thin behind it"* to *"Everything
+they have left is in it."* Confirmed in real Chrome on a live board, all three lines
+through the real alert strip in the danger tone — and worth knowing for the next probe:
+**the strip HOLDS each message and queues the rest**, so three emits 400ms apart read
+back as the PREVIOUS line each time. That is the queue working, not a wiring failure.
+
+**MEASURED, `--nomuster` AS THE CONTROL, MATCHED SEEDS. THE WIN RATE DOES NOT MOVE AND
+THE FAILURE MODE DOES**, which is exactly what it was built to do:
+
+```
+region       tier   n    win%      win-med      all-med     DEFEATS  timeouts (ahead/behind)
+riverfen       1   48  85 -> 83   8.6 -> 8.8  10.2 -> 9.0   0 -> 4    7 -> 4   (4/3 -> 3/1)
+gallowmoor     3   48  54 -> 52  14.2 ->13.5  24.0 ->19.6   2 -> 5   20 -> 18  (13/7 -> 14/4)
+ravensmarch    5   48  33 -> 35  17.5 ->18.0  30.4 ->28.2   2 -> 9   30 -> 22  (10/20 -> 12/10)
+cinderwatch    6   24  25 -> 21  18.4 ->13.4  35.1 ->35.1   1 -> 3   17 -> 16  (12/5 -> 16/0)
+```
+
+**THE NON-WIN COUNT IS UNCHANGED — 79 AGAINST 80 — AND SIXTEEN OF THEM CHANGED KIND.**
+Timeouts fall from 74 to 59 and defeats rise from 5 to 21, so the timeout share of every
+failure goes **94% → 74%** and the defeat share **6% → 26%**. The schedule changed almost
+nothing about how OFTEN the player fails and a great deal about HOW.
+
+All four rows stay `ok` against their band. The win-rate deltas (−2, −2, +2, −4) are
+inside the SEM at their sample sizes and mean nothing; the defeat counts are a rare event
+and 0→4 and 2→9 are not noise. The all-run medians falling 12%, 18% and 7% on the three
+rows that RESOLVE are the same fact from the other side: battles that used to grind to
+the cap now finish. (cinderwatch's stays pinned at its cap either way — tier 6 is
+clock-bound and this file already records it as taking almost no losses at all. What
+moved there is the composition of its timeouts: **five behind to zero behind**, so every
+remaining one is a battle the player was winning when the horns sounded.)
+
+**cinderwatch is an n=24 SCREEN, not a result** — this file's own rule — and it is here
+because its direction agrees with three independent n=48 rows, not because 21% and 25%
+can be told apart.
+
+That is the first measured dent in this file's own campaign-wide finding — *"twelve
+defeats in five hundred and seventy-six battles… `WIN_BAND` is measuring what fraction
+FINISH before the clock"* — and it is a dent made **without touching a single dial**.
+
+**THE OPENER CAN NOW BEAT THE BOT AND NOT A PASSIVE PLAYER, WHICH IS THE RIGHT WAY ROUND
+AND WAS NOT DESIGNED.** riverfen goes 0 → 4 defeats for the harness while the passive
+re-take two sections down survives all three waves on all three seeds. The bot is out
+contesting ground with a thin camp when a host lands; a player doing nothing has
+everything at home. Overextending and losing your camp to the announced host is a lesson
+the first region is a good place to learn, and it is one the campaign could not teach at
+all before.
+
+**Three rows of twenty-four, so do not read it as a campaign result.** Tiers 1, 3 and 5,
+chosen because all three were in band and none was clock-pinned; a full sweep belongs to
+whichever pass next re-takes the table.
 
 **AIMING IT AT THE CAMP IS THREE DECISIONS AT ONCE.** It is the lose condition, so it is
 the one target a player cannot decide to ignore. It is a site the player OWNS, so the
@@ -3240,11 +3333,11 @@ relievers`, which is the existing pattern for converging a whole country on one 
 site. Pinned as a test, because "built, documented, unreachable" is this project's
 signature failure.
 
-**IT LATCHES ONLY ON SUCCESS, and that half matters more than it sounds.** A thin enemy
-returns false *without* setting `musterTick`, so it keeps trying until the window closes:
-an enemy that is poor at minute eight and rich at minute eleven still gets its moment. A
-one-shot check at the opening tick would have spent the entire feature on whichever think
-happened to land first.
+**A WAVE LATCHES ONLY ON SUCCESS, and that half matters more than it sounds.** A thin
+enemy returns false *without* setting `musterTick` or advancing the index, so it keeps
+trying until that window closes: an enemy that is poor at minute eight and rich at minute
+eleven still gets its moment. A one-shot check at the opening tick would have spent the
+whole wave on whichever think happened to land first.
 
 **Placed after `homeGuard` and `defend`, before `attack`.** The household guard and any
 site fighting off its own assault have already taken their troops off the board, so the
@@ -3281,15 +3374,42 @@ camp at all, so `defendTurn`'s first `if` is false on every think of every numbe
 re-takeable — a muster nobody answers is a difficulty spike, and an answer with nothing
 to answer is dead code.
 
-**Contract v13 — the v8 lesson a FIFTH time: no CONFIG field moved.** `state.ai` gained
-`musterTick`, and a v12 blob resumed after its muster already landed reads the latch as
-undefined, sits inside the window, and raises a **second host**. That is the engine
-stepping a blob differently, which is what the number tracks. The new `ENEMY_MUSTER`
-event costs nothing and needed no bump of its own — nothing in `battle/` or `tools/`
-reads `state.events` at all, verified rather than assumed.
+**Contract v13 was the v8 lesson a FIFTH time and v14 is the SIXTH — no CONFIG field
+moved either time.** v13 added `state.ai.musterTick`, so a v12 blob resumed after its
+host landed read the latch as undefined and raised a second one. v14 added
+`state.ai.musterWave`, and a v13 blob is worse in the same shape: the missing index reads
+as **0**, so wave ONE is due again at a tick still inside its own window and the enemy
+raises the host it already spent. Both are the engine stepping a blob differently, which
+is what the number tracks. The `ENEMY_MUSTER` event costs nothing and needed no bump of
+its own — nothing in `battle/` or `tools/` reads `state.events` at all, verified rather
+than assumed. `tests/setpiece.test.js` asserts the v13 double-fire directly rather than
+arguing it, and says so in its own failure message if it ever stops being true.
 
 Confirmed in real Chrome on a live gallowmoor board, through the real alert strip:
 `THE HOST MARCHES — 190 closing on your camp, 32s out. Their country is thin behind it.`
+
+**⇒ THE SCHEDULE FIXED THE TIER-1 PROBLEM THE SECTION BELOW DIAGNOSES, AND NOT ON
+PURPOSE.** Everything from here to "Where it does fire" was measured against the SINGLE
+SHOT and is provenance. Re-taken on the same three passive riverfen seeds against the
+three-wave schedule:
+
+```
+seed     schedule ON                                   schedule OFF     was (one shot)
+1000     timeout 17.1m  w1 5.1m/48  w2 8.6m/54  w3 12.0m/36   timeout    LOSS 9.9m
+8919     timeout 17.1m  w1 5.1m/38  w2 8.6m/55  w3 12.0m/41   timeout    timeout
+16838    timeout 17.1m  w1 5.2m/49  w2 8.6m/63  w3 12.0m/41   timeout    LOSS 9.4m
+```
+
+**All three waves fire on every seed and the camp survives all three, where ONE host
+killed it in two of three.** The mechanism is the first wave being earlier and smaller —
+`0.30` at `commit` 0.55 raises 38–49 bodies where `0.42` at 0.75 raised 72–94 — so a
+first-timer now meets a raid they can absorb, and the escalation only reaches a player
+still alive at minute twelve. That is the design question the section below ends on
+("`atFrac`/the tutorial gate") answered by a change made for an unrelated reason, which
+is worth flagging rather than claiming as foresight.
+
+The passive opener still ends in a timeout rather than a win, which is correct: **passive
+play is supposed to lose**, and the muster is no longer what does it.
 
 **⚠ THE `minBodies` FLOOR WAS RECORDED HERE AS SPARING THE CAMPAIGN OPENER, AND THAT
 IS TRUE OF THE BOT AND FALSE OF A PLAYER.** The claim was *"measured over three full
@@ -3308,7 +3428,8 @@ NO ORDERS                                FIRED  3/3    loss 9.9m, timeout, loss 
 **It fires at 7.2m in all three, with 72–94 bodies against a floor of 24** — three to
 four times the number the floor is checking, so `minBodies` never binds and lowering or
 raising it would change nothing. The window is the whole gate: `hardCapMs` 1,026,000 ×
-`atFrac` 0.42 = 430.9s, and the observed fire time is 431s.
+`atFrac` 0.42 = 430.9s, and the observed fire time is 431s. (`atFrac` was the single
+shot's one window and no longer exists — `MUSTER.waves[i].at` replaced it.)
 
 **AND IT IS THE CAUSE OF THE DEFEAT, NOT A COINCIDENCE OF IT** — `--nomuster` over the
 same three passive seeds:
