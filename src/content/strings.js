@@ -283,7 +283,17 @@ export const RECORD = Object.freeze({
 
 export const SHOP = Object.freeze({
   header: 'Spend crowns on things you will feel next battle.',
-  affordIn: 'Affordable in',
+  affordIn: 'in',
+  /** A player who has conquered nothing earns nothing, so every row is
+   *  unaffordable and none of them can be waited for. `timeToAfford` answers
+   *  Infinity there and the wait line used to render it as "~Infinitys" — the
+   *  one outright broken string on the screen, on the first visit anybody
+   *  makes to it. Says what DOES pay instead, the way the relic line does. */
+  noIncome: 'Conquer a region to start earning',
+  /** THE TOTAL, which is the number an idle shop exists to report and the one
+   *  this screen never had. The row's description states what ONE level does;
+   *  this prefixes what all of them together have bought. */
+  ownedSoFar: 'You hold:',
   /** Relics cannot be waited for, so the tooltip names the two places they come
    *  from instead of counting down to a moment that never arrives. */
   relicsFrom: 'Relics come from first conquests and incursion rungs',

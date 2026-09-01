@@ -195,8 +195,17 @@ only where that leaves the attackable region visible (it does at 1920x1080, meas
 a porthole-pinned `OBJECTIVE ·` tag names it everywhere else. Full write-up, including the
 landscape header regression this found and fixed, in CLAUDE.md.
 
-**4. Put a level, a next-effect and a time-to-afford on every shop row.** All three
-numbers already exist.
+**4. ~~Put a level, a next-effect and a time-to-afford on every shop row.~~ DONE**, and
+one of the three was a false premise: the LEVEL has always been shown (`Lv 6`, `3/5`,
+`owned`). What was missing is the TOTAL — a row states what one level does, so `Lv 6` and
+"+12% crowns per second" never added up to the +72% a player was holding. Rows now carry
+`You hold: …`, derived from the upgrade's own effects × its own level so it cannot drift
+from what the engine applies.
+
+The time-to-afford existed, was correct, and lived only in the `title` of a DISABLED
+button — and rendered `Affordable in ~Infinitys` on a fresh save, where income is zero.
+Both fixed; full write-up, including the free-variable bug that made the shop go blank the
+moment anything was bought, in CLAUDE.md.
 
 **5. Name the Marshal, and let abdication retire him.** Pure content, no engine change,
 no contract risk — and it gives recommendation 1's waves a face.

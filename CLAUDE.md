@@ -3835,6 +3835,75 @@ handful of times a battle.
   live inside `meta`, so `fromPersisted` heals them and no migration was needed; and they
   survive a new campaign and a save import, because they are the player's, not the save's.
 
+## The shop said what a level DOES and never what the levels BOUGHT
+
+Three findings, and only one of them is what the ROADMAP entry predicted.
+
+**THE LEVEL WAS ALREADY THERE** — `.shop-level` has rendered `Lv 6` / `3/5` / `owned` all
+along. The entry claiming otherwise was written from a screenshot rather than the DOM;
+recorded here because a to-do list that describes a fix as missing when it shipped is the
+same staleness this file warns about at "Still open".
+
+**WHAT WAS MISSING IS THE TOTAL.** A row states its PER-LEVEL effect in a sentence, so a
+player back after an absence read `Lv 6` and *"+12% crowns per second"* and had no way to
+know they were holding **+72%**. `meta/upgrades.js ownedEffects` multiplies an upgrade's
+own `effects` array by its own level and the row renders `You hold: +72% income · +12h
+away cap`. **The numbers are derived and only the WORDS are authored**
+(`content/effects.data.js`), so a row cannot claim a bonus the engine does not apply —
+`tests/shopowned.test.js` compares every line against `upgradeEffects`, which is the fold
+the battle config actually reads. `mult` compounds and everything else is linear, exactly
+as that function has it: Drill at level 5 reads **−18%** training cost, not −20%.
+
+**AND THE RETURN-VISIT NUMBER WAS COMPUTED, CORRECT, AND INVISIBLE.** `waitText` has
+existed for this feature's whole life and lived only in the `title` of the **disabled** Buy
+button — a hover, on the one control a player cannot press, on the screen the idle half
+exists to bring them back to. Its own comment calls it *"the pull the idle layer runs on"*.
+It is a `.shop-wait` span on the row now, revealed by `:has(.btn.buy:disabled)` so the
+250ms affordability tick still toggles nothing (re-rendering throws keyboard focus, a bug
+already fixed once in that file).
+
+**⚠ AND IT PRINTED `Affordable in ~Infinitys`.** `timeToAfford` answers Infinity at zero
+income, which is exactly a fresh save — no conquests, no income, every row unaffordable —
+so the first player ever to open this screen met the one outright broken string on it.
+Same shape as the relic branch beside it: where waiting is not the answer, say what is
+(*"Conquer a region to start earning"*). Confirmed through the real smoke run, which now
+asserts the wait exists AND does not contain "Infinity".
+
+### A free variable, and why the shop went blank only once something was bought
+
+**`ownedEffects` referenced two constants it never imported.** A free variable is not a
+syntax error and `npm run check` is happy, so the module loaded fine — and the reference
+only evaluates when `level > 0`. Measured in a browser: the shop rendered **25 rows at
+level 0 and ZERO rows the moment anything was bought**, mounting its header and silently
+losing its whole list, with **no exception reaching the console**.
+
+That is the split-closure gotcha this file already records (`createSelection`), arriving
+in a second shape — and the lesson is about the TEST, not the fix. A test that renders the
+shop on a fresh save passes; a test that calls the function for one upgrade at one level
+catches it instantly. `tests/shopowned.test.js` walks **every** upgrade at a level it can
+reach, and its negative control was run: removing the import turns three tests red.
+
+**The browser found it and four probe attempts nearly did not**, for a reason worth
+copying: the failure looked like a broken PROBE. The shop opened, the header was right,
+the treasury ticked, and `Runtime.exceptionThrown` reported nothing. What separated the
+two was bisecting the fixture — baseline 25 rows, `crowns` 25, `upgrades` **0** — which
+named the trigger in one run after four spent guessing at the route into the screen.
+
+### Two more 400-line splits, both along the seam rather than at a line number
+
+`meta/upgrades.js` → `meta/shopbuy.js` (`spendAll`/`buyN`/`suggestedBuy`): that file
+answers *what does this line cost, what does it do, may I buy it*; this one is the LOOP
+over those answers. **It is NOT re-exported**, deliberately — everything in it imports
+`canBuy`/`buy`/`shopListing` back, so a re-export would close a cycle, which is the same
+reason `rally.js`, `refund.js` and `retreat.js` are each imported directly. Three
+consumers: `screens/shop.js`, `tools/simshop.js`, `tests/shopbulk.test.js`.
+
+`screens/shop.js` → `screens/shoprow.js`, on the `worldmap.js`/`worldmap-detail.js` seam:
+the scene owns the overlay, the header figures, the section list and the tick; the row
+builder owns a row. `watched` is handed in as a **getter** rather than as the array,
+because `render()` re-points its own — a reference captured once would leave the tick
+walking rows that have left the document.
+
 ## The campaign map: 23 of 24 plates said nothing, and the secret was already out
 
 **MEASURED on a fresh save: the world map showed twenty-three of twenty-four regions as

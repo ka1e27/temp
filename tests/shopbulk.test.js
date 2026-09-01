@@ -10,9 +10,8 @@ import assert from 'node:assert/strict';
 
 import { createState } from '../src/core/store.js';
 import { UPGRADES, SAFE_MAX_LEVEL } from '../src/content/upgrades.data.js';
-import {
-  levelOf, canBuy, shopListing, spendAll, buyN, suggestedBuy, costAtLevel,
-} from '../src/meta/upgrades.js';
+import { levelOf, canBuy, shopListing, costAtLevel } from '../src/meta/upgrades.js';
+import { spendAll, buyN, suggestedBuy } from '../src/meta/shopbuy.js';
 
 const meta = (crowns = 0, upgrades = {}, relics = 0) => {
   const s = createState({ seed: 1, now: 0 });

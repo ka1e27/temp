@@ -162,7 +162,25 @@
 .shop-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .shop-name { font-weight: var(--w-bold); }
 .shop-desc { font-size: var(--t-sm); color: var(--c-text-dim); }
+/* WHAT THE LEVELS ALREADY BOUGHT ADD UP TO. Dimmer and smaller than the
+   description above it, because the description is what a purchase DOES and
+   this is a receipt — read once on arrival, not on every scan of the row. */
+.shop-owned {
+  font: var(--t-xs) / 1.3 var(--font-num);
+  color: color-mix(in srgb, var(--c-player) 72%, var(--c-text-dim));
+}
 .shop-row-side { display: flex; align-items: center; gap: var(--s-3); }
+/* THE WAIT, REVEALED ONLY WHERE IT IS TRUE. Built on every row so the 250ms
+   affordability tick never has to add or remove a node — the same reason
+   `.shop-suggest` is always present — and shown only while the row's own Buy
+   button is disabled, which is exactly when "come back in four minutes" is
+   information rather than noise. `:has()` keeps the rule with the button whose
+   state it follows, so nothing has to remember to toggle a second class. */
+.shop-wait { display: none; }
+.shop-row:has(.btn.buy:disabled) .shop-wait {
+  display: block; max-width: 8em; text-align: right;
+  font: var(--t-xs) / 1.2 var(--font-num); color: var(--c-text-dim);
+}
 /* An endless line's "x10" stacks ABOVE its price rather than beside it —
    children of a column stretch to the widest one by default, so this needs
    no width rule of its own to line up under `.btn.buy`'s 6.5em. Side-by-side

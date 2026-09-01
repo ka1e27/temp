@@ -8,7 +8,8 @@
 import { UNIT_IDS } from '../src/content/balance.js';
 import { doctrineChoices, doctrineOpen } from '../src/meta/doctrine.js';
 import { UPGRADES } from '../src/content/upgrades.data.js';
-import { shopListing, buy, spendAll } from '../src/meta/upgrades.js';
+import { shopListing, buy } from '../src/meta/upgrades.js';
+import { spendAll } from '../src/meta/shopbuy.js';
 import { recalcIncome } from '../src/meta/idle.js';
 
 /**

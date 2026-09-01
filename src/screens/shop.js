@@ -9,10 +9,11 @@
 import { h, clear, mount, bindText, inertSiblings } from '../ui/dom.js';
 import { compact, rate } from '../ui/format.js';
 import { UI, SHOP } from '../content/strings.js';
-import { shopListing, buy, canBuy, spendAll, buyN, suggestedBuy } from '../meta/upgrades.js';
-import { inventory, buyCharge, canBuyCharge } from '../meta/boosters.js';
-import { incomePerSec, timeToAfford } from '../meta/idle.js';
-import { BOOSTER_LABEL } from './prebattle.js';
+import { shopListing, canBuy } from '../meta/upgrades.js';
+import { spendAll, suggestedBuy } from '../meta/shopbuy.js';
+import { inventory } from '../meta/boosters.js';
+import { incomePerSec } from '../meta/idle.js';
+import { createRowBuilder } from './shoprow.js';
 
 export function createShopScene(ctx) {
   let root = null;
@@ -30,6 +31,13 @@ export function createShopScene(ctx) {
   let lastSuggested = null;
 
   const meta = () => ctx.state.meta;
+  // ONE builder per scene, sharing this scene's own state. `watched` is handed
+  // in as a getter rather than as the array, because `render()` re-points it —
+  // a captured reference would leave the tick walking rows that are no longer
+  // in the document.
+  const rows = createRowBuilder({
+    ctx, meta, render: () => render(), watched: () => watched,
+  });
 
   return {
     id: 'shop',
@@ -166,58 +174,6 @@ export function createShopScene(ctx) {
     return shopListing(meta()).some((g) => g.items.some((i) => i.currency === 'crowns' && i.affordable));
   }
 
-  /** Icon-only by design — the label is the price. Screen readers get the rest. */
-  function buyButton({ label, cost, check, wait, onBuy, currency = 'crowns', suggested = false }) {
-    const ok = check();
-    const relic = currency === 'relics';
-    const el = h(`button.btn.buy${relic ? '.buy-relic' : ''}`, {
-      type: 'button',
-      disabled: !ok,
-      'aria-disabled': ok ? null : 'true',
-      // The ring is a visual-only cue, so a screen-reader user gets the same
-      // claim as a suffix on the button they were already going to read,
-      // rather than a second element to tab past.
-      'aria-label': `${UI.buy} ${label} for ${Math.round(cost)} ${relic ? 'relics' : 'crowns'}`
-        + (suggested ? SHOP.suggestedSuffix : ''),
-      // Showing the wait turns "can't afford" into "come back in 90s",
-      // which is the pull the idle layer runs on — and is a LIE for a relic
-      // price, because no amount of waiting pays one. That row says where they
-      // come from instead.
-      title: ok ? '' : wait(),
-      on: { click: () => { if (check()) { onBuy(); render(); } } },
-    }, relic ? String(cost) : compact(cost));
-    watched.push({ el, check, wait, last: ok });
-    return el;
-  }
-
-  /** "x10": the same purchase, up to ten times, through `buyN` — never a
-   *  single deduction at ten times today's price (a level-9 line does not
-   *  cost nine times its level-0 price). Offered only on endless lines,
-   *  where "again" is ever a question worth a shortcut for. */
-  function bulkBuyButton(item) {
-    const check = () => canBuy(meta(), item.id).ok;
-    const ok = check();
-    const wait = () => waitText(item.cost, item.currency);
-    const el = h('button.btn.ghost.buy-ten', {
-      type: 'button',
-      disabled: !ok,
-      'aria-disabled': ok ? null : 'true',
-      'aria-label': SHOP.buyTenHint(item.name),
-      title: ok ? '' : wait(),
-      on: {
-        click: () => {
-          if (!check()) return;
-          buyN(meta(), item.id, 10, ctx.bus);
-          render();
-        },
-      },
-    }, SHOP.buyTen);
-    watched.push({ el, check, wait, last: ok });
-    return el;
-  }
-
-  // --- structure -----------------------------------------------------------
-
   function render() {
     clear(listRoot);
     watched = [];
@@ -271,7 +227,7 @@ export function createShopScene(ctx) {
       })] : []));
 
       for (const item of group.items) {
-        const row = upgradeRow(item, item.id === suggested);
+        const row = rows.upgradeRow(item, item.id === suggested);
         rowById.set(item.id, row);
         mount(section, row);
       }
@@ -285,98 +241,9 @@ export function createShopScene(ctx) {
       const section = h('section.shop-group', { 'aria-labelledby': 'shop-grp-charges' },
         h('h3#shop-grp-charges', { text: 'Booster charges' }),
         h('p.shop-group-note', { text: 'Carried into battle and consumed when used.' }));
-      for (const b of boosters) mount(section, boosterRow(b));
+      for (const b of boosters) mount(section, rows.boosterRow(b));
       mount(listRoot, section);
     }
   }
 
-  /** @param {boolean} suggested this is `suggestedBuy`'s current pick */
-  function upgradeRow(item, suggested = false) {
-    const maxed = item.reason === 'maxed';
-    // An endless line has no denominator to show — "7 / Infinity" is noise, and
-    // "7 / 64" would advertise a floating-point ceiling as though it were a
-    // design one. Just the level it is at.
-    const owned = item.endless ? (item.level ? `Lv ${item.level}` : '')
-      : item.maxLevel > 1 ? `${item.level}/${item.maxLevel}`
-        : (item.level ? 'owned' : '');
-
-    const buyEl = () => buyButton({
-      label: item.name,
-      cost: item.cost,
-      currency: item.currency,
-      check: () => canBuy(meta(), item.id).ok,
-      wait: () => waitText(item.cost, item.currency),
-      onBuy: () => buy(meta(), item.id, ctx.bus),
-      suggested,
-    });
-
-    return h('div.shop-row', {
-      'data-maxed': maxed ? '1' : null,
-      'data-locked': item.locked ? '1' : null,
-      'data-suggested': suggested ? '1' : null,
-    },
-      h('div.shop-row-main', {},
-        h('span.shop-name', { text: item.name }),
-        h('span.shop-desc', { text: item.desc }),
-        // ALWAYS BUILT, SHOWN BY CSS. The suggestion moves on the 250ms
-        // affordability tick, which deliberately toggles one attribute rather
-        // than re-render()ing — re-rendering throws focus off whatever the
-        // keyboard is on, a bug already fixed once in this file. So the line
-        // that explains the ring cannot be a node that comes and goes; it is a
-        // node that is always there and `[data-suggested]` reveals.
-        h('span.shop-suggest', { text: SHOP.suggestedTag })),
-      h('div.shop-row-side', {},
-        h('span.shop-level.num', { text: owned }),
-        item.locked
-          // The PRICE is still shown — that is what makes a locked line worth
-          // looking at — but there is no control, because a disabled button that
-          // can never enable this session is just a worse label.
-          ? h('span.shop-locked', {
-            text: `${compact(item.cost)} · ${UI.locked}`,
-            'aria-label': `${item.name} costs ${Math.round(item.cost)} crowns and is locked`
-              + ' until the campaign is finished',
-          })
-          : maxed
-            ? h('span.shop-maxed', { text: UI.maxed, 'aria-label': `${item.name} is fully upgraded` })
-            // An endless line also gets "x10" stacked ABOVE its price rather
-            // than beside it: the row's right column is already as wide as
-            // the price button, and a phone has no width to spare next to it
-            // (tools/mobile.mjs audits this screen; see shop-row-buys in CSS).
-            : item.endless
-              ? h('div.shop-row-buys', {}, bulkBuyButton(item), buyEl())
-              : buyEl()));
-  }
-
-  function boosterRow(b) {
-    const name = BOOSTER_LABEL[b.id] ?? b.id;
-    const full = b.count >= b.maxStock;
-    return h('div.shop-row', { 'data-booster': b.id },
-      h('div.shop-row-main', {},
-        h('span.shop-name', { text: name }),
-        h('span.shop-desc', { text: `${b.count} / ${b.maxStock} ${SHOP.chargeLabel} in stock` })),
-      h('div.shop-row-side', {},
-        h('span.shop-level.num', {
-          text: `x${b.count}`, 'aria-label': `${b.count} ${name} charges owned`,
-        }),
-        full
-          ? h('span.shop-maxed', { text: UI.maxed, 'aria-label': SHOP.boosterFull })
-          : buyButton({
-            label: `one ${name} charge`,
-            cost: b.chargeCost,
-            currency: b.chargeCurrency,
-            check: () => canBuyCharge(meta(), b.id, 1).ok,
-            wait: () => waitText(b.chargeCost, b.chargeCurrency),
-            onBuy: () => buyCharge(meta(), b.id, 1, ctx.bus),
-          })));
-  }
-
-  /** Why you cannot afford it yet. For crowns that is a COUNTDOWN, because the
-   *  idle layer really will get you there and saying so is the pull the whole
-   *  idle half runs on. For relics it has to be a PLACE, because no amount of
-   *  waiting pays one — a "~90s" on a relic price would be the only outright
-   *  false thing in this screen. */
-  function waitText(cost, currency) {
-    if (currency === 'relics') return SHOP.relicsFrom;
-    return `${SHOP.affordIn} ~${Math.ceil(timeToAfford(meta(), cost))}s`;
-  }
 }

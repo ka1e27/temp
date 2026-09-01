@@ -70,7 +70,32 @@ export async function runMeta(page, h, step, note, OUT, REGIONS) {
     const rows = await page.eval(() => document.querySelectorAll('.shop-row').length);
     if (!rows) throw new Error('shop opened with no rows');
     await h.hitPoint('.btn.buy', 'a shop Buy button');
-    step(`shop: ${rows} rows, buy buttons hittable`);
+    // THE RECEIPT AND THE WAIT, both of which only exist once something is
+    // OWNED or something is UNAFFORDABLE. A fresh save is neither, so the step
+    // buys a level first — and that is exactly the state a unit test at level 0
+    // cannot reach: this screen once rendered its header and silently no rows
+    // at all the moment any upgrade was bought, with nothing thrown.
+    const shop = await page.eval(async () => {
+      const g = window.__game;
+      const { buy } = await import('/src/meta/upgrades.js');
+      g.state.meta.crowns = 60;              // enough for one level, not two
+      buy(g.state.meta, 'treasury', g.bus);
+      g.scenes.pop(); g.scenes.push(g.screens.shop);
+      await new Promise((r) => setTimeout(r, 250));
+      const row = document.querySelector('.shop-row');
+      const wait = [...document.querySelectorAll('.shop-wait')]
+        .find((e) => getComputedStyle(e).display !== 'none');
+      return {
+        rows: document.querySelectorAll('.shop-row').length,
+        owned: row?.querySelector('.shop-owned')?.textContent ?? null,
+        wait: wait?.textContent ?? null,
+      };
+    });
+    if (!shop.rows) throw new Error('the shop lost every row once a level was bought');
+    if (!shop.owned) throw new Error('a bought line shows no "you hold" receipt');
+    if (!shop.wait) throw new Error('no unaffordable row shows a wait');
+    if (/Infinity/.test(shop.wait)) throw new Error(`the wait reads "${shop.wait}"`);
+    step(`shop: ${rows} rows, buy hittable, "${shop.owned}", "${shop.wait}"`);
     await page.screenshot(`${OUT}/04-shop.png`);
     if (await h.has('.shop-close')) await h.click('.shop-close', 'shop Close');
     else await page.eval(() => window.__game.scenes.pop());
