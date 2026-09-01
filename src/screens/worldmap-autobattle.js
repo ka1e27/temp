@@ -14,6 +14,7 @@
 // panel back.
 import { startAutoResolve, canAutoResolve } from '../meta/autobattle.js';
 import { TICK_MS } from '../core/loop.js';
+import { WORLD } from '../content/strings.js';
 
 /** Wall-clock budget per animation frame, and the tick batch checked against
  *  it. Small enough that even the slowest single tick this project has
@@ -22,13 +23,14 @@ import { TICK_MS } from '../core/loop.js';
 const FRAME_BUDGET_MS = 8;
 const MICRO_TICKS = 10;
 
+// The copy moved to content/strings.js WORLD, where this file's own comment
+// always said it belonged. It also stopped naming "the difficulty table" —
+// that is `npm run sim` and `WIN_BAND`, a description of how the game is
+// tested, shipped to the player as though it were a fact about the war.
 const COPY = Object.freeze({
-  // Not in content/strings.js (owned elsewhere mid-pass): plain strings here,
-  // worth folding in once that file is free again.
-  button: 'Auto-resolve',
-  hint: 'Or let your own tactics fight it in the background — the same policy'
-    + ' the difficulty table is measured with. It can still lose.',
-  cancel: 'Cancel',
+  button: WORLD.autoButton,
+  hint: WORLD.autoHint,
+  cancel: WORLD.autoCancel,
 });
 
 /**

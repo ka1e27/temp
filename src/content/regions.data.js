@@ -150,7 +150,8 @@ export const REGIONS = Object.freeze([
   // Full reasoning: ./regions.provenance.js, "TIER 4".
   T('thanescar', 'Thanescar', 4, [3, 2], ['karrowmere', 'duskfell', 'obsidian'],
     4.90, 17, 13, [[2, 4, 7], 15, 4], 2.10, 0.6, 28.4, 12,
-    'Sixteen enemy sites and two concurrent attacks. You will lose ground somewhere; choose where.',
+    'They come from two directions at once, and never only once. You will'
+    + ' lose ground somewhere; choose where.',
     'branch'),
   T('blackspire', 'Blackspire', 4, [4, -1], ['sunder', 'vaelstrand', 'ironcrown', 'ravensmarch'],
     4.95, 17, 13, [[2, 4, 7], 15, 4], 2.12, 0.6, 34, 13.5,
@@ -159,12 +160,14 @@ export const REGIONS = Object.freeze([
   T('ironcrown', 'Ironcrown', 4, [4, 0],
     ['vaelstrand', 'duskfell', 'blackspire', 'obsidian', 'ravensmarch', 'gravenreach'],
     5.00, 17, 13, [[2, 4, 7], 19, 4], 2.14, 0.6, 40.8, 14.5,
-    'A Marshal holds the throne: the castle guard fights 25% harder and trains 40% faster.',
+    'A Marshal holds the throne. His guard fights harder than its numbers say,'
+    + ' and the gate refills faster than you can empty it.',
     'choke'),
   T('obsidian', 'The Obsidian Throne', 4, [4, 1],
     ['ironcrown', 'duskfell', 'thanescar', 'gravenreach', 'nightharrow'],
     5.05, 17, 13, [[2, 4, 7], 20, 4], 2.16, 0.6, 49, 13,
-    'Nineteen sites, three fronts, and a castle that retreats rather than feeds you. Their capital.',
+    'Three fronts, and a castle that burns its stores rather than feed you.'
+    + ' Behind it, their capital.',
     'branch'),
 
   // --- Tier 5 (3) -- the enemy's homeland, east of the throne. What makes it
@@ -177,7 +180,8 @@ export const REGIONS = Object.freeze([
   // reasoning: ./regions.provenance.js, "TIER 5".
   T('ravensmarch', 'Ravensmarch', 5, [5, -1], ['blackspire', 'ironcrown', 'gravenreach', 'stormhalt'],
     5.05, 18, 13, [[2, 5, 8], 18, 4], 2.19, 0.6, 61, 16,
-    'Past the throne the road keeps going. Four attacks at once, and no reserve that answers all of them.',
+    'Past the throne the road keeps going. They come at four places at once,'
+    + ' and no reserve answers all four.',
     'branch'),
   T('gravenreach', 'Gravenreach', 5, [5, 0],
     ['ironcrown', 'obsidian', 'ravensmarch', 'nightharrow', 'stormhalt', 'cinderwatch'],
@@ -200,7 +204,8 @@ export const REGIONS = Object.freeze([
   // "TIER 6", and CLAUDE.md ("Still open" -> the campaign re-tune, third pass).
   T('stormhalt', 'Stormhalt', 6, [6, -1], ['ravensmarch', 'gravenreach', 'cinderwatch'],
     5.60, 20, 15, [[2, 5, 9], 28, 5], 2.28, 0.6, 118, 16,
-    'A storm coast fortress fed from the sea. Five attacks at once, and every one of them means it.'),
+    'A storm coast fortress fed from the sea. Five fronts open at once and not'
+    + ' one of them is a feint.'),
   T('cinderwatch', 'Cinderwatch', 6, [6, 0],
     ['gravenreach', 'nightharrow', 'stormhalt', 'widowsgate'],
     5.65, 20, 15, [[2, 5, 9], 30, 5], 2.30, 0.6, 147, 18.5,

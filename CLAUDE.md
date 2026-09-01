@@ -3760,6 +3760,37 @@ Two audit rules exist so the tool does not argue its own fixes back out: content
 `touch-action: none`, which is the world map) is reachable, not stranded. Both are detected
 by signature rather than by class name.
 
+### The game stopped telling players how it is QA'd
+
+`screens/worldmap-autobattle.js` shipped this under a region's flavour text:
+*"Or let your own tactics fight it in the background — **the same policy the
+difficulty table is measured with**. It can still lose."* "The difficulty table"
+is `npm run sim` and `WIN_BAND` — a description of how the game is TESTED,
+presented to the player as a fact about the war. The comment directly above it
+already conceded the strings belonged in `content/strings.js`; they live there
+now, and the sentence says what a player actually needs: the same officers fight
+it, they are no better at it unwatched, and it can be lost.
+
+**The region flavour text had the same disease, and it got worse as the tiers
+rose.** Tier 1 reads as scenery (*"Flooded lowlands: two neutral farms sit in
+the open and the enemy is slow to claim them"*); by tier 4 five rows were
+printing engine knobs verbatim — Ironcrown's *"the castle guard fights 25%
+harder and trains 40% faster"* is two balance multipliers, and Thanescar,
+Ravensmarch and Stormhalt each narrated `AI_TIERS[].concurrent` as though the
+number were the region's personality. All five are rewritten in the voice
+Cinderwatch already had (*"They burned their own farms rather than leave them
+standing"*): **the information survives — two, four and five simultaneous
+attacks, a Marshal on the throne, a scorched capital — as an image rather than
+as a knob name.** Nothing reads these strings but the screen, so no measured
+number can move.
+
+**AND SIX LABELS ON THE MOST-READ SCREEN IN THE GAME HAD NO CONSTANT TO EVEN BE
+DEAD.** `worldmap-detail.js` hardcoded `Tier` / `Enemy strength` / `Battlefield`
+/ `Enemy sites` / `Typical length` / `Income if taken` as inline literals — seen
+on every region hover, and invisible to a tone pass, which is the one thing
+`strings.js`'s own header says the file exists to guarantee. Moved verbatim, so
+the screen is byte-identical and only its address changed.
+
 ### What a battle EARNED you, on the screen you are already reading
 
 Two beats the game computed and then swallowed, both now on the results card

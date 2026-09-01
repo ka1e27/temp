@@ -169,6 +169,28 @@ export const WORLD = Object.freeze({
   rewardPermanent: 'Conquering this region permanently raises your income by',
   rewardLump: 'A successful raid pays',
   frontOpened: 'A new front has opened:',
+  // AUTO-RESOLVE. Lived in `screens/worldmap-autobattle.js` as an inline
+  // literal whose own comment conceded it belonged here — and it told the
+  // player about "the difficulty table", which is `npm run sim` and `WIN_BAND`:
+  // a description of how the game is QA'd, presented as a fact about the war.
+  // What a player needs to know is that the same commander who fights for them
+  // fights here, and that it is a real battle they can lose.
+  autoButton: 'Auto-resolve',
+  autoHint: 'Your own officers fight it out while you look elsewhere. They are'
+    + ' no better at it than they are when you are watching — this can be lost.',
+  autoCancel: 'Cancel',
+  // THE REGION CARD'S ROW LABELS. Six labels on the screen a player reads
+  // before every single fight, and they were inline literals in
+  // `worldmap-detail.js` with no constant to even be dead — so a tone pass
+  // could not have found them, which is the one thing the header of this file
+  // says it exists to guarantee.
+  rowTier: 'Tier',
+  rowEnemy: 'Enemy strength',
+  rowBoard: 'Battlefield',
+  rowEnemySites: 'Enemy sites',
+  rowLength: 'Typical length',
+  rowGate: 'Throne holds until',
+  rowIncome: 'Income if taken',
   expeditionHint: 'You land with an army sized by the regions you already hold.',
   firstRegion: 'Riverfen is the only region you can reach with an empire of zero.',
   // Adjacency lets you reach a region long before your empire can take it —

@@ -59,11 +59,11 @@ export function createDetailRenderer(deps) {
     // selectors over a list that can change length are the defect; naming the
     // row is the fix.
     const rows = [
-      ['Tier', `${region.tier}`],
-      ['Enemy strength', `x${region.enemyMult.toFixed(2)}`, 'difficulty'],
-      ['Battlefield', `${region.grid.cols} x ${region.grid.rows}`],
-      ['Enemy sites', `${region.siteCounts.enemy}`],
-      ['Typical length', `~${region.targetLengthMin} min`],
+      [WORLD.rowTier, `${region.tier}`],
+      [WORLD.rowEnemy, `x${region.enemyMult.toFixed(2)}`, 'difficulty'],
+      [WORLD.rowBoard, `${region.grid.cols} x ${region.grid.rows}`],
+      [WORLD.rowEnemySites, `${region.siteCounts.enemy}`],
+      [WORLD.rowLength, `~${region.targetLengthMin} min`],
       // THE NUMBER THAT DECIDES SEVERAL OF THESE BATTLES, AND IT WAS NEVER SHOWN.
       // `castleGateFrac` is the share of the countryside the throne holds out
       // for, and until now it appeared nowhere before the fight and, in the
@@ -75,8 +75,9 @@ export function createDetailRenderer(deps) {
       // below the gate. It leaks nothing — it is a static rule of the region,
       // like its size — and it is omitted rather than shown as 0%% where there is
       // no gate, because "0%%" reads as a requirement rather than as its absence.
-      ...(gateFrac > 0 ? [['Throne holds until', `you hold ${percent(gateFrac)} of the map`]] : []),
-      ['Income if taken', rate(region.rewardPerSec), 'reward'],
+      ...(gateFrac > 0
+        ? [[WORLD.rowGate, `you hold ${percent(gateFrac)} of the map`]] : []),
+      [WORLD.rowIncome, rate(region.rewardPerSec), 'reward'],
     ];
 
     // THE HAND THIS REGION CARRIES, on the screen where a region is CHOSEN.
