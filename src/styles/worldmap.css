@@ -23,12 +23,14 @@
    lead — label above value, the crown count at display size. Placement is
    explicit because the scene emits label/value FOUR times as one flat row of
    eight, and the pairs have to stack rather than run along. */
-/* FOUR label/value pairs, laid out as label-over-value columns. The placements
-   are explicit rather than auto-flowed because the pairs arrive as eight flat
+/* FIVE label/value pairs, laid out as label-over-value columns. The placements
+   are explicit rather than auto-flowed because the pairs arrive as ten flat
    children and `grid-auto-flow: column dense` would put a label under a value
-   the moment one of them is ever conditional. */
+   the moment one of them is ever conditional. Anything inserted in
+   worldmap-header.js has to be renumbered here — that is the price of pinning
+   them, and it is cheaper than the failure the alternative has. */
 .wm-treasury {
-  display: grid; grid-template-columns: repeat(4, max-content);
+  display: grid; grid-template-columns: repeat(5, max-content);
   column-gap: var(--s-6); row-gap: var(--s-1); align-items: baseline;
 }
 .wm-treasury > :nth-child(1) { grid-area: 1 / 1; }
@@ -39,6 +41,13 @@
 .wm-treasury > :nth-child(6) { grid-area: 2 / 3; }
 .wm-treasury > :nth-child(7) { grid-area: 1 / 4; }
 .wm-treasury > :nth-child(8) { grid-area: 2 / 4; }
+.wm-treasury > :nth-child(9) { grid-area: 1 / 5; }
+.wm-treasury > :nth-child(10) { grid-area: 2 / 5; }
+/* The orientation figure. In the ACCENT hue rather than gold or green, because
+   it is the one number here that is not a currency. */
+.wm-treasury .campaign {
+  font: var(--w-bold) var(--t-lg) / 1 var(--font-num); color: var(--c-accent);
+}
 /* HOW LONG THE EMPIRE EARNS WITHOUT YOU. Dim by default, because a raised cap
    is simply a fact — and warning-hued at `is-floor`, the untouched eight hours,
    which is the one state the player can do something about. Measured: at full
@@ -91,6 +100,20 @@
   content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
   box-shadow: inset 0 0 var(--s-7) var(--s-4) var(--c-bg);
 }
+/* THE OBJECTIVE, PINNED TO THE WINDOW RATHER THAN TO THE WORLD — see
+   worldmap.js for the measurement. It does not pan, it is not a control, and
+   it is absent (rather than empty) once the capital has fallen. */
+.wm-objective {
+  position: absolute; top: var(--s-3); left: var(--s-3); z-index: 2;
+  margin: 0; padding: var(--s-1) var(--s-3); pointer-events: none;
+  display: none;
+  border-left: 2px solid var(--c-gold); border-radius: 0 3px 3px 0;
+  background: color-mix(in srgb, var(--c-surface) 82%, transparent);
+  color: var(--c-gold); font-size: var(--t-xs);
+  font-weight: var(--w-bold); letter-spacing: var(--track-label);
+}
+.wm-objective.is-on { display: block; }
+
 /* Never lost: one press puts whatever you can act on back in the middle. */
 .wm-recentre {
   position: absolute; left: var(--s-3); bottom: var(--s-3); z-index: 3;
@@ -164,6 +187,30 @@
 }
 .wm-hex[data-status='locked'] .wm-tier { color: inherit; opacity: 0.75; }
 .wm-hex[data-status='locked']:hover { transform: none; filter: none; }
+/* A LOCKED REGION IS NAMED, and the name is what stops the board being a grid
+   of question marks — but it must still read as country you do not hold, so it
+   keeps the hatch and the locked hue and only the name comes up to legible.
+   Below `--c-locked`'s own weight the name was the same wash as the hatch. */
+.wm-hex[data-status='locked'] .wm-name {
+  color: color-mix(in srgb, var(--c-text) 62%, transparent);
+}
+
+/* THE CAPITAL: the campaign's destination, marked from tick 0 rather than on
+   arrival. A ring rather than a fill, so it composes with all three ownership
+   states — it is a label on a place, not a fourth kind of place — and a crown
+   glyph beside the name, because a colour on its own is a channel some players
+   do not have. `::after` already carries the locked hatch and the status wash,
+   so this rides the OUTLINE, which nothing else on the plate uses. */
+.wm-hex[data-capital] {
+  outline: 2px solid color-mix(in srgb, var(--c-gold) 72%, transparent);
+  outline-offset: -3px;
+}
+.wm-hex[data-capital] .wm-name::after {
+  content: ' ♛'; color: var(--c-gold); font-size: 0.85em;
+}
+.wm-hex[data-capital][data-status='locked'] .wm-name {
+  color: color-mix(in srgb, var(--c-gold) 62%, var(--c-text));
+}
 
 /* available: an enemy holding, and your move */
 .wm-hex[data-status='available'] {
@@ -241,6 +288,12 @@
 .wm-detail { display: flex; flex-direction: column; padding: var(--s-5); overflow-y: auto; }
 .wm-detail h2 { margin: 0 0 var(--s-1); font: var(--w-bold) var(--t-xl) / 1.15 var(--font); }
 .wm-flavour { margin: 0 0 var(--s-5); color: var(--c-text-dim); font-size: var(--t-sm); }
+/* The one region that is the campaign's stated objective. Gold, above the
+   flavour, because it is a fact about the WAR rather than about the ground. */
+.wm-capital {
+  margin: 0 0 var(--s-3); color: var(--c-gold);
+  font-size: var(--t-sm); font-weight: var(--w-bold);
+}
 
 /* The reward and the difficulty are what the player is actually deciding on,
    so they lead the list at display weight and the rest is reference. Ordered
@@ -319,71 +372,6 @@
 .wm-offline .btn { order: 1; }
 .wm-offline span.wm-offline-cap {
   order: 2; flex-basis: 100%; color: var(--c-warn);
-}
-
-/* ---------- fluid from 1024px up ---------- */
-
-@media (max-width: 1180px) {
-  .wm-header { margin: var(--s-3) var(--s-3) 0; padding: var(--s-3) var(--s-4); }
-  .wm-body { padding: var(--s-3); gap: var(--s-3); }
-  .wm-detail { padding: var(--s-4); }
-  .wm-treasury { column-gap: var(--s-5); }
-}
-
-/* Below the target range the sidebar stops being a sidebar rather than
-   crushing the board. Desktop-first: a safety net, not a phone layout. */
-@media (max-width: 860px) {
-  .wm-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr auto; }
-  .wm-detail { max-height: 44vh; }
-  .wm-go { min-height: var(--hit); }
-}
-
-/* Phones: the Attack button stops being the last thing in a scrolling column.
-   `.wm-detail` scrolls and `.wm-go` has `margin-top: auto`, which on a desktop
-   sidebar pins the primary action to the bottom of a panel you can see all of.
-   At 390x844 the same rule put it at y=883 — below the fold, reachable only by
-   scrolling the panel first, which is a poor place for the one button the whole
-   screen exists to offer. Sticky keeps it in view without changing the order. */
-@media (max-width: 720px), (max-height: 560px) {
-  /* FOUR READOUTS DO NOT FIT ACROSS A PHONE. Adding the away cap took the
-     header past 390px and pushed `.wm-actions` — Upgrades and Menu — off the
-     right edge entirely; `tools/mobile.mjs` caught it as "1 control off-screen
-     at x=401". Two columns of two pairs instead, and the header wraps so the
-     buttons drop to their own line rather than being shoved out of the world.
-     Hiding the away cap here was the other option and is the wrong one: a phone
-     is exactly where a player closes the tab, so it is the screen the number is
-     FOR. */
-  .wm-header { flex-wrap: wrap; row-gap: var(--s-3); }
-  .wm-treasury { grid-template-columns: repeat(2, max-content); column-gap: var(--s-5); }
-  .wm-treasury > :nth-child(5) { grid-area: 3 / 1; }
-  .wm-treasury > :nth-child(6) { grid-area: 4 / 1; }
-  .wm-treasury > :nth-child(7) { grid-area: 3 / 2; }
-  .wm-treasury > :nth-child(8) { grid-area: 4 / 2; }
-  .wm-actions { margin-left: auto; }
-  .wm-detail { max-height: 46vh; padding: var(--s-3); }
-  .wm-go {
-    position: sticky; bottom: 0; z-index: 1;
-    margin-top: var(--s-3); font-size: var(--t-md);
-  }
-  .wm-flavour { margin-bottom: var(--s-3); }
-  .wm-stats { margin-bottom: var(--s-3); }
-}
-
-/* A PHONE IN LANDSCAPE IS WIDE AND SHORT, so none of the width rules above fire
-   and every one of the problems is still there — at 844x390 the Attack button
-   landed at y=596, two hundred pixels below the fold. Height is the axis that
-   is scarce here, so the sidebar comes back (there is width for it) and the
-   panel simply gets shorter. */
-@media (max-height: 560px) and (min-width: 721px) {
-  .wm-body { grid-template-columns: minmax(0, 1fr) var(--sidebar); grid-template-rows: 1fr; }
-  .wm-detail { max-height: none; }
-  .wm-header { margin: var(--s-2) var(--s-3) 0; padding: var(--s-2) var(--s-3); }
-  .wm-body { padding: var(--s-2); gap: var(--s-2); }
-}
-
-/* Touch: compact desktop metrics grow to a real thumb target. */
-@media (pointer: coarse) {
-  .wm-recentre { min-height: var(--hit); }
 }
 
 /* THE HAND A REGION CARRIES — see meta/incursion.js `campaignTwistPlan`. Styled

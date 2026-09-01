@@ -3835,6 +3835,91 @@ handful of times a battle.
   live inside `meta`, so `fromPersisted` heals them and no migration was needed; and they
   survive a new campaign and a save import, because they are the player's, not the save's.
 
+## The campaign map: 23 of 24 plates said nothing, and the secret was already out
+
+**MEASURED on a fresh save: the world map showed twenty-three of twenty-four regions as
+`???`.** No destination, no geography, no reason to think the names mean anything — a grid
+of grey question marks with one red hex. Seed the campaign complete and the SAME screen is
+the best in the game: named country, gold borders, a treasury and an income. The emotional
+payoff of an idle game is "look what I have taken", and it was withheld for the hours it
+takes to earn it.
+
+**AND THE MYSTERY WAS FAKE, WHICH IS WHAT SETTLED THE DESIGN QUESTION.**
+`worldmap-detail.js renderDetail` renders the name, the flavour and the whole stat block —
+tier, the enemy multiplier to two decimals, board size, enemy sites, typical length, income
+if taken — **before** it branches on the lock; only the bottom action row is gated. So one
+click on a region twenty conquests out already returned all of it. The board and the panel
+disagreed with each other and **the board was the one lying**, which is why the fix is to
+name the board rather than to gag the panel. `tests/worldboard.test.js` pins both halves,
+and the panel half is the negative control: if a later pass ever gates the panel, the board
+becomes the more informative surface and that test fails rather than letting the two drift
+apart in the other direction.
+
+**A LOCKED NAME NEEDED ITS OWN COLOUR.** `--c-locked` is chosen for a hatch, not for text,
+so rendering the name at the plate's inherited colour changed nothing anybody could read.
+The plate keeps its hatch and its hue; only the name comes up to legible.
+
+### The destination, and the two places it could not be shown
+
+`CAPITAL_ID` (`obsidian`) already existed for the results copy. The board marks it with a
+gold ring and a crown glyph, the panel names it (`WORLD.capitalHint`), and the label carries
+it too — a marker that is a ring and a colour is a marker a screen reader cannot see.
+
+**BUT MARKING IT IS NOT SHOWING IT, AND THE ARITHMETIC SAYS SO.** Measured at 1440x900: the
+board is **2011px** wide against a **1046px** porthole, and the beachhead and the capital
+sit **1071px** apart, so at this screen's deliberately fixed 1:1 zoom the two cannot be in
+shot together at all. `fitZoom` is documented as never scaling between ("a map whose scale
+moves with the window is a map you cannot learn the shape of"), so zooming out to fit is a
+reversal of a considered decision rather than a fix. Two things answer it instead:
+
+- **`centreOnSelected` slides toward the capital where it FITS.** `worldmap-pan.js
+  wouldReveal` answers "would this pan leave that element on screen", so the nicer view is
+  proposed and taken only when it costs nothing — the anti-lost-ness guarantee is CHECKED
+  rather than traded away. Confirmed in a browser at both sizes: at 1440x900 nothing moves,
+  at 1920x1080 the beachhead and the throne are both in shot.
+- **`.wm-objective` is pinned to the porthole rather than to the world**, so it does not
+  pan. It retires the moment the capital falls; what is BEHIND the capital is the results
+  screen's surprise to give, not a label's to spoil.
+
+**The tag stands down below 720px wide or 560px tall**, and that is a trade rather than an
+oversight: the map band is ~110px there and an overlay covering the plates to say where the
+plates go is worth less than the plates. The header figure and the marked plate both survive.
+
+### A fifth readout, and the grid that places its pairs by hand
+
+`CAMPAIGN N / 24` is the only figure on that header that is not money, and the world map has
+never shown it — the most basic progress number in the game was absent from the screen that
+is a picture of it.
+
+**`.wm-treasury` PLACES EVERY PAIR BY `nth-child`, DELIBERATELY** — auto-flow would put a
+label under a value the moment one became conditional. The cost is that adding a pair
+mis-places it silently, and the phone rule only ever renumbered children 5–8. **A fifth pair
+flows into an implicit column, which puts a label BESIDE its own value**, on the narrowest
+screen, with nothing failing.
+
+**AND THE LANDSCAPE COST WAS BIGGER THAN THE PORTRAIT ONE.** The phone rule is
+`(max-width: 720px), (max-height: 560px)` — an OR — so an 844x390 phone on its side got the
+two-column layout too, and five pairs took the header from four rows to **six**, pushing the
+one region you can attack off the screen entirely. Verified against the parent commit in a
+worktree, so the pre-existing state and the aggravation are separable: landscape was already
+cramped, and this change made it worse until the landscape block got a three-column treasury
+of its own. Same pair count, four rows, board height unchanged.
+
+`tests/worldboard.test.js` derives that rule rather than hardcoding "5 through 10": for every
+media block that re-declares the grid, every child's effective column must fit the column
+count that block declares. Its negative control was run — deleting the landscape placements
+reports *"child 9 sits in column 5 of 3"*.
+
+**`tools/smoke.mjs` gates the visible half**, because every one of these is a single DOM node
+and the way a node like this fails is by rendering nothing: no plate may be unnamed, one must
+carry `data-capital`, and the campaign figure must match `N / M`.
+
+**AND IT CAUGHT A STALE `demo.html`.** `tests/shell.test.js` requires the render harness to
+load exactly the stylesheets `index.html` loads, in order — and it was missing `hudrails.css`
+from an earlier pass as well as the new `worldmap.responsive.css`. That is the
+"grep the test tree for the file you touched" rule arriving a second time: the earlier pass
+ran every suite adjacent to its change and not the one that owns the file list.
+
 ## The phone pass, and the audit that missed the only thing wrong
 
 `npm run mobile` drives the real game at real device metrics and reports four things.

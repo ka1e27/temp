@@ -225,7 +225,11 @@ export function createResultsScene(ctx) {
       // A NEW FRONT, which `refreshUnlocks` has always returned and nothing has
       // ever read. `WORLD.frontOpened` was written for exactly this moment and
       // had zero readers in the whole tree; meanwhile a conquest silently
-      // turned its neighbours from "???" into names with no comment at all.
+      // turned its neighbours from unreachable to attackable, with no comment
+      // of any kind. (When this was written the board also swapped a
+      // placeholder for the name at that moment — it names every region now,
+      // so what a conquest changes is the MODE, and the line is if anything
+      // more needed: the board's own tell is a small tag reading OPEN.)
       const fronts = (applied.opened ?? []).map((id) => regionById(id)?.name)
         .filter(Boolean);
       const copy = resultCopy(outcome, applied, region);

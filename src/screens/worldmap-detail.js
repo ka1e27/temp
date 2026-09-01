@@ -15,7 +15,7 @@ import { UI, WORLD } from '../content/strings.js';
 import { compact, rate, duration, percent } from '../ui/format.js';
 import { modeOf, raidCooldownRemaining, campaignGap, CAMPAIGN_GAP_WARN } from '../meta/world.js';
 import { previewReward } from '../meta/rewards.js';
-import { GATE_CLAMP } from '../content/regions.data.js';
+import { GATE_CLAMP, CAPITAL_ID } from '../content/regions.data.js';
 // The one resolver for "what hand does this region carry", so the world map and
 // the loadout brief cannot disagree about the fight the player is about to take.
 import { regionBrief as brief } from './prebattle-brief.js';
@@ -90,6 +90,13 @@ export function createDetailRenderer(deps) {
 
     mount(detail,
       h('h2#wm-detail-h', { text: region.name }),
+      // THE DESTINATION, NAMED WHERE IT IS SELECTED. The board marks the
+      // capital with a ring and a glyph, which is a colour and a shape; this is
+      // the sentence that says what it MEANS, and it is the only place in the
+      // shipped game that states the campaign has an end and a country behind
+      // it. Conditional, so every other region's panel is untouched.
+      ...(region.id === CAPITAL_ID
+        ? [h('p.wm-capital', { text: WORLD.capitalHint })] : []),
       h('p.wm-flavour', { text: region.flavour ?? '' }),
       h('dl.wm-stats', {}, ...rows.flatMap(([k, v, stat]) => [
         h('dt.label', { text: k, ...(stat ? { 'data-stat': stat } : {}) }),

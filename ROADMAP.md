@@ -182,10 +182,18 @@ make gold-at-zero-with-troops-climbing say something out loud. D1 and D2 are one
 with two symptoms and they are the difference between a player who learns the game and
 one who watches a frozen board for five minutes.
 
-**3. Show the campaign map you are fighting for.** Names and terrain on unconquered
-regions instead of `???`, and the enemy capital visible from region 1. This is the
-cheapest large win in the game: the good version of the screen already exists and is
-merely gated.
+**3. ~~Show the campaign map you are fighting for.~~ DONE.** Every plate is named — the
+`???` was never a secret, since `renderDetail` gives the full stat block for a locked
+region before it branches on the lock. The capital is marked from tick 0 (gold ring, crown
+glyph, named in the label and on its own panel), and the header gained `CAMPAIGN N / 24`.
+
+The half that could NOT be delivered as asked is worth recording: "the enemy capital
+visible from region 1" is arithmetically impossible at 1440x900 — the board is 2011px
+against a 1046px porthole and the two are 1071px apart, and this screen's fixed 1:1 zoom
+is a documented decision, not an oversight. So the opening shot slides toward the capital
+only where that leaves the attackable region visible (it does at 1920x1080, measured), and
+a porthole-pinned `OBJECTIVE ·` tag names it everywhere else. Full write-up, including the
+landscape header regression this found and fixed, in CLAUDE.md.
 
 **4. Put a level, a next-effect and a time-to-afford on every shop row.** All three
 numbers already exist.

@@ -339,6 +339,27 @@ export function createMapPanner(o) {
       setPan(p.x, p.y);
     },
 
+    /**
+     * Would this pan leave `el` fully on screen?
+     *
+     * Exists so a caller can PROPOSE a nicer view and fall back when it costs
+     * something — worldmap.js slides the opening shot toward the capital only
+     * as far as leaves the region you can attack visible. Asking here rather
+     * than in the screen keeps the pan-to-screen arithmetic (`clampPan`, the
+     * zoom, the measured viewport) in the one file that owns it; a second copy
+     * would be right until the day one of the three changed.
+     */
+    wouldReveal(el, proposed, pad = 24) {
+      if (!el) return false;
+      measure();
+      const p = clampPan(proposed, content, view, zoom);
+      const l = p.x + el.offsetLeft * zoom;
+      const t = p.y + el.offsetTop * zoom;
+      return l >= pad && t >= pad
+        && l + el.offsetWidth * zoom <= view.w - pad
+        && t + el.offsetHeight * zoom <= view.h - pad;
+    },
+
     /** Pan the least amount that brings an element fully into view. */
     reveal(el, pad = 24) {
       if (!el) return;

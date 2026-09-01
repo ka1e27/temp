@@ -17,7 +17,7 @@ import { compact, rate, duration } from '../ui/format.js';
 import { UI, WORLD, IDLE } from '../content/strings.js';
 import {
   worldView, regionById, isAttackable, raidCooldownRemaining, modeOf,
-  campaignGap, CAMPAIGN_GAP_WARN,
+  campaignGap, CAMPAIGN_GAP_WARN, regionsConquered,
 } from '../meta/world.js';
 import { incomePerSec, offlineNotice } from '../meta/idle.js';
 import { offlineCapMs } from '../meta/upgrades.js';
@@ -27,7 +27,8 @@ import { createAutoResolveUI } from './worldmap-autobattle.js';
 import { createDetailRenderer } from './worldmap-detail.js';
 import { createWorldHeader } from './worldmap-header.js';
 import { bootRoute, launchFirstRegion } from './mainmenu.js';
-import { HEX, layoutHexes, createMapPanner } from './worldmap-pan.js';
+import { HEX, layoutHexes, createMapPanner, centreOn } from './worldmap-pan.js';
+import { CAPITAL_ID, REGION_IDS } from '../content/regions.data.js';
 
 export function createWorldMapScene(ctx) {
   let root = null;
@@ -36,6 +37,7 @@ export function createWorldMapScene(ctx) {
   let selected = null;
   let detailEl = null;
   let boardEl = null;
+  let objective = null;
   /** The header buttons that leave this screen — held here (not just inside
    *  enter()) so beginAutoResolve can disable them for the duration. */
   let navButtons = [];
@@ -87,15 +89,31 @@ export function createWorldMapScene(ctx) {
       const head = createWorldHeader({ meta, scenes: ctx.scenes, screens: ctx.screens });
       navButtons = head.navButtons;
       const header = head.el;
-      const { crowns: setCrowns, relics: setRelics, income: setIncome,
-        away: setAway, awayFloor: setAwayFloor } = head.set;
+      // `head.set` is passed whole rather than as positional setters: adding a
+      // sixth is what showed that shape does not scale, and a mis-ordered
+      // argument list would write the treasury into the campaign counter with
+      // nothing failing.
 
       // The window and the world. `map` clips and hears the gesture; `board` is
       // the one layer that moves, so panning costs a single composited
       // transform no matter how many plates are on it.
       const board = h('div.wm-board', { role: 'group', 'aria-label': 'Regions' });
       boardEl = board;
-      const map = h('div.wm-map', {}, board,
+      // THE OBJECTIVE, PINNED TO THE PORTHOLE RATHER THAN TO THE WORLD.
+      // Marking the capital on its own plate is not the same as SHOWING it:
+      // measured at 1440x900 the board is 2011px wide against a 1046px window,
+      // and the beachhead and the capital are 1071px apart, so at this screen's
+      // fixed 1:1 zoom the two cannot be in shot together at all. (At 1920x1080
+      // they can, and `centreOnSelected` takes that view when it is available —
+      // confirmed in a browser at both sizes.) A tag that does not pan is what
+      // answers "where am I going" on every window in between.
+      //
+      // It retires the moment the capital falls, because an objective you have
+      // met is not an objective. What is behind it is announced by the results
+      // screen (RESULTS.capitalBody), which is a better place for a surprise
+      // than a label that would have to spoil it in advance.
+      objective = h('p.wm-objective', { 'aria-hidden': 'true' });
+      const map = h('div.wm-map', {}, board, objective,
         h('button.btn.ghost.wm-recentre', {
           text: 'Centre', type: 'button',
           'aria-label': 'Centre the map on the selected region',
@@ -177,10 +195,9 @@ export function createWorldMapScene(ctx) {
       });
 
       buildBoard(board, detail);
-      refresh(setCrowns, setRelics, setIncome, setAway, setAwayFloor);
+      refresh(head.set);
 
-      const timer = setInterval(
-        () => refresh(setCrowns, setRelics, setIncome, setAway, setAwayFloor), 250);
+      const timer = setInterval(() => refresh(head.set), 250);
       const off = ctx.bus.on('meta:region-unlocked', () => buildBoard(board, detail));
 
       return [
@@ -231,19 +248,31 @@ export function createWorldMapScene(ctx) {
 
     regions.forEach((r, i) => {
       const locked = r.status === 'locked';
+      // A LOCKED REGION IS NAMED, and the placeholder it replaced was never a
+      // secret: `worldmap-detail.js` renders the name, the flavour and the whole
+      // stat block — tier, enemy multiplier to two decimals, board size, enemy
+      // sites, typical length, income if taken — BEFORE it branches on the lock,
+      // so one click on a region twenty conquests away already returned all of
+      // it. The board and the panel disagreed and the board was the one lying.
+      // 23 of 24 plates read as question marks, so a new player had no
+      // destination and no sense that the names meant anything.
+      const capital = r.id === CAPITAL_ID;
       const cell = h('button.wm-hex', {
         type: 'button',
         'data-status': r.status,
         'data-tier': r.tier,
         'data-mode': r.mode,
+        // Marked from tick 0, because a destination revealed on arrival is not
+        // a destination.
+        ...(capital ? { 'data-capital': 'true' } : {}),
         style: { left: `${at[i].x}px`, top: `${at[i].y}px` },
-        title: locked ? UI.locked : r.name,
+        title: hexTitle(r, locked, capital),
         // Ownership is otherwise conveyed by colour alone.
-        'aria-label': hexLabel(r),
+        'aria-label': hexLabel(r, capital),
         'aria-pressed': 'false',
         on: { click: () => select(r.id, detail) },
       },
-      h('span.wm-name', { text: locked ? '???' : r.name }),
+      h('span.wm-name', { text: r.name }),
       h('span.wm-tier', { text: `T${r.tier}` }));
       cells.set(r.id, cell);
       mount(board, cell);
@@ -253,6 +282,15 @@ export function createWorldMapScene(ctx) {
     // (a region unlocking) never yanks the view out from under them. Only the
     // first build of a visit chooses where to look.
     panner?.setContent(width, height);
+
+    // Written where the board is, so the conquest that retires it lands on the
+    // same rebuild that repaints the plate.
+    const cap = regions.find((r) => r.id === CAPITAL_ID);
+    const showObjective = !!cap && cap.status !== 'conquered';
+    if (objective) {
+      objective.textContent = showObjective ? `${WORLD.objective} ${cap.name}` : '';
+      objective.classList.toggle('is-on', showObjective);
+    }
 
     const keep = selected && cells.has(selected) ? selected : null;
     const first = regions.find((r) => isAttackable(meta(), r.id))
@@ -267,15 +305,36 @@ export function createWorldMapScene(ctx) {
   function centreOnSelected() {
     const el = cells.get(selected);
     if (!el || !panner) return;
-    panner.centre(el.offsetLeft + el.offsetWidth / 2, el.offsetTop + el.offsetHeight / 2);
+    const cx = el.offsetLeft + el.offsetWidth / 2;
+    const cy = el.offsetTop + el.offsetHeight / 2;
+    // ...AND THE DESTINATION IS IN SHOT WHERE IT FITS. Slide the centre toward
+    // the capital, but only as far as leaves the region you can ACT on fully
+    // visible — the guarantee above is checked rather than traded away, and on
+    // a window too small for both (see `.wm-objective`) nothing moves.
+    const cap = cells.get(CAPITAL_ID);
+    if (cap && cap !== el) {
+      const mid = { x: (cx + cap.offsetLeft + cap.offsetWidth / 2) / 2, y: cy };
+      if (panner.wouldReveal(el, centreOn(mid.x, mid.y, panner.view, panner.zoom))) {
+        panner.centre(mid.x, mid.y);
+        return;
+      }
+    }
+    panner.centre(cx, cy);
   }
 
-  function hexLabel(r) {
-    if (r.status === 'locked') return `Locked region, tier ${r.tier}`;
-    const state = r.mode === 'attack' ? 'available to invade'
-      : r.mode === 'raid' ? 'conquered, raid ready'
-        : r.mode === 'cooldown' ? 'conquered, recovering' : UI.locked;
-    return `${r.name}, tier ${r.tier}, ${state}`;
+  function hexTitle(r, locked, capital) {
+    const head = capital ? `${r.name} — ${WORLD.capitalTag}` : r.name;
+    return locked ? `${head}. ${UI.locked}: ${WORLD.lockedHint}` : head;
+  }
+
+  function hexLabel(r, capital) {
+    const state = r.status === 'locked' ? 'locked'
+      : r.mode === 'attack' ? 'available to invade'
+        : r.mode === 'raid' ? 'conquered, raid ready'
+          : r.mode === 'cooldown' ? 'conquered, recovering' : UI.locked;
+    // The capital is named in the label too: a marker that is a glyph and a
+    // colour is a marker a screen reader cannot see.
+    return `${r.name}, tier ${r.tier}, ${state}${capital ? `, ${WORLD.capitalTag}` : ''}`;
   }
 
   function select(id, detail) {
@@ -316,19 +375,21 @@ export function createWorldMapScene(ctx) {
     boardEl?.classList.toggle('is-locked', locked);
   }
 
-  function refresh(setCrowns, setRelics, setIncome, setAway, setAwayFloor) {
-    setCrowns(compact(meta().crowns));
+  function refresh(set) {
+    // N of 24, and it is the only figure on this screen that is not money.
+    set.campaign(`${regionsConquered(meta())} / ${REGION_IDS.length}`);
+    set.crowns(compact(meta().crowns));
     // Uncompacted, like the shop's. A relic count is small enough to read
     // exactly, and "1.2k" beside a treasury reading "1.2k" would be two
     // different quantities wearing the same word.
-    setRelics(String(Math.floor(meta().relics ?? 0)));
-    setIncome(rate(incomePerSec(meta())));
+    set.relics(String(Math.floor(meta().relics ?? 0)));
+    set.income(rate(incomePerSec(meta())));
     // Whole hours: the cap moves in two-hour steps and nobody plans an absence
     // to the minute. `is-floor` marks the untouched base — the one state worth
     // drawing attention to, because it is the one a player can fix.
     const capMs = offlineCapMs(meta());
-    setAway(`${Math.round(capMs / 3600000)}h`);
-    setAwayFloor(capMs <= OFFLINE.baseCapMs);
+    set.away(`${Math.round(capMs / 3600000)}h`);
+    set.awayFloor(capMs <= OFFLINE.baseCapMs);
     if (!selected || !detailEl) return;
     const region = regionById(selected);
     if (!region) return;

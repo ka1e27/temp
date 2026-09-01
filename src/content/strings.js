@@ -169,6 +169,15 @@ export const WORLD = Object.freeze({
   rewardPermanent: 'Conquering this region permanently raises your income by',
   rewardLump: 'A successful raid pays',
   frontOpened: 'A new front has opened:',
+  // THE CAMPAIGN'S DESTINATION, NAMED AND MARKED FROM TICK 0. Every region
+  // beyond tier 4 exists because the capital is not the end — "taking the
+  // enemy's capital is when you find out how much country is behind it" — and
+  // none of that was sayable while the board showed a grid of question marks.
+  capitalTag: 'their capital',
+  capitalHint: 'The war ends at their capital — and then you find out how much'
+    + ' country is behind it.',
+  rowCampaign: 'Campaign',
+  objective: 'OBJECTIVE ·',
   // AUTO-RESOLVE. Lived in `screens/worldmap-autobattle.js` as an inline
   // literal whose own comment conceded it belonged here — and it told the
   // player about "the difficulty table", which is `npm run sim` and `WIN_BAND`:

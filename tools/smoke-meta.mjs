@@ -11,10 +11,29 @@ export async function runMeta(page, h, step, note, OUT, REGIONS) {
     return;
   }
 
-  const wm = await page.eval(() => ({
-    hexes: document.querySelectorAll('.wm-hex').length,
-    crowns: document.querySelector('.crowns')?.textContent,
-  }));
+  const wm = await page.eval(() => {
+    const hexes = [...document.querySelectorAll('.wm-hex')];
+    const cap = document.querySelector('.wm-hex[data-capital]');
+    return {
+      hexes: hexes.length,
+      crowns: document.querySelector('.crowns')?.textContent,
+      // EVERY PLATE IS NAMED. 23 of 24 used to read as a placeholder while one
+      // click on any of them returned the full stat block, so the board and
+      // the panel disagreed and the board was the one lying. A blank name is
+      // the same defect wearing different clothes, so both are refused.
+      unnamed: hexes.filter((e) => !e.querySelector('.wm-name')?.textContent.trim()).length,
+      // ...and the campaign has a marked destination and a progress figure.
+      // Both are one DOM node; neither is covered by any unit test, and the
+      // way a node like this fails is by rendering nothing at all.
+      capital: cap?.querySelector('.wm-name')?.textContent.trim() ?? null,
+      campaign: document.querySelector('.campaign')?.textContent?.trim() ?? null,
+    };
+  });
+  if (wm.unnamed) throw new Error(`${wm.unnamed} region plate(s) render no name`);
+  if (!wm.capital) throw new Error('no region plate is marked as the capital');
+  if (!/^\d+ \/ \d+$/.test(wm.campaign ?? '')) {
+    throw new Error(`the campaign figure reads "${wm.campaign}"`);
+  }
   // Driven off REGIONS rather than a literal: the literal read 18 and broke
   // the moment a fifth tier shipped, which makes the smoke test assert that
   // the campaign has not grown instead of that every region gets a plate.
@@ -40,7 +59,8 @@ export async function runMeta(page, h, step, note, OUT, REGIONS) {
   });
   if (!onScreen) throw new Error('not one region hex is fully on screen');
   await h.hitPoint('.wm-hex[data-smoke="1"]', `the region hex "${onScreen}"`);
-  step(`world map: ${wm.hexes} regions, treasury ${wm.crowns}`);
+  step(`world map: ${wm.hexes} regions all named, ${wm.campaign} taken, `
+    + `objective ${wm.capital}, treasury ${wm.crowns}`);
   await page.screenshot(`${OUT}/03-worldmap.png`);
 
   // Shop opens, its buy buttons are hittable, and it closes.
