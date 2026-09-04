@@ -4660,6 +4660,118 @@ finished or abandoned. That is `worldmap.js bootRoute` working exactly as design
 documented — *"it owns the boot decision (menu, or straight into region 1 on a clean
 save)"*. The design is the finding, so it is recorded rather than changed.
 
+## The results card was one object in four hues, and it emphasised the wrong number
+
+Two defects, found by rendering all four outcomes through the real
+`toOutcome()`/results pipeline and LOOKING at them. Both are the same shape — a rule
+expressed as a position rather than as a meaning — and neither could fail a test.
+
+**THE HERO FIGURE WAS CHOSEN BY POSITION, AND THE MEANING-BASED FIX WAS ALREADY
+WRITTEN AND UNWIRED.** `results.css` styled `dd:last-of-type` gold at display weight,
+described in its own comment as *"the payoff line — crowns, or the income the win just
+bought"*. That is true on a win, where the last row IS the income. On the other three
+outcomes the last row is **ENEMY LOSSES** — so a Defeat card's brightest, largest number
+was a casualty count, and a Withdrawn card's was `0` in gold. Sitting directly beside it
+was `dd[data-stat='payoff']`, the selector written for exactly this, and **nothing in
+the whole tree ever emitted `data-stat`** — the positional fallback was doing all the
+work. Same defect `prebattle.css` shipped as `dd:first-of-type` one release earlier, in
+the sibling stylesheet, found the same way (a screenshot) and fixed the same way.
+
+**AND ALL FOUR OUTCOMES WERE ONE CARD.** Same 560px width, same rhythm, same stat table
+— a victory and a withdrawal differed by a 3px top edge, a tag word, a faint wash and
+the headline. What fixes it was already being computed and thrown away: **the rows are
+two KINDS**, what happened and what you got. `statRows` returns `[label, value, kind]`
+and the card renders two `<dl>`s, so a win carries an earnings block and a loss simply
+does not — the two are a different SHAPE before any colour is read. Measured: 601px
+against 438px, on the same board.
+
+The third element rather than an object is deliberate: four assertions across two suites
+index `r[0]` and `r[1]`, and an appended element leaves every one of them true.
+
+**THE PRIMARY BUTTON CONTRADICTED THE COPY.** `To the map` was `.btn.primary`, first in
+the row, and therefore the one `enter()` focuses — on every outcome. So a Defeat card
+read *"Change your expedition and try again"* over a filled button that LEAVES, with the
+action the sentence names beside it in the secondary style and Enter bound to the wrong
+one. `results-copy.js actionOrder` is the rule, pure and testable with no DOM (the
+`recruitOffer`/`offlineNotice`/`stalemateCheck` shape). **A retreat deliberately still
+leads with the map**, and that is the negative control that matters: the player chose to
+leave and the copy gives them no instruction to reverse, so pressing them back in would
+be the same disagreement pointing the other way.
+
+**A CHARGE SPENT IS A FACT, NOT A GAIN.** It is the one row that could plausibly be
+mistaken for a payoff, and putting it in the earnings list would have the card
+congratulate a player on what a defeat charged them.
+
+**`results.js` hit the 400-line cap on the way and split into `results-copy.js`** — what
+is TRUE about a finished battle (`resultCopy`, `resultReason`, `statRows`, `actionOrder`)
+versus how it is put on the page. Re-exported from the original front door, so none of
+the four suites that import them had to move.
+
+**AND THE SPLIT REPRODUCED THE FREE-VARIABLE GOTCHA A THIRD TIME.** `resultCopy` closed
+over `COACH` and the new module did not import it, so `resultCopy` threw
+`ReferenceError` — **only on the win branch**. The module loaded, `npm run check` passed,
+and *every one of the seven node suites that import `resultCopy` passed too*, because
+none of them reaches the first-conquest line. The BROWSER found it, exactly as it found
+`ownedEffects`. The fix afterwards was mechanical and is the transferable part: strip
+comments and string literals from the moved block, extract every capitalised identifier,
+and diff that set against the import list — it named `COACH` and nothing else in one
+pass. Worth running on any split, not just one that failed.
+
+**Two process notes, both of which cost time here.**
+
+A source-text assertion has to strip comments FIRST. `tests/resultcard.test.js` greps
+`results.css` for `dd:last-of-type` to prove the positional rule is gone — and the prose
+above `.results-gains` NAMES that selector while explaining the defect, so the first run
+reported the bug it was documenting. `tests/marshalname.test.js` hit the identical trap
+on `contract.js` one item earlier.
+
+And **`git checkout <path>` to revert a negative control destroys unstaged work in the
+same file.** Reverting an experimental CSS edit that way took the real fix with it, and
+nothing said so — the test simply went back to failing. Stage the work before running
+controls on it; `git checkout` then restores from the index rather than from HEAD.
+
+## The board fills a third of the canvas, and most of the rest cannot be reclaimed
+
+Recorded as a MEASUREMENT rather than as a fix, because the obvious reading of it points
+at a lever that is not available.
+
+Two independent methods agree. Sampling the real `#board-bg` pixels against the flat
+backdrop, and separately projecting the grid's world AABB through the live camera:
+
+```
+window        canvas     board    HUD    empty      board w/h of canvas
+1600x1000   1600x861    44.2%   16.8%   47.0%      57% wide, 78% tall
+1440x900    1440x761    40.1%   21.1%   44.0%      54% wide, 75% tall
+1280x800    1280x660    35.3%   24.2%   46.4%      50% wide, 71% tall
+1024x768    1024x629    40.4%   30.4%   37.1%      58% wide, 69% tall
+```
+
+**The fit is HEIGHT-bound at every size**, so the wasted space is horizontal: a 1.36:1
+board (riverfen, 647.8 x 476.0 world units) in a ~1.9:1 canvas. `camera.fit` takes the
+min of the two axes after subtracting `HUD_INSETS` (top 56, bottom 96, left 8, right 8)
+and `pad` 20, which is 192px of vertical furniture out of 861 — and those insets are
+approximately right, since the full-width top furniture reaches y=59 and the bottom dock
+starts 120px from the bottom.
+
+So the board cannot grow horizontally (it has no more content) and cannot grow
+vertically (it would go under the HUD). **The horizontal slack is where the rails
+live** — at 1440 they sit at x=12..249 and x=1348..1426 — so some of it is genuinely
+used, and `pad` is worth about 9% of board area if anybody wants it. This is an
+aspect-ratio fact, not a bug, and the headline "the board gets a third of the screen" is
+true while the implied fix is not available.
+
+**Note the phone audit cannot see any of this.** `tools/mobile.mjs`'s `MIN_BOARD_PCT`
+of 55 measures HUD PLATE COVERAGE, not how much of the canvas the board fills, so it
+passes this happily — two different questions with similar-sounding names.
+
+**One genuine sub-bug, measured and inert.** `gridBounds` is asymmetric: it adds a half
+hex on the left (`minX = -size * SQRT3 * 0.5`) and stops at the rightmost hex CENTRE on
+the right, so it under-reports the board's true width by half a hex (647.7 against
+677.2). It never clips, because the fit is height-bound everywhere it was measured and
+`pad` absorbs the rest — the tightest case found was **8px of spare** at a 390-wide
+window, where width does bind. Left alone deliberately; recorded so the next reader does
+not re-derive it.
+
 ## What the results screen may claim, and the empire line beside the objective
 
 **Three things the game said that were not true**, all found by playing it rather than

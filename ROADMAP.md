@@ -238,6 +238,32 @@ a to-do list that describes shipped work as pending sends the next reader to bui
 twice, which is the failure CLAUDE.md records under "Still open" — three stale entries in
 eight, now four.
 
+**8. ~~The board gets a third of the screen, and every outcome looks the same.~~ HALF
+DONE, HALF STRUCK — and the split is the deliverable.**
+
+The RESULTS half was real and is fixed, and it was two defects rather than one, both of
+the same shape (a rule written as a position instead of a meaning) and neither able to
+fail a test. The card's hero figure was `dd:last-of-type` — right on a win, where the
+last row is the income the victory bought, and wrong on the other three, where the last
+row is ENEMY LOSSES. So a **Defeat card's brightest, largest number was a casualty
+count** and a Withdrawn card's was `0` in gold. `dd[data-stat='payoff']` was already in
+the stylesheet, written for exactly this, with **nothing in the tree emitting
+`data-stat`**. And `To the map` was primary, first and focused on every outcome, so
+*"Change your expedition and try again"* sat over a filled button that leaves.
+
+The structural half fell out of the same fix: the rows are two KINDS, so the card renders
+two lists and a win carries an earnings block a loss does not — 601px against 438px on
+the same board, a different SHAPE before any colour is read.
+
+The BOARD half is struck as **measured but structural**. Confirmed twice over by two
+independent methods (pixel sampling and projecting the grid AABB through the live
+camera): the board is 35–44% of the canvas and 37–47% is genuinely empty. But the fit is
+HEIGHT-bound at every size, so the waste is horizontal — a 1.36:1 board in a ~1.9:1
+canvas — and the board cannot grow sideways (no more content) or downward (the HUD).
+`pad` is worth ~9% of board area if anyone wants it; that is the whole available lever.
+Full numbers, plus the one genuine sub-bug found on the way (`gridBounds` is asymmetric
+by half a hex, and provably inert — 8px of spare in the tightest case), in CLAUDE.md.
+
 **7. ~~Fix the dead booster and the overflowing build rail~~ (D7)** — **DONE.** The smoke
 gate now hit-tests every `#hud` control rather than the first of each class; the rails
 got `.pb-body`'s fade via a shared `ui/dom.js watchOverflow`; the two redundant rail

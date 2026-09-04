@@ -62,6 +62,11 @@ export const RESULTS = Object.freeze({
   /** The tag on an honour crossed by the battle you just fought. Twenty named
    *  thresholds were computed every tick and announced nowhere. */
   honourEarned: 'Honour earned',
+  /** Names the second stat list for a screen reader. The card carries two
+   *  `<dl>`s — what happened, and what the battle paid — and without a label
+   *  the two arrive as one undifferentiated run of terms. Sighted readers get
+   *  the same split as a block; this is that split, said out loud. */
+  gainedLabel: 'What this battle earned',
   campaignTitle: 'The last region is yours',
   campaignBody: 'Twenty-four of twenty-four. There is nothing left of theirs to'
     + ' take: what remains is the ladder, the frontier, and the crown you could'
