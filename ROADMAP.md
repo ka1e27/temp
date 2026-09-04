@@ -4233,6 +4233,84 @@ fractionally wider, which is what says the ram's cost is entirely its SLOTS. Sie
 scarcity, above. And the concentration counter-pick. Anything proposed next should say
 which of those shapes it is not, before it is built.
 
+### ⇒ DIAGNOSED: it is denominated in GOLD and TRAINING TIME, and every attempt so far aimed at SLOTS
+
+**The sentence two paragraphs up — "the gap is created entirely in the opening, by the
+landing force" — is the thing that was wrong, and it is why seven attempts all aimed at
+the same denominator.** It was inferred from the `learnedPlayerComp` table above: both
+loadouts converge on militia by minute two, so the opening looked like the only place
+they differ. They converge *because militia wins the in-battle economy*. The landing
+force is where the difference is VISIBLE, not where it is CAUSED.
+
+**Four denominators decide a unit's worth. Exactly one of them is anchored.**
+`UNIT_SLOTS` is derived from gold^0.83 with a documented deliberate break
+(`balance.engine.js`); attack-per-gold, defence-per-gold and bodies-per-yard-per-second
+are anchored against nothing at all. Measured against the REAL mid-battle enemy army
+(gallowmoor, 1/5/9 minutes, two seeds: militia ~56%, spearmen ~28%, raiders ~11%,
+rams ~5%) rather than a hand-picked one:
+
+```
+            atk/SLOT      atk/GOLD      def/GOLD      bodies/yard/s
+militia     4.84  (#2)    0.403 (#1)    0.302 (#2)    0.250 (#1)
+raiders     6.01  (#1)    0.400 (#2)    0.123 (#4)    0.083 (#4)
+spearmen    2.71  (#6)    0.226 (#4)    0.361 (#1)    0.125 (#2)
+archers     3.67  (#3)    0.275 (#3)    0.100 (#6)    0.083 (#5)
+halberds    3.17  (#4)    0.195 (#6)    0.081 (#7)    0.063 (#6)
+outriders   3.14  (#5)    0.209 (#5)    0.104 (#5)    0.100 (#3)
+sappers     1.00  (#7)    0.055 (#7)    0.127 (#3)    0.063 (#7)
+```
+
+**Militia's WORST rank is #2. Every other unit's worst is #4 or lower.** A roster with a
+decision in it has every unit best at something and bad at something else, which is what
+the other six do; militia is never forced to choose.
+
+**And militia does not lead per SLOT — raiders do, by 24%.** That retires five of the
+seven attempts in one measurement: they re-priced the landing force, which is the one
+column where the roster already works. Attack per GOLD is a **dead heat** (0.403 v
+0.400), so on the budget that governs the other eight-to-twenty minutes the expensive
+unit buys no offence, and the fight is decided by the two unpriced columns — holding
+cost (**2.5×** raiders per gold, and a battle is won by holding 30–55 sites) and yard
+throughput (**3×**, because `batch` is charged in gold and is therefore a pure rate, and
+militia is the only line troop that has it).
+
+**The keystone: the battle is fought with TRAINED bodies.** Gallowmoor, shipped harness
+options, seeds 1000 and 8919 — a **307-body landing force**, and by minute FIVE another
+**300 and 238** trained, i.e. **49% and 44% of everything ever fielded**, in runs the bot
+went on to lose (a winning run trains more). CLAUDE.md's own census has it at 1,092 bodies
+by minute fifteen from a ~243-body landing. `battleRoster` narrows training to the
+expedition's own types, so **a slot spent is a production line chosen** — a per-slot
+comparison prices the first two minutes of a twenty-minute decision.
+
+**A plausible hypothesis that died here, recorded so it is not re-run.** The enemy
+guarantees itself a spear backbone (`MAPGEN.trainType.trainingGround` is `'spearmen'`;
+`aiadapt.js` reserves one yard before either share spends), and militia counters
+spearmen — so "the enemy hands militia its own counter" looks like the answer. It is
+not: the enemy's real army is only 21–34% spearmen and mostly militia, and against THAT
+army raiders lead per slot. A fixture built on a pure spearwall would have encoded the
+wrong explanation and passed.
+
+**Pinned as `tests/loadouteconomy.test.js` — 114ms against `loadoutdominance`'s ~700
+seconds**, exact, and true whatever the dial ships today, which is what a win-rate test
+cannot be while the campaign is mid-search. Three negative controls run: a second batch-2
+unit, a militia defence cut, and a slot reprice putting militia first per slot each turn
+the right test red. It also guards the regression a fix would invite — a SECOND
+all-rounder.
+
+**NO NUMBER WAS CHANGED, deliberately.** The lever this names is the gold column and
+`batch`, and moving either re-tunes twenty-four regions while two rows are still out of
+band. The one lever probed (`MAPGEN.trainType.trainingGround`, n=24 matched seeds,
+gallowmoor) closes the gap completely — default 54% / mono 63% becomes 17%/17% on
+raiders and 25%/25% on militia — **and costs 29–37 points of difficulty doing it**, so
+the closure is confounded with a floor effect and it is not shippable as it stands.
+
+**So the next attempt should say which of the seven shapes it is not AND which
+denominator it moves.** The three unpriced ones are the candidates; slots are not. Two
+that follow directly from the table and are cheap to screen: give a second line troop
+`batch: 2` so throughput is a choice rather than a default, or widen the enemy's YARD
+COUNT so `counterShare` can actually bind (`ai.data.js` already names that one as the
+honest lever for its own near-inert ladder — it is the same fix seen from the other
+side). Both are balance passes and both want the re-tune finished first.
+
 ---
 
 ## Near-term — each is one file or one flag

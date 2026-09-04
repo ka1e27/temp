@@ -6742,8 +6742,91 @@ buttons read `–` for the whole battle because a fresh save has no relics.
   **Seven fixes measured, five rejected, two shipped: two militia nerfs, a slot-share
   cap, share-scaled march speed, and the concentration counter-pick are dead; the siege
   frontage shipped for `breachSeconds` and the slot reprice shipped for this.** Anything
-  proposed next should say which of those seven shapes it is not, and it should act on
-  the landing force, because that is the only place the two armies differ.
+  proposed next should say which of those seven shapes it is not.
+
+  **⇒ AND THE STANDING ADVICE THAT WENT WITH THAT SENTENCE — "it should act on the
+  LANDING FORCE, because that is the only place the two armies differ" — IS RETIRED.
+  IT WAS DERIVED FROM AN INCOMPLETE MODEL, AND IT IS WHY ALL SEVEN ATTEMPTS AIMED AT
+  THE SAME WRONG DENOMINATOR.** The two armies differ there because both CONVERGE on
+  militia by minute two (measured, 95% and 99%), and they converge because militia wins
+  the in-battle ECONOMY. So the landing force is where the difference is VISIBLE, not
+  where it is CAUSED.
+
+  **FOUR DENOMINATORS DECIDE A UNIT'S WORTH AND ONLY ONE OF THEM IS ANCHORED.**
+  `UNIT_SLOTS` is authored with care — `balance.engine.js` derives it from gold^0.83 and
+  documents the one deliberate break — and nothing anchors the other three against
+  anything at all. Measured against the REAL mid-battle enemy army rather than a
+  hand-picked one (gallowmoor, sampled at 1/5/9 minutes over two seeds: militia ~56%,
+  spearmen ~28%, raiders ~11%, rams ~5%):
+
+  ```
+              atk/SLOT      atk/GOLD      def/GOLD      bodies/yard/s
+  militia     4.84  (#2)    0.403 (#1)    0.302 (#2)    0.250 (#1)
+  raiders     6.01  (#1)    0.400 (#2)    0.123 (#4)    0.083 (#4)
+  spearmen    2.71  (#6)    0.226 (#4)    0.361 (#1)    0.125 (#2)
+  archers     3.67  (#3)    0.275 (#3)    0.100 (#6)    0.083 (#5)
+  halberds    3.17  (#4)    0.195 (#6)    0.081 (#7)    0.063 (#6)
+  outriders   3.14  (#5)    0.209 (#5)    0.104 (#5)    0.100 (#3)
+  sappers     1.00  (#7)    0.055 (#7)    0.127 (#3)    0.063 (#7)
+  ```
+
+  **READ THE RANKS. Militia's WORST rank across the four is #2; every other unit's worst
+  is #4 or lower.** That single line is the whole defect: a roster with a decision in it
+  has every unit best at something and bad at something else, which is exactly what the
+  other six do. There is no axis on which bringing something else is right.
+
+  **AND MILITIA DOES NOT LEAD ON ATTACK PER SLOT — RAIDERS DO, BY 24%.** That is the
+  measurement that retires five of the seven attempts in one stroke: they all re-priced
+  the landing force, which is the one denominator where the roster is already working.
+  Worse, attack per GOLD is a **dead heat** (0.403 against 0.400), so on the budget that
+  governs the other eight-to-twenty minutes the expensive unit buys no offence at all,
+  and the fight is decided by the two columns nobody has ever priced:
+
+  - **Holding cost.** Militia garrisons captured ground at **2.5x** raiders per gold, and
+    a battle is won by taking and holding thirty to fifty-five sites.
+  - **Yard throughput.** `batch` is charged in gold (`training.js trainJob`:
+    `cost = gold * batch`), so it buys no discount — it is purely a rate, doubling what
+    one training ground turns out per second. **Militia is the only line troop that has
+    it**, and yards are scarce: instrumented on gallowmoor the enemy holds **three or
+    four**, and exactly ONE of them ever answers the player's 94-96% militia army,
+    because `spendable = yards - 1` and the `max(1, ...)` floor is the entire rule (the
+    `counterShare` ladder is documented as near-inert in `ai.data.js` for this reason).
+
+  **THE KEYSTONE IS THAT THE BATTLE IS FOUGHT WITH TRAINED BODIES, NOT LANDED ONES.**
+  Measured on gallowmoor with the shipped harness options, seeds 1000 and 8919: a
+  **307-body landing force**, and by minute FIVE another **300 and 238** bodies trained —
+  **49% and 44% of everything ever fielded** — in runs the bot went on to lose, so a
+  winning run trains more. This file's own census already has the bot at 1,092 bodies by
+  minute fifteen from a ~243-body landing. `meta/composition.js battleRoster` narrows
+  training to the expedition's own types, so **a slot spent is a production line chosen**,
+  and a per-slot comparison prices only the first two minutes of a twenty-minute decision.
+
+  **A HYPOTHESIS THAT DIED ON THE WAY, worth recording because it is the plausible one.**
+  The enemy guarantees itself a spear backbone (`MAPGEN.trainType.trainingGround` is
+  `'spearmen'`, and `aiadapt.js` reserves one yard before either share spends anything),
+  and militia is the unit that counters spearmen — so "the enemy hands militia its own
+  counter" looks like the answer. It is not: the enemy's REAL army is only 21-34%
+  spearmen and mostly militia, and against that army **raiders lead on attack per slot**.
+  The counter matrix is not what carries this. A fixture built on a pure spearwall would
+  have encoded the wrong explanation and passed.
+
+  **PINNED AS ARITHMETIC RATHER THAN AS A WIN RATE**, in `tests/loadouteconomy.test.js`
+  (114ms, against `loadoutdominance`'s ~700 seconds) — exact, and true whatever
+  `regions.data.js` ships today, which is precisely what a win-rate test cannot be while
+  the campaign is mid-search. Three negative controls were run: a second batch-2 unit, a
+  militia defence cut, and a slot reprice that puts militia first per slot each turn the
+  right test red. It also guards the thing that would silently restore the defect after a
+  fix — a SECOND all-rounder, i.e. any other unit becoming top-three on all four.
+
+  **WHAT IS NOT DONE, STATED PLAINLY: no number was changed.** The lever this diagnosis
+  names is the gold column and `batch`, and moving either re-tunes twenty-four regions —
+  the campaign is mid-re-tune and two rows are still out of band, so a reprice now would
+  be authored against a moving target. The one lever that was probed
+  (`MAPGEN.trainType.trainingGround`, n=24 matched seeds on gallowmoor) closes the gap
+  completely — default 54%/mono 63% becomes 17%/17% on raiders and 25%/25% on militia —
+  **and crushes difficulty by 29-37 points doing it**, so the gap closure is confounded
+  with a floor effect and it is not shippable as it stands. The arithmetic above is exact
+  and unconfounded; the sim probe agrees in direction only.
 - ~~**Ownership's second channel is half-built.**~~ **CLOSED, both halves.**
   `render/ownerDash.js` did the site STROKE (solid yours, dashed theirs, fine dotted
   for nobody's and for a fogged ghost). The other half was the territory FLOOD, which
