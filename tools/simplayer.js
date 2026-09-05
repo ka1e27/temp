@@ -38,6 +38,7 @@ import { beliefFor } from '../src/battle/belief.js';
 // FROM simpool.js for `pooledAssaultTurn`).
 import { HOME_FLOOR, pooledAssaultTurn } from './simpool.js';
 import { defendTurn } from './simdefend.js';
+import { marchTurn } from './simmarch.js';
 // How a run BEGINS moved to ./simstart.js at the line cap and is re-exported
 // here, so this file stays the harness's one front door.
 import { metaFor, startRun } from './simstart.js';
@@ -156,6 +157,25 @@ export function playerTurn(state, opts = {}) {
   // muster, at tools/simdefend.js.
   if (opts.answer !== false) {
     for (const id of defendTurn(view, state, state.commands)) usedSources.add(id);
+  }
+
+  // ...AND THE ONE THING IT DOES ABOUT THE TROOPS THAT ARE ALREADY OUTSIDE.
+  //
+  // `MOVE_SQUAD` was the largest of the eight command verbs nothing in `tools/`
+  // had ever issued, and it was not a rounding error: `battle/meleephase.js`
+  // camps any column that walks onto a contested tile, nothing clears `camped`
+  // again on its own, and 59-81% of every body-second this bot spent off a site
+  // was therefore spent STRANDED — on regions it wins as well as ones it loses.
+  // Whole argument and the five-battle table at tools/simmarch.js.
+  //
+  // It touches no garrison, so it takes no `usedSources` entry: these are
+  // troops the send loop below cannot see or spend either way.
+  // OFF BY DEFAULT (`--march` opts in), because the effect is far too big to
+  // land on a table that was just tuned: +8 on riverfen and +13 on gallowmoor
+  // at n=24, and riverfen leaves its band on that alone. Every number in
+  // regions.data.js was taken without it.
+  if (opts.march) {
+    for (const cmd of marchTurn(view, mine)) state.commands.push(cmd);
   }
 
   for (const src of mine) {

@@ -1649,6 +1649,110 @@ promptly (`ATTACKED — farm will fall` at 37.6s, `UNDER SIEGE — farm` at 43.7
 on a fresh riverfen). What no surface distinguishes is on the BOARD: an incoming
 two-troop free-lunch grab and an incoming assault are drawn identically.
 
+## The harness plays 5 of the game's 12 verbs, and the missing one that mattered
+
+`battle/commands.js HANDLERS` has twelve entries. Counted against the source —
+`grep -c "t: '<VERB>'" tools/*.js` — the bot that produces every win rate this project
+has ever published pushes **four** of them, and this pass added a fifth:
+
+```
+SEND 5   TRAIN 1   UPGRADE 1   BUILD 2        <- everything ever measured
+MOVE_SQUAD 0                                  <- ADDED HERE, opt-in
+RECRUIT 0  RALLY 0  RALLY_KEEP 0  BOOSTER 0  RETREAT 0  RETREAT_SQUAD 0  WITHDRAW 0
+```
+
+CLAUDE.md concedes several of these individually — *"the harness launches every run with
+`boosters: []`"*, *"the harness never recruits"*, *"`MOVE_SQUAD` is issued by
+`screens/battle-orders.js` and by tests, and by nothing in `tools/` at all"* — and had
+never totalled them. By this project's own most-repeated rule, seven-twelfths of the
+game's skill expression is an unverified claim.
+
+**AND THE AUDIT RE-RANKED THEM, which is why it was worth doing before building
+anything.** Instrumented over a real gallowmoor battle:
+
+```
+verb            opportunity in one battle                       verdict
+MOVE_SQUAD      59-81% of body-seconds off a site are stranded  THE BIG ONE
+RECRUIT         peak treasury 219g against a 250g commission    UNREACHABLE, not unplayed
+RETREAT         11 losing-melee-seconds in a whole battle       negligible
+BOOSTER         config carries [] from region 2 on              a relic-economy question
+```
+
+**RECRUIT is the interesting negative.** The bot never once holds the 250 gold a Marshal
+costs — it spends everything on training and building — so the commission is not a verb
+it declines to use, it is one it cannot afford. That is a fact about the policy's
+economy rather than a gap in its repertoire, and no amount of teaching it the verb would
+change a number. **BOOSTER** is bounded the same way from the other side: `metaFor` earns
+no relics, so the harness config carries an empty booster array for every region past the
+first (region 1 gets exactly one free `march` charge from `withFirstBattleCharge`, and
+never fires it). Measuring boosters means measuring a relic economy, which is the
+`--relics` gap this file already records — not a policy change.
+
+### MOVE_SQUAD: the bot was abandoning most of its field army
+
+**`battle/meleephase.js openHexMelee` camps every squad that walks onto a contested
+tile** — that is the whole of "you cannot walk through an army" — and **nothing clears
+`camped` again** except `RETREAT_SQUAD` or `MOVE_SQUAD`, neither of which anything in
+`tools/` had ever issued. So a column that met one of the enemy's two-troop columns, won,
+and was left standing on a hex simply stopped being part of the war.
+
+That is not a rare event: this file's own census has the enemy sending **2,114 columns in
+a twenty-minute gallowmoor battle at a median size of two**, so the late boards are thick
+with tiny columns whose main effect is to halt bigger ones. Measured, five battles across
+three regions:
+
+```
+riverfen   seed 1000    win   9.2m   81% of body-seconds off a site STRANDED   11 halted
+riverfen   seed 8919    win  11.4m   72%   ...ending with 41 bodies parked     12 halted
+gallowmoor seed 1000    loss  9.3m   59%                                       44 halted
+gallowmoor seed 24757   loss  4.9m   71%                                       31 halted
+thanescar  seed 8919    loss  4.6m   60%                                       23 halted
+```
+
+**Between 59% and 81% of every body-second the bot spent outside a building was spent
+stranded — on regions it WINS as much as ones it loses.** riverfen ends with fifty-one
+bodies standing in fields.
+
+**THE FIRST MEASUREMENT OF THIS OVERSTATED IT AND THE CORRECTION IS WORTH KEEPING.**
+Counting squad-SECONDS read 82% camped, which looked enormous — but a camped squad stays
+in `state.squads` indefinitely while a marching one leaves the array on arrival, so
+seconds are biased toward whatever is standing still. Counting distinct squads and BODIES
+is the honest version, and it is what the table above reports.
+
+**`tools/simmarch.js marchTurn` is the policy and it is deliberately the dullest one that
+works**: a stranded column walks to the nearest friendly site and rejoins the empire,
+where every existing rule can spend it again. It does not pick its own assault targets —
+`bestAssaultTarget` reasons about a source SITE and its garrison, and teaching it to
+reason about a squad would be a second targeting policy to keep in step with the first.
+
+**A COLUMN IN AN OPEN-GROUND MELEE IS NEVER RE-TASKED, and that is a rule rather than an
+optimisation.** `openHexMelee` sets `camped` AND hangs a `melee` record on the same squad
+without taking it off `state.squads`, so `cmdMoveSquad` would accept the order and march a
+column straight out of a fight — a free disengage no player is offered, since breaking off
+is RETREAT and RETREAT leaves with whatever survives to the moment it is ordered.
+
+**IT SHIPS OFF (`--march` OPTS IN), and the reason is size rather than doubt.** Measured
+at n=24, matched seeds, one variable:
+
+```
+region        --march ON     off          delta   all-median      timeouts while AHEAD
+riverfen      96%   9.2m     88%   8.0m    +8      10.2m / 8.8m    1 / 2
+gallowmoor    67%  11.9m     54%  16.1m   +13      12.5m / 19.6m   3 / 8
+```
+
+Riverfen leaves its band on that alone (96% against a 92 ceiling), and gallowmoor's
+all-run median falls **19.6m → 12.5m** while timeouts-while-ahead go 8 → 3 — the
+`--richyards` signature exactly: a bot that stops running out of clock. Every number in
+`regions.data.js` was taken without it and the campaign is 22 of 24 in band as of the last
+sweep, so turning this on does not improve the table, it invalidates it. This is the
+`--richyards` decision arriving a second time, and it should be resolved the same way:
+**re-base with `--march` ON before spending another dial**, because the campaign is
+currently tuned against a bot that abandons most of its field army.
+
+Inertness is proven rather than argued — matched runs at the default are byte-identical to
+the parent commit — and `tests/simmarch.test.js` pins that as its load-bearing negative
+control, alongside the melee rule and a deterministic destination.
+
 ## The harness bot CAN concentrate force now, and it changes nothing — the force is not there
 
 **Read this instead of the section below it, which is the hypothesis this one tested.**

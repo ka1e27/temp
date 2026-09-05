@@ -238,6 +238,41 @@ a to-do list that describes shipped work as pending sends the next reader to bui
 twice, which is the failure CLAUDE.md records under "Still open" — three stale entries in
 eight, now four.
 
+**9. ~~The harness never plays 8 of the game's 12 verbs.~~ AUDITED, and the one that
+mattered is built and measured — but it SHIPS OFF.**
+
+The count is confirmed: `battle/commands.js HANDLERS` has twelve entries and the bot that
+produces every published win rate pushed four (SEND, TRAIN, UPGRADE, BUILD). The audit
+re-ranked the missing eight, which is why it was worth doing before building anything:
+
+- **RECRUIT is UNREACHABLE, not unplayed** — the bot's peak treasury in a gallowmoor
+  battle is **219 gold** against a 250-gold commission. Teaching it the verb would change
+  no number.
+- **BOOSTER is a relic-economy question, not a policy one** — `metaFor` earns no relics,
+  so the config carries `[]` from region 2 on. (Region 1 gets one free `march` charge from
+  `withFirstBattleCharge` and never fires it.)
+- **RETREAT is negligible** — 11 losing-melee-seconds in a whole battle.
+- **MOVE_SQUAD was the big one**, and it is much bigger than "one of eight".
+
+`battle/meleephase.js openHexMelee` camps every column that walks onto a contested tile,
+**nothing clears `camped` again** except MOVE_SQUAD or RETREAT_SQUAD, and the enemy sends
+~2,114 columns a battle at a median size of two. So the bot's field army was being
+progressively converted into stranded piles it had no verb to recover. Measured across
+five battles, three regions, wins and losses: **59–81% of every body-second spent off a
+site was spent stranded**, and riverfen — a region it wins — ends with fifty-one bodies
+standing in fields.
+
+`tools/simmarch.js` fixes it with the dullest policy that works (walk to the nearest
+friendly site and rejoin the empire), and it is worth **+8 on riverfen and +13 on
+gallowmoor** at n=24 — riverfen leaves its band on that alone, and gallowmoor's all-run
+median falls 19.6m → 12.5m with timeouts-while-ahead going 8 → 3. That is the
+`--richyards` signature and the `--richyards` decision arriving a second time: too big to
+land on a table that is 22 of 24 in band, so `--march` OPTS IN and the default is proven
+byte-identical to the parent commit.
+
+**The recommendation is explicit: re-base with `--march` ON before the next dial moves.**
+The campaign is currently tuned against a bot that abandons most of its field army.
+
 **8. ~~The board gets a third of the screen, and every outcome looks the same.~~ HALF
 DONE, HALF STRUCK — and the split is the deliverable.**
 

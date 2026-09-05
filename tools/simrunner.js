@@ -18,6 +18,7 @@
 //   node tools/simrunner.js --all --doctrine=breaker   # ...every region under ONE doctrine
 //   node tools/simrunner.js --all --nomuster     # ...an enemy that never commits its host
 //   node tools/simrunner.js --all --noanswer     # ...a bot that never marches home to meet one
+//   node tools/simrunner.js --all --march        # ...one that picks its halted columns back up
 //
 // The scripted player itself lives in tools/simplayer.js so tests can drive it.
 import { playOne } from './simplayer.js';
@@ -196,6 +197,25 @@ for (const id of regionIds) {
     // answers is a difficulty spike, and an answer with nothing to answer is
     // dead code. See tools/simdefend.js.
     answer: !args.noanswer,
+    // `--march` is the bot that picks its halted columns back up, and it OPTS
+    // IN — inverting the house `--noX` pattern deliberately, exactly as `--pool`
+    // does and for the opposite reason. `--pool` ships off because it was a
+    // wash; this ships off because it is far too BIG to land on a table that
+    // was just tuned. Measured at n=24, matched seeds, one variable:
+    //
+    //     region        --march ON     off          delta
+    //     riverfen      96%   9.2m     88%   8.0m    +8
+    //     gallowmoor    67%  11.9m     54%  16.1m   +13
+    //
+    // Riverfen leaves its band on that alone (96% against a 78-92 ceiling), and
+    // gallowmoor's ALL-run median falls 19.6m -> 12.5m with timeouts-while-ahead
+    // going 8 -> 3, which is the `--richyards` signature: a bot that stops
+    // running out of clock. Every number in regions.data.js was taken without
+    // it, so turning it on does not improve the table, it invalidates it — and
+    // the campaign is 22 of 24 in band as of the last sweep. See
+    // tools/simmarch.js, and the recommendation to re-base with it ON before
+    // the next dial moves.
+    march: !!args.march,
   };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
 
