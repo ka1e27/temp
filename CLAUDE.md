@@ -1649,6 +1649,65 @@ promptly (`ATTACKED — farm will fall` at 37.6s, `UNDER SIEGE — farm` at 43.7
 on a fresh riverfen). What no surface distinguishes is on the BOARD: an incoming
 two-troop free-lunch grab and an incoming assault are drawn identically.
 
+## The "24 of 24 in band" claim is stale, and emberholt's dial runs backwards
+
+**Screened at the shipped default (`--march` off), six regions across five tiers:**
+
+```
+region       tier   n     win%   verdict     band
+riverfen      1     32     84%   ok          78-92
+emberholt     2     96     90%   TOO EASY    66-84   <- confirmed, 6 over
+gallowmoor    3     32     53%   ok          50-72
+thanescar     4     96     53%   ok          34-56   <- n=32 read 59, that was noise
+ravensmarch   5     32     31%   ok          22-42
+widowsgate    6     32     38%   TOO EASY    18-36   <- 2 over, NOT confirmed
+```
+
+**One row confirms out of band.** thanescar screened at 59% and came back 53% at n=96 —
+the project's own "confirm within ~8 points of an edge at higher n" rule earning its keep
+again. widowsgate is 2 points over at n=32 and unconfirmed.
+
+**It is not this session's doing, and it is not a tier that moved.** The only
+balance-relevant change made here was the muster schedule, and emberholt reads **91% with
+the muster and 91% with `--nomuster`** — identical; thanescar goes 59% → 56% without it,
+i.e. the muster makes it slightly harder, which is the right direction. Nor did the tier
+drift: kaldan 78, highmarch 78, greywater 75, thornmoor 84, all `ok`. Emberholt is alone.
+
+It also cannot be bisected against `df05b2c`, the commit whose message says "24 of 24 in
+band": **285 commits of feature work follow it**, several of which this file records as
+having re-opened the re-tune. The claim is provenance, not today's state.
+
+### Two levers measured at n=96, and neither closed it
+
+```
+3.88 / player 4    90%   baseline, TOO EASY
+4.03 / player 4    95%   the dial UP made it EASIER — backwards
+3.88 / player 3    86%   beachhead cut, -4, right direction but still over
+```
+
+**`enemyMult` RUNS BACKWARDS ON EMBERHOLT.** +0.15 cost five points of difficulty, and the
+supporting detail says it is real rather than noise: timeouts fell 9 → 5, losses 1 → 0,
+and battles got LONGER (win-median 9.7m → 10.6m). A slower, more decisive win is the
+opposite of what a harder enemy should buy.
+
+**The row's own shape agrees.** Emberholt fields ELEVEN enemy sites against thornmoor's
+ten on the identical 3.88 dial, and reads six points EASIER. More enemy country here buys
+an enemy that spreads and attacks rather than one that holds — and this bot beats an
+attacker, because it wins field battles and then walks onto the ground the attacker left.
+That is the same inversion already recorded for the neutral pool ("widening the neutral
+pool makes a region HARDER, not easier"), found independently on a different column.
+
+⚠ **So the campaign's headline knob is not monotonic at tier 2**, which contradicts the
+standing note that says non-linearity is a tier-4-and-up problem. Re-measure the DIRECTION
+before reaching for `enemyMult` on any row that is misbehaving, not just its size.
+
+**Left unfixed deliberately, and the values in `regions.data.js` are the shipped ones.**
+A −4 that leaves the row at 86% is still out of band and would make emberholt the only
+tier-2 region landing on three sites; shipping it would report "fixed" while the gate
+still fails. What is shipped instead is the response curve, so the next attempt starts
+from three n=96 measurements rather than from the assumption that the dial points the way
+it usually does.
+
 ## The harness plays 5 of the game's 12 verbs, and the missing one that mattered
 
 `battle/commands.js HANDLERS` has twelve entries. Counted against the source —

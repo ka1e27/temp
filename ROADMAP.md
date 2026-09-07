@@ -238,6 +238,34 @@ a to-do list that describes shipped work as pending sends the next reader to bui
 twice, which is the failure CLAUDE.md records under "Still open" — three stale entries in
 eight, now four.
 
+**10. THE "24 OF 24 IN BAND" CLAIM IS STALE — one row confirms out, and its dial runs
+backwards. OPEN, with the response curve measured.**
+
+Screened at the shipped default across five tiers: riverfen 84 ok, emberholt **90 TOO
+EASY**, gallowmoor 53 ok, thanescar 53 ok, ravensmarch 31 ok, widowsgate 38 (2 over,
+unconfirmed at n=32). thanescar screened at 59 and came back 53 at n=96, which is the
+"confirm near an edge at higher n" rule earning its keep again.
+
+Not this session's doing — emberholt reads 91% both with the muster and with `--nomuster`
+— and not a tier that moved: kaldan 78, highmarch 78, greywater 75, thornmoor 84, all ok.
+It also cannot be bisected against the commit whose message claims 24 of 24, because
+**285 commits follow it**, several of which re-opened the re-tune. That claim is
+provenance, not state.
+
+**Two levers measured at n=96 and neither closed it**: `enemyMult` 3.88 → 4.03 took it
+from 90% to **95%** — the dial runs BACKWARDS on this row, with timeouts falling 9 → 5 and
+battles getting longer — and the beachhead cut (player 4 → 3) is worth −4, landing at 86%,
+still out. Emberholt fields eleven enemy sites against thornmoor's ten on the identical
+dial and is six points easier, so the row's own shape agrees: more enemy country buys an
+enemy that spreads and attacks, and this bot beats an attacker.
+
+Left unfixed on purpose — a −4 that still reports TOO EASY is not a fix — and the
+`regions.data.js` values are the shipped ones. What is shipped is the curve, so the next
+attempt starts from three n=96 measurements instead of the assumption that the dial points
+the usual way. **The general lesson is the transferable part: `enemyMult` is not monotonic
+at tier 2, which contradicts the standing note that its non-linearity is a tier-4-and-up
+problem. Re-measure the DIRECTION, not just the size.**
+
 **9. ~~The harness never plays 8 of the game's 12 verbs.~~ AUDITED, and the one that
 mattered is built and measured — but it SHIPS OFF.**
 

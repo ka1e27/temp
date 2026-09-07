@@ -106,6 +106,29 @@ export const REGIONS = Object.freeze([
     3.88, 15, 12, [[2, 3, 4], 7, 4], 1.25, 0.25, 7.9, 9,
     'Bramble country: five neutral farms make the opening land grab the whole battle.',
     'branch'),
+  // THE ONE ROW THAT DRIFTED OUT OF BAND, and it drifted alone: screened at the
+  // shipped default, tier 2 reads kaldan 78, highmarch 78, greywater 75,
+  // thornmoor 84 — all `ok` — against emberholt's 90, confirmed at n=96.
+  //
+  // ⚠ AND TWO LEVERS WERE MEASURED ON IT AT n=96 AND NEITHER CLOSED IT. Values
+  // below are the SHIPPED ones; both probes were reverted.
+  //
+  //     3.88 / player 4    90%   baseline, TOO EASY
+  //     4.03 / player 4    95%   dial UP made it EASIER — backwards
+  //     3.88 / player 3    86%   beachhead cut, -4, right way but still over
+  //
+  // `enemyMult` RUNS BACKWARDS HERE: +0.15 cost five points of difficulty,
+  // timeouts fell 9 -> 5 and battles got LONGER (win-median 9.7m -> 10.6m). It
+  // is the same inversion this project already recorded for the neutral pool,
+  // and the row's own shape agrees — emberholt fields ELEVEN enemy sites
+  // against thornmoor's ten on the identical dial and reads six points easier.
+  // More enemy country here buys an enemy that spreads and attacks rather than
+  // one that holds, and this bot beats an attacker. DO NOT REACH FOR THE DIAL
+  // ON THIS ROW WITHOUT RE-MEASURING THE DIRECTION.
+  //
+  // The beachhead is the one lever whose direction is not in doubt, and one
+  // site is worth -4 here. It was not shipped alone because 86% is still out of
+  // band and it would make emberholt the only tier-2 row landing on three.
   T('emberholt', 'Emberholt', 2, [0, 2], ['ironwood', 'saltmere', 'thornmoor', 'gallowmoor'],
     3.88, 16, 12, [[2, 3, 5], 7, 4], 1.7, 0.3, 9.5, 9.5,
     'Ash plains where the enemy trains raiders first. Bring spears or lose your farms by 2:00.'),
