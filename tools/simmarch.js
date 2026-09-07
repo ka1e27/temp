@@ -48,6 +48,20 @@
 // ON before spending another dial**, because the campaign is currently tuned
 // against a bot that abandons most of its field army.
 //
+// AND IT IS NOT AN ASYMMETRY FIX, WHICH IS HOW THIS WAS FIRST WRITTEN UP. The
+// enemy AI emits exactly three verbs — SEND, TRAIN, RETREAT — so it has no
+// MOVE_SQUAD either, and `openHexMelee` camps its columns on the same rule.
+// Measured, both sides strand a comparable share of their own field army:
+// player 59-81%, enemy 51-64%. The enemy halts two to four times as many
+// columns and each is tiny (median 2 against the player's 4-6), but relative to
+// what each side has in the field the loss is similar.
+//
+// So this hands the player a capability the enemy structurally lacks. That is
+// still the right model — the game ships to HUMANS and an unremarkable human
+// drags a stopped column onward, which is this harness's whole specification —
+// but it is a design decision rather than a neutral repair, and the honest
+// alternative is to teach the enemy to recover its columns too.
+//
 // Inertness is proven rather than argued: riverfen, gallowmoor and thanescar at
 // n=8 are byte-identical to the parent commit with the flag absent, and
 // tests/simmarch.test.js pins the default issuing zero MOVE_SQUAD as its

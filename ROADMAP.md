@@ -271,7 +271,15 @@ land on a table that is 22 of 24 in band, so `--march` OPTS IN and the default i
 byte-identical to the parent commit.
 
 **The recommendation is explicit: re-base with `--march` ON before the next dial moves.**
-The campaign is currently tuned against a bot that abandons most of its field army.
+But the REASON was corrected after the fact and the correction matters. The first write-up
+called this an instrument fix — the bot keeping troops it paid for. Checked afterwards,
+the enemy AI emits only SEND/TRAIN/RETREAT, so it has no MOVE_SQUAD either, and both sides
+strand at a comparable relative rate (player 59–81%, enemy 51–64%). So `--march` is not
+correcting an asymmetry; it hands the player something the enemy structurally lacks. The
+re-base is still right — the game ships to humans and an unremarkable human drags a
+stopped column onward — but the alternative should be named rather than assumed away:
+**teach the enemy to recover its columns too**, which is the same argument this project
+already makes for the upgrade button, pointed the other way. Numbers in CLAUDE.md.
 
 **8. ~~The board gets a third of the screen, and every outcome looks the same.~~ HALF
 DONE, HALF STRUCK — and the split is the deliverable.**

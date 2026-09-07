@@ -1753,6 +1753,43 @@ Inertness is proven rather than argued — matched runs at the default are byte-
 the parent commit — and `tests/simmarch.test.js` pins that as its load-bearing negative
 control, alongside the melee rule and a deterministic destination.
 
+**⇒ AND THE FIRST FRAMING OF THIS WAS WRONG IN A WAY THAT CHANGES THE RECOMMENDATION.**
+It was written up as the bot "keeping troops it already paid for" — an instrument fix,
+implying the campaign was tuned against a broken measurement. Checked afterwards, that is
+not the situation. **The enemy AI emits exactly three verbs** — `grep -rhno "t: '[A-Z_]*'"
+over `battle/ai*.js` returns SEND, TRAIN and RETREAT and nothing else — so **it has no
+MOVE_SQUAD either**, and `openHexMelee` camps its columns on the same rule. Both sides
+strand, and measured they strand at a comparable RELATIVE rate:
+
+```
+region        seed    side     stranded share of its own field-army body-seconds   halted   median size
+riverfen      1000    player      81%                                                 11        5
+riverfen      1000    enemy       64%                                                 12        2
+gallowmoor    1000    player      59%                                                 44        6
+gallowmoor    1000    enemy       57%                                                142        2
+gallowmoor    24757   player      71%                                                 31        4
+gallowmoor    24757   enemy       51%                                                 89        2
+```
+
+The enemy halts **two to four times as many columns** and each is tiny (median 2 against
+the player's 4–6), which is the same census that says it sends 2,114 columns a battle —
+but as a share of its own field army it loses about as much as the player does.
+
+**So `--march` does not correct an asymmetry; it hands the player a capability the enemy
+structurally lacks.** The re-base is still the right call, but for a different reason than
+the one first written down: the game ships to HUMANS, and an unremarkable human absolutely
+drags a stopped column onward — that is the harness's whole specification. Tuning against
+a bot that cannot is pricing the campaign against a player who does not exist. What the
+measurement rules out is the easier story, that this is free.
+
+**The alternative is real and should be named rather than assumed away: teach the ENEMY
+to recover its columns too.** That is the same argument this file already makes for why
+the AI does not get the upgrade button, pointed the other way, and it would keep the two
+sides on the same rules. It is a bigger change (the AI has no notion of a squad it owns
+but has not tasked) and it would move the table as well, so it is a balance pass in its
+own right — but "the player gets it and the enemy does not" is a design decision, not a
+neutral fix, and it should be made deliberately.
+
 ## The harness bot CAN concentrate force now, and it changes nothing — the force is not there
 
 **Read this instead of the section below it, which is the hypothesis this one tested.**
