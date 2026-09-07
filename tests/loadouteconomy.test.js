@@ -78,6 +78,23 @@ function rank(key, unit) {
 }
 const worstRank = (unit) => Math.max(...KEYS.map((k) => rank(k, unit)));
 
+test('economy: the documented table covers every line troop', () => {
+  // A GUARD ON THE PROSE, NOT ON THE CODE, and it exists because the write-up
+  // of this finding shipped with a row missing. The measurement that produced
+  // the table in CLAUDE.md used a HAND-WRITTEN unit list while this file
+  // derives `LINE` from `UNIT_IDS` — so the two silently disagreed by one
+  // (rams), and every rank below it in the documented table was one place too
+  // high. The conclusion survived, because militia is top-two either way; the
+  // table did not. Values re-derived and both documents corrected.
+  //
+  // If a unit is added or removed, this fails and says so, which is the cue to
+  // re-take the table rather than to edit this number.
+  assert.equal(LINE.length, 8,
+    `the roster changed (${LINE.join(', ')}) — re-derive the denominator table in `
+    + 'CLAUDE.md and ROADMAP.md rather than editing this count');
+  assert.ok(!LINE.includes('marshal'), 'the Marshal is commissioned, not costed per gold');
+});
+
 test('economy: militia is the only troop that is top-two on EVERY denominator', () => {
   // THE DEFECT, STATED AS A RANK RATHER THAN A WIN RATE. A roster with a real
   // decision in it has every unit best at something and bad at something else —

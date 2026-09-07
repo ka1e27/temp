@@ -4314,11 +4314,12 @@ rams ~5%) rather than a hand-picked one:
             atk/SLOT      atk/GOLD      def/GOLD      bodies/yard/s
 militia     4.84  (#2)    0.403 (#1)    0.302 (#2)    0.250 (#1)
 raiders     6.01  (#1)    0.400 (#2)    0.123 (#4)    0.083 (#4)
-spearmen    2.71  (#6)    0.226 (#4)    0.361 (#1)    0.125 (#2)
 archers     3.67  (#3)    0.275 (#3)    0.100 (#6)    0.083 (#5)
+spearmen    2.71  (#6)    0.226 (#4)    0.361 (#1)    0.125 (#2)
+outriders   3.13  (#5)    0.209 (#5)    0.104 (#5)    0.100 (#3)
 halberds    3.17  (#4)    0.195 (#6)    0.081 (#7)    0.063 (#6)
-outriders   3.14  (#5)    0.209 (#5)    0.104 (#5)    0.100 (#3)
-sappers     1.00  (#7)    0.055 (#7)    0.127 (#3)    0.063 (#7)
+rams        2.26  (#7)    0.085 (#7)    0.028 (#8)    0.050 (#8)
+sappers     1.00  (#8)    0.055 (#8)    0.127 (#3)    0.063 (#7)
 ```
 
 **Militia's WORST rank is #2. Every other unit's worst is #4 or lower.** A roster with a
