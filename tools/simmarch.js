@@ -32,21 +32,29 @@
 // onward without thinking about it. The bot could not.
 //
 // IT SHIPS OFF (`--march` OPTS IN), AND THE REASON IS SIZE RATHER THAN DOUBT.
-// Measured at n=24, matched seeds, one variable:
+// Re-taken at n=32 across five tiers, matched seeds, one variable:
 //
-//     region        --march ON     off          delta   all-median     ahead
-//     riverfen      96%   9.2m     88%   8.0m    +8      10.2m / 8.8m   1 / 2
-//     gallowmoor    67%  11.9m     54%  16.1m   +13      12.5m / 19.6m  3 / 8
+//     region       tier   off     --march ON    delta
+//     riverfen      1     84%      88%           +4
+//     emberholt     2     91%      94%           +3
+//     gallowmoor    3     53%      66%          +13
+//     thanescar     4     59%      59%            0
+//     ravensmarch   5     31%      56%          +25
 //
-// Riverfen leaves its band on that alone (96% against a 92 ceiling), and
-// gallowmoor's ALL-run median falls 19.6m -> 12.5m while timeouts-while-ahead go
-// 8 -> 3 — the `--richyards` signature exactly: a bot that stops running out of
-// clock. Every number in regions.data.js was taken without this, and the
-// campaign is 22 of 24 in band as of the last sweep, so turning it on does not
-// improve the table, it invalidates it. That is the `--richyards` decision
-// arriving a second time and it wants the same answer: **re-base with `--march`
-// ON before spending another dial**, because the campaign is currently tuned
-// against a bot that abandons most of its field army.
+// +3, +4, +13, 0, +25 — NOT A SHIFT, A RE-WEIGHTING, and a wider spread than the
+// ram slot reprice (+14 duskfell against +3 karrowmere) that CLAUDE.md records
+// as having cost a full re-tune rather than a dial nudge. Ravensmarch alone goes
+// from `ok` to `TOO EASY`; thanescar does not move at all.
+//
+// The shape follows how much INTERCEPTION a map produces, which is the
+// mechanism: the enemy halts 11 player columns on riverfen and 44 on gallowmoor,
+// so the busier the board the more there is to pick back up. One number cannot
+// price this, and the re-base has to re-take every row.
+//
+// ⚠ AN EARLIER TWO-ROW SCREEN AT n=24 READ +8 AND +13 AND WAS MISLEADING. It
+// moved its own control (riverfen 88% off at n=24, 84% at n=32), so most of that
+// +8 was noise. CLAUDE.md's "n=12 is far too noisy to tune on" applies at 24 too
+// when the deltas are single digits.
 //
 // AND IT IS NOT AN ASYMMETRY FIX, WHICH IS HOW THIS WAS FIRST WRITTEN UP. The
 // enemy AI emits exactly three verbs — SEND, TRAIN, RETREAT — so it has no

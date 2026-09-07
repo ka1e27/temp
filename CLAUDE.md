@@ -1731,23 +1731,39 @@ without taking it off `state.squads`, so `cmdMoveSquad` would accept the order a
 column straight out of a fight — a free disengage no player is offered, since breaking off
 is RETREAT and RETREAT leaves with whatever survives to the moment it is ordered.
 
-**IT SHIPS OFF (`--march` OPTS IN), and the reason is size rather than doubt.** Measured
-at n=24, matched seeds, one variable:
+**IT SHIPS OFF (`--march` OPTS IN), and the reason is size rather than doubt.** Screened
+at n=24 on two rows it read +8 and +13. **Re-taken at n=32 across five tiers, matched
+seeds, one variable — and the two-row screen was badly misleading:**
 
 ```
-region        --march ON     off          delta   all-median      timeouts while AHEAD
-riverfen      96%   9.2m     88%   8.0m    +8      10.2m / 8.8m    1 / 2
-gallowmoor    67%  11.9m     54%  16.1m   +13      12.5m / 19.6m   3 / 8
+region       tier   off     --march ON    delta
+riverfen      1     84%      88%           +4
+emberholt     2     91%      94%           +3
+gallowmoor    3     53%      66%          +13
+thanescar     4     59%      59%            0
+ravensmarch   5     31%      56%          +25
 ```
 
-Riverfen leaves its band on that alone (96% against a 92 ceiling), and gallowmoor's
-all-run median falls **19.6m → 12.5m** while timeouts-while-ahead go 8 → 3 — the
-`--richyards` signature exactly: a bot that stops running out of clock. Every number in
-`regions.data.js` was taken without it and the campaign is 22 of 24 in band as of the last
-sweep, so turning this on does not improve the table, it invalidates it. This is the
-`--richyards` decision arriving a second time, and it should be resolved the same way:
-**re-base with `--march` ON before spending another dial**, because the campaign is
-currently tuned against a bot that abandons most of its field army.
+**+3, +4, +13, 0, +25. It is not a shift, it is a RE-WEIGHTING** — a wider spread than
+the ram slot reprice (+14 duskfell against +3 karrowmere) that this file records as
+having cost a full re-tune rather than a dial nudge. Ravensmarch alone goes from `ok` to
+`TOO EASY`, and thanescar does not move at all.
+
+**The shape follows how much interception a map produces**, which is the mechanism: the
+enemy halts 11 player columns on riverfen and 44 on gallowmoor, so the bigger and busier
+the board, the more there is to pick back up. That is why a single number cannot price
+this and why the re-base has to re-take every row.
+
+**Two process notes from that.** The n=24 screen moved its own control (riverfen read 88%
+off at n=24 and 84% at n=32), so most of the headline +8 was noise — a reminder that this
+file's own "n=12 is far too noisy to tune on" applies at 24 as well when the deltas are
+single digits. And gallowmoor's all-run median falls **20.6m → 12.5m** with
+timeouts-while-ahead going 9 → 4, which is the `--richyards` signature: a bot that stops
+running out of clock.
+
+Every number in `regions.data.js` was taken without this, so turning it on does not
+improve the table, it invalidates it. **Re-base with `--march` ON before spending another
+dial — but re-take every row rather than shifting the dial by a constant.**
 
 Inertness is proven rather than argued — matched runs at the default are byte-identical to
 the parent commit — and `tests/simmarch.test.js` pins that as its load-bearing negative

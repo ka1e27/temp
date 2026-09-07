@@ -171,9 +171,10 @@ export function playerTurn(state, opts = {}) {
   // It touches no garrison, so it takes no `usedSources` entry: these are
   // troops the send loop below cannot see or spend either way.
   // OFF BY DEFAULT (`--march` opts in), because the effect is far too big to
-  // land on a table that was just tuned: +8 on riverfen and +13 on gallowmoor
-  // at n=24, and riverfen leaves its band on that alone. Every number in
-  // regions.data.js was taken without it.
+  // land on a table that was just tuned — and it is a RE-WEIGHTING rather than a
+  // shift: +4/+3/+13/0/+25 across tiers 1-5 at n=32, ravensmarch alone going
+  // from `ok` to TOO EASY. Every number in regions.data.js was taken without it.
+  // Full table and the mechanism at tools/simmarch.js.
   if (opts.march) {
     for (const cmd of marchTurn(view, mine)) state.commands.push(cmd);
   }

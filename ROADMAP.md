@@ -263,12 +263,14 @@ site was spent stranded**, and riverfen — a region it wins — ends with fifty
 standing in fields.
 
 `tools/simmarch.js` fixes it with the dullest policy that works (walk to the nearest
-friendly site and rejoin the empire), and it is worth **+8 on riverfen and +13 on
-gallowmoor** at n=24 — riverfen leaves its band on that alone, and gallowmoor's all-run
-median falls 19.6m → 12.5m with timeouts-while-ahead going 8 → 3. That is the
-`--richyards` signature and the `--richyards` decision arriving a second time: too big to
-land on a table that is 22 of 24 in band, so `--march` OPTS IN and the default is proven
-byte-identical to the parent commit.
+friendly site and rejoin the empire). Re-taken at n=32 across five tiers it is worth
+**+4 / +3 / +13 / 0 / +25** on riverfen / emberholt / gallowmoor / thanescar /
+ravensmarch — **a re-weighting, not a shift**, and a wider spread than the ram slot
+reprice that cost a full re-tune. Ravensmarch alone goes from `ok` to `TOO EASY`; the
+shape follows how much interception a map produces. Too big to land on a table nobody has
+re-verified, so `--march` OPTS IN and the default is proven byte-identical to the parent
+commit. (An earlier two-row screen at n=24 read +8/+13 and moved its own control — most
+of that was noise, which is worth remembering before trusting a small sweep.)
 
 **The recommendation is explicit: re-base with `--march` ON before the next dial moves.**
 But the REASON was corrected after the fact and the correction matters. The first write-up

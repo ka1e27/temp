@@ -201,20 +201,15 @@ for (const id of regionIds) {
     // IN — inverting the house `--noX` pattern deliberately, exactly as `--pool`
     // does and for the opposite reason. `--pool` ships off because it was a
     // wash; this ships off because it is far too BIG to land on a table that
-    // was just tuned. Measured at n=24, matched seeds, one variable:
-    //
-    //     region        --march ON     off          delta
-    //     riverfen      96%   9.2m     88%   8.0m    +8
-    //     gallowmoor    67%  11.9m     54%  16.1m   +13
-    //
-    // Riverfen leaves its band on that alone (96% against a 78-92 ceiling), and
-    // gallowmoor's ALL-run median falls 19.6m -> 12.5m with timeouts-while-ahead
-    // going 8 -> 3, which is the `--richyards` signature: a bot that stops
-    // running out of clock. Every number in regions.data.js was taken without
-    // it, so turning it on does not improve the table, it invalidates it — and
-    // the campaign is 22 of 24 in band as of the last sweep. See
-    // tools/simmarch.js, and the recommendation to re-base with it ON before
-    // the next dial moves.
+    // was just tuned. Re-taken at n=32 across five tiers, matched seeds, one
+    // variable, and it is a RE-WEIGHTING rather than a shift: riverfen +4,
+    // emberholt +3, gallowmoor +13, thanescar 0, ravensmarch +25. The shape
+    // follows how much INTERCEPTION a map produces. Every number in
+    // regions.data.js was taken without it, so turning it on does not improve
+    // the table, it invalidates it, and the re-base has to re-take every row
+    // rather than shift the dial by a constant. See tools/simmarch.js —
+    // including why an earlier n=24 two-row screen read +8/+13 and was mostly
+    // noise.
     march: !!args.march,
   };
   for (let i = 0; i < N; i++) runs.push(playOne(id, 1000 + i * 7919, before, idleMin, opts));
