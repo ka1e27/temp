@@ -1,0 +1,131 @@
+/* Rival leader banner (leaderBanner.js) — DESIGN §3.6.
+   Top-centre, below the HUD, click-through, auto-hides. data-state: idle | in | out. */
+
+.leader-banner {
+  /* Where the banner sits. Below the world HUD bar (~76px) and the battle HUD pill (~92px);
+     integration can override on #ui if a screen's top chrome is taller. */
+  --leader-banner-top: 100px;
+  position: absolute;
+  top: var(--leader-banner-top);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: calc(var(--z-coach) + 1);
+  width: min(440px, calc(100vw - 24px));
+  pointer-events: none; /* never blocks the map, and neither does anything inside it */
+  transition: top var(--dur-med) var(--ease-out);
+}
+.leader-banner * { pointer-events: none; }
+/* The toast lane (top: 84px) shares this spot: while a toast is up, glide below its first row. */
+#ui:has(.toasts > .toast) .leader-banner { --leader-banner-top: 148px; }
+
+.leader-card {
+  --leader-color: #9a927f;
+  --leader-light: #d8d0bb;
+  --leader-dark: #5f5847;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px var(--sp-4) 12px 10px;
+  overflow: hidden;
+  /* A little more opaque than a plain panel and washed with the faction colour, so the text
+     stays legible over snow, sand and sea alike. */
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--leader-color) 30%, transparent), transparent 62%),
+    rgba(14, 17, 26, 0.9);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid color-mix(in srgb, var(--leader-color) 55%, rgba(255, 255, 255, 0.1));
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-14px) scale(0.97);
+  transition: opacity 240ms var(--ease-out), transform 300ms var(--ease-punch), visibility 0s linear 320ms;
+}
+.leader-banner[data-state='in'] .leader-card {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 200ms var(--ease-out), transform 340ms var(--ease-punch), visibility 0s;
+}
+.leader-banner[data-state='out'] .leader-card {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px) scale(0.98);
+  transition: opacity 260ms ease-in, transform 260ms ease-in, visibility 0s linear 280ms;
+}
+
+.leader-medal {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.leader-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.leader-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.leader-name {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: var(--fs-md);
+  letter-spacing: 0.03em;
+  color: var(--leader-light);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.leader-title {
+  font-weight: 800;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+.leader-line {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1.32;
+  color: var(--text);
+  text-wrap: pretty;
+}
+
+/* countdown: a hairline in the faction colour that shrinks over the banner's lifetime */
+.leader-timer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--leader-color), var(--leader-light));
+  transform-origin: 0 50%;
+  opacity: 0.85;
+}
+.leader-banner.is-sticky .leader-timer { display: none; }
+@keyframes leader-timer-a { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes leader-timer-b { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.leader-banner[data-state='in'][data-tick='a'] .leader-timer { animation: leader-timer-a var(--leader-ms, 4200ms) linear forwards; }
+.leader-banner[data-state='in'][data-tick='b'] .leader-timer { animation: leader-timer-b var(--leader-ms, 4200ms) linear forwards; }
+
+/* Reduce Motion: fade only — no slide, no scale, no shrinking bar. */
+html.reduce-motion .leader-card,
+html.reduce-motion .leader-banner[data-state='in'] .leader-card,
+html.reduce-motion .leader-banner[data-state='out'] .leader-card {
+  transform: none;
+}
+html.reduce-motion .leader-card { transition: opacity 180ms linear, visibility 0s linear 200ms; }
+html.reduce-motion .leader-banner[data-state='in'] .leader-card { transition: opacity 180ms linear, visibility 0s; }
+html.reduce-motion .leader-banner[data-state='out'] .leader-card { transition: opacity 180ms linear, visibility 0s linear 200ms; }
+html.reduce-motion .leader-timer { display: none; }
+html.reduce-motion .leader-banner { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .leader-card, .leader-banner[data-state='in'] .leader-card, .leader-banner[data-state='out'] .leader-card { transform: none; }
+  .leader-timer { display: none; }
+}
+
+/* Phones: 24px of screen gutter, a hair tighter card, and clear of the two-row phone HUD. */
+@media (max-width: 480px) {
+  .leader-banner { --leader-banner-top: 84px; }
+  .leader-card { gap: var(--sp-2); padding: 8px var(--sp-3) 11px 8px; }
+  .leader-medal { width: 40px; height: 40px; }
+  .leader-line { font-size: var(--fs-sm); }
+}

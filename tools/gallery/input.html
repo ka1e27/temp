@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>gallery: camera + input</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1220; }
+  #world { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  #world.dragging { cursor: grabbing; }
+  #ui {
+    position: fixed; inset: 0; pointer-events: none;
+    font: 13px/1.5 Nunito, system-ui, sans-serif; color: #f3ead7;
+  }
+  .panel {
+    position: absolute; pointer-events: auto;
+    background: rgba(16, 20, 30, 0.78); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  #hud { top: 10px; left: 10px; padding: 10px 14px; white-space: pre; font-size: 12px; max-width: 46ch; }
+  #hud b { color: #f5c451; }
+  #buttons { top: 10px; right: 10px; padding: 8px; display: flex; gap: 8px; }
+  #buttons button {
+    pointer-events: auto; cursor: pointer; font: inherit; font-weight: 700;
+    color: #2a1d05; border: none; border-radius: 10px; padding: 8px 12px;
+    background: linear-gradient(#f7d774, #e0a82e);
+  }
+  #buttons button:active { transform: translateY(1px); }
+  #hint {
+    bottom: 10px; left: 50%; transform: translateX(-50%);
+    padding: 6px 14px; font-size: 12px; color: #a3a9b6;
+  }
+</style>
+</head>
+<body>
+<canvas id="world"></canvas>
+<div id="ui">
+  <div id="hud" class="panel">loading…</div>
+  <div id="buttons" class="panel">
+    <button id="btnFar" type="button">Fly: far corner</button>
+    <button id="btnHome" type="button">Fly: home</button>
+  </div>
+  <div id="hint" class="panel">
+    drag empty space = pan · drag a settlement = send · shift-drag = lasso ·
+    wheel/pinch = zoom · click = select hex · long-press (touch) = inspect
+  </div>
+</div>
+<script type="module" src="input.js"></script>
+</body>
+</html>

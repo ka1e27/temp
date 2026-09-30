@@ -1,12 +1,42 @@
 // Zero-dependency static server for development.
 // ES modules require a real HTTP origin (see the file:// guard in index.html).
+//
+//   node tools/serve.js                       # the repo at http://localhost:8080/
+//   node tools/serve.js --base=/temp/         # the repo at http://localhost:8080/temp/, NOTHING at /
+//   node tools/serve.js --root=_site --port=9000
+//   env: PORT, BASE_PATH, ROOT_DIR (flags win)
+//
+// GitHub Pages serves this site from a project subpath (https://ka1e27.github.io/temp/), never from
+// "/". `--base` reproduces that exactly: every request must carry the prefix, "/" is a 404, and
+// "/temp" redirects to "/temp/" like Pages does. Anything that only works from "/" (an absolute
+// path, a service worker scope, a manifest start_url) then fails here instead of in production.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize, sep } from 'node:path';
+import { extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const PORT = Number(process.env.PORT) || 8080;
+const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
+  const [k, ...v] = a.slice(2).split('=');
+  return [k, v.join('=') || 'true'];
+}));
+
+const REPO = fileURLToPath(new URL('..', import.meta.url));
+const rootArg = flags.root || process.env.ROOT_DIR;
+const ROOT = rootArg ? resolve(isAbsolute(rootArg) ? rootArg : join(process.cwd(), rootArg)) : REPO;
+const PORT = Number(flags.port ?? process.env.PORT) || 8080;
+
+/**
+ * '/temp/' -> '/temp'; '' or '/' -> '' (served from the root). Git Bash on Windows rewrites an argument like
+ * "/temp/" into "C:/Program Files/Git/temp/" before Node sees it: a drive-letter path means its last segment.
+ */
+function normaliseBase(raw) {
+  let text = String(raw || '').trim().replace(/\\/g, '/');
+  if (/^[A-Za-z]:/.test(text)) text = `/${text.split('/').filter(Boolean).pop() || ''}`;
+  const trimmed = text.replace(/\/+$/, '');
+  if (!trimmed) return '';
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+const BASE = normaliseBase(flags.base ?? process.env.BASE_PATH);
 
 // `.js` MUST be text/javascript or the browser refuses to execute the module.
 const MIME = {
@@ -27,6 +57,19 @@ const MIME = {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   let rel = decodeURIComponent(url.pathname);
+
+  if (BASE) {
+    if (rel === BASE) {
+      // Pages redirects the bare project path to the trailing-slash form.
+      res.writeHead(301, { Location: `${BASE}/${url.search}` }).end();
+      return;
+    }
+    if (!rel.startsWith(`${BASE}/`)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' }).end(`Not found (this server only serves ${BASE}/)`);
+      return;
+    }
+    rel = rel.slice(BASE.length);
+  }
   if (rel === '/') rel = '/index.html';
 
   // Contain path traversal: resolve, then verify the result is still under ROOT.
@@ -49,5 +92,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Hex Dominion → http://localhost:${PORT}`);
+  console.log(`Hex Dominion → http://localhost:${PORT}${BASE ? `${BASE}/` : ''}`);
 });

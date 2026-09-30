@@ -1,0 +1,167 @@
+/* Battle crowns row (crownRow.js) — DESIGN §4.8. Three medals: Victory, Swift, Unbroken.
+   data-state on each slot: target (open, not conquered yet) | earned | missed (conquered without). */
+
+.crown-row {
+  --crown-px: 26px;
+  --medal: calc(var(--crown-px) * 1.75);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+  width: 100%;
+  align-items: start;
+}
+
+.crown-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  text-align: center;
+}
+
+/* --- the medal ------------------------------------------------------------------ */
+.crown-medal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--medal);
+  height: var(--medal);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px dashed rgba(255, 255, 255, 0.36);
+  transition: background var(--dur-med) var(--ease-out), border-color var(--dur-med) var(--ease-out),
+    box-shadow var(--dur-med) var(--ease-out);
+}
+.crown-glyph { display: grid; place-items: center; color: rgba(255, 255, 255, 0.34); transform-origin: 50% 70%; }
+.crown-glyph .icon { transition: color var(--dur-med) var(--ease-out); }
+
+/* corner glyph: tells the three crowns apart without reading (colour-blind safe) */
+.crown-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: calc(var(--crown-px) * 0.62);
+  height: calc(var(--crown-px) * 0.62);
+  border-radius: 50%;
+  background: #171a25;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.crown-label {
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  line-height: 1.2;
+  color: var(--text-dim);
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+.crown-bonus {
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  color: var(--gold);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.crown-bonus:empty { display: none; }
+
+/* --- states ---------------------------------------------------------------------- */
+.crown-slot[data-state='target'] .crown-label { color: var(--text-muted); }
+
+.crown-slot[data-state='missed'] .crown-medal { border: 1.5px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.025); }
+.crown-slot[data-state='missed'] .crown-glyph { color: rgba(255, 255, 255, 0.13); }
+.crown-slot[data-state='missed'] .crown-badge { color: rgba(255, 255, 255, 0.22); border-color: rgba(255, 255, 255, 0.12); }
+.crown-slot[data-state='missed'] .crown-label { color: var(--text-dim); text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, 0.28); }
+
+.crown-slot[data-state='earned'] .crown-medal {
+  border: 1.5px solid var(--gold);
+  background: radial-gradient(circle at 50% 30%, rgba(255, 224, 138, 0.42), rgba(245, 196, 81, 0.12) 72%);
+  box-shadow: 0 0 16px rgba(245, 196, 81, 0.42), inset 0 0 8px rgba(255, 224, 138, 0.22);
+}
+.crown-slot[data-state='earned'] .crown-glyph { color: var(--gold-bright); }
+.crown-slot[data-state='earned'] .crown-glyph .icon { filter: drop-shadow(0 1px 1.5px rgba(70, 40, 0, 0.6)); }
+.crown-slot[data-state='earned'] .crown-badge {
+  background: linear-gradient(180deg, #f7d774, #e0a82e);
+  border-color: rgba(60, 35, 0, 0.55);
+  color: #2a1d05;
+}
+.crown-slot[data-state='earned'] .crown-label { color: var(--text); }
+
+/* --- the award pop ------------------------------------------------------------------ */
+.crown-ring, .crown-spark { position: absolute; pointer-events: none; opacity: 0; }
+.crown-ring {
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--gold-bright);
+}
+.crown-spark {
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: var(--gold-bright);
+  box-shadow: 0 0 6px 1px rgba(255, 224, 138, 0.8);
+}
+
+@keyframes crown-pop {
+  0% { transform: scale(0.25) rotate(-16deg); opacity: 0; }
+  50% { transform: scale(1.4) rotate(5deg); opacity: 1; }
+  75% { transform: scale(0.94) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes crown-ring {
+  0% { transform: scale(0.7); opacity: 0.9; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+@keyframes crown-spark {
+  0% { transform: rotate(var(--a)) translateX(0) scale(1); opacity: 1; }
+  100% { transform: rotate(var(--a)) translateX(calc(var(--medal) * 0.85)) scale(0.2); opacity: 0; }
+}
+@keyframes crown-flash {
+  0% { box-shadow: 0 0 0 0 rgba(255, 224, 138, 0.9); }
+  100% { box-shadow: 0 0 16px rgba(245, 196, 81, 0.42), inset 0 0 8px rgba(255, 224, 138, 0.22); }
+}
+@keyframes crown-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.crown-slot.is-popping .crown-glyph { animation: crown-pop 480ms var(--ease-punch) both; }
+.crown-slot.is-popping .crown-medal { animation: crown-flash 620ms ease-out both; }
+.crown-slot.is-popping .crown-ring { animation: crown-ring 640ms ease-out both; }
+.crown-slot.is-popping .crown-spark { animation: crown-spark 620ms cubic-bezier(0.12, 0.7, 0.3, 1) both; }
+.crown-slot.is-popping .crown-badge { animation: crown-fade 300ms ease-out 120ms both; }
+
+/* Reduce Motion: no pop, no burst — the medal simply fades to gold. */
+html.reduce-motion .crown-slot.is-popping .crown-glyph { animation: crown-fade 220ms ease-out both; }
+html.reduce-motion .crown-slot.is-popping .crown-medal,
+html.reduce-motion .crown-slot.is-popping .crown-ring,
+html.reduce-motion .crown-slot.is-popping .crown-spark,
+html.reduce-motion .crown-slot.is-popping .crown-badge { animation: none; }
+html.reduce-motion .crown-ring, html.reduce-motion .crown-spark { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .crown-slot.is-popping .crown-glyph { animation: crown-fade 220ms ease-out both; }
+  .crown-slot.is-popping .crown-medal,
+  .crown-slot.is-popping .crown-ring,
+  .crown-slot.is-popping .crown-spark,
+  .crown-slot.is-popping .crown-badge { animation: none; }
+  .crown-ring, .crown-spark { display: none; }
+}
+
+/* --- sizes ---------------------------------------------------------------------------- */
+/* sm: region card. Compact: smaller medal, no corner glyph (too small to read), one-line labels. */
+.crown-row[data-size='sm'] { --medal: calc(var(--crown-px) * 1.7); gap: var(--sp-1); }
+.crown-row[data-size='sm'] .crown-badge { display: none; }
+.crown-row[data-size='sm'] .crown-label { font-size: 0.68rem; }
+/* lg: hero moment on the victory card. */
+.crown-row[data-size='lg'] .crown-label { font-size: var(--fs-sm); }
+.crown-row[data-size='lg'] .crown-bonus { font-size: var(--fs-sm); }
+
+/* Phones: the row must fit 3 across a 390px screen inside a card, so labels may wrap
+   rather than the row overflowing. */
+@media (max-width: 480px) {
+  .crown-row { gap: var(--sp-1); }
+  .crown-label { font-size: 0.7rem; }
+}

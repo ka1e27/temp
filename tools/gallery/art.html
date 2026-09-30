@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hex Dominion 2 — Art Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: rgba(16,20,30,0.78);
+    --panel-border: rgba(255,255,255,0.08);
+    --cream: #f3ead7;
+    --muted: #a3a9b6;
+    --gold: #f5c451;
+    --gold-soft: #f7d774;
+    --good: #6fcf97;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: radial-gradient(ellipse at 20% -10%, #16202c 0%, var(--bg) 55%);
+    color: var(--cream);
+    font: 600 15px/1.5 Nunito, system-ui, sans-serif;
+  }
+  body { padding: 28px 32px 80px; }
+  h1, h2, h3 {
+    font-family: Cinzel, Georgia, serif;
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: 0.02em;
+  }
+  h1 { font-size: 30px; color: var(--gold-soft); }
+  h2 { font-size: 20px; margin-top: 0; color: var(--cream); }
+  p.lead { color: var(--muted); max-width: 780px; margin: 0 0 28px; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 20px 24px 26px;
+    margin-bottom: 24px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+  section > p.note { color: var(--muted); font-size: 13px; margin: -4px 0 16px; max-width: 900px; }
+  .canvas-frame {
+    display: inline-block;
+    background: #0e2233;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    overflow: hidden;
+    line-height: 0;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .label {
+    font-family: Nunito, sans-serif;
+    font-weight: 700;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: center;
+  }
+  .grid {
+    display: grid;
+    gap: 14px;
+  }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .swatch .name { font-size: 12px; color: var(--muted); font-weight: 700; }
+  table.settlement-grid { border-collapse: collapse; }
+  table.settlement-grid th, table.settlement-grid td {
+    padding: 6px 10px;
+    text-align: center;
+  }
+  table.settlement-grid th {
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+  }
+  table.settlement-grid th:first-child, table.settlement-grid td:first-child { text-align: right; }
+  #bench-output {
+    font-family: 'Nunito', monospace;
+    font-variant-numeric: tabular-nums;
+    background: rgba(0,0,0,0.25);
+    border-radius: 10px;
+    padding: 14px 18px;
+    white-space: pre-line;
+    font-size: 14px;
+  }
+  #bench-output b { color: var(--good); }
+  #bench-output .warn { color: #eb5757; }
+  a { color: #7db8ff; }
+</style>
+</head>
+<body>
+  <h1>Hex Dominion 2 — Art Gallery</h1>
+  <p class="lead">
+    Dev gallery for <code>game/render/{palette,tiles,sprites,clouds}.js</code> — a hand-painted
+    tabletop diorama, drawn procedurally with no image assets (DESIGN §7). This page renders a
+    mock island (generated here only, never written into <code>game/world</code>) to exercise the
+    whole stack: elevation skirts, rivers, roads, coast foam, decorations, territory, settlements,
+    banners, squads and clouds.
+  </p>
+
+  <section>
+    <h2>Sample island</h2>
+    <p class="note">World-overview zoom (s≈13) and battle zoom (s≈38) of the same mock continent, drawn back-to-front with decorations, rivers, roads, coast foam, territory tint + borders, settlements with banners and troop badges, marching squads, a drag-to-send arrow, and clouds over the unexplored corner.</p>
+    <div class="row">
+      <div class="col">
+        <div class="label">World overview — s = 13</div>
+        <div class="canvas-frame"><canvas id="overview-canvas" width="900" height="560"></canvas></div>
+      </div>
+      <div class="col">
+        <div class="label">Battle zoom — s = 38</div>
+        <div class="canvas-frame"><canvas id="battle-canvas" width="900" height="560"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Terrain</h2>
+    <p class="note">Every terrain type standalone at s = 40, full decoration LOD.</p>
+    <div id="terrain-grid" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>Settlements &times; factions</h2>
+    <p class="note">Every settlement type, every faction (Free Folk roofs are warm brown per DESIGN §7.2, regardless of banner colour), at battle and overview scale.</p>
+    <div id="settlement-wrap-36"></div>
+    <div id="settlement-wrap-16" style="margin-top:18px"></div>
+  </section>
+
+  <section>
+    <h2>Squads, badges, banners, emblems</h2>
+    <p class="note">Squads at counts 1, 5, 12, 40, 250 (up to 12 soldier dots drawn, real count on the pill); troop badges; animated banners; the five faction emblems.</p>
+    <div class="col" style="gap:22px">
+      <div>
+        <div class="label" style="text-align:left;margin-bottom:8px">Squads</div>
+        <div id="squad-row" class="row"></div>
+      </div>
+      <div>
+        <div class="label" style="text-align:left;margin-bottom:8px">Troop badges</div>
+        <div id="badge-row" class="row"></div>
+      </div>
+      <div>
+        <div class="label" style="text-align:left;margin-bottom:8px">Banners (animated)</div>
+        <div id="banner-row" class="row"></div>
+      </div>
+      <div>
+        <div class="label" style="text-align:left;margin-bottom:8px">Emblems</div>
+        <div id="emblem-row" class="row"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Performance</h2>
+    <p class="note">Baking ~2000 tiles (50&times;40) into an offscreen canvas: base + coast foam + river + road + decorations. Target &lt; 150 ms at s = 14.</p>
+    <div id="bench-output">running…</div>
+  </section>
+
+  <script type="module" src="./art.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+/* Hex Dominion 2 — UI stylesheet entry point (ARCHITECTURE §2, §8).
+   Link only this file: @import pulls in tokens, base and every component in
+   the right cascade order. Mobile-first; DESIGN §7.5 is the visual spec. */
+
+@import url('./tokens.css');
+@import url('./base.css');
+
+@import url('./components/hud.css');
+@import url('./components/regioncard.css');
+@import url('./components/intel.css');
+@import url('./components/council.css');
+@import url('./components/battlehud.css');
+@import url('./components/results.css');
+@import url('./components/title.css');
+@import url('./components/overlays.css');
+@import url('./components/crowns.css');
+@import url('./components/leaderbanner.css');

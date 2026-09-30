@@ -1,0 +1,176 @@
+/* Reset + foundational element styles. Mobile-first; DESIGN §7.5/§8. */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: #0b0d12;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* The UI kit shows/hides panels with the [hidden] attribute; an author `display` rule on a
+   component would otherwise beat the UA stylesheet and leave hidden panels on screen. */
+[hidden] { display: none !important; }
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+p { margin: 0; }
+button, input, select { font-family: inherit; color: inherit; }
+button { cursor: pointer; }
+ul { margin: 0; padding: 0; list-style: none; }
+svg { display: block; flex-shrink: 0; }
+
+/* Numbers should never jitter horizontally as they roll — gold counters,
+   timers and cost tags all get tabular figures (DESIGN §7.5). */
+.nums, .gold-amount, .stat-value, .clock, .cost-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The DOM UI root: absolutely positioned over the world canvas. Every pixel
+   of it lets map input (pan/zoom/drag-send) fall through by default; panels
+   opt back in with pointer-events: auto (ARCHITECTURE §8). */
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-size: var(--fs-md);
+  overflow: hidden;
+}
+/* :where() keeps this default at ZERO specificity: any component that declares its own
+   `pointer-events: none` (.coach, .tooltip, ...) wins, so full-screen layers stay
+   click-through instead of swallowing every map click. The containers below have no
+   rule of their own, so they are declared here. */
+:where(#ui *) { pointer-events: auto; }
+.passthrough, .battle-hud, .toasts, .coach-ring { pointer-events: none; }
+
+/* Thin, quiet scrollbars for any panel that scrolls (council, realm). */
+.scroll-y { overflow-y: auto; overflow-x: hidden; }
+.scroll-y::-webkit-scrollbar { width: 8px; }
+.scroll-y::-webkit-scrollbar-track { background: transparent; }
+.scroll-y::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+.scroll-y::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* --- Glass panel, the one visual unit everything else is built from ----- */
+.glass-panel {
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+}
+
+/* --- Icons --------------------------------------------------------------- */
+.icon { flex-shrink: 0; }
+.icon-good, .icon-good .icon { color: var(--good); }
+.icon-bad, .icon-bad .icon { color: var(--bad); }
+.icon-gold, .icon-gold .icon { color: var(--gold); }
+
+/* --- Buttons ------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: var(--touch-target);
+  padding: var(--sp-2) var(--sp-4);
+  border: none;
+  border-radius: var(--btn-radius);
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.01em;
+  transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out), opacity var(--dur-fast);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: translateY(1px) scale(0.98); }
+.btn:disabled, .btn[aria-disabled='true'] {
+  opacity: var(--btn-disabled-opacity);
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
+.btn-primary {
+  background: var(--btn-primary-grad);
+  color: var(--btn-primary-text);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 4px 14px rgba(224, 168, 46, 0.35);
+}
+.btn-primary:not(:disabled):hover { background: var(--btn-primary-grad-hover); }
+.btn-primary:not(:disabled):active { box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25); }
+
+.btn-secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--text);
+  border: 1px solid var(--btn-secondary-border);
+}
+.btn-secondary:not(:disabled):hover { background: var(--btn-secondary-bg-hover); }
+
+.btn-danger {
+  background: rgba(235, 87, 87, 0.16);
+  color: #ffb3b3;
+  border: 1px solid rgba(235, 87, 87, 0.4);
+}
+.btn-danger:not(:disabled):hover { background: rgba(235, 87, 87, 0.28); }
+
+.btn-icon {
+  padding: 0;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  border-radius: 999px;
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  color: var(--text);
+}
+.btn-icon:not(:disabled):hover { background: var(--btn-secondary-bg-hover); }
+
+.btn-block { width: 100%; }
+
+/* Small pill/badge shared by chips, levels and labels. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+/* Reduce Motion: collapse decorative animation, keep state changes instant. */
+html.reduce-motion .anim,
+html.reduce-motion [class*='pulse'],
+html.reduce-motion [class*='shake'] {
+  animation: none !important;
+}
+
+/* A coin inside a gold button (Buy, Collect, Scout) took the button's dark text colour and read as a black dot:
+   make it a pale coin so its rim and mark show. */
+.btn-primary .icon-coin { color: #fff3c9; }

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hex Dominion 2 — Living Map Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: rgba(16,20,30,0.82);
+    --panel-border: rgba(255,255,255,0.09);
+    --cream: #f3ead7;
+    --muted: #a3a9b6;
+    --gold: #f5c451;
+    --gold-soft: #f7d774;
+    --good: #6fcf97;
+    --bad: #eb5757;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0e2233; color: var(--cream);
+    font: 700 13px/1.4 Nunito, system-ui, sans-serif; overflow: hidden; }
+  #stage { position: fixed; inset: 0; display: grid; }
+  #stage.single { grid-template: 1fr / 1fr; }
+  #stage.compare { grid-template: 1fr 1fr / 1fr 1fr; gap: 2px; background: #06090e; }
+  #stage.level01 { grid-template: 1fr / 1fr 1fr; gap: 2px; background: #06090e; }
+  .view { position: relative; overflow: hidden; }
+  .view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .view .tag {
+    position: absolute; left: 12px; top: 10px; padding: 4px 12px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    font: 700 15px Cinzel, Georgia, serif; color: var(--gold-soft); letter-spacing: 0.04em;
+  }
+  #panel {
+    position: fixed; left: 12px; top: 12px; width: 292px; max-height: calc(100vh - 24px); overflow: auto;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px;
+    padding: 12px 14px 14px; backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  }
+  body.bare #panel, body.bare .tag { display: none; }
+  body.bare #readout { display: none; }
+  h1 { font: 700 16px Cinzel, Georgia, serif; color: var(--gold-soft); margin: 0 0 8px; letter-spacing: 0.03em; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: center; }
+  .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; width: 100%; }
+  button {
+    font: 700 12px Nunito, system-ui, sans-serif; color: var(--cream); cursor: pointer;
+    background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 5px 10px;
+  }
+  button:hover { background: rgba(255,255,255,0.14); }
+  button.on { background: linear-gradient(#f7d774, #e0a82e); color: #2a1d05; border-color: transparent; }
+  input[type=range] { width: 100%; accent-color: var(--gold); }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--cream); }
+  #readout {
+    position: fixed; right: 12px; top: 12px; min-width: 250px; padding: 10px 14px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--panel-border); font: 700 12px/1.55 Nunito, sans-serif;
+    font-variant-numeric: tabular-nums; white-space: pre; backdrop-filter: blur(10px);
+  }
+  #readout b { color: var(--gold-soft); }
+  #log { color: var(--muted); font-size: 12px; max-height: 110px; overflow: auto; white-space: pre-wrap; }
+  .ok { color: var(--good); } .warn { color: var(--bad); }
+  @media (max-width: 640px) {
+    #panel { width: calc(100vw - 24px); max-height: 38vh; }
+    #readout { top: auto; bottom: 8px; left: 8px; right: 8px; min-width: 0; font-size: 10.5px; }
+  }
+</style>
+</head>
+<body>
+<div id="stage" class="single"></div>
+<div id="panel">
+  <h1>Living map</h1>
+  <div class="row"><div class="label" id="focusLabel">Focus region</div></div>
+  <div class="row">
+    <div class="label">Force focus region prosperity</div>
+    <button data-level="0">0</button><button data-level="1">I</button>
+    <button data-level="2">II</button><button data-level="3">III</button>
+    <button data-all="3">All owned III</button><button data-all="0">All 0</button>
+  </div>
+  <div class="row"><div class="label" id="timeLabel">Time held</div>
+    <input id="time" type="range" min="0" max="540" step="1" value="0">
+    <button id="play">Play (1 h / s)</button><button id="reset">Reset</button>
+  </div>
+  <div class="row"><div class="label">View</div>
+    <button data-view="overview">Overview</button><button data-view="mid">Mid</button>
+    <button data-view="close">Close</button><button data-view="mill">Mill</button>
+    <button data-view="harbour">Harbour</button><button data-view="phone">Realm</button>
+  </div>
+  <div class="row"><div class="label">Options</div>
+    <label class="chk"><input type="checkbox" id="rm"> Reduce Motion</label>
+    <label class="chk"><input type="checkbox" id="fog"> Fog</label>
+    <label class="chk"><input type="checkbox" id="amb" checked> Ambient</label>
+    <label class="chk"><input type="checkbox" id="routes"> Routes</label>
+    <label class="chk"><input type="checkbox" id="battle"> Battle mask</label>
+  </div>
+  <div class="row"><div class="label">Quality <span id="qv">1.0</span></div>
+    <input id="quality" type="range" min="0" max="1" step="0.05" value="1"></div>
+  <div class="row"><button id="flock">Spawn bird flock</button><button id="stress">Stress (all owned)</button></div>
+  <div class="row"><div class="label">Level-ups</div><div id="log"></div></div>
+</div>
+<div id="readout"></div>
+<script type="module" src="living.js"></script>
+</body>
+</html>

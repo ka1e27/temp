@@ -1,0 +1,112 @@
+/* Top HUD bar (hud.js). */
+
+.hud {
+  position: absolute;
+  top: var(--sp-3);
+  left: var(--sp-3);
+  right: var(--sp-3);
+  z-index: var(--z-hud);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+}
+
+.hud-gold-block {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  /* The gold counter is the single most important number in the HUD — it
+     must never be the thing that gives way when space is tight. (A stray
+     min-width:0 here used to let the flex row crush it to 0px whenever the
+     action buttons didn't fit; hud-actions gives way instead now.) */
+  flex-shrink: 0;
+}
+.hud-gold-icon { color: var(--gold); }
+.hud-gold-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.hud-gold-value {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: var(--fs-2xl);
+  color: var(--gold-bright);
+  white-space: nowrap;
+}
+.hud-income {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--good);
+  white-space: nowrap;
+}
+
+@keyframes hud-gold-pulse {
+  0% { transform: scale(1); filter: brightness(1); }
+  35% { transform: scale(1.14); filter: brightness(1.5); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.gold-pulse { animation: hud-gold-pulse 500ms var(--ease-punch); }
+
+/* A bigger, rarer moment for large jumps (a conquest bounty, an explicit
+   `pulse: true`) — a soft radial flash behind the block plus a stronger
+   pop, layered on top of the everyday .gold-pulse rather than replacing
+   it, so a big gain still gets the ordinary tick PLUS this. */
+.hud-gold-block::before {
+  content: '';
+  position: absolute;
+  inset: -12px -16px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(245, 196, 81, 0.55), transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+@keyframes hud-gold-flash-bg {
+  0% { opacity: 0; }
+  25% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.hud-gold-block.is-flashing::before { animation: hud-gold-flash-bg 650ms ease-out; }
+@keyframes hud-gold-flash-pop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.32); }
+  100% { transform: scale(1); }
+}
+.hud-gold-block.is-flashing .hud-gold-value,
+.hud-gold-block.is-flashing .hud-gold-icon { animation: hud-gold-flash-pop 650ms var(--ease-punch); }
+
+.hud-stars {
+  color: var(--gold);
+  border: 1px solid rgba(245, 196, 81, 0.35);
+  background: rgba(245, 196, 81, 0.12);
+  flex-shrink: 0;
+}
+.hud-stars .icon { color: var(--gold); }
+.hud-stars[hidden] { display: none; }
+
+.hud-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+  min-width: 0;
+}
+.hud-btn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 640px) {
+  .hud { top: var(--sp-2); left: var(--sp-2); right: var(--sp-2); padding: var(--sp-2); gap: var(--sp-2); }
+  .hud-gold-value { font-size: var(--fs-xl); }
+  .hud-btn-label { display: none; }
+  .hud-btn { padding: var(--sp-2); }
+  .hud-actions { gap: var(--sp-1); }
+}

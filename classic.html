@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hex Dominion (classic v1)</title>
+<!-- THE SHELL. None of this is visible inside the game, which is exactly why it
+     was missing: a browser game with a default tab icon and no share preview
+     reads as a prototype before a single pixel of it has loaded.
+
+     `maximum-scale=1,user-scalable=no` used to be here to stop double-tap zoom
+     during a drag. It also forbids pinch-zoom, which is WCAG 1.4.4 (Resize
+     Text) — and it was never the right tool: `touch-action` in the CSS already
+     suppresses the browser's own gestures on the two boards, per element, which
+     is the fix that does not take zoom away from everyone else. -->
+<meta name="description" content="Take a hex world one region at a time. Conquered
+ regions pay you crowns whether or not you are playing; crowns buy the upgrades that
+ crack the next, harder region. Real-time battles, deterministic combat, no downloads.">
+<meta name="theme-color" content="#0b0d12">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./src/styles/tokens.css">
+<link rel="stylesheet" href="./src/styles/base.css">
+<link rel="stylesheet" href="./src/styles/hud.css">
+<link rel="stylesheet" href="./src/styles/hud.responsive.css">
+<link rel="stylesheet" href="./src/styles/screens.css">
+<link rel="stylesheet" href="./src/styles/panelbars.css">
+<link rel="stylesheet" href="./src/styles/prebattle.css">
+<link rel="stylesheet" href="./src/styles/scenes.css">
+<link rel="stylesheet" href="./src/styles/worldmap.css">
+<script>
+// Classic (non-module) script so it still runs when module loading is blocked.
+// ES modules are always fetched in CORS mode; a file:// document has origin
+// `null`, so every import fails and the page renders blank with no explanation.
+// No browser flag fixes this. Fail loudly with instructions instead.
+if (location.protocol === 'file:') {
+  document.documentElement.innerHTML =
+    '<body style="font:16px/1.6 system-ui,sans-serif;padding:3rem;max-width:40rem;' +
+    'margin:auto;background:#0b0d12;color:#e7ebf3">' +
+    '<h1 style="color:#3ddc97">Run a local server</h1>' +
+    '<p>ES modules cannot load from <code>file://</code>, so opening this file ' +
+    'directly will never work.</p>' +
+    '<pre style="background:#12151d;padding:1rem;border-radius:8px;border:1px solid #263041">' +
+    'npm start</pre>' +
+    '<p>then open <a href="http://localhost:8080" style="color:#5aa9ff">' +
+    'http://localhost:8080</a>.</p></body>';
+}
+</script>
+</head>
+<body>
+  <div id="game">
+    <canvas id="board-bg"></canvas>
+    <canvas id="board-fx"></canvas>
+    <div id="hud"></div>
+    <div id="screen-root"></div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

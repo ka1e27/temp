@@ -1,37 +1,51 @@
-// OFFLINE PLAY. The one platform feature an idle game cannot really do without.
+// Service worker: offline play + installability for Hex Dominion 2.
 //
-// The whole premise of the genre is "come back later", and the meta layer is
-// built for it — regions pay crowns while the tab is shut and meta/idle.js pays
-// out an absence up to `OFFLINE.baseCapMs`. But a player with no connection
-// could not open the game AT ALL to collect any of it. The manifest and the
-// icons were already here, so it was installable and then dead on a train.
+// NETWORK-FIRST for everything same-origin. v1 used cache-first, which is fine
+// for a finished game but means a returning player can be served a stale mix of
+// files after an update. Network-first always runs the newest deploy when online
+// and falls back to the last good copy when offline.
 //
-// RUNTIME CACHING, NOT A PRECACHE MANIFEST, and that is forced by the project
-// rather than chosen. Precaching wants a list of every asset, and this game is
-// ~100 hand-written ES modules with no build step to generate one — a
-// hand-maintained list would be wrong the first time somebody added a file, and
-// silently: the app would keep working online and fail only offline, which is
-// the worst way for it to be wrong. Runtime caching needs no list. The first
-// visit loads exactly what the game needs, which populates the cache with
-// exactly the right set by construction, and every visit after that works
-// offline.
+// The cache name carries a version: activating a new worker deletes every other
+// cache, including v1's 'hexdominion-v1', so old files can never be mixed in.
 //
-// STALE-WHILE-REVALIDATE. Serve from cache immediately (so a return visit is
-// instant and an offline one works at all), fetch in the background, and keep
-// the fresh copy for next time. The cost is honest and worth stating: a player
-// who reloads right after a deploy is one version behind until the load after
-// that. For a single-player game with local saves that is fine; the alternative
-// — network-first — would make every load wait on the network to discover
-// nothing had changed, which is the slow half of both worlds.
+// FIRST VISIT: a worker does not control the page that registered it, so nothing that page
+// loaded went through the fetch handler below and none of it was cached; reloading offline right
+// after a first visit would fail. Two things close that gap: the app shell is cached at install,
+// and the page sends the list of everything it loaded (a 'precache' message) once the worker is
+// ready, which the worker fetches into the same cache.
 //
-// The save lives in localStorage (`hexdominion.save` / `hexdominion.battle`),
-// which this never touches. A cache purge cannot cost a player their campaign.
-const CACHE = 'hexdominion-v1';
+// Everything is relative to the worker's SCOPE, never to "/": the site lives under a project
+// subpath (https://ka1e27.github.io/temp/).
+const CACHE = 'hexdominion-v2-4';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
-// Take over from an older worker straight away rather than waiting for every
-// tab to close — otherwise a returning player can sit on a months-old worker
-// indefinitely, since this game is exactly the sort you keep pinned.
-self.addEventListener('install', () => self.skipWaiting());
+const isFontHost = (url) => url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+
+/** Fetches each URL into the cache unless it is already there. Best effort: one failure never blocks the rest. */
+async function precache(list) {
+  const cache = await caches.open(CACHE);
+  await Promise.all(list.map(async (raw) => {
+    try {
+      const url = new URL(raw, self.registration.scope);
+      const font = isFontHost(url);
+      if (url.origin !== self.location.origin && !font) return;
+      if (await cache.match(url.href)) return;
+      const req = font ? new Request(url.href, { mode: 'no-cors' }) : new Request(url.href, { cache: 'reload' });
+      const res = await fetch(req);
+      if (res && (res.ok || res.type === 'opaque')) await cache.put(url.href, res);
+    } catch { /* offline, or a file that does not exist: skip it */ }
+  }));
+}
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(precache(SHELL));
+  self.skipWaiting();
+});
+
+self.addEventListener('message', (e) => {
+  const data = e.data;
+  if (data && data.type === 'precache' && Array.isArray(data.urls)) e.waitUntil(precache(data.urls));
+});
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
@@ -42,33 +56,35 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  // GET only, and same-origin only. A POST has no business in a static game,
-  // and caching a cross-origin response opaquely would fill the bucket with
-  // things this worker cannot even read the status of.
   if (req.method !== 'GET') return;
-  if (new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  // Google Fonts: cache-first (immutable URLs), so text renders offline too.
+  const isFont = isFontHost(url);
+  if (url.origin !== self.location.origin && !isFont) return;
 
   e.respondWith((async () => {
-    const cached = await caches.match(req);
-    const fresh = fetch(req).then(async (res) => {
-      // `res.ok` excludes 404s and 5xxs: caching an error page under a module's
-      // URL would make the game permanently broken offline, and it would look
-      // like a code fault rather than a caching one.
-      if (res && res.ok) (await caches.open(CACHE)).put(req, res.clone());
+    const cache = await caches.open(CACHE);
+    if (isFont) {
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      try {
+        const res = await fetch(req);
+        if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
+        return res;
+      } catch {
+        return new Response('', { status: 504 });
+      }
+    }
+    try {
+      const res = await fetch(req, { cache: 'no-cache' });
+      if (res && res.ok) cache.put(req, res.clone());
       return res;
-    }).catch(() => null);
-
-    // Cache first when we have it — `fresh` is deliberately not awaited here,
-    // it runs on and updates the cache for the next load.
-    if (cached) return cached;
-    const res = await fresh;
-    if (res) return res;
-    // Offline and never seen: nothing useful to say, but a Response is
-    // required, and a thrown error inside respondWith surfaces as a confusing
-    // network error in the console.
-    return new Response('Offline, and this file was never cached.', {
-      status: 503,
-      headers: { 'Content-Type': 'text/plain' },
-    });
+    } catch {
+      const hit = await cache.match(req, { ignoreSearch: true });
+      if (hit) return hit;
+      return new Response('Offline, and this file was never cached.', {
+        status: 503, headers: { 'Content-Type': 'text/plain' },
+      });
+    }
   })());
 });

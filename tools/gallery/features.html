@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hex Dominion 2 — Crowns and Leaders Gallery</title>
+<meta name="theme-color" content="#0b0d12">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+
+<!-- The shipped stylesheet. crowns.css / leaderbanner.css are linked explicitly here because
+     game/styles/main.css (integration's file) does not @import them yet; once it does, these
+     two links are redundant but harmless. -->
+<link rel="stylesheet" href="../../game/styles/main.css">
+<link rel="stylesheet" href="../../game/styles/components/crowns.css">
+<link rel="stylesheet" href="../../game/styles/components/leaderbanner.css">
+
+<style>
+  /* Gallery-only chrome. None of this ships with the game. */
+  html { margin: 0; background: #0b0d12; }
+  body { margin: 0; background: transparent; font-family: var(--font-ui); color: var(--text); }
+
+  #gallery-bg {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(ellipse 62% 50% at 32% 36%, rgba(134, 180, 106, 0.75), transparent 68%),
+      radial-gradient(ellipse 40% 46% at 46% 30%, rgba(156, 196, 110, 0.55), transparent 70%),
+      radial-gradient(ellipse 50% 60% at 68% 62%, rgba(95, 154, 85, 0.55), transparent 68%),
+      radial-gradient(ellipse 60% 65% at 60% 45%, rgba(59, 143, 176, 0.5), transparent 72%),
+      linear-gradient(160deg, #2f6d8f 0%, #235a79 30%, #1a4560 60%, #102c3d 100%);
+  }
+  #gallery-bg::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 200px 30px rgba(0, 0, 0, 0.45); }
+
+  #gallery-nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    padding: 12px 20px;
+    background: rgba(8, 10, 16, 0.85);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .gallery-brand { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; }
+  .gallery-brand small { display: block; font-family: var(--font-ui); font-weight: 700; color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.02em; }
+  .gallery-modes { display: flex; gap: 8px; flex-wrap: wrap; }
+  .gallery-modes button, .gallery-tools button, .g-btn {
+    padding: 8px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted); font-weight: 800; font-size: 0.8rem;
+  }
+  .gallery-modes button.is-active { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: transparent; }
+  .g-btn.is-on { background: rgba(245, 196, 81, 0.2); color: var(--gold-bright); border-color: rgba(245, 196, 81, 0.5); }
+  body.gallery-bare #gallery-nav { display: none; }
+
+  .gallery-view { padding: 20px; }
+  .gallery-view[hidden] { display: none; }
+  .g-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 20px; align-items: start; }
+  .g-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .g-section h2 {
+    font-family: var(--font-ui); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em;
+    text-transform: uppercase; color: rgba(255, 255, 255, 0.72); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  }
+  .g-note { font-size: 0.74rem; color: rgba(255, 255, 255, 0.62); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); line-height: 1.4; }
+  .g-panel { padding: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .g-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 10px; }
+  .g-row > span { font-size: 0.7rem; font-weight: 800; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .g-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .g-slot {
+    position: relative; transform: translateZ(0); overflow: hidden;
+    border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(6, 10, 18, 0.28);
+  }
+  .g-slot.h-360 { height: 360px; } .g-slot.h-420 { height: 420px; } .g-slot.h-520 { height: 520px; }
+  .g-slot.h-260 { height: 260px; } .g-slot.h-620 { height: 620px; }
+  .g-map { background: linear-gradient(160deg, #6f9c5a, #4f8a5a 45%, #e3cf98 70%, #3b8fb0); }
+
+  /* the four static banners: in flow instead of pinned top-centre */
+  .g-static .leader-banner { position: relative; top: auto; left: auto; transform: none; width: 100%; --leader-banner-top: 0; }
+
+
+  .g-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .g-table th { text-align: left; font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); padding: 4px 8px; }
+  .g-table td { padding: 6px 8px; vertical-align: top; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+  .g-table td:first-child { color: var(--text-muted); font-weight: 800; white-space: nowrap; }
+  .g-fac { font-family: var(--font-title); font-weight: 700; }
+
+  /* the #ui wrapper used for the toast-glide demo is fixed inset 0 of its transformed slot */
+  .g-slot #ui { position: absolute; inset: 0; }
+  @media (max-width: 480px) { .gallery-view { padding: 8px; } .g-panel { padding: 12px; } .g-row { grid-template-columns: 70px minmax(0, 1fr); } }
+
+  canvas.g-canvas { display: block; border-radius: 12px; background: #000; max-width: 100%; }
+  canvas.g-zoom { image-rendering: pixelated; }
+  .g-pips-wrap { display: flex; flex-direction: column; gap: 10px; }
+</style>
+</head>
+<body>
+  <div id="gallery-bg"></div>
+
+  <header id="gallery-nav">
+    <div class="gallery-brand">HEX DOMINION 2<small>Crowns and rival leaders — tools/gallery/features.html</small></div>
+    <div class="gallery-modes">
+      <button data-mode="crowns" class="is-active">Crowns</button>
+      <button data-mode="leaders">Leaders</button>
+      <button data-mode="pips">Map pips</button>
+      <button data-mode="compose">In context</button>
+    </div>
+  </header>
+
+  <main id="view-crowns" class="gallery-view"></main>
+  <main id="view-leaders" class="gallery-view" hidden></main>
+  <main id="view-pips" class="gallery-view" hidden></main>
+  <main id="view-compose" class="gallery-view" hidden></main>
+
+  <script type="module" src="./features.js"></script>
+</body>
+</html>

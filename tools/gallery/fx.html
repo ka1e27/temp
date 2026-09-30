@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fx + sfx gallery — Hex Dominion 2</title>
+<!-- Dev-only gallery (docs/ARCHITECTURE.md §2: "tools/gallery/*.html|js dev
+     galleries ... served by npm start"). Not part of the shipped game shell,
+     so no Google Fonts network dependency and no service worker — just the
+     two systems this engineer owns (game/audio/sfx.js, game/render/fx.js)
+     wired to buttons, plus window.demo(name) for tools/pageshot.mjs. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --panel: rgba(16,20,30,0.82);
+    --panel-border: rgba(255,255,255,0.08);
+    --cream: #f3ead7;
+    --muted: #a3a9b6;
+    --gold: #f5c451;
+    --gold-soft: #f7d774;
+    --gold-deep: #e0a82e;
+    --good: #6fcf97;
+    --bad: #eb5757;
+    --ink: #2a1d05;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex;
+    font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+    color: var(--cream);
+    background: #0b0d12;
+    overflow: hidden;
+  }
+  #stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+  #shakeWrap { position: absolute; inset: -20px; }
+  #bg, #fx { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #bg { inset: 20px; width: calc(100% - 40px); height: calc(100% - 40px); }
+  #fx { inset: 20px; width: calc(100% - 40px); height: calc(100% - 40px); }
+
+  #stats {
+    position: absolute; top: 10px; left: 10px;
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  #goldCounter {
+    position: absolute; top: 10px; right: 10px;
+    padding: 6px 14px 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    font-weight: 800;
+    color: var(--gold);
+    font-variant-numeric: tabular-nums;
+    display: flex; align-items: center; gap: 6px;
+    pointer-events: none;
+  }
+  #goldCounter .coin {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--gold-soft), var(--gold-deep));
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+  }
+
+  #panel {
+    width: 340px;
+    flex: 0 0 auto;
+    overflow-y: auto;
+    background: #12141c;
+    border-left: 1px solid var(--panel-border);
+    padding: 14px;
+  }
+  #panel h1 { font-size: 15px; margin: 0 0 2px; color: var(--cream); }
+  #panel .sub { color: var(--muted); font-size: 11px; margin: 0 0 14px; }
+  .section { margin-bottom: 16px; }
+  .section h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 0 0 8px; font-weight: 700;
+  }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  button {
+    font: inherit; cursor: pointer;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--panel-border);
+    color: var(--cream);
+    border-radius: 8px;
+    padding: 7px 4px;
+    font-size: 11.5px;
+    transition: transform 0.06s ease, background 0.15s ease;
+  }
+  button:hover { background: rgba(255,255,255,0.12); }
+  button:active { transform: translateY(1px) scale(0.97); }
+  .grid.scenarios button { grid-column: span 3; text-align: left; padding-left: 10px; }
+  #chaosBtn {
+    width: 100%; margin-top: 4px; padding: 12px;
+    font-weight: 800; letter-spacing: 0.04em; font-size: 13px;
+    color: var(--ink);
+    background: linear-gradient(180deg, var(--gold-soft), var(--gold-deep));
+    border: none; border-radius: 10px;
+  }
+  .controls label {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; margin-bottom: 8px; color: var(--muted); font-size: 12px;
+  }
+  .controls input[type="range"] { width: 130px; }
+  hr { border: none; border-top: 1px solid var(--panel-border); margin: 14px 0; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div id="shakeWrap">
+      <canvas id="bg"></canvas>
+      <canvas id="fx"></canvas>
+    </div>
+    <div id="stats">fps -- · particles --</div>
+    <div id="goldCounter"><span class="coin"></span><span id="goldVal">1,240</span></div>
+  </div>
+  <div id="panel">
+    <h1>fx + sfx gallery</h1>
+    <p class="sub">game/audio/sfx.js · game/render/fx.js — click anything, it's a live audition.</p>
+
+    <div class="section">
+      <h2>Scenarios (battle events)</h2>
+      <div class="grid scenarios" id="scenarioGrid"></div>
+    </div>
+
+    <button id="chaosBtn" type="button">CHAOS</button>
+
+    <hr>
+
+    <div class="section">
+      <h2>Sounds</h2>
+      <div class="grid" id="sfxGrid"></div>
+    </div>
+
+    <div class="section">
+      <h2>Effects</h2>
+      <div class="grid" id="fxGrid"></div>
+    </div>
+
+    <hr>
+
+    <div class="section controls">
+      <label><span>Mute</span> <input type="checkbox" id="muteChk"></label>
+      <label><span>Volume</span> <input type="range" id="volRange" min="0" max="1" step="0.01" value="0.8"></label>
+      <label><span>Reduce motion</span> <input type="checkbox" id="rmChk"></label>
+    </div>
+  </div>
+  <script type="module" src="./fx.js"></script>
+</body>
+</html>

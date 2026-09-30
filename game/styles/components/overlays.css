@@ -1,0 +1,352 @@
+/* Modal, toasts, settings, realm, coach, welcome, dev panel, tooltip. */
+
+/* ============================== modal.js ================================= */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(6, 8, 14, 0.6);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  animation: fade-in var(--dur-med) var(--ease-out);
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-panel {
+  width: min(400px, 100%);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  box-shadow: var(--panel-shadow-lg);
+  animation: modal-pop var(--dur-med) var(--ease-punch);
+}
+@keyframes modal-pop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.modal-title { font-size: var(--fs-lg); }
+.modal-body { color: var(--text-muted); font-size: var(--fs-sm); line-height: 1.5; }
+.modal-actions { display: flex; gap: var(--sp-2); justify-content: flex-end; }
+.modal-actions .btn { flex: 1; }
+
+/* ============================== toasts.js ================================= */
+.toasts {
+  position: absolute;
+  /* Clears the HUD's gold bar (~78px tall including its own top offset,
+     desktop or mobile) so a toast never covers the one number players
+     watch most. Screens with no HUD just get a slightly generous top
+     margin instead, which is harmless. */
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: min(360px, calc(100vw - 24px));
+  align-items: center;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--panel-radius-sm);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--panel-shadow);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  opacity: 0;
+  transform: translateY(-16px) scale(0.96);
+  transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-out);
+}
+.toast.is-in { opacity: 1; transform: translateY(0) scale(1); }
+.toast.is-out { opacity: 0; transform: translateY(-10px) scale(0.98); }
+.toast-message { flex: 1; }
+.toast-close { background: none; border: none; color: var(--text-dim); padding: 4px; }
+.toast-info .icon { color: var(--text-muted); }
+.toast-success { border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.toast-success .icon { color: var(--good); }
+.toast-warning { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.toast-warning .icon { color: var(--warn); }
+
+/* ============================== settings.js ================================ */
+.settings, .realm {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-modal);
+  width: min(420px, calc(100vw - 24px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--panel-shadow-lg);
+}
+.settings-header, .realm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4) var(--sp-4) 0;
+}
+.settings-title, .realm-title { font-size: var(--fs-lg); }
+.settings-body, .realm-body { padding: var(--sp-3) var(--sp-4) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.settings-section { display: flex; flex-direction: column; gap: var(--sp-2); }
+.settings-subtitle { font-size: var(--fs-sm); color: var(--text-muted); font-family: var(--font-ui); font-weight: 800; }
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.settings-row-label { display: flex; align-items: center; gap: var(--sp-2); font-weight: 700; font-size: var(--fs-sm); }
+
+.settings-toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  flex-shrink: 0;
+  transition: background var(--dur-fast);
+}
+.settings-toggle-knob {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 999px;
+  background: var(--text);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.settings-toggle.is-on { background: var(--good); }
+.settings-toggle.is-on .settings-toggle-knob { transform: translateX(18px); }
+
+.settings-code {
+  width: 100%;
+  resize: vertical;
+  padding: var(--sp-2);
+  border-radius: var(--panel-radius-sm);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: var(--fs-xs);
+}
+.settings-import-row { display: flex; align-items: center; gap: var(--sp-3); }
+.settings-import-row .btn { flex: 1; }
+.settings-import-msg { font-size: var(--fs-xs); color: var(--good); font-weight: 700; }
+.settings-import-msg.is-error { color: var(--bad); }
+
+/* ============================== realm.js =================================== */
+.realm-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.realm-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-radius: var(--panel-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+}
+.realm-stat .icon { color: var(--gold); flex-shrink: 0; }
+.realm-stat-label { flex: 1; font-size: var(--fs-xs); color: var(--text-muted); }
+.realm-stat-value { font-weight: 800; font-size: var(--fs-sm); }
+
+.dynasty-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-radius: var(--panel-radius-sm);
+  background: linear-gradient(160deg, rgba(245, 196, 81, 0.14), rgba(245, 196, 81, 0.03));
+  border: 1px solid rgba(245, 196, 81, 0.25);
+}
+.dynasty-header { display: flex; align-items: center; justify-content: space-between; }
+.dynasty-level { font-family: var(--font-title); font-weight: 700; font-size: var(--fs-md); }
+.dynasty-stars { display: flex; align-items: center; gap: 5px; color: var(--gold); font-weight: 800; }
+.dynasty-desc { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.5; }
+
+/* ============================== coach.js =================================== */
+.coach { position: fixed; inset: 0; z-index: var(--z-coach); pointer-events: none; }
+.coach-ring {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 4px rgba(245, 196, 81, 0.18);
+  animation: coach-pulse 1.6s ease-in-out infinite;
+}
+@keyframes coach-pulse {
+  0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0.9; }
+  70% { transform: translate(-50%, -50%) scale(1.18); opacity: 0.25; }
+  100% { transform: translate(-50%, -50%) scale(0.85); opacity: 0.9; }
+}
+.coach-bubble {
+  position: fixed;
+  pointer-events: auto;
+  max-width: 260px;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--panel-radius-sm);
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border-light);
+  box-shadow: var(--panel-shadow);
+}
+.coach-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 14px; height: 14px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border-light);
+}
+.coach-bubble.arrow-down::after { bottom: -8px; border-top: none; border-left: none; }
+.coach-bubble.arrow-up::after { top: -8px; border-bottom: none; border-right: none; }
+.coach-text { flex: 1; font-size: var(--fs-sm); font-weight: 700; color: var(--text); margin: 0; }
+.coach-dismiss { background: none; border: none; color: var(--text-dim); flex-shrink: 0; }
+
+/* ============================== welcome.js ================================= */
+.welcome-card {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-modal);
+  width: min(360px, calc(100vw - 32px));
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+  box-shadow: var(--panel-shadow-lg);
+  animation: results-pop 420ms var(--ease-punch);
+}
+.welcome-title { font-size: var(--fs-xl); }
+.welcome-away { color: var(--text-muted); font-size: var(--fs-sm); }
+.welcome-time { color: var(--text); font-weight: 800; }
+.welcome-gold-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--gold);
+}
+.welcome-gold-row .icon { color: var(--gold); }
+.welcome-gold { font-family: var(--font-title); font-size: var(--fs-2xl); font-weight: 700; color: var(--gold-bright); }
+.coin-burst { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.coin-burst-piece {
+  position: absolute;
+  left: 0; top: 0;
+  color: var(--gold);
+  animation: coin-burst-fly 800ms var(--delay, 0ms) var(--ease-out) forwards;
+}
+@keyframes coin-burst-fly {
+  0% { transform: translate(0, 0) scale(0.6); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; }
+}
+.welcome-collect { width: 100%; }
+
+/* ============================== devpanel.js ================================= */
+.devpanel {
+  position: absolute;
+  bottom: var(--sp-3);
+  left: var(--sp-3);
+  z-index: var(--z-panel);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  max-width: min(320px, calc(100vw - 24px));
+}
+.devpanel-toggle {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px dashed rgba(255, 122, 122, 0.5);
+  background: rgba(235, 87, 87, 0.12);
+  color: #ffb3b3;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+}
+.devpanel-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--panel-radius-sm);
+  background: var(--panel-bg-solid);
+  border: 1px dashed rgba(255, 122, 122, 0.35);
+}
+.devpanel-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.devpanel-row .btn { font-size: var(--fs-xs); padding: var(--sp-1) var(--sp-2); min-height: 32px; }
+.devpanel-seed {
+  flex: 1;
+  min-width: 100px;
+  padding: var(--sp-2);
+  border-radius: var(--panel-radius-sm);
+  border: 1px solid var(--panel-border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-size: var(--fs-xs);
+}
+.devpanel-speed.is-on { background: color-mix(in srgb, var(--good) 25%, transparent); color: var(--good); }
+
+/* ============================== tooltip.js ================================= */
+.tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  pointer-events: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.92);
+  border: 1px solid var(--panel-border-light);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: var(--panel-shadow);
+}
+
+@media (max-width: 480px) {
+  .realm-stats-grid { grid-template-columns: 1fr; }
+}
+
+/* Music volume slider (settings.js). */
+.settings-slider { width: 150px; max-width: 45vw; accent-color: var(--gold); cursor: pointer; }
+.settings-volume-row.is-off { opacity: 0.45; }
+
+/* Phones: the Realm panel sits directly under the HUD bar and is exactly as tall as the room left, its
+   body scrolling (eleven stat rows plus the dynasty box do not fit a 844 px screen otherwise). */
+@media (max-width: 640px) {
+  .realm {
+    top: 84px;
+    transform: translateX(-50%);
+    max-height: calc(100vh - 96px);
+    max-height: calc(100dvh - 96px);
+  }
+  .realm .realm-body { overflow-y: auto; min-height: 0; }
+}
+
+/* Welcome-back: which regions prospered while the player was away. */
+.welcome-prospered { margin: 0; font-size: var(--fs-sm); font-weight: 700; color: var(--gold-bright); text-align: center; }
+.welcome-prospered[hidden] { display: none; }
+.welcome-cap { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-muted); text-align: center; text-wrap: balance; }
+.welcome-cap[hidden] { display: none; }

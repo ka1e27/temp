@@ -1,12 +1,11 @@
-# Publish the game to GitHub Pages.
+# Publish Hex Dominion to GitHub Pages.
 #
 # There is nothing to build: the game is zero-dependency ES modules and static
-# assets, and Pages serves it over https, which is all the modules ever needed
-# (the local `file://` restriction that index.html guards against does not
-# apply here). So the "build" is a test run plus an upload of the repo.
+# assets served straight from the repo. The "build" is a test run, a real-browser
+# smoke test, and an upload.
 #
-# Tests gate the deploy on purpose — a broken push should not become the
-# playable link people are testing against.
+# Both gates must pass before a deploy — a broken push should never become the
+# playable link.
 name: Deploy to GitHub Pages
 
 on:
@@ -33,28 +32,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # No `npm ci`: the project has no dependencies, and adding one would be
-      # the first thing to break that promise.
-      - name: Unit tests
+      # No `npm ci`: the project has no dependencies.
+      - name: Unit tests (world, battle, meta, fx, camera, input)
         run: npm test
-      - name: File size and purity gates
-        run: npm run check
 
-  # THE TWO TESTS THAT EXIST BECAUSE A RELEASE ONCE SHIPPED COMPLETELY
-  # UNCLICKABLE, and which until now ran only when somebody remembered.
-  #
-  # `#screen-root` is `pointer-events: none` and every scene has to opt back
-  # in; a whole release went out with nobody able to click anything, and the
-  # unit suite was green throughout, because a synthetic `el.click()` bypasses
-  # hit testing entirely. smoke.mjs dispatches REAL pointer events and asserts
-  # `document.elementFromPoint` lands on the target first, which is the only
-  # kind of check that can catch it. mobile.mjs is the other half: it measures
-  # how much of the screen the board actually gets at phone size, after an
-  # audit that reported a clean bill of health on a layout that was unplayable.
-  #
-  # Neither can run in the `verify` job: they need the game SERVED (ES modules
-  # cannot load from file://) and a real browser. So they get their own job,
-  # and the deploy waits on both.
+  # A synthetic el.click() bypasses hit testing, so only real pointer events in a
+  # real browser prove the game is clickable. tools/check.mjs boots the game in
+  # headless Chrome (via tools/cdp.js, no dependencies), clicks through New Realm,
+  # starts a battle, drag-sends troops, wins, and reloads to check the save — at
+  # desktop size and at phone size with touch — and once more under the /temp/ prefix.
   browser:
     runs-on: ubuntu-latest
     steps:
@@ -62,26 +48,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # tools/cdp.js drives Chrome over the DevTools Protocol directly rather
-      # than through Playwright — no dependency, so nothing to install. It
-      # takes the binary from CHROME_PATH, and ubuntu-latest ships Chrome.
       - name: Locate Chrome
         run: |
           BIN="$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)"
-          # Fail HERE rather than three steps later. cdp.js falls back to
-          # /opt/pw-browsers/chromium when CHROME_PATH is empty, which does not
-          # exist on a runner — so an unset variable would surface as a spawn
-          # error inside a test and read like a test failure instead of a
-          # missing browser.
           if [ -z "$BIN" ]; then echo "no Chrome on this runner"; exit 1; fi
           echo "CHROME_PATH=$BIN" >> "$GITHUB_ENV"
           "$BIN" --version
       - name: Serve the game
         run: |
-          # nohup + redirected output, NOT a bare `npm start &`. Each step is
-          # its own shell; a plain background job holds the step's stdout open
-          # and dies with it often enough to be a flaky-CI generator. The log
-          # file is also what makes a failure diagnosable rather than silent.
+          # nohup + redirected output: a bare background job can die with the step.
           nohup npm start > /tmp/serve.log 2>&1 &
           for _ in $(seq 1 60); do
             curl -sf -o /dev/null http://localhost:8080/ && break
@@ -90,16 +65,14 @@ jobs:
           if ! curl -sf -o /dev/null http://localhost:8080/; then
             echo "dev server never came up:"; cat /tmp/serve.log; exit 1
           fi
-      - name: Clickable end to end (real hit-tested pointer events)
-        run: node tools/smoke.mjs
-      - name: Playable at phone size (board share)
-        run: node tools/mobile.mjs
-      # LAST on purpose: this one installs a service worker to prove the game
-      # works offline, and cleans up after itself. Running it ahead of the other
-      # two would risk them asserting against a cache it left behind, which is
-      # the hidden state index.html's https-only registration exists to avoid.
-      - name: Playable offline (service worker installs and caches)
-        run: node tools/offline.mjs
+      - name: Smoke test in a real browser
+        run: node tools/check.mjs
+      # The site is served from a PROJECT SUBPATH (https://ka1e27.github.io/temp/), never from "/". This runs the
+      # same suite against a server that serves the repo under /temp/ with nothing at "/" (like Pages), then checks
+      # the deployed shape: every asset resolves under the prefix, the service worker's scope and cache, the
+      # manifest's start_url and icons, classic.html, and an offline reload after one visit.
+      - name: Smoke test under the /temp/ subpath (service worker, manifest, offline)
+        run: node tools/check.mjs --base=temp
 
   deploy:
     needs: [verify, browser]
@@ -109,21 +82,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      # ONE-TIME SETUP, done by a repo admin before this can ever succeed:
-      #   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
-      #
-      # It cannot be automated from here. `enablement: true` was tried and the
-      # workflow token refused it — `pages: write` grants permission to DEPLOY
-      # to a Pages site, not to CREATE one, so the API answers "Resource not
-      # accessible by integration". Creating the site needs admin rights the
-      # Actions token deliberately does not have.
+      # One-time setup by a repo admin: Settings -> Pages -> Source: "GitHub Actions".
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Package the site
         uses: actions/upload-pages-artifact@v3
         with:
-          # Served from a subpath (/temp/), which works because every asset
-          # reference in index.html is relative.
+          # Served from a subpath (/temp/); every asset reference is relative.
           path: .
       - name: Deploy
         id: deployment

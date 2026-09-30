@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>music gallery — Hex Dominion 2</title>
+<!-- Dev-only audition page for game/audio/music.js (docs/MUSIC.md). Every control is a live
+     call into the real engine: scenes, intensity, assault, stingers, seed, volume, mute.
+     tools/musicrender.mjs loads this page too and calls window.__renderClip(name) to render
+     clips offline. Not part of the shipped game. -->
+<style>
+  :root {
+    color-scheme: dark;
+    --panel: rgba(16,20,30,0.82);
+    --panel-border: rgba(255,255,255,0.08);
+    --cream: #f3ead7;
+    --muted: #a3a9b6;
+    --gold: #f5c451;
+    --gold-soft: #f7d774;
+    --gold-deep: #e0a82e;
+    --good: #6fcf97;
+    --bad: #eb5757;
+    --ink: #2a1d05;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+    color: var(--cream);
+    background: #0b0d12;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 18px 16px 40px;
+  }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .card h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin: 0 0 10px; font-weight: 700;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .row:last-child { margin-bottom: 0; }
+  button {
+    font: inherit; cursor: pointer;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--panel-border);
+    color: var(--cream);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    transition: transform 0.06s ease, background 0.15s ease;
+  }
+  button:hover { background: rgba(255,255,255,0.12); }
+  button:active { transform: translateY(1px) scale(0.97); }
+  button.on { background: rgba(245,196,81,0.2); border-color: var(--gold); color: var(--gold); }
+  button.primary {
+    color: var(--ink); border: none;
+    background: linear-gradient(180deg, var(--gold-soft), var(--gold-deep));
+    font-weight: 800;
+  }
+  label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  input[type="range"] { width: 200px; }
+  input[type="number"] { width: 110px; background: #12141c; color: var(--cream); border: 1px solid var(--panel-border); border-radius: 6px; padding: 6px; }
+  .val { color: var(--cream); font-variant-numeric: tabular-nums; min-width: 42px; display: inline-block; }
+  #meter { height: 10px; background: #12141c; border-radius: 5px; overflow: hidden; flex: 1 1 200px; min-width: 160px; }
+  #meterFill { height: 100%; width: 0; background: linear-gradient(90deg, var(--good), var(--gold), var(--bad)); }
+  pre { margin: 0; font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre-wrap; }
+  #seq { color: var(--gold); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+  <h1>music gallery</h1>
+  <p class="sub">game/audio/music.js · click anywhere first (browsers need a gesture to start audio) · every control is a live call into the engine.</p>
+
+  <div class="card">
+    <h2>Scene</h2>
+    <div class="row" id="sceneRow"></div>
+    <div class="row">
+      <label>Intensity <input type="range" id="intensity" min="0" max="1" step="0.01" value="0.5"><span class="val" id="intensityVal">0.50</span></label>
+      <button id="assaultBtn" type="button">Assault</button>
+    </div>
+    <div class="row">
+      <button id="victoryBtn" type="button">Stinger: victory</button>
+      <button id="defeatBtn" type="button">Stinger: defeat</button>
+      <label><input type="checkbox" id="withSfx" checked> play the matching sfx at the resolve</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Scripted sequence (3 min)</h2>
+    <div class="row">
+      <button id="seqBtn" type="button" class="primary">Play: title, world, battle ramp, assault, victory, world</button>
+      <button id="seqStop" type="button">Stop</button>
+      <span id="seq"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Seed / key</h2>
+    <div class="row">
+      <label>Seed <input type="number" id="seed" value="3" step="1"></label>
+      <button id="seedApply" type="button">Apply</button>
+      <button id="seedRandom" type="button">Random</button>
+      <span id="keyInfo" style="color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Mix</h2>
+    <div class="row">
+      <label>Music volume <input type="range" id="musicVol" min="0" max="1" step="0.01" value="0.4"><span class="val" id="musicVolVal">0.40</span></label>
+    </div>
+    <div class="row">
+      <label>Master volume <input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.7"><span class="val" id="masterVolVal">0.70</span></label>
+      <label><input type="checkbox" id="mute"> mute (master)</label>
+      <label><input type="checkbox" id="pause"> paused (tab hidden)</label>
+    </div>
+    <div class="row" id="sfxRow"><span style="color:var(--muted);font-size:12px">overlap check: </span></div>
+    <div class="row"><div id="meter"><div id="meterFill"></div></div><span id="meterTxt" class="val" style="min-width:170px"></span></div>
+  </div>
+
+  <div class="card">
+    <h2>Engine</h2>
+    <pre id="dbg">not started: click a button</pre>
+  </div>
+
+  <script type="module" src="./music.js"></script>
+</body>
+</html>

@@ -1,18 +1,18 @@
 {
   "name": "Hex Dominion",
   "short_name": "Hex Dominion",
-  "description": "Idle conquest with real-time battles. Twenty-four regions, an endless incursion ladder, and combat with no dice in it.",
+  "description": "Idle conquest on a living hex continent: fast real-time battles fought on the map itself, regions that pay you gold even while you are away, no downloads.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b0d12",
-  "theme_color": "#0b0d12",
+  "background_color": "#101826",
+  "theme_color": "#101826",
   "categories": ["games", "strategy"],
   "icons": [
     { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "./icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

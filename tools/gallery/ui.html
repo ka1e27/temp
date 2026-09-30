@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hex Dominion 2 — UI Gallery</title>
+<meta name="theme-color" content="#0b0d12">
+
+<!-- DESIGN §7.5: Cinzel for titles/region names, Nunito for everything else. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+
+<!-- The real, shipped stylesheet — nothing in this gallery re-styles a
+     game/ui component; every visual choice lives in game/styles. -->
+<link rel="stylesheet" href="../../game/styles/main.css">
+
+<style>
+  /* Gallery-only chrome. None of this ships with the game. */
+  html { margin: 0; background: #0b0d12; }
+  /* body must NOT also set an opaque background: once <html> has one of its
+     own, body's background stops propagating to the canvas and instead
+     paints as a normal in-flow box — which sits ABOVE a z-index:-1 fixed
+     element in stacking order, silently hiding it. Ask me how long that took
+     to track down. */
+  body { margin: 0; background: transparent; font-family: var(--font-ui); color: var(--text); }
+
+  /* Placeholder "living map" — soft painted gradient standing in for the
+     real canvas renderer (owned by the render engineer). Land greens over
+     an ocean blue, DESIGN §7.1's palette family, not its actual tiles. */
+  #gallery-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(ellipse 62% 50% at 32% 36%, rgba(134, 180, 106, 0.75), transparent 68%),
+      radial-gradient(ellipse 40% 46% at 46% 30%, rgba(156, 196, 110, 0.55), transparent 70%),
+      radial-gradient(ellipse 50% 60% at 68% 62%, rgba(95, 154, 85, 0.55), transparent 68%),
+      radial-gradient(ellipse 60% 65% at 60% 45%, rgba(59, 143, 176, 0.5), transparent 72%),
+      linear-gradient(160deg, #2f6d8f 0%, #235a79 30%, #1a4560 60%, #102c3d 100%);
+  }
+  #gallery-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 200px 30px rgba(0, 0, 0, 0.45);
+  }
+
+  #gallery-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    background: rgba(8, 10, 16, 0.85);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-wrap: wrap;
+  }
+  .gallery-brand { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; }
+  .gallery-brand small { display: block; font-family: var(--font-ui); font-weight: 700; color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.02em; }
+  .gallery-modes { display: flex; gap: 8px; }
+  .gallery-modes button {
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    font-weight: 800;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+  .gallery-modes button.is-active { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: transparent; }
+
+  .gallery-view { min-height: calc(100vh - 57px); }
+  .gallery-view[hidden] { display: none; }
+
+  #view-kit { padding: 24px; }
+  .gallery-kit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 20px;
+    align-items: start;
+  }
+  /* Below ~2 real 340px columns' worth of width, auto-fill's minmax(340px,…)
+     computed 2 tracks anyway and let the row overflow instead of collapsing
+     to one — a definite `1fr` sidesteps the auto-fill/minmax edge case
+     entirely rather than chasing why. */
+  @media (max-width: 760px) {
+    .gallery-kit-grid { grid-template-columns: 1fr; }
+  }
+  .gallery-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* Grid items default to min-width:auto, i.e. never smaller than their
+       content's min-content size — the icon swatch grid's own ~850px
+       min-content (9 columns × minmax(84px,...)) would otherwise force this
+       whole column wider than a phone viewport instead of wrapping, the
+       same "min-size:auto" trap as the flex HUD bug above, one layout
+       model over. */
+    min-width: 0;
+  }
+  .gallery-section h2 {
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .gallery-slot {
+    position: relative;
+    transform: translateZ(0); /* containing block for position:fixed children too (coach/tooltip) */
+    overflow: hidden;
+    height: 220px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .gallery-slot--tall { height: 640px; }
+  .gallery-slot--med { height: 420px; }
+  .gallery-slot .hint-btn-row { position: absolute; left: 8px; bottom: 8px; z-index: 5; display: flex; gap: 6px; flex-wrap: wrap; }
+  .gallery-slot .hint-btn-row button {
+    font-size: 0.68rem; font-weight: 800; padding: 5px 9px; border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.5); color: var(--text);
+  }
+
+  .gallery-panel-static {
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 16px;
+  }
+  .icon-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; }
+  .icon-swatch {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 10px 4px; border-radius: 10px; background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted); font-size: 0.62rem; font-weight: 700; text-align: center;
+  }
+  .icon-swatch .icon { color: var(--gold-bright); }
+
+  .gallery-fullscreen { position: relative; height: calc(100vh - 57px); transform: translateZ(0); overflow: hidden; }
+
+  /* ?bare=1: hides every bit of gallery-only chrome so a screenshot shows
+     exactly what the real game would render at that viewport size — used
+     for the composition/battle/title full-screen modes, not the Kit grid
+     (whose section labels are the point of that view, not "chrome"). */
+  body.gallery-bare #gallery-nav { display: none; }
+  body.gallery-bare .gallery-view { min-height: 100vh; }
+  body.gallery-bare .gallery-fullscreen { height: 100vh; }
+
+  /* Anchors the Composition view's region card below the HUD. Two fixed
+     offsets keyed to the same 640px breakpoint hud.css itself switches on,
+     rather than a JS-measured height — the Composition view starts out
+     `hidden` (Kit is the default mode), and a hidden ancestor lays out at
+     0×0, so measuring the HUD's real height at page-build time always
+     reads back 0. */
+  .composition-card { position: absolute; top: 96px; right: 24px; left: 24px; max-width: 340px; margin-left: auto; }
+  @media (max-width: 900px) {
+    /* Below the HUD *and* the demo toast — both stay close to full-width up
+       to ~900px (checked against a 844×390 landscape phone, not just
+       390-ish portrait widths), so unlike true desktop — where the toast is
+       centred and the card is right-anchored with room to spare either
+       side — they'd otherwise overlap both vertically and horizontally. */
+    .composition-card { top: 140px; }
+  }
+
+  code.gallery-note { font-size: 0.7rem; color: var(--text-dim); }
+</style>
+</head>
+<body>
+  <div id="gallery-bg"></div>
+
+  <header id="gallery-nav">
+    <div class="gallery-brand">HEX DOMINION 2<small>UI kit gallery — tools/gallery/ui.html</small></div>
+    <div class="gallery-modes">
+      <button data-mode="kit" class="is-active">Kit</button>
+      <button data-mode="composition">Composition</button>
+      <button data-mode="battle">Battle HUD</button>
+      <button data-mode="title">Title</button>
+    </div>
+  </header>
+
+  <main id="view-kit" class="gallery-view"></main>
+  <main id="view-composition" class="gallery-view" hidden></main>
+  <main id="view-battle" class="gallery-view" hidden></main>
+  <main id="view-title" class="gallery-view" hidden></main>
+
+  <script type="module" src="./ui.js"></script>
+</body>
+</html>

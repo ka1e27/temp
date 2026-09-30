@@ -1,0 +1,129 @@
+/* Integration-layer styles (game/app): where the app glue places UI kit
+   components the kit itself leaves unpositioned (the region card), plus the
+   title-screen scrim and the dev overlay. Kit visuals stay in game/styles. */
+
+/* --- Region card dock: right column on desktop, bottom sheet on phones ------ */
+.hd-dock {
+  position: absolute;
+  z-index: var(--z-panel);
+  top: 84px;
+  right: var(--sp-3);
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-radius: var(--panel-radius);
+  animation: hd-dock-in 260ms var(--ease-punch, cubic-bezier(0.2, 0.9, 0.3, 1.2));
+  scrollbar-width: none;
+}
+.hd-dock::-webkit-scrollbar { display: none; }
+.hd-dock .region-card { max-width: none; }
+@keyframes hd-dock-in {
+  0% { opacity: 0; transform: translateX(24px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 640px) {
+  .hd-dock {
+    top: auto;
+    left: var(--sp-2);
+    right: var(--sp-2);
+    bottom: calc(var(--sp-2) + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-height: 62vh;
+    animation-name: hd-sheet-in;
+  }
+  @keyframes hd-sheet-in {
+    0% { opacity: 0; transform: translateY(40px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+}
+/* Landscape phones: a narrower column that fits under the HUD. */
+@media (max-height: 520px) and (min-width: 641px) {
+  .hd-dock { top: 84px; width: min(300px, 44vw); max-height: calc(100vh - 92px); }
+}
+
+/* --- Title screen: a soft scrim so the logo reads over the busy map --------- */
+.title-screen {
+  background:
+    radial-gradient(ellipse 62% 58% at 50% 46%, rgba(9, 16, 28, 0.78) 0%, rgba(9, 16, 28, 0.5) 46%, rgba(9, 16, 28, 0) 100%),
+    linear-gradient(180deg, rgba(9, 16, 28, 0.35) 0%, rgba(9, 16, 28, 0) 24%, rgba(9, 16, 28, 0) 70%, rgba(9, 16, 28, 0.55) 100%);
+  animation: hd-fade-in 900ms ease-out both;
+}
+@keyframes hd-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* --- Dev overlay (?dev=1) -------------------------------------------------- */
+.hd-perf {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  z-index: 9999;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #9cffb0;
+  font: 600 11px/1.3 ui-monospace, Consolas, monospace;
+  pointer-events: none !important;
+  white-space: pre;
+}
+.hd-perf[data-warn='1'] { color: #ffd479; }
+.hd-perf[data-warn='2'] { color: #ff8a80; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hd-dock, .title-screen { animation: none; }
+}
+.reduce-motion .hd-dock, .reduce-motion .title-screen { animation: none; }
+
+/* Sea-coloured fade used when a whole new continent replaces the one on screen. */
+.hd-fade {
+  position: fixed; inset: 0; z-index: 45; pointer-events: none;
+  background: #10283d; opacity: 0; transition: opacity 260ms ease;
+}
+.hd-fade.on { opacity: 1; pointer-events: auto; }
+
+/* Title buttons: the kit's translucent secondary buttons wash out over a bright map. */
+.title-screen .btn-secondary {
+  background: rgba(14, 22, 36, 0.66);
+  border-color: rgba(255, 255, 255, 0.28);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.title-screen .btn-secondary:hover { background: rgba(28, 40, 60, 0.78); }
+
+/* --- Battle extras (game/scenes/battle.js) --------------------------------------- */
+/* Skip the victory sequence: bottom centre, above the send-fraction bar. The top centre belongs to the leader
+   banner (it used to sit ON the banner's text) and the top right to the pause / speed cluster. */
+.hd-skip {
+  position: absolute;
+  z-index: var(--z-modal);
+  bottom: calc(176px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  animation: hd-fade-in 400ms ease-out both;
+}
+.hd-help { font-family: var(--font-title); font-weight: 800; font-size: 1.05rem; }
+.hd-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); text-align: left; }
+.hd-controls h3 { font-size: var(--fs-md); margin-bottom: var(--sp-2); color: var(--gold); }
+.hd-controls p { font-size: var(--fs-sm); color: var(--text-muted); margin: 0 0 6px; line-height: 1.4; }
+.hd-controls b { color: var(--text); font-weight: 800; }
+@media (max-width: 640px) { .hd-controls { grid-template-columns: 1fr; } }
+/* Pausing freezes the sim and dims the HUD slightly (PLAYFEEL §3). */
+.battle-hud.is-paused .battle-bottom, .battle-hud.is-paused .battle-top { opacity: 0.72; }
+.battle-hud .battle-bottom, .battle-hud .battle-top { transition: opacity 200ms ease; }
+
+/* Phone battle HUD: keep the five power buttons on ONE row (the kit wraps them 3 + 2). */
+@media (max-width: 640px) {
+  .power-buttons { flex-wrap: nowrap; gap: 8px; }
+  .power-btn { width: 54px; height: 54px; }
+  .power-name { max-width: 58px; }
+}
+
+/* Desktop battles: the top pill (region name, tug-of-war bar, timer) runs from y = 12 to ~88, so toasts start a little beneath it
+   instead of touching it (the playtest flagged the 4 px overlap of the Rally toast). */
+#ui:has(.battle-hud:not([hidden])) .toasts { top: 100px; }
+
+/* Phone battles: the mission chip drops below the button row, so toasts start beneath it instead
+   of covering the progress bar (the desktop offset already clears it). */
+@media (max-width: 840px) {
+  #ui:has(.battle-hud:not([hidden])) .toasts { top: 120px; }
+}

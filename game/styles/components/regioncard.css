@@ -1,0 +1,146 @@
+/* Region card (regionCard.js). */
+
+.region-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+.region-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--sp-2);
+}
+.region-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-lg);
+  color: var(--text);
+}
+.region-card-tier {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.owner-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  background: color-mix(in srgb, var(--chip-color, #9a927f) 22%, rgba(255, 255, 255, 0.04));
+  border: 1px solid color-mix(in srgb, var(--chip-color, #9a927f) 55%, transparent);
+}
+.owner-chip .icon { color: var(--chip-color, currentColor); }
+
+.region-card-body { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.region-card-perk {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.region-card-perk .icon { color: var(--gold); }
+
+.region-card-locked {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  padding: var(--sp-2) 0;
+}
+
+/* Reward lines: "Income +1.0/s forever" / "Bounty 90 gold", each spelled
+   out in words (not a bare number) so a first-time player never has to
+   guess what a number means. */
+.region-card-rewards { display: flex; flex-direction: column; gap: 4px; }
+.reward-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.reward-line strong, .reward-line b { font-weight: 800; }
+/* Frontier: income and bounty on one wrapping row. */
+.region-card-rewards.is-pair { flex-direction: row; flex-wrap: wrap; gap: 2px var(--sp-4); }
+
+/* The matchup: difficulty chip centred above a two-sided, named bar — blue
+   (you) vs the defender's own colour, meeting at the power/strength ratio. */
+.region-card-matchup { display: flex; flex-direction: column; gap: 6px; }
+.matchup-chip-row { display: flex; justify-content: center; }
+.matchup-chip { font-weight: 800; font-size: var(--fs-xs); }
+
+.matchup-chip.diff-easy { color: var(--diff-easy); background: color-mix(in srgb, var(--diff-easy) 18%, transparent); }
+.matchup-chip.diff-fair { color: var(--diff-fair); background: color-mix(in srgb, var(--diff-fair) 18%, transparent); }
+.matchup-chip.diff-hard { color: var(--diff-hard); background: color-mix(in srgb, var(--diff-hard) 18%, transparent); }
+.matchup-chip.diff-deadly { color: var(--diff-deadly); background: color-mix(in srgb, var(--diff-deadly) 18%, transparent); }
+
+.matchup-bar-track {
+  display: flex;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+.matchup-you-fill {
+  height: 100%;
+  background: var(--faction-player);
+  transition: width var(--dur-med) var(--ease-out);
+}
+.matchup-enemy-fill {
+  height: 100%;
+  transition: width var(--dur-med) var(--ease-out);
+}
+.matchup-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.matchup-you-label strong { color: var(--faction-player); }
+
+.region-card-action { margin-top: var(--sp-1); }
+
+/* Crowns (crownRow.js). Frontier: the open medals on desktop; on a phone bottom sheet one compact
+   line instead (the sheet must stay short). Owned regions show their earned crowns everywhere. */
+.region-card-crowns { display: flex; flex-direction: column; gap: 4px; }
+.region-card-crowns-label { font-size: var(--fs-xs); color: var(--text-muted); }
+.region-card-par { display: none; margin: 0; font-size: var(--fs-xs); color: var(--text-muted); text-align: center; }
+@media (max-width: 640px) {
+  .region-card-crowns:not(.is-owned) .crown-row,
+  .region-card-crowns:not(.is-owned) .region-card-crowns-label { display: none; }
+  .region-card-crowns:not(.is-owned) .region-card-par { display: block; }
+}
+
+/* Phone bottom sheet: it has a height budget (a scouted card should stay near half of the screen, the map
+   behind it is the point of scouting), so the rows sit a little closer together. */
+@media (max-width: 640px) {
+  .region-card-body { gap: var(--sp-2); }
+}
+
+/* Prosperity line on an owned region (level, bonus, the time to the next level). */
+.region-card-prosperity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.region-card-prosperity .icon { color: var(--gold); }
+.region-card-prosperity[hidden] { display: none; }
+.region-card-next { color: var(--text-dim); font-weight: 600; }

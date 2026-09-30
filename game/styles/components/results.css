@@ -1,0 +1,98 @@
+/* Victory / Defeat / Retreat card (results.js) — DESIGN §7.4. */
+
+.results-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-modal);
+  width: min(420px, calc(100vw - 32px));
+  padding: var(--sp-6) var(--sp-5) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  text-align: center;
+  box-shadow: var(--panel-shadow-lg);
+  animation: results-pop 420ms var(--ease-punch);
+}
+@keyframes results-pop {
+  0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+.results-banner {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: var(--fs-3xl);
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+.results-card[data-result='victory'] .results-banner {
+  background: linear-gradient(180deg, #ffe9a8, var(--gold) 60%, #e0a82e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 4px 24px rgba(245, 196, 81, 0.35);
+}
+.results-card[data-result='defeat'] .results-banner { color: var(--bad); }
+.results-card[data-result='retreat'] .results-banner { color: var(--text-muted); }
+
+.results-region {
+  font-family: var(--font-title);
+  font-size: var(--fs-lg);
+  color: var(--text);
+  margin-bottom: var(--sp-3);
+}
+
+.results-body { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-4); width: 100%; }
+
+.results-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2) var(--sp-4);
+}
+.results-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  justify-content: center;
+}
+
+.results-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  text-align: left;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--panel-radius-sm);
+  padding: var(--sp-3);
+}
+.results-actions { display: flex; gap: var(--sp-3); }
+.results-action { flex: 1; }
+
+@media (max-width: 480px) {
+  .results-banner { font-size: var(--fs-2xl); }
+  .results-stats-grid { grid-template-columns: 1fr; }
+}
+
+/* Crowns on the victory card (crownRow.js, size lg) and the first-victory explanation. */
+.results-crowns { display: flex; justify-content: center; }
+.results-crown-tip {
+  margin: calc(-1 * var(--sp-2)) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+/* Phones: keep the stat grid two-up so the crown row, the tip and six stats fit on screen. */
+@media (max-width: 480px) {
+  .results-stats-grid { grid-template-columns: 1fr 1fr; gap: var(--sp-2) var(--sp-3); }
+  .results-stat { min-width: 0; }
+}
+
+/* Zero stats ("0 lost", "0 killed") are neutral and muted, never red. */
+.results-stat.is-zero, .results-stat.is-zero .icon { color: var(--text-dim); font-weight: 600; }

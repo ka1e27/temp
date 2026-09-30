@@ -1,0 +1,106 @@
+/* Design tokens (DESIGN §7.5). Every colour, radius, shadow and duration
+   used anywhere in game/styles or game/ui comes from a variable defined
+   here — a visual tuning pass should be a single-file diff. */
+:root {
+  color-scheme: dark;
+
+  /* --- Glass panels -------------------------------------------------- */
+  --panel-bg: rgba(16, 20, 30, 0.78);
+  --panel-bg-solid: #12151f;
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-border-light: rgba(255, 255, 255, 0.14);
+  --panel-radius: 14px;
+  --panel-radius-sm: 10px;
+  --panel-blur: 10px;
+  --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --panel-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
+
+  /* --- Text ------------------------------------------------------------ */
+  --text: #f3ead7;
+  --text-muted: #a3a9b6;
+  --text-dim: #7b8190;
+
+  /* --- Semantic colours -------------------------------------------------- */
+  --gold: #f5c451;
+  --gold-bright: #ffe08a;
+  --good: #6fcf97;
+  --bad: #eb5757;
+  --warn: #f2a154;
+
+  /* Difficulty ramp: Easy green → Fair → Hard → Deadly red (DESIGN §5.3). */
+  --diff-easy: #6fcf97;
+  --diff-fair: #c7d66a;
+  --diff-hard: #f2a154;
+  --diff-deadly: #eb5757;
+
+  /* --- Buttons ----------------------------------------------------------- */
+  --btn-primary-grad: linear-gradient(180deg, #f7d774, #e0a82e);
+  --btn-primary-grad-hover: linear-gradient(180deg, #ffe08a, #eeb63a);
+  --btn-primary-text: #2a1d05;
+  --btn-secondary-bg: rgba(255, 255, 255, 0.06);
+  --btn-secondary-bg-hover: rgba(255, 255, 255, 0.12);
+  --btn-secondary-border: rgba(255, 255, 255, 0.18);
+  --btn-radius: 10px;
+  --btn-disabled-opacity: 0.45;
+
+  /* --- Faction fallback palette (components should prefer data-provided
+     colours; these exist for the gallery's mock data and any placeholder). */
+  --faction-player: #3d7ef0;
+  --faction-freefolk: #9a927f;
+  --faction-crimson: #d8433f;
+  --faction-violet: #9b5de5;
+  --faction-amber: #f29e38;
+
+  /* --- Type --------------------------------------------------------------- */
+  --font-title: 'Cinzel', Georgia, serif;
+  --font-ui: 'Nunito', system-ui, -apple-system, sans-serif;
+  --fs-xs: 0.72rem;
+  --fs-sm: 0.82rem;
+  --fs-md: 0.95rem;
+  --fs-lg: 1.15rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+  --fs-3xl: 2.8rem;
+
+  /* --- Spacing -------------------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* --- Motion --------------------------------------------------------------- */
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 420ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-punch: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* --- Layering --------------------------------------------------------------- */
+  --z-hud: 10;
+  --z-panel: 20;
+  --z-coach: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+  --z-tooltip: 60;
+
+  --touch-target: 44px;
+}
+
+/* Reduce Motion (DESIGN §7.4 + settings.js): both the OS preference and the
+   in-game toggle collapse to the same `.reduce-motion` class on <html>, so
+   every rule only has to check one thing. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-med: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+html.reduce-motion {
+  --dur-fast: 0ms;
+  --dur-med: 0ms;
+  --dur-slow: 0ms;
+}

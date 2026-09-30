@@ -16,6 +16,13 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { launch } from './cdp.js';
 
+// SUPERSEDED for v2: this regenerates the v1 share card and icons, and would overwrite og.png and every icon with v1 art.
+// The v2 launch assets are rendered by the game's own renderer: `node tools/launch-assets.mjs`. Pass --v1 to run this anyway.
+if (!process.argv.includes('--v1')) {
+  console.error('tools/shellcards.mjs is the v1 asset generator and is disabled. Use: node tools/launch-assets.mjs  (or pass --v1)');
+  process.exit(1);
+}
+
 const ROOT = new URL('..', import.meta.url).pathname;
 
 /** Pull a handful of custom properties straight out of the token file. */

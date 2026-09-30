@@ -1,0 +1,59 @@
+/* Title screen (title.js) — DESIGN §6. No panel background: the living map
+   shows through everywhere except the text and buttons themselves. */
+
+.title-screen {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-6);
+  padding: var(--sp-5);
+  text-align: center;
+}
+
+.title-logo-wrap { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); }
+
+.title-logo {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: clamp(2.6rem, 9vw, 5.5rem);
+  line-height: 1.02;
+  letter-spacing: 0.05em;
+  margin: 0;
+  background: linear-gradient(180deg, #fff3d6 0%, var(--gold-bright) 35%, var(--gold) 65%, #b9852a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 26px rgba(0, 0, 0, 0.55));
+}
+
+.title-tagline {
+  max-width: 440px;
+  color: var(--text);
+  font-weight: 700;
+  font-size: var(--fs-md);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.75), 0 0 4px rgba(0, 0, 0, 0.5);
+}
+
+.title-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: min(320px, 80vw);
+}
+.title-btn { font-size: var(--fs-md); min-height: 52px; }
+
+.title-version {
+  position: absolute;
+  bottom: var(--sp-3);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+@media (max-width: 480px) {
+  .title-screen { gap: var(--sp-5); }
+}

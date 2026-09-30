@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hex Dominion 2 — Scout and Sabotage Gallery</title>
+<meta name="theme-color" content="#0b0d12">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+
+<!-- The real, shipped stylesheets. intel.css is not @imported by main.css yet (integration adds
+     that line, see docs/briefs/intel-hookup.md), so the gallery links it directly. -->
+<link rel="stylesheet" href="../../game/styles/main.css">
+<link rel="stylesheet" href="../../game/styles/components/intel.css">
+
+<style>
+  /* Gallery-only chrome. None of this ships with the game. */
+  html { margin: 0; background: #0b0d12; }
+  body { margin: 0; background: transparent; font-family: var(--font-ui); color: var(--text); }
+  #gallery-bg {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(ellipse 62% 50% at 32% 36%, rgba(134, 180, 106, 0.55), transparent 68%),
+      radial-gradient(ellipse 50% 60% at 68% 62%, rgba(95, 154, 85, 0.45), transparent 68%),
+      linear-gradient(160deg, #2f6d8f 0%, #235a79 30%, #1a4560 60%, #102c3d 100%);
+  }
+  #gallery-bg::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 200px 30px rgba(0, 0, 0, 0.45); }
+
+  #gallery-nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 10px 20px;
+    background: rgba(8, 10, 16, 0.85);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .gallery-brand { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; }
+  .gallery-brand small { display: block; font-family: var(--font-ui); font-weight: 700; color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.02em; }
+  .gallery-modes { display: flex; gap: 8px; }
+  .gallery-modes button {
+    padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.06); color: var(--text-muted); font-weight: 800; font-size: 0.8rem; cursor: pointer;
+  }
+  .gallery-modes button.is-active { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: transparent; }
+  body.gallery-bare #gallery-nav { display: none; }
+
+  .gallery-view[hidden] { display: none; }
+
+  /* --- panel states ------------------------------------------------------------------------- */
+  #view-panels { padding: 20px; }
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fill, 360px); gap: 22px 20px; align-items: start; justify-content: center; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; width: 360px; }
+  .state-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(255, 255, 255, 0.78); text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+  .state-label small { text-transform: none; letter-spacing: 0; font-weight: 700; color: rgba(255,255,255,0.6); margin-left: 6px; }
+  .state-cell .region-card { max-width: none; }
+
+  /* --- phone sheet: 390 px wide viewport, cards fill it like the bottom sheet does -------------- */
+  body.phone #view-panels { padding: 8px; }
+  body.phone .state-grid { grid-template-columns: 1fr; gap: 14px; }
+  body.phone .state-cell { width: 100%; }
+
+  .specimens { max-width: 1100px; margin: 26px auto 0; display: flex; flex-direction: column; gap: 8px; }
+  #specimen-canvas { width: 480px; height: 96px; border-radius: 10px; }
+  body.phone .specimens, body.sheet .specimens { display: none; }
+  body.only-cards .specimens { display: none; }
+  body.specimens-only #state-grid, body.specimens-only #hook-note { display: none; }
+  .hook-note {
+    max-width: 1100px; margin: 0 auto 16px; padding: 8px 12px; border-radius: 10px;
+    background: rgba(242, 161, 84, 0.16); border: 1px solid rgba(242, 161, 84, 0.4);
+    color: #ffd9b0; font-size: 0.78rem; font-weight: 700;
+  }
+  .hook-note[hidden] { display: none; }
+
+  /* --- map ---------------------------------------------------------------------------------------- */
+  #view-map { position: relative; height: calc(100vh - 57px); }
+  body.gallery-bare #view-map { height: 100vh; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #map-caption {
+    position: absolute; left: 14px; bottom: 12px; padding: 6px 10px; border-radius: 8px;
+    background: rgba(8, 10, 16, 0.72); color: var(--text-muted); font-size: 0.74rem; font-weight: 700; max-width: 60%;
+  }
+  body.gallery-bare #map-caption { display: none; }
+</style>
+</head>
+<body>
+<div id="gallery-bg"></div>
+
+<div id="gallery-nav">
+  <div class="gallery-brand">Scout and Sabotage<small>Region-card panel, sabotage states, map marks. Real meta and render modules.</small></div>
+  <div class="gallery-modes">
+    <button data-mode="panels" class="is-active">Panel states</button>
+    <button data-mode="map">World map</button>
+  </div>
+</div>
+
+<main id="view-panels" class="gallery-view">
+  <div id="hook-note" class="hook-note" hidden></div>
+  <div id="state-grid" class="state-grid"></div>
+  <section id="specimens" class="specimens">
+    <div class="state-label">Torch glyph at 12 / 16 / 22 / 32 px over sand, grass, snow and rock</div>
+    <canvas id="specimen-canvas"></canvas>
+  </section>
+</main>
+
+<main id="view-map" class="gallery-view" hidden>
+  <canvas id="map"></canvas>
+  <div id="map-caption"></div>
+</main>
+
+<script type="module" src="./intel.js"></script>
+</body>
+</html>

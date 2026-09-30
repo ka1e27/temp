@@ -1,0 +1,283 @@
+/* In-battle HUD (battleHud.js) — DESIGN §4. */
+
+.battle-hud { position: absolute; inset: 0; z-index: var(--z-hud); }
+
+/* --- top: region name, tug-of-war bar, timer ----------------------------- */
+.battle-top {
+  position: absolute;
+  top: var(--sp-3);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-5);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  box-shadow: var(--panel-shadow);
+  min-width: 260px;
+}
+.battle-region-name {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: var(--fs-md);
+  letter-spacing: 0.03em;
+}
+.territory-bar {
+  display: flex;
+  width: min(46vw, 280px);
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+}
+.territory-you {
+  background: var(--faction-player);
+  transition: width var(--dur-med) var(--ease-out);
+}
+.territory-enemy {
+  background: var(--bad);
+  transition: width var(--dur-med) var(--ease-out);
+}
+.battle-timer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* --- top right: pause / speed / retreat ---------------------------------- */
+.battle-topright {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.battle-speed { min-width: 64px; }
+.battle-retreat-label { white-space: nowrap; }
+
+/* --- bottom: send-fraction selector + powers ------------------------------ */
+.battle-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: calc(100vw - 16px);
+}
+
+.send-fraction-selector {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+}
+.send-fraction-btn {
+  position: relative;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  padding: 0 var(--sp-3);
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 800;
+  font-size: var(--fs-sm);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.send-fraction-btn.is-active { background: var(--btn-primary-grad); color: var(--btn-primary-text); }
+.send-fraction-key {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-muted);
+  font-size: 0.55rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.send-fraction-btn.is-active .send-fraction-key { color: var(--btn-primary-text); background: rgba(0, 0, 0, 0.25); }
+
+/* 64px desktop / 56px phone (media query below), icon ~28px, a small-caps
+   name below the circle, a hotkey badge (desktop only — Q/W/E/R/T), the
+   level pip, and a centred numeral over the sweep while cooling. */
+.power-buttons { display: flex; gap: var(--sp-3); flex-wrap: wrap; justify-content: center; }
+.power-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.power-btn {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border-light);
+  background: var(--panel-bg);
+  -webkit-backdrop-filter: blur(var(--panel-blur));
+  backdrop-filter: blur(var(--panel-blur));
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.power-btn:active { transform: scale(0.94); }
+.power-icon {
+  position: relative;
+  z-index: 2;
+  color: var(--text);
+  transition: opacity var(--dur-fast);
+}
+.power-btn.is-cooling .power-icon { opacity: 0.3; }
+.power-cooldown-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: conic-gradient(rgba(0, 0, 0, 0.68) calc(var(--cd, 0) * 360deg), transparent 0);
+  transition: background 120ms linear;
+}
+.power-cooldown-num {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--text);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+.power-cooldown-num:empty { display: none; }
+.power-hotkey {
+  position: absolute;
+  z-index: 3;
+  top: -6px;
+  left: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid var(--panel-border-light);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.power-hotkey:empty { display: none; }
+.power-level-pip {
+  position: absolute;
+  z-index: 3;
+  right: 2px;
+  bottom: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--gold);
+  font-size: 0.6rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.power-name {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  /* "Forced March" is the longest name: wide enough that desktop never shows "FORCED MA..." */
+  max-width: 96px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.power-name.is-locked { color: var(--text-dim); }
+.power-name-short { display: none; }
+
+.power-btn.is-locked { filter: grayscale(1); opacity: 0.45; }
+
+@keyframes power-ready-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(245, 196, 81, 0); }
+  50% { box-shadow: 0 0 16px 3px rgba(245, 196, 81, 0.6); }
+}
+.power-btn.is-ready { animation: power-ready-glow 1.6s ease-in-out infinite; border-color: rgba(245, 196, 81, 0.5); }
+
+@keyframes power-just-ready-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.24); }
+  100% { transform: scale(1); }
+}
+.power-btn.power-just-ready { animation: power-just-ready-pop 420ms var(--ease-punch); }
+
+/* Armed: the player has picked this power and is choosing a target — a
+   crisp white pulse, deliberately distinct from the warm gold "ready" glow
+   so the two states are never ambiguous. */
+@keyframes power-armed-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 18px 4px rgba(255, 255, 255, 0.45); }
+  50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55), 0 0 8px 2px rgba(255, 255, 255, 0.2); }
+}
+.power-btn.is-armed { animation: power-armed-pulse 1s ease-in-out infinite; border-color: #fff; }
+
+/* The centred region/timer pill and the top-right help/pause/speed/retreat cluster share one row.
+   Side by side they need about 260px (pill) + 330px (cluster) + margins, so the pill drops UNDER the
+   cluster below 840px (phones and narrow tablets), and the cluster loses its "Retreat" word up to
+   960px (icon only), where the two would otherwise touch. The pill is compact when stacked: the
+   name on one line, the tug-of-war bar and the clock sharing the next. */
+@media (max-width: 960px) {
+  .battle-retreat-label { display: none; }
+}
+@media (max-width: 840px) {
+  .battle-top {
+    top: 60px; min-width: 0; max-width: calc(100vw - 24px);
+    display: grid; grid-template-columns: auto auto; align-items: center; justify-content: center;
+    column-gap: var(--sp-3); row-gap: 2px; padding: 5px var(--sp-4) 6px; border-radius: 22px;
+  }
+  .battle-region-name { grid-column: 1 / -1; text-align: center; font-size: var(--fs-sm); line-height: 1.2; }
+  .territory-bar { width: 34vw; max-width: 200px; }
+}
+@media (max-width: 640px) {
+  .power-buttons { max-width: 100%; justify-content: center; }
+  .power-btn { width: 56px; height: 56px; }
+  .power-hotkey { display: none; }
+  .power-name { font-size: 0.58rem; max-width: 62px; }
+  .power-name-full { display: none; }
+  .power-name-short { display: inline; }
+  .battle-speed span:last-child { display: inline; }
+}
+
+/* Landscape phones (844×390-ish): there's width to spare but very little
+   height — the top row and bottom controls need to not eat the whole
+   screen between them. */
+@media (max-height: 480px) {
+  .battle-top { top: var(--sp-2); }
+  .battle-topright { top: var(--sp-2); }
+  .battle-bottom { bottom: calc(var(--sp-2) + env(safe-area-inset-bottom, 0px)); gap: var(--sp-2); }
+  .power-btn { width: 52px; height: 52px; }
+  .power-name { display: none; }
+}

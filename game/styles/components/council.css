@@ -1,0 +1,172 @@
+/* War Council panel (council.js). Floats over the map as its own glass
+   panel — DESIGN §7.5 is "map-first", so this is not a dimming full-screen
+   modal, just a large docked panel. */
+
+.council {
+  position: absolute;
+  z-index: var(--z-panel);
+  top: 76px;
+  right: var(--sp-3);
+  width: 420px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.council-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4) 0;
+}
+.council-title { font-size: var(--fs-lg); }
+
+.council-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.council-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+}
+.council-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 800;
+  font-size: var(--fs-sm);
+  padding: 6px 14px;
+  border-radius: 999px;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.council-tab.is-active { background: var(--btn-primary-grad); color: var(--btn-primary-text); }
+
+.council-buymax {
+  cursor: pointer;
+  border: 1px solid var(--btn-secondary-border);
+  background: var(--btn-secondary-bg);
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+}
+.council-buymax.is-on {
+  background: color-mix(in srgb, var(--good) 22%, transparent);
+  border-color: color-mix(in srgb, var(--good) 55%, transparent);
+  color: var(--good);
+}
+
+.council-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+
+.upgrade-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--panel-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background var(--dur-fast);
+}
+.upgrade-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: rgba(245, 196, 81, 0.12);
+  color: var(--gold);
+}
+.upgrade-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.upgrade-card-name-row { display: flex; align-items: center; gap: var(--sp-2); }
+.upgrade-card-name { font-weight: 800; font-size: var(--fs-sm); }
+.upgrade-card-level { font-size: 0.65rem; }
+.upgrade-card-level.is-locked { color: var(--text-dim); }
+.upgrade-card-desc {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  /* Up to two lines instead of one clipped line ("Every settlement musters new troops fast..."). */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.upgrade-card-effect {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.upgrade-card-current { color: var(--text-muted); }
+.upgrade-card-arrow { color: var(--text-dim); }
+.upgrade-card-next { color: var(--good); }
+.upgrade-card.is-maxed .upgrade-card-next { color: var(--gold); }
+
+.upgrade-card-buy {
+  flex-direction: column;
+  gap: 2px;
+  min-width: 64px;
+  padding: var(--sp-2);
+  font-size: var(--fs-xs);
+}
+.upgrade-card-buy.is-unlock::before {
+  content: 'Unlock';
+  font-size: 0.62rem;
+  font-weight: 800;
+  opacity: 0.8;
+}
+
+@keyframes buy-glow {
+  0%, 100% { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 0 rgba(245, 196, 81, 0); }
+  50% { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 14px 2px rgba(245, 196, 81, 0.55); }
+}
+.upgrade-card.is-affordable .upgrade-card-buy { animation: buy-glow 1.8s ease-in-out infinite; }
+
+@keyframes upgrade-bought-flash {
+  0% { background: rgba(245, 196, 81, 0.45); transform: scale(1); }
+  100% { background: rgba(255, 255, 255, 0.04); transform: scale(1); }
+}
+.upgrade-card.upgrade-bought { animation: upgrade-bought-flash 650ms var(--ease-out); }
+
+@media (max-width: 640px) {
+  .council {
+    top: auto;
+    bottom: var(--sp-2);
+    left: var(--sp-2);
+    right: var(--sp-2);
+    width: auto;
+    max-height: 72vh;
+  }
+  .upgrade-card-desc { display: none; }
+}
+
+/* Army tab: the one upgrade that raises Army Power the most per gold right now (game/app/bestValue.js). */
+.upgrade-card-tag {
+  align-self: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink, #2a1d05);
+  background: linear-gradient(180deg, var(--gold-bright, #f7d774), var(--gold, #f5c451));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+.upgrade-card-tag[hidden] { display: none; }
+.upgrade-card.is-best-value { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold, #f5c451) 45%, transparent); }

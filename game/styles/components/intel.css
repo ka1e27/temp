@@ -1,0 +1,211 @@
+/* Scout and Sabotage panel (ui/intelPanel.js), mounted inside the region card under the difficulty
+   bar. data-state: unscouted (one compact button row) | scouted (report box).
+   data-sabotage (scouted only): ready | poor | maxed.
+   Everything comes from tokens.css; sizes are tuned for the ~330 px content width of the desktop
+   card and the 390 px phone bottom sheet, and the report is deliberately dense: the card it lives in
+   is already about 40 % of a phone screen. */
+
+.intel-panel {
+  --intel-accent: var(--warn);
+  --intel-line: rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.intel-panel[hidden], .intel-row[hidden], .intel-report[hidden], .intel-notes[hidden] { display: none; }
+
+/* --- Buttons: compact, secondary. Touch screens get the full 44 px target. ----------------- */
+.intel-btn {
+  min-height: 34px;
+  padding: 4px 11px;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@media (pointer: coarse) {
+  .intel-btn { min-height: var(--touch-target); }
+}
+.intel-btn .icon { color: var(--gold); }
+.intel-sabotage-btn .icon { color: var(--intel-accent); }
+.intel-btn:disabled .icon { color: currentColor; }
+.intel-btn-cost { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-bright); }
+.intel-btn-cost:not(:empty)::before { content: '\00b7'; margin-right: 1px; color: var(--text-dim); }
+.intel-btn-cost .icon { color: var(--gold); }
+.intel-free { font-weight: 800; color: var(--good); text-transform: lowercase; }
+.intel-btn:disabled .intel-btn-cost, .intel-btn:disabled .intel-free { color: inherit; }
+
+.intel-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.intel-hint {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-dim);
+}
+.intel-hint[data-tone='poor'], .intel-panel[data-sabotage='poor'] .intel-sabotage-hint { color: var(--warn); }
+.intel-hint:empty { display: none; }
+
+/* --- Scouted report box -------------------------------------------------------------------------- */
+.intel-panel[data-state='scouted'] {
+  padding: 8px 10px;
+  border-radius: var(--panel-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--intel-line);
+}
+.intel-report { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+.intel-panel.is-revealing .intel-report { animation: intel-reveal var(--dur-slow) var(--ease-out) both; }
+@keyframes intel-reveal {
+  0% { opacity: 0; transform: translateY(-6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Composition chips: "Keep 46 · Fort 34 · Tower 14 x2". Keep is gold, forts and towers are called out. */
+.intel-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.intel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 5px 0 4px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  white-space: nowrap;
+}
+.intel-chip-num { color: var(--text); font-weight: 800; }
+.intel-chip-count { color: var(--text-dim); font-weight: 800; margin-left: -1px; }
+.intel-chip .icon { color: var(--text-dim); }
+
+.intel-chip[data-type='keep'] {
+  color: var(--gold-bright);
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
+  border-color: color-mix(in srgb, var(--gold) 42%, transparent);
+}
+.intel-chip[data-type='keep'] .icon { color: var(--gold); }
+.intel-chip[data-type='fort'], .intel-chip[data-type='tower'] {
+  color: color-mix(in srgb, var(--warn) 40%, white);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 42%, transparent);
+}
+.intel-chip[data-type='fort'] .icon, .intel-chip[data-type='tower'] .icon { color: var(--warn); }
+.intel-chip[data-neutral='1'] { border-style: dashed; color: var(--text-dim); }
+
+/* The chip holding the weak point wears the same ring as the map marker. */
+.intel-chip[data-weak='1'] {
+  border-color: color-mix(in srgb, var(--text) 55%, transparent);
+  box-shadow: 0 0 0 1px rgba(243, 234, 215, 0.14);
+}
+.intel-chip[data-weak='1']::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--text);
+  animation: intel-pulse-ring 1.9s ease-in-out infinite;
+}
+@keyframes intel-pulse-ring {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+/* Personality and weak point: one line each. */
+.intel-personality, .intel-weak, .intel-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  line-height: 1.25;
+  min-width: 0;
+}
+.intel-personality { color: var(--text); font-weight: 700; }
+.intel-emblem { display: inline-flex; color: var(--intel-faction, var(--text-muted)); }
+.intel-weak { color: var(--text-muted); font-weight: 700; }
+.intel-weak strong { color: var(--text); font-weight: 800; }
+.intel-ring {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  margin: 0 2px;
+  border-radius: 50%;
+  border: 2px solid var(--text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  animation: intel-pulse-ring 1.9s ease-in-out infinite;
+}
+
+.intel-notes { display: flex; flex-direction: column; gap: 1px; padding-left: 1px; }
+.intel-note {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.intel-note::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  flex-shrink: 0;
+  margin: 0 5px 0 4px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+/* Sabotage: button, then the two torch pips with the total cut. A reason ("Need 438 more gold")
+   takes its own line only while it applies. */
+.intel-sabotage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 1px;
+  padding-top: 7px;
+  border-top: 1px solid var(--intel-line);
+}
+.intel-sabotage-btn { flex: 0 1 auto; }
+.intel-pips-group { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+.intel-pips { display: inline-flex; align-items: center; gap: 2px; }
+.intel-pip {
+  display: inline-flex;
+  color: rgba(255, 255, 255, 0.2);
+  transition: color var(--dur-med) var(--ease-out), filter var(--dur-med) var(--ease-out);
+}
+.intel-pip[data-lit='1'] {
+  color: var(--intel-accent);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--intel-accent) 70%, transparent));
+}
+.intel-pip.is-flaring { animation: intel-flare var(--dur-slow) var(--ease-punch) both; }
+@keyframes intel-flare {
+  0% { transform: scale(0.4); filter: drop-shadow(0 0 0 transparent); }
+  55% { transform: scale(1.5); filter: drop-shadow(0 0 10px var(--intel-accent)); }
+  100% { transform: scale(1); }
+}
+.intel-cut {
+  min-width: 2.4em;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  color: var(--intel-accent);
+}
+.intel-cut:empty { display: none; }
+
+.intel-panel[data-sabotage='maxed'] .intel-sabotage-btn { color: var(--text-muted); font-weight: 700; }
+
+/* --- Phone bottom sheet: the map behind the card is the point of scouting, so the report stays lean:
+   one note instead of two, and the card's perk line steps aside while a scouted report is showing
+   (it comes back the moment the card shows another region). ------------------------------------- */
+@media (max-width: 640px) {
+  .intel-panel[data-state='scouted'] { padding: 7px 9px; }
+  .intel-report { gap: 4px; }
+  .intel-note:nth-child(n + 2) { display: none; }
+  .region-card:has(.intel-panel[data-state='scouted']) .region-card-perk { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intel-panel.is-revealing .intel-report, .intel-pip.is-flaring { animation: none; }
+}
+html.reduce-motion .intel-panel.is-revealing .intel-report,
+html.reduce-motion .intel-pip.is-flaring { animation: none; }
