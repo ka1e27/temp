@@ -153,7 +153,8 @@ Works, §6 tutorial; PLAYFEEL §4 placement rules + new step table W0-M4). Assig
   queue while dialogs are open + inline council/save status; hints avoid enemy keeps (monitor proven to catch it); touch
   hides the canvas word under the tooltip; Dynasty first in phone Realm; W2 camera framing; strip roads follow squad
   routes with arrowheads. 933/933, check desktop 183 / phone 180 / --base=temp 405, a11y 152, icons 25, hints ×7, galleries
-  pass. 169 files changed since commit 6bbcdc4. **Waiting on the user: new local commit + publish decision.**
+  pass. **Committed 912572b and pushed `redesign` to origin (2026-10-01, user approved).** `main` (deploys) untouched at df05b2c;
+  merging to main still needs explicit approval.
 
 ## PREVIOUS STATE (2026-09-30 ~10:15): release candidate, feature-complete
 - All features are in the game: the core redesign, plus music, battle crowns, rival leader
