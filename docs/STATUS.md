@@ -4,7 +4,9 @@ Branch `redesign` (v1 preserved at tag `v1-final` and playable at `classic.html`
 Nothing has been committed or pushed yet; `main` (which auto-deploys to GitHub Pages) is
 untouched.
 
-## ROUND 3 (2026-09-30 ~11:00): user playtest feedback, in progress
+## LIVE (2026-10-02): v2 deployed to GitHub Pages from main a48e1d7
+
+## ROUND 3 (2026-09-30 ~11:00): user playtest feedback, done
 The user played the RC and asked for: fixing misplaced tutorial hints; teaching sending, Rally and
 every control (incl. shift-drag); auto-send; no marching through enemy territory; centred ×/gear
 buttons; per-area upgrades. Lead design (DESIGN §4.3 supply lines, §4.4 front lines, §5.8 Region
@@ -153,8 +155,10 @@ Works, §6 tutorial; PLAYFEEL §4 placement rules + new step table W0-M4). Assig
   queue while dialogs are open + inline council/save status; hints avoid enemy keeps (monitor proven to catch it); touch
   hides the canvas word under the tooltip; Dynasty first in phone Realm; W2 camera framing; strip roads follow squad
   routes with arrowheads. 933/933, check desktop 183 / phone 180 / --base=temp 405, a11y 152, icons 25, hints ×7, galleries
-  pass. **Committed 912572b and pushed `redesign` to origin (2026-10-01, user approved).** `main` (deploys) untouched at df05b2c;
-  merging to main still needs explicit approval.
+  pass. **Committed 912572b and pushed `redesign` (2026-10-01).** Then, on the user's explicit request, `main` was
+  fast-forwarded to a48e1d7 and **DEPLOYED** (Actions run 36956047792: verify + browser + /temp/ checks + deploy all green);
+  https://ka1e27.github.io/temp/ serves v2 (sw cache hexdominion-v2-5), v1 at classic.html. Future merges to main still need
+  explicit approval each time.
 
 ## PREVIOUS STATE (2026-09-30 ~10:15): release candidate, feature-complete
 - All features are in the game: the core redesign, plus music, battle crowns, rival leader
