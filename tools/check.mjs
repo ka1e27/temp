@@ -25,12 +25,15 @@
 //   6. the dev hook winBattle() -> victory card -> a real click on Continue -> the region is ours
 //   7. reload: the save persisted (Continue is offered, the region is still ours)
 // It never uses frame times as a pass/fail criterion (headless Chrome here rasterises on the CPU).
-import { DRAG_ARROW } from '../game/scenes/timing.js';
+import { DRAG_ARROW, NO_ROUTE_TEXT } from '../game/scenes/timing.js';
 
 if (!process.env.CHROME_PATH && process.platform === 'win32') {
   process.env.CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 }
 const { launch } = await import('./cdp.js');
+const { robustChecks } = await import('./robustChecks.mjs');
+const { keepsakeChecks } = await import('./keepsakeChecks.mjs');
+const { playtestChecks } = await import('./playtestChecks.mjs');
 
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
   const [k, ...v] = a.slice(2).split('=');
@@ -53,7 +56,7 @@ let BASE = flags.url || process.env.CHECK_URL || 'http://localhost:8080';
 const SERVER_PORT = 21000 + Math.floor(Math.random() * 20000);
 /** (Re)starts our own subpath server on its fixed port and waits until it answers. */
 async function startServer() {
-  const args = ['tools/serve.js', `--base=${SUBPATH}/`, `--port=${SERVER_PORT}`];
+  const args = ['tools/serve.js', `--base=${SUBPATH}/`, `--port=${SERVER_PORT}`, '--hooks'];
   if (flags.root) args.push(`--root=${flags.root}`);
   serverProc = spawn(process.execPath, args, { stdio: 'ignore', cwd: new globalThis.URL('..', import.meta.url) });
   for (let i = 0; i < 60; i++) {
@@ -109,6 +112,26 @@ async function variant(name, { width, height, mobile }) {
   const crownPct = () => page.eval(async () => {
     const { BOUNTY_FRACTION_PER_CROWN: f } = await import(new URL('game/config/crowns.js', document.baseURI).href);
     return Number((f * 100).toFixed(1));
+  });
+  // PLAYFEEL §4 hint placement, measured after EVERY frame of the whole run by tools/hintMonitor.js (reinstalled after each reload, collected before it).
+  const hintProblems = [];
+  let hintFrames = 0;
+  const hintInstall = () => page.eval(async () => { const m = await import(new URL('tools/hintMonitor.js', document.baseURI).href); const mon = m.installHintMonitor(); mon.regionId = null; });
+  const hintCollect = async () => {
+    const r = await page.eval(() => (window.__hm ? window.__hm.report() : null)).catch(() => null);
+    if (!r) return;
+    hintFrames += r.shown;
+    for (const h of r.hints) for (const [kind, v] of Object.entries(h.problems)) hintProblems.push(`"${h.text.slice(0, 40)}": ${kind} (${v.n} frames) ${v.detail}`);
+  };
+  // Icon-only buttons: the icon's visible box centre within 1 px of the button centre, the button inside its bar (tools/iconMetrics.js).
+  const iconProblems = [];
+  const iconSeen = new Set();
+  const iconMeasure = (where) => page.eval(async () => { const m = await import(new URL('tools/iconMetrics.js', document.baseURI).href); return m.measureIconButtons(); }).then((rows) => {
+    for (const r of rows) {
+      iconSeen.add(r.el);
+      if (Math.max(Math.abs(r.dx), Math.abs(r.dy)) > 1) iconProblems.push(`${r.el} (${where}): icon off centre by ${r.dx}, ${r.dy}`);
+      if (r.outside > 0.5) iconProblems.push(`${r.el} (${where}): pokes ${r.outside} px out of ${r.bar}`);
+    }
   });
   const centerOf = (sel, txt) => page.eval((s, t) => {
     const els = [...document.querySelectorAll(s)].filter((e) => e.getClientRects().length > 0 && !e.closest('[hidden]'));
@@ -225,6 +248,8 @@ async function variant(name, { width, height, mobile }) {
     await sleep(1500);
     // The ?dev=1 panel sits over the bottom-left of a phone screen; it is not part of the game a player sees.
     await page.eval(() => window.__hd.hideDev(true));
+    await hintInstall();
+    await iconMeasure('title');
     ok(errors.length === 0, `no console errors during boot${errors.length ? `: ${errors[0]}` : ''}`);
     ok(await page.eval(() => {
       const c = document.getElementById('world');
@@ -252,6 +277,33 @@ async function variant(name, { width, height, mobile }) {
     // counts as an activation when it ENDS, so this is what proves the phone unlock).
     ok(await waitFor(() => { const m = window.__hd.music.getDebug(); return m.started && m.activeVoices > 0 && m.errors === 0; }, 8000),
       'the first click unlocked audio and the music is playing (voices > 0, no errors)');
+
+    // 2b. touch: a pinch that starts on the game's chrome must not zoom the PAGE (the viewport stays user-scalable; the chrome is `touch-action: pan-x pan-y`)
+    if (mobile) {
+      const pinchAt = async (cx, cy, s0, s1) => {
+        await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx - s0, y: cy, id: 1 }, { x: cx + s0, y: cy, id: 2 }] });
+        for (let i = 1; i <= 12; i++) { const sp = s0 + ((s1 - s0) * i) / 12; await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx - sp, y: cy, id: 1 }, { x: cx + sp, y: cy, id: 2 }] }); await sleep(16); }
+        await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await sleep(300);
+      };
+      await pinchAt(width / 2, 40, 25, 110); // over the HUD bar
+      ok(await page.eval(() => window.visualViewport.scale === 1), 'a pinch on the HUD does not zoom the page (visualViewport.scale stays 1)');
+      await page.eval(() => window.__hd.openCouncil());
+      await sleep(800);
+      await pinchAt(width / 2, height * 0.45, 25, 110); // over the open War Council
+      ok(await page.eval(() => window.visualViewport.scale === 1), 'nor does a pinch on an open panel');
+      await page.eval(() => { document.querySelector('.council-close')?.click(); });
+      await sleep(500);
+      // the small x buttons keep their look but take a finger: a tap 17 px off the toast's x (inside its 44 px hit area) dismisses the toast
+      await page.eval(() => window.__hd.services.ui.toasts.update({ id: 'touch-probe', type: 'info', message: 'Touch target probe', duration: 9000 }));
+      await sleep(700);
+      const tx = await page.eval(() => { const b = document.querySelector('.toast-close'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      ok(!!tx, 'a toast with its x is on screen');
+      if (tx) {
+        await tap(tx.x - 17, tx.y + 17);
+        ok(await waitFor(() => ![...document.querySelectorAll('.toast')].some((t) => /Touch target probe/.test(t.textContent) && !t.classList.contains('is-out')), 2500), 'a finger 17 px off the toast x still dismisses it (44 px hit area)');
+      }
+    }
 
     // 3. select the first frontier region by clicking its keep ---------------------------------
     const frontierTarget = () => page.eval(async () => {
@@ -281,9 +333,18 @@ async function variant(name, { width, height, mobile }) {
     } else {
       ok(await page.eval(() => { const r = document.querySelector('.region-card .crown-row'); return !!r && r.getClientRects().length > 0 && r.querySelectorAll('.crown-slot').length === 3; }),
         'the desktop card shows the three open crown medals');
-      // the Attack hint's bubble hangs clear of the card's bottom edge instead of overlapping its padding (when the hint is up)
-      ok(await page.eval(() => { const b = document.querySelector('.coach:not([hidden]) .coach-bubble'); const card = document.querySelector('.region-card'); if (!b || !card) return true; return b.getBoundingClientRect().top >= card.getBoundingClientRect().bottom + 4; }),
-        'the Attack hint bubble clears the region card edge');
+      // the Attack hint's bubble sits beside its button (left of the card on desktop): it may brush the card's outer padding but never covers a row of the card
+      ok(await page.eval(() => {
+        const b = document.querySelector('.coach:not([hidden]) .coach-bubble');
+        const card = document.querySelector('.region-card');
+        if (!b || !card) return true;
+        const a = b.getBoundingClientRect();
+        return [...card.querySelectorAll('.region-card-header, .region-card-body > *')].filter((n) => n.getClientRects().length > 0).every((n) => {
+          const c = n.getBoundingClientRect();
+          return a.right <= c.left + 0.5 || a.left >= c.right - 0.5 || a.bottom <= c.top + 0.5 || a.top >= c.bottom - 0.5;
+        });
+      }),
+        'the Attack hint bubble never covers a row of the region card');
       ok(await page.eval((p) => (document.querySelector('.region-card')?.textContent || '').includes('Crowns: +' + p + '% bounty each'), await crownPct()),
         'the desktop card label quotes the crown bonus from config (BOUNTY_FRACTION_PER_CROWN)');
     }
@@ -318,7 +379,8 @@ async function variant(name, { width, height, mobile }) {
     ok(await waitFor((id) => window.__hd.state.intel[id]?.sabotage === 2, 4000, target.id), 'the second Sabotage step lands (maxed at level 2)');
     ok(await waitFor(() => { const b = document.querySelector('.intel-sabotage-btn'); return !!b && b.disabled && /already weakened/i.test(b.textContent); }, 3000),
       'the Sabotage button is disabled and says the garrisons are already weakened');
-    ok(await page.eval(() => { const d = document.querySelector('.hd-dock'); return d.getBoundingClientRect().height <= innerHeight * 0.63; }), 'the card stays within its height cap (the sheet scrolls beyond it)');
+    // the card never outgrows the screen: a phone's sheet is capped at 62% (76% while the tutorial's Attack bubble has opened room above the button), the desktop column at the screen minus the HUD; its body scrolls inside
+    ok(await page.eval((phone) => { const d = document.querySelector('.hd-dock'); const open = [...document.querySelectorAll('.region-card-hintslot')].some((r) => r.dataset.px && r.dataset.px !== '0'); return d.getBoundingClientRect().height <= (phone ? innerHeight * (open ? 0.77 : 0.63) : innerHeight - 88); }, mobile), 'the card stays within its height cap (its body scrolls inside)');
     await sleep(600);
 
     // 4. Attack, pressed SLOWLY while gold ticks and the card refreshes ------------------------------
@@ -350,6 +412,12 @@ async function variant(name, { width, height, mobile }) {
     await pressAudit('.power-btn', 'battle power button (Rally)');
     await pressAudit('.battle-pause', 'battle Pause');
     await pressAudit('.battle-speed', 'battle speed');
+    {
+      // no power name is ever cut with an ellipsis ("FORCED MAR...", "BULWA..."): the visible form fits its box at this viewport
+      const cut = await page.eval(() => [...document.querySelectorAll('.power-name')].filter((n) => n.getClientRects().length && n.scrollWidth > n.clientWidth + 0.5)
+        .map((n) => ([...n.children].find((c) => getComputedStyle(c).display !== 'none') || n).textContent));
+      ok(cut.length === 0, `every power name fits without an ellipsis${cut.length ? `: ${cut.join(', ')}` : ''}`);
+    }
     ok(await page.eval(() => !!window.__hd.battle && window.__hd.battle.stats.sent === 0), 'no troops sent yet');
 
     // 5. drag from the War Camp to a hostile/neutral site ------------------------------------
@@ -361,6 +429,8 @@ async function variant(name, { width, height, mobile }) {
       return { camp, foe: foes[0] };
     });
     ok(!!drag.camp && !!drag.foe, 'a War Camp and an enemy site are on screen');
+    // the tutorial's gold arrow must point at a settlement the camp may actually attack (front lines: never at one with no route)
+    ok(await page.eval(() => import(new URL('game/battle/sim.js', document.baseURI).href).then((m) => { const ta = window.__hd.tutorialArrow(); return !ta || m.canRoute(window.__hd.battle, 0, ta.from, ta.to); })), 'the tutorial arrow points at a settlement the camp can route to');
     // Step 3 of the tutorial promises "the arrow tells you if you'll take it": while the drag is held over the target, the
     // arrow must be green for a capture / red for a shortfall (the tooltip says the same in words).
     // the red case first, when a foe the camp cannot take is on screen: hold over it, read the arrow, then let go back on the camp (no send)
@@ -392,13 +462,148 @@ async function variant(name, { width, height, mobile }) {
     ok(!!held && !!held.info && held.info.outcome === expected, `the live drag preview matches the sim's prediction (${expected}; got ${held && held.info && held.info.outcome})`);
     ok(!!held && held.info && held.info.color === (expected === 'capture' ? DRAG_ARROW.capture : expected === 'fail' ? DRAG_ARROW.fail : DRAG_ARROW.neutral), `the drag arrow is ${expected === 'capture' ? 'green' : expected === 'fail' ? 'red' : 'gold'} while held over the target`);
     ok(!!held && (expected === 'capture' ? /capture/ : /not enough/).test(held.tip), `the tooltip says it in words ("${held && held.tip}")`);
+    if (mobile) ok(!!held && held.info && held.info.tooltip && held.info.wordDrawn == null && !!held.info.mark, `on touch the canvas outcome word is not drawn while the tooltip says it (word ${held && held.info && held.info.wordDrawn}, mark ${held && held.info && held.info.mark})`);
+    else ok(!!held && held.info && held.info.wordDrawn === held.info.word, `with a mouse the outcome word is drawn beside the arrow head ("${held && held.info && held.info.wordDrawn}")`);
     ok(await waitFor(() => window.__hd.battle.stats.sent > 0, 6000), 'a real drag from the War Camp sends troops (battle.stats.sent > 0)');
     ok(await waitFor(() => window.__hd.battle.squads.length > 0, 4000), 'a squad is marching');
+    {
+      // An ARMED power (Rally waiting for its target) must not turn a send drag from your own settlement into a map pan (RC2: a hint's x ate the Rally
+      // target tap on a phone, Rally stayed armed, and from then on every send drag moved the camera instead). Drag from the camp at several places on it.
+      const rallyBtn = await centerOf('.power-btn');
+      const armed = () => page.eval(() => !!document.querySelector('.power-btn.is-armed'));
+      if (await armed()) { await tap(rallyBtn.x, rallyBtn.y); await sleep(250); }
+      const ready = await page.eval(() => window.__hd.battle.t >= window.__hd.battle.cooldowns.rally && (window.__hd.battle.player.powers.rally || 0) > 0);
+      if (ready) {
+        await tap(rallyBtn.x, rallyBtn.y);
+        await sleep(350);
+        ok(await waitFor(() => !!document.querySelector('.power-btn.is-armed'), 1500), 'Rally is armed (waiting for its target)');
+        const cam0 = await page.eval(() => ({ x: window.__hd.camera.x, y: window.__hd.camera.y, z: window.__hd.camera.zoom }));
+        const sent0 = await page.eval(() => window.__hd.battle.stats.sent);
+        const c = await page.eval(() => window.__hd.siteInfo().find((s) => s.type === 'camp' && s.owner === 0));
+        const f = await page.eval((id) => window.__hd.siteInfo().find((s) => s.id === id), drag.foe.id);
+        await dragTo({ x: c.x, y: c.y + 4 }, { x: f.x, y: f.y + 4 });
+        await sleep(300);
+        const cam1 = await page.eval(() => ({ x: window.__hd.camera.x, y: window.__hd.camera.y }));
+        const moved = Math.hypot(cam1.x - cam0.x, cam1.y - cam0.y) * cam0.z;
+        ok(moved < 4, `with Rally armed, a drag from the War Camp does NOT pan the map (camera moved ${moved.toFixed(1)} px)`);
+        ok(!(await armed()), 'the drag stood the armed power down');
+        ok(await waitFor((n) => window.__hd.battle.stats.sent > n, 4000, sent0), 'and it sent troops instead');
+      } else console.log('  note: Rally not ready; the armed-power drag case was not exercised');
+    }
 
+    // 5a. supply lines and front lines (DESIGN 4.3, 4.4), with REAL input: a Ctrl-drag (a long-press drag on touch) makes a standing line that keeps sending; the same
+    // gesture on the same target removes it; the Auto toggle turns plain drags into lines; right-click (long-press) on the source removes; a drag held over a settlement
+    // with no route is grey and says why, and letting go there shakes it and explains
+    {
+      const supplyDrag = async (a, b, onHold) => {
+        if (mobile) {
+          await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: a.x, y: a.y, id: 1 }] });
+          await sleep(650);
+          for (let i = 1; i <= 14; i++) {
+            await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: a.x + ((b.x - a.x) * i) / 14, y: a.y + ((b.y - a.y) * i) / 14, id: 1 }] });
+            await sleep(16);
+          }
+          await sleep(120);
+          if (onHold) await onHold();
+          await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        } else {
+          const m = 2; // Ctrl
+          await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a.x, y: a.y, button: 'none', buttons: 0, modifiers: m });
+          await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: a.x, y: a.y, button: 'left', buttons: 1, clickCount: 1, modifiers: m });
+          for (let i = 1; i <= 14; i++) {
+            await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a.x + ((b.x - a.x) * i) / 14, y: a.y + ((b.y - a.y) * i) / 14, button: 'left', buttons: 1, modifiers: m });
+            await sleep(12);
+          }
+          await sleep(120);
+          if (onHold) await onHold();
+          await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: b.x, y: b.y, button: 'left', buttons: 0, clickCount: 1, modifiers: m });
+        }
+      };
+      const lines = () => page.eval(() => window.__hd.supplyInfo().lines);
+      const plan = await page.eval(() => import(new URL('game/battle/sim.js', document.baseURI).href).then((m) => {
+        const hd = window.__hd;
+        const info = hd.siteInfo();
+        const camp = info.find((x) => x.type === 'camp' && x.owner === 0);
+        const onScreen = (x) => x.y > 100 && x.y < innerHeight - 170 && x.x > 10 && x.x < innerWidth - 10;
+        const dest = info.filter((x) => x.owner !== 0 && onScreen(x) && m.canRoute(hd.battle, 0, camp.id, x.id)).sort((a, b) => Math.hypot(a.x - camp.x, a.y - camp.y) - Math.hypot(b.x - camp.x, b.y - camp.y))[0] || null;
+        const mine = info.filter((x) => x.owner === 0);
+        const blocked = info.find((x) => x.owner !== 0 && onScreen(x) && !mine.some((o) => m.canRoute(hd.battle, 0, o.id, x.id))) || null;
+        return { camp, dest, blocked };
+      }));
+      ok(!!plan.camp && !!plan.dest, 'a settlement the camp can route to is on screen');
+      if (plan.camp && plan.dest) {
+        const from = { x: plan.camp.x, y: plan.camp.y + 4 };
+        const to = { x: plan.dest.x, y: plan.dest.y + 4 };
+        const sentBefore = await page.eval(() => window.__hd.battle.stats.sent);
+        let heldS = null;
+        await supplyDrag(from, to, async () => { heldS = await page.eval(() => ({ info: window.__hd.dragInfo(), tip: document.querySelector('.tooltip')?.textContent || '' })); });
+        ok(!!heldS && !!heldS.info && heldS.info.supply === true, `${mobile ? 'a long-press drag' : 'a Ctrl-drag'} is a SUPPLY drag while held`);
+        ok(!!heldS && /^Supply line: \d+% every \d+ s/.test(heldS.tip), `the tooltip says what a supply line does ("${heldS && heldS.tip}")`);
+        ok(await waitFor((c, d) => window.__hd.supplyInfo().lines.some((l) => l.from === c && l.to === d), 3000, plan.camp.id, plan.dest.id), 'the gesture made a standing supply line (battle.supply)');
+        ok(await waitFor((n) => window.__hd.battle.stats.sent > n, 9000, sentBefore), 'the line keeps sending on its own (auto sends)');
+        await iconMeasure('battle with a supply line');
+        let heldRepeat = null;
+        await supplyDrag(from, to, async () => { heldRepeat = await page.eval(() => document.querySelector('.tooltip')?.textContent || ''); });
+        ok(heldRepeat === 'Remove supply line', `repeating the gesture on the same target offers to remove the line ("${heldRepeat}")`);
+        ok(await waitFor(() => window.__hd.supplyInfo().lines.length === 0, 3000), 'and removes it');
+        // Auto: plain drags make lines while it is on
+        const autoBtn = await centerOf('.battle-auto');
+        ok(!!autoBtn && autoBtn.hit, 'the Auto toggle is on screen and under its own centre');
+        ok(await page.eval(() => { const b = document.querySelector('.battle-auto'); return b.getAttribute('aria-pressed') === 'false' && /off/i.test(b.textContent); }), 'Auto starts OFF and says so in words');
+        await tap(autoBtn.x, autoBtn.y);
+        ok(await waitFor(() => { const b = document.querySelector('.battle-auto'); return b.getAttribute('aria-pressed') === 'true' && b.classList.contains('is-on') && /on/i.test(b.textContent); }, 2000), 'pressing Auto turns it ON (aria-pressed, gold, "On")');
+        let heldAuto = null;
+        await dragTo(from, to, async () => { heldAuto = await page.eval(() => ({ info: window.__hd.dragInfo(), tip: document.querySelector('.tooltip')?.textContent || '' })); });
+        ok(!!heldAuto && !!heldAuto.info && heldAuto.info.supply === true, `with Auto on, a plain drag is a supply drag (${JSON.stringify(heldAuto)})`);
+        ok(await waitFor((c, d) => window.__hd.supplyInfo().lines.some((l) => l.from === c && l.to === d), 3000, plan.camp.id, plan.dest.id), 'and it made a line');
+        await tap((await centerOf('.battle-auto')).x, (await centerOf('.battle-auto')).y);
+        ok(await waitFor(() => document.querySelector('.battle-auto').getAttribute('aria-pressed') === 'false', 2000), 'Auto turns OFF again');
+        if (!mobile) {
+          const key = async (k, code, vk) => { await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }); await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); };
+          await key('s', 'KeyS', 83);
+          ok(await waitFor(() => document.querySelector('.battle-auto').getAttribute('aria-pressed') === 'true', 1500), 'the S key turns Auto on');
+          await key('s', 'KeyS', 83);
+          ok(await waitFor(() => document.querySelector('.battle-auto').getAttribute('aria-pressed') === 'false', 1500), 'and off again');
+        }
+        // removal from the source: right-click (mouse) or a long press without dragging (touch)
+        if (mobile) {
+          await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y, id: 1 }] });
+          await sleep(720);
+          await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        } else {
+          await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y, button: 'none', buttons: 0 });
+          await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'right', buttons: 2, clickCount: 1 });
+          await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: from.x, y: from.y, button: 'right', buttons: 0, clickCount: 1 });
+        }
+        ok(await waitFor(() => window.__hd.supplyInfo().lines.length === 0, 3000), `${mobile ? 'a long press' : 'a right-click'} on the source removes its line`);
+        ok((await lines()).length === 0, 'no standing line is left');
+      }
+      const blockedNow = await page.eval(() => import(new URL('game/battle/sim.js', document.baseURI).href).then((m) => {
+        const hd = window.__hd;
+        const info = hd.siteInfo();
+        const mine = info.filter((x) => x.owner === 0);
+        const onScreen = (x) => x.y > 100 && x.y < innerHeight - 170 && x.x > 10 && x.x < innerWidth - 10;
+        return info.find((x) => x.owner !== 0 && onScreen(x) && !mine.some((o) => m.canRoute(hd.battle, 0, o.id, x.id))) || null;
+      }));
+      if (blockedNow && plan.camp) {
+        plan.blocked = blockedNow;
+        let heldB = null;
+        await dragTo({ x: plan.camp.x, y: plan.camp.y + 4 }, { x: plan.blocked.x, y: plan.blocked.y + 4 }, async () => {
+          heldB = await page.eval(() => ({ info: window.__hd.dragInfo(), tip: document.querySelector('.tooltip')?.textContent || '' }));
+        });
+        ok(!!heldB && !!heldB.info && heldB.info.outcome === 'noRoute' && heldB.info.color === DRAG_ARROW.blocked, 'the drag arrow is GREY while held over a settlement with no route');
+        ok(!!heldB && heldB.tip === NO_ROUTE_TEXT, `the tooltip says why ("${heldB && heldB.tip}")`);
+        ok(await waitFor((id) => window.__hd.supplyInfo().refused === id, 1500, plan.blocked.id), 'letting go there is refused (the target shakes)');
+        ok(await waitFor((t) => { const e = document.querySelector('.tooltip'); return !!e && !e.hidden && e.textContent === t; }, 1500, NO_ROUTE_TEXT), 'and the tooltip explains it over the target');
+      } else console.log('  note: every settlement on screen had a route; the no-route case was not exercised here (tools/hints.mjs and the unit tests cover it)');
+    }
     // 5b. reload MID-battle: the fight resumes from the save ----------------------------------
     const before = await page.eval(() => ({ sent: window.__hd.battle.stats.sent, t: window.__hd.battle.t, sites: window.__hd.battle.sites.length }));
+    await iconMeasure('battle');
+    await hintCollect();
     await page.send('Page.navigate', { url: URL });
     ok(await waitFor(() => !!window.__hd && window.__hd.scene === 'title', 30000), 'reload mid-battle: back at the title');
+    await hintInstall();
     await clickReal('.title-actions button', 'Continue', 'Continue (mid-battle)');
     ok(await waitFor(() => window.__hd.scene === 'battle', 12000), 'Continue resumes straight into the battle');
     ok(await waitFor(() => window.__hd.battlePhase === 'live', 12000), 'the resumed battle is live');
@@ -445,8 +650,10 @@ async function variant(name, { width, height, mobile }) {
     const lv1 = await levels();
     ok(await page.eval(() => [...document.querySelectorAll('.upgrade-card-tag')].filter((t) => !t.hidden).length === 1), 'still exactly one "Best value" tag after the purchases (it is recomputed on purchase)');
     ok(lv1 >= lv0 + 3, `three real clicks on Buy bought three levels (${lv0} -> ${lv1})`);
-    ok(await page.eval(() => [...document.querySelectorAll('.toast')].filter((t) => /→ level/.test(t.textContent)).length === 1),
-      'a spree of purchases is ONE toast (updated in place), not a pile');
+    ok(await page.eval(() => { const s = document.querySelector('.council-status'); return !!s && /^Bought .+, level \d+$/.test(s.textContent) && s.getAttribute('aria-live') === 'polite'; }),
+      'a purchase says so INSIDE the council (a polite status line under the header: "Bought <name>, level N")');
+    ok(await page.eval(() => [...document.querySelectorAll('.toasts > .toast')].filter((t) => !t.classList.contains('is-out')).length === 0),
+      'no toast appears over the open council (its feedback is inline)');
     await clickReal('.council-tab', 'Realm', 'Realm tab');
     await sleep(300);
     ok(await page.eval(async () => {
@@ -457,14 +664,57 @@ async function variant(name, { width, height, mobile }) {
     await clickReal('.council-close', null, 'War Council (close)');
     await sleep(500);
 
+    // 6c. Region Works (DESIGN 5.8), real input: build through the chooser, upgrade, the demolish confirm (Keep keeps, Demolish refunds half), saved -----------
+    {
+      const scrollTo = async (sel) => { await page.eval((q) => { const e = document.querySelector(q); if (e) e.scrollIntoView({ block: 'nearest' }); }, sel); await sleep(250); };
+      const works = () => page.eval((id) => JSON.parse(JSON.stringify((window.__hd.state.works || {})[id] || [])), regionId);
+      await page.eval(() => { window.__hd.hideDev(true); window.__hd.state.settings.hints = false; window.__hd.grantGold(20000); }); // the ?dev=1 panel would sit over a phone's bottom sheet
+      await page.eval((id, z) => window.__hd.flyToRegion(id, z, 300), regionId, mobile ? 14 : 18);
+      await sleep(1400);
+      const pos = await page.eval((id) => window.__hd.regionScreenPos(id), regionId);
+      await tap(pos.x, pos.y);
+      ok(await waitFor(() => { const w = document.querySelector('.works-panel'); return !!w && !w.hidden && w.getClientRects().length > 0; }, 4000), 'an owned region\'s card has the Works panel');
+      ok(await page.eval(() => document.querySelectorAll('.works-panel .works-slot').length === 3), 'three slots, always (built, empty or locked)');
+      await scrollTo('.works-build');
+      await clickReal('.works-build', null, 'Build... (empty slot)');
+      ok(await waitFor(() => document.querySelectorAll('.works-choice').length >= 5, 2000), 'the chooser lists the five Works');
+      const goldBefore = await page.eval(() => window.__hd.state.gold);
+      await scrollTo('.works-choice');
+      await clickReal('.works-choice', 'Barracks', 'Barracks (chooser)');
+      ok(await waitFor((id) => ((window.__hd.state.works || {})[id] || []).some((w) => w.type === 'barracks' && w.level === 1), 3000, regionId), 'Barracks I is built (state.works)');
+      ok(await page.eval((g) => window.__hd.state.gold < g, goldBefore), 'it cost gold');
+      ok(await waitFor(() => [...document.querySelectorAll('.toast')].some((t) => /barracks/i.test(t.textContent)), 2000), 'a toast says so');
+      ok(await waitFor(() => !!document.querySelector('.works-upgrade'), 2000), 'the card shows the built row with an Upgrade button');
+      await scrollTo('.works-upgrade:not([disabled])');
+      await clickReal('.works-upgrade:not([disabled])', null, 'Upgrade (Barracks)');
+      ok(await waitFor((id) => ((window.__hd.state.works || {})[id] || []).some((w) => w.type === 'barracks' && w.level === 2), 3000, regionId), 'Barracks II (upgrade)');
+      ok(await waitFor((id) => { const raw = localStorage.getItem('hexdominion.v2'); const w = raw ? JSON.parse(raw).works : null; return !!w && Array.isArray(w[id]) && w[id].length > 0; }, 4000, regionId), 'the Works are in the save (localStorage)');
+      // demolish: one tap only asks; Keep keeps it
+      await scrollTo('.works-more');
+      await clickReal('.works-more', null, 'Works "..." (demolish)');
+      ok(await waitFor(() => !!document.querySelector('.works-keep') && document.querySelector('.works-keep').getClientRects().length > 0, 1500), 'a single tap opens a confirm (Keep / Demolish), nothing is destroyed yet');
+      ok((await works()).length === 1, 'still built while the confirm is open');
+      await clickReal('.works-keep', null, 'Keep');
+      ok(await waitFor(() => !document.querySelector('.works-keep') || document.querySelector('.works-keep').getClientRects().length === 0, 1500), 'Keep closes the confirm');
+      ok((await works()).length === 1, 'Keep keeps the Work');
+      const g1 = await page.eval(() => window.__hd.state.gold);
+      await scrollTo('.works-more');
+      await clickReal('.works-more', null, 'Works "..." (demolish again)');
+      await sleep(300);
+      await clickReal('.works-demolish', null, 'Demolish');
+      ok(await waitFor((id) => ((window.__hd.state.works || {})[id] || []).length === 0, 3000, regionId), 'Demolish removes it');
+      ok(await page.eval((g) => window.__hd.state.gold > g, g1), 'and refunds gold');
+    }
     // 7. persistence -----------------------------------------------------------------------------
     // Prosperity: two and a half hours of tenure (dev hook) make level II, and the level is saved.
     const bakes0 = await page.eval(() => window.__hd.renderer.terrain.stats().bakes);
     await page.eval(() => window.__hd.advanceTenure(2.5));
     ok(await page.eval(() => { const h = window.__hd; return h.state.prosperity[h.world.startRegion] >= 2; }), 'two and a half hours of tenure give the home region prosperity level II');
     ok(await waitFor((n) => window.__hd.renderer.terrain.stats().bakes > n, 4000, bakes0), 'the map shows it: a level-up re-bakes the terrain chunks that hold the region');
+    await hintCollect();
     await page.send('Page.navigate', { url: URL });
     ok(await waitFor(() => !!window.__hd && window.__hd.scene === 'title', 30000), 'reloads to the title');
+    await hintInstall();
     ok(await page.eval(() => document.querySelector('.title-actions button')?.hidden === false), 'Continue is offered (a save exists)');
     await clickReal('.title-actions button', 'Continue', 'Continue (title)');
     ok(await waitFor(() => window.__hd.scene === 'world', 10000), 'Continue loads the saved realm');
@@ -548,10 +798,63 @@ async function variant(name, { width, height, mobile }) {
       await tap(lv.x, lv.y);
       ok(await page.eval(() => window.__hd.state.settings.leaderVoices === true), 'and back on');
     }
+
+    // 10. front lines (DESIGN 4.4): in a battle with settlements the camp cannot reach, a drag held over one is GREY with the reason, and letting go is refused, shakes and explains ---
+    {
+      await clickReal('.settings-close', null, 'Settings (close)');
+      await page.eval(() => { window.__hd.state.settings.hints = false; });
+      await page.eval(() => window.__hd.conquerRegions(7));
+      await sleep(1200);
+      const pick = await page.eval(async () => {
+        const hd = window.__hd;
+        const prog = await import(new URL('game/meta/progression.js', document.baseURI).href);
+        const { buildArena } = await import(new URL('game/battle/arena.js', document.baseURI).href);
+        const sim = await import(new URL('game/battle/sim.js', document.baseURI).href);
+        let best = null;
+        for (const id of prog.frontier(hd.state, hd.world)) {
+          const pl = prog.playerBattleStats(hd.state, hd.world, id);
+          const en = prog.enemyBattleStats(hd.world, hd.state, id);
+          const b = sim.createBattle(buildArena(hd.world, hd.state.owner, id, pl, en), pl, en);
+          const camp = b.sites.find((x) => x.type === 'camp');
+          const cut = b.sites.filter((x) => x.owner !== 0 && !b.sites.some((o) => o.owner === 0 && sim.canRoute(b, 0, o.id, x.id))).length;
+          if (!best || cut > best.cut) best = { id, cut };
+        }
+        return best;
+      });
+      ok(!!pick && pick.cut > 0, `a frontier battle with cut-off settlements exists (${pick && pick.cut} cut off)`);
+      if (pick && pick.cut > 0) {
+        await page.eval((id) => window.__hd.startBattle(id), pick.id);
+        ok(await waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live', 25000), 'the battle goes live');
+        await sleep(900);
+        const cut = await page.eval(() => import(new URL('game/battle/sim.js', document.baseURI).href).then((m) => {
+          const hd = window.__hd;
+          const info = hd.siteInfo();
+          const mine = info.filter((x) => x.owner === 0);
+          const camp = info.find((x) => x.type === 'camp');
+          const onScreen = (x) => x.y > 100 && x.y < innerHeight - 170 && x.x > 10 && x.x < innerWidth - 10;
+          return { camp, site: info.find((x) => x.owner !== 0 && onScreen(x) && !mine.some((o) => m.canRoute(hd.battle, 0, o.id, x.id))) || null };
+        }));
+        ok(!!cut.site, 'a cut-off settlement is on screen');
+        if (cut.site) {
+          let held = null;
+          await dragTo({ x: cut.camp.x, y: cut.camp.y + 4 }, { x: cut.site.x, y: cut.site.y + 4 }, async () => {
+            held = await page.eval(() => ({ info: window.__hd.dragInfo(), tip: document.querySelector('.tooltip')?.textContent || '' }));
+          });
+          ok(!!held && !!held.info && held.info.outcome === 'noRoute' && held.info.color === DRAG_ARROW.blocked, 'the drag arrow is GREY while held over a settlement with no route');
+          ok(!!held && held.tip === NO_ROUTE_TEXT, `the tooltip says why ("${held && held.tip}")`);
+          ok(await waitFor((id) => window.__hd.supplyInfo().refused === id, 1500, cut.site.id), 'letting go there is refused (the target shakes)');
+          ok(await waitFor((t) => { const e = document.querySelector('.tooltip'); return !!e && !e.hidden && e.textContent === t; }, 1500, NO_ROUTE_TEXT), 'and the tooltip explains it over the target');
+          ok(await page.eval(() => window.__hd.battle.stats.sent === 0), 'nothing was sent');
+        }
+      }
+    }
   } catch (err) {
     ok(false, `unexpected error: ${err && err.message}`);
   } finally {
     allErrors.push(...errors.map((e) => `[${name}] ${e}`));
+    await hintCollect();
+    ok(hintProblems.length === 0, `every hint was placed by the PLAYFEEL §4 rules (pointer within 8 px of its target, never covering it, on screen, hidden while the target is off screen or covered; ${hintFrames} hint frames measured)${hintProblems.length ? `: ${hintProblems.slice(0, 4).join(' | ')}` : ''}`);
+    ok(iconProblems.length === 0, `every icon-only button has its icon centred (within 1 px) and sits inside its bar (${iconSeen.size} measured)${iconProblems.length ? `: ${iconProblems.slice(0, 4).join(' | ')}` : ''}`);
     ok(errors.length === 0, `no console errors in the whole ${name} run${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
     await page.close();
   }
@@ -634,6 +937,33 @@ async function deployChecks() {
     ok(missing.length === 0, `every file the first load used is cached${missing.length ? ` (missing ${missing.length}: ${missing.slice(0, 3).join(', ')})` : ` (${expected.length} files)`}`);
     ok(internal.includes(`${SUBPATH}/`) || internal.some((u) => u.endsWith('index.html')), 'the page itself is cached');
 
+    // the worker's fallbacks, FOR REAL (the server's test hooks): a 5xx and a captive portal's HTML 200 serve the CACHED file, and the bad answers are never cached
+    const fall = await page.eval(async (base) => {
+      const real = await (await fetch(`${base}/game/main.js`)).text();
+      const r503 = await fetch(`${base}/game/main.js?__respond=503`);
+      const t503 = await r503.text();
+      const rp = await fetch(`${base}/game/main.js?__portal=1`);
+      const tp = await rp.text();
+      const name = (await caches.keys()).find((k) => /^hexdominion-/.test(k));
+      const keys = (await (await caches.open(name)).keys()).map((q) => q.url);
+      return { s503: r503.status, same503: t503 === real, sp: rp.status, ctp: rp.headers.get('content-type'), samep: tp === real, poisoned: keys.some((u) => /__portal|__respond/.test(u)) };
+    }, BASE);
+    ok(fall.s503 === 200 && fall.same503, 'a 503 from the server serves the CACHED copy of the file, not the error page');
+    ok(fall.sp === 200 && /javascript/.test(fall.ctp || '') && fall.samep, 'a captive portal answering a .js request with HTML (200) serves the cached script');
+    ok(!fall.poisoned, 'and neither bad answer was put in the cache');
+    // ka1e27.github.io is ONE origin for every GitHub Pages project: a fresh worker activation deletes only OLD hexdominion-* caches
+    await page.eval(async () => {
+      await (await caches.open('other-app-v1')).put('/x', new Response('hello'));
+      await (await caches.open('hexdominion-v1')).put('/y', new Response('old'));
+      const r = await navigator.serviceWorker.ready;
+      await r.unregister();
+    });
+    await page.send('Page.navigate', { url: START });
+    ok(await waitFor(async () => { const names = await caches.keys(); return !!(await navigator.serviceWorker.getRegistration()) && names.includes('other-app-v1') && !names.includes('hexdominion-v1') && names.some((n) => /^hexdominion-v2/.test(n)); }, 25000),
+      'a fresh worker activation deletes the OLD hexdominion-* cache and leaves the cache of ANOTHER app alone');
+    await sleep(800);
+    await page.eval(async () => { await caches.delete('other-app-v1'); });
+
     // 3. manifest -----------------------------------------------------------------------------------------------
     const man = await page.eval(async () => {
       const link = document.querySelector('link[rel="manifest"]');
@@ -708,11 +1038,18 @@ async function deployChecks() {
 const watchdog = setTimeout(() => {
   console.error('\ncheck.mjs: overall timeout');
   process.exit(1);
-}, (SUBPATH ? 9 : 6) * 60 * 1000);
+}, (SUBPATH ? 20 : 32) * 60 * 1000); // the main flow grew (supply lines, Works, front lines, robustness, keepsakes); a loaded machine needs the room
 
-if (flags.only !== 'phone') await variant('desktop', { width: 1440, height: 900, mobile: false });
-if (flags.only !== 'desktop') await variant('phone', { width: 390, height: 844, mobile: true });
-if (SUBPATH) await deployChecks();
+// --only=desktop|phone|robust|keepsakes|playtest|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
+// plain mode only: they do not depend on the deployed shape, so --base=... runs the two variants and the deploy checks.
+const only = flags.only;
+const wants = (name) => !only || only === name;
+if (wants('desktop')) await variant('desktop', { width: 1440, height: 900, mobile: false });
+if (wants('phone')) await variant('phone', { width: 390, height: 844, mobile: true });
+if (!SUBPATH && wants('robust')) await robustChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('keepsakes')) await keepsakeChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('playtest')) await playtestChecks({ launch, BASE, ok, sleep, allErrors, shotsDir: flags.shots || null });
+if (SUBPATH && wants('deploy')) await deployChecks();
 clearTimeout(watchdog);
 stopServer();
 

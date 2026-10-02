@@ -103,7 +103,7 @@ export function drawRegionLabels(ctx, camera, labelData, opts = {}) {
   const fontPx = Math.max(11, Math.min(23, camera.zoom * 0.66));
   const showChips = camera.zoom >= 9; // below that the chips would just pile onto neighbouring names
   const nameFont = `700 ${fontPx}px Cinzel, Georgia, serif`;
-  const chipFont = Math.max(9, fontPx * 0.56);
+  const chipFont = Math.max(11, fontPx * 0.56); // never under 11 px (DESIGN 7.5a)
   const chipFontStr = `800 ${chipFont}px Nunito, system-ui, sans-serif`;
   const chipH = chipFont * 1.55;
   // Crown pips: 0.72 x the label font, clamped 11-16 px; they travel with their label.
@@ -157,9 +157,15 @@ export function drawRegionLabels(ctx, camera, labelData, opts = {}) {
     const { d } = c;
     const y = c.baseY + dy;
     ctx.font = nameFont;
-    ctx.lineWidth = Math.max(2, fontPx * 0.22);
-    ctx.strokeStyle = 'rgba(20,16,10,0.75)';
+    // a region of yours sits on the blue-green owned tint, where cream text needs more than the usual outline (it read poorly zoomed in): a heavier, darker
+    // stroke and a soft shadow behind the name
+    const owned = d.kind === 3;
+    ctx.lineWidth = Math.max(2, fontPx * (owned ? 0.34 : 0.22));
+    ctx.strokeStyle = owned ? 'rgba(6,20,38,0.92)' : 'rgba(20,16,10,0.75)';
+    if (owned) { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = Math.max(2, fontPx * 0.3); }
     ctx.strokeText(d.name, c.x, y);
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
     ctx.fillStyle = d.priority === 0 ? ACCENTS.goldSoft : ACCENTS.cream;
     ctx.fillText(d.name, c.x, y);
 

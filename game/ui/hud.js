@@ -13,12 +13,12 @@ const FLASH_MS = 650;
 const BIG_JUMP_RATIO = 0.05;
 
 /**
- * @param {{ onCouncil?: () => void, onRealm?: () => void, onSettings?: () => void }} [callbacks]
+ * @param {{ onCouncil?: () => void, onRealm?: () => void, onRegions?: () => void, onSettings?: () => void }} [callbacks]
  * @returns {{ el: HTMLElement, update(data: { gold: number, incomePerSec: number, dynastyStars?: number, pulse?: boolean, quiet?: boolean }): void, destroy(): void }}
  *   `pulse` forces the big flash; `quiet` (idle drift) suppresses every pulse/flash and re-aims a
  *   running roll instead of restarting it.
  */
-export function createHud({ onCouncil, onRealm, onSettings } = {}) {
+export function createHud({ onCouncil, onRealm, onRegions, onSettings } = {}) {
   let displayedGold = 0;
   let lastTargetGold = 0;
   let rafId = null;
@@ -26,9 +26,15 @@ export function createHud({ onCouncil, onRealm, onSettings } = {}) {
   const goldValueEl = h('span.hud-gold-value.nums', {}, '0');
   const goldIconEl = h('span.hud-gold-icon', {}, icon('coin', 26));
   const incomeEl = h('span.hud-income.nums', {}, '+0/s');
-  const goldBlockEl = h('div.hud-gold-block', {},
+  // The Treasury, for a screen reader: "Treasury: 1.2K gold, +3.5 per second". The rolling numbers are hidden from it (they change every frame); the plain
+  // sentence below only changes when the TARGET changes, and is deliberately NOT a live region (gold ticks all the time).
+  const goldSrEl = h('span.visually-hidden', {}, '0 gold');
+  const incomeSrEl = h('span.visually-hidden', {}, '0 per second');
+  goldValueEl.setAttribute('aria-hidden', 'true');
+  incomeEl.setAttribute('aria-hidden', 'true');
+  const goldBlockEl = h('div.hud-gold-block', { role: 'group', 'aria-label': 'Treasury' },
     goldIconEl,
-    h('div.hud-gold-text', {}, goldValueEl, incomeEl));
+    h('div.hud-gold-text', {}, goldValueEl, incomeEl, goldSrEl, incomeSrEl));
   const starsCountEl = h('span.hud-stars-count.nums', {}, '0');
   const starsEl = h('div.hud-stars.pill', { hidden: true }, icon('star', 14), starsCountEl);
 
@@ -38,7 +44,9 @@ export function createHud({ onCouncil, onRealm, onSettings } = {}) {
     h('div.hud-actions', {},
       h('button.btn.btn-secondary.hud-btn', { onClick: () => onCouncil?.(), 'aria-label': 'War Council' },
         icon('scroll', 18), h('span.hud-btn-label', {}, 'War Council')),
-      h('button.btn.btn-secondary.hud-btn', { onClick: () => onRealm?.(), 'aria-label': 'Realm' },
+      h('button.btn.btn-secondary.hud-btn', { onClick: () => onRegions?.(), 'aria-label': 'Regions list' },
+        icon('map', 18), h('span.hud-btn-label', {}, 'Regions')),
+      h('button.btn.btn-secondary.hud-btn', { onClick: () => onRealm?.(), 'aria-label': 'Realm stats' },
         icon('trophy', 18), h('span.hud-btn-label', {}, 'Realm')),
       h('button.btn-icon', { onClick: () => onSettings?.(), 'aria-label': 'Settings' },
         icon('gear', 18)),
@@ -134,9 +142,13 @@ export function createHud({ onCouncil, onRealm, onSettings } = {}) {
         || (!quiet && delta > 0 && (lastTargetGold <= 0 || delta / lastTargetGold >= BIG_JUMP_RATIO));
       animateGoldTo(data.gold, big, quiet);
       lastTargetGold = data.gold;
+      const goldSr = `${shortNumber(data.gold)} gold`;
+      if (goldSrEl.textContent !== goldSr) goldSrEl.textContent = goldSr;
     }
     if (typeof data.incomePerSec === 'number') {
       incomeEl.textContent = `+${formatRate(data.incomePerSec)}/s`;
+      const incomeSr = `plus ${formatRate(data.incomePerSec)} per second`;
+      if (incomeSrEl.textContent !== incomeSr) incomeSrEl.textContent = incomeSr;
     }
     const stars = data.dynastyStars || 0;
     starsEl.hidden = stars <= 0;

@@ -393,6 +393,107 @@ cost on hi-dpi). Reveal: puffs scale ×1.6 and fade over 1.4 s, staggered.
   `offlineCapHours(state)` (game/app/income.js: `ECONOMY.offlineCapHours` + one per Treasury level). The Treasury line of the War Council reads the same
   config (`upgrades.js` `effectText`; it used to type a base of 8 h). `ui.bonuscopy.test.js` ties both to `offlineEarnings`.
 
+## Tutorial hints: placement, steps and icon buttons (PLAYFEEL §4; round of 2026-09-30)
+- **Placement is geometry, checked every frame** (`game/ui/coach.js`). `placeHint(bubbleSize, targetBox, viewport, { prefer, obstacles })` is pure and unit-tested
+  (`game/tests/ui.hints.test.js`): it tries below / above / right / left of the target (the `prefer` side first), puts the tail on the bubble edge facing the
+  target (it slides along the edge, clear of the rounded corners), keeps the tail tip `TIP_GAP` = 4 px from the target box (contract: 8), never overlaps the target,
+  keeps the bubble fully on screen (8 px margin) and, when a pressable control sits between bubble and target (the send-size row above a power button), holds the
+  bubble back and lengthens the tail (`REACH_STEPS`, up to 68 px more) instead of covering the control. Obstacles are soft (overlap x 1000 in the score) so a hint is
+  always placed; the bubble width is squeezed (280 / 232 / 190 / 156) before anything is overlapped. Along the target's edge the bubble tries centred first, then slid as far either way as the
+  tail can still reach the box, so it can step aside from a toast or panel beside its target (the C3 hint beside an arriving toast at 768 px).
+- **Targets are live.** A hint's `target` is a function, never a snapshot: `{ el }`, `{ find }` (look the element up again each frame), `{ get }` (a box in screen px,
+  e.g. a settlement's on-screen box from the camera), `{ find, get }` (a group: `get` for the box, `find` for the covered test) or `{ x, y }`. The coach re-reads it in
+  `tick()`, which main.js calls at the END of every frame (after `sceneManager.frame`, `selfTick: false`), so a pan, a zoom or a camera flight is followed with no lag.
+  While the target is off screen (< 50% visible) or something other than the map or the target itself is on top of its centre (a panel, the council), the hint is hidden
+  and comes back when it is visible again. `card: true` is a small pointer-less card for hints about the map itself (pan/zoom). `avoid: [el | () => box]` adds more
+  things to stay off (B1 passes the gold arrow and its destination settlement). Panels listed in main.js `obstacles` (HUD buttons, region card, send bar, council,
+  realm, toasts with content, the leader banner while showing) are avoided; a panel that HOLDS the target is expanded into its other pressable controls.
+- **Shared target boxes** live in `game/app/hintTargets.js` (`siteBox`, `regionLabelBox`, `unionBox`, `distPointBox`, `overlapArea`, `visibleFraction`); the game and the
+  monitor import the same maths, but the monitor resolves WHAT a hint points at independently, from the hint's text (`tools/hintMonitor.js expectedFor`).
+- **One hint at a time, new hint waits >= 1.5 s** (`COACH_MIN_SHOW_MS`, unchanged main.js wrapper). `tutorial.pick` returns one step; the coach shows one bubble.
+- **The check** (`tools/hints.mjs`): plays a fresh profile at 1280x720, 1440x900, 1920x1080, 1339x863 (mouse), 390x844, 844x390, 768x1024 (touch) with REAL input
+  (pan, pinch/wheel zoom, region tap, Attack, War Camp drag, send size, multi-select, Rally aim, pause, Firestorm, council, scouting, selection clear, dynasty), and
+  `tools/hintMonitor.js` measures after EVERY game frame (`__hd.afterFrame`): tip within 8 px of the target box, bubble not over its target, not over another
+  control (> 25% of it), not over the B1 arrow destination, fully on screen, one coach, hidden while the target is off screen or covered. Any violation exits 1. A run prints
+  one line per distinct hint with frames measured and the worst tip distance (about 4 px everywhere); screenshots `screenshots/game/hints-<tag>-<viewport>-NN-*.png`
+  (`--tag=before` runs against an older build without failing). `tools/check.mjs` runs the same monitor over the desktop and phone tutorial and fails on a miss.
+- **Landscape phones (844x390)**: the battle camera band was 94 px tall, so the gold-arrow target could end up under the timer strip. `frameRect()` (scenes/battle.js) now
+  returns `y0 = 78, y1 = H - 128` when `H < 520` (the timer strip is ~70 px, the send bar + powers ~125 px); the region card's Attack row is sticky at the bottom of the
+  scrolling card (`.region-card-action`, regioncard.css) so W3 can always point at it.
+- **Tutorial state is a set** (`state.tutorial = { seen: { W0: true, ... }, done }`; `game/meta/state.js` typedef, `save.js` `migrateTutorial`): an old `{ step, done }`
+  save migrates to "every old step before `step` seen" (`OLD_ORDER` in `migrateTutorial`: [W0, W1], [W2], [W3], [B1], [B3], [B5], [M1]; an old `done` marks all of them), so a veteran
+  is shown only the NEW steps (B2, B4, C*, P*, M2-M4) when their moment comes, and `done` becomes false again. Unknown ids and non-true values are dropped on load. `Settings > Replay tutorial` clears `seen`, `done` and turns hints on (`tutorial.replay()`; main.js `onReplayTutorial`).
+- **Steps** (`TUTORIAL_STEPS` in scenes/timing.js: id, scene, anchor, text/textTouch/textAim, `after`, `needs`, `seenOn`, `timeoutSec`, `activeOnly`; conditions in
+  `game/app/tutorialRules.js` `RULES`, pure functions of the scene's facts): W0 realm/gold, W1 pan+zoom, W2 glowing region, W3 Attack, B1 War Camp drag, B2 send size,
+  B3 multi-select / lasso (`activeOnly`: shown only while the player has two or more sites), B4 Rally (button, then aiming), B5 keep, C1 supply lines, C2 blocked (front line),
+  C3 pause/speed, P1 Firestorm, P2 clear selection, M1 council, M2 scout, M3 Region Works, M4 Found a Dynasty. `seenOn` lists the events that mark a step seen when the
+  player does the thing: tap, panAndZoom, regionSelected, battleStart, send, sizeChanged, capture, multiSend, rally, supplyCreated, noRouteSeen, pauseOrSpeed, firestorm,
+  selectionCleared, councilOpened, scouted, workBuilt, realmOpened (`tutorial.notify(event)`). Steps whose feature is not built are gated by `needs` in
+  `game/app/features.js` (`FEATURES.supply`, `FEATURES.works`).
+- **The `?` controls card** (`game/ui/controls.js`, data `CONTROLS`, `showControls()`): mouse/keyboard and touch columns for every control (drag to send, Ctrl-drag and
+  long-press supply lines, Shift-drag lasso, A select all, 1-4 send size, Space pause, speed, Q/W/E/R/T powers, right-click/Esc cancel, pan, wheel/pinch zoom), reachable from the
+  battle HUD (`?`) and Settings > Controls.
+- **Touch targets and page zoom.** The viewport stays user-scalable (accessibility). On a coarse pointer the small x buttons (`.coach-dismiss` 24x14, `.toast-close` 20x20) keep their look but get a 44 px hit area (an invisible
+  `::after`, overlays.css); `tools/iconMetrics.js` probes the REAL hit size with `elementFromPoint` and `iconcheck` fails under 44 px on touch. `#ui` and modal backdrops are `touch-action: pan-x pan-y` (sliders `pan-y`), so a
+  pinch that starts on the HUD, a card, a panel, a modal or a toast no longer zooms the page (it did: `visualViewport.scale` went to 5) while every panel still scrolls; the map zooms from the canvas (`touch-action: none`).
+  `check.mjs` (phone) pinches over the HUD and an open council and asserts `visualViewport.scale === 1`, and taps 17 px off a toast x to dismiss it.
+- **Icon-only buttons are centred by CSS, not by luck** (`game/styles/base.css` `.btn-icon`): `display: inline-flex; align-items/justify-content: center; line-height: 1;
+  padding: 0`, the glyph `svg` is `display: block` with a `viewBox`. The HUD gear/close x/pause used a bare `<button class="btn-icon">` that was not flex, so the svg sat on the
+  left (12-13 px off). `tools/iconcheck.mjs` opens the HUD, council, realm, settings, a modal, a toast, a hint and a battle at 1440x900, 390x844 and 844x390, and measures
+  the SVG content's `getBBox` centre (through the viewBox) against the button's centre (<= 1 px), plus "the gear circle lies inside the HUD bar". `tools/check.mjs` measures the same thing in place (`tools/iconMetrics.js`) at desktop and phone.
+
+## Supply lines, front lines and Region Works in the scenes (DESIGN §4.3, §4.4, §5.8; round of 2026-09-30)
+- **Drag feedback** (`scenes/battle.js`): while a send is dragged, `drawReach` rings every settlement the drag could reach (soft gold breathing ring, stronger on the one under the pointer) and greys the
+  ones with no route (a dark disc, dashed ring and a cross: `render/supplyLines.js` `drawReachGlow` / `drawNoRoute`). The arrow is green / red / gold by `previewSend().outcome` as before and **grey
+  (`DRAG_ARROW.blocked`) for `'noRoute'`**, with the tooltip `NO_ROUTE_TEXT` ("No route: take a closer settlement first", one constant in `scenes/timing.js`); in a multi-source drag each source that cannot
+  reach the target draws its own grey arrow while the others show the outcome, and the tooltip adds "(N cannot reach)". Letting go on such a target issues the send anyway: the sim answers with a
+  `refused` event (`owner` = the player) and `onRefused` shakes the target (a 420 ms decaying wobble, off under Reduce Motion), plays the error cue and shows the same tooltip over the target for 2.6 s,
+  and tells the tutorial (`noRouteSeen` fact).
+- **Supply lines**: a **Ctrl-drag (or Alt-drag)** from a settlement (desktop), a **long press, then drag** (touch: after 450 ms the source shows a dashed ring and a hint tooltip; the drag that follows is the SAME
+  press), or the **Auto toggle** in the battle HUD (`.battle-auto`, left of the send size: icon `supply`, the words "Auto" and "On"/"Off", gold when on, `aria-pressed`, key **S**). With Auto on, plain drags AND the
+  tap-select-then-tap-target flow make lines; with Auto on, Ctrl/long-press gives the one-off send instead (the gestures flip the mode). The supply drag wears the player's colour (grey without a route) and its
+  tooltip reads "Supply line: 50% every 3 s" (from `SUPPLY`) or "Remove supply line". `orderSupply(from, to)` issues `{type:'supply'}`, or `{type:'unsupply'}` when EVERY source already has a line to that target
+  (the repeated gesture undoes it). Remove also by **right-click on the source** (a `pointerdown` listener on the canvas: pointer.js passes no position to `onCancel`) or, on touch, a **long press and let go without
+  dragging** on a source that has a line (dragging on redirects it). The first line shows a one-time toast saying what it does and how to remove it.
+- **Drawing the lines** (`drawSupplyLines`, before the units and intent lines, after the land): every line in `battle.supply` (the AI's too, when balance gives it any) as flowing chevrons
+  (`render/supplyLines.js drawSupplyLine`) along `routeFor(...).points` (lifted by each tile's elevation like the settlements), in the owner's faction colour, on a faint dark track, inset from both settlements,
+  about half the weight of the send arrow (chevron stroke ~2 px against the arrow's ~4.6 px shaft). A line whose route is cut by a moved front draws nothing (the sim keeps it). `send` events with `auto: true`
+  spawn a 3-particle dust puff and play no `send` cue. `arrow` sfx is throttled to one per 140 ms (War Camp volleys from Watchtower Works share the cue).
+- **A line that cannot fire WAITS, visibly.** The sim keeps a line whose route has closed (the front moved); `drawWaitingLines` (over the settlements, from `drawOverlays`) draws a short grey dashed stub from the
+  source toward the target ending in a pale pause badge (`render/supplyLines.js drawWaitingLine`). It never spans the land in between, so no frame shows troops or chevrons crossing enemy land; when the route
+  reopens the chevrons return by themselves. A very short hop between neighbouring settlements still gets its chevrons (the gaps shrink with the route; under 12 px nothing is drawn).
+- **The tutorial's gold arrow (B1) never points at a settlement with no route** (`tutorialArrowTarget` skips `previewSend(...).outcome === 'noRoute'`; its arrival time reads 0, which used to win the ranking and aim it at an
+  unreachable keep). `check.mjs` asserts `canRoute(camp, arrow target)`. `tools/supplyshots.mjs` photographs the whole supply UI with real input (`supply-desk-*`, `supply-phone-*`: the drag glow, a standing line with
+  NO drag in progress along a corridor route, Auto, the grey no-route drag, the refusal, and a waiting line); the arenas are picked by scanning real ones with the sim's functions.
+- **Display ownership is the simulation's own** (`scenes/arenaOwnership.js`): `tileOwner` asks `battle/territory.js tileOwner` for every tile the arena knows, so what is drawn as yours is exactly the land you may
+  cross; the file keeps only the TIMING (capture ripple, surrender cascade, victory flood). Border-march corridors (`tile.link`, DESIGN §4.4) get no owner from the sim, are never in a settlement's ripple cell or
+  the flood schedule (`own.linkTiles`), and `renderer.arena.setCorridors` / `drawCorridors` (render/arenaLayer.js) draws only a subtle dashed edge around them.
+  A strip that crosses a mountain ridge (arena tiles `pass: true`, `terrain: 'hills'`; the world tile stays `mountain`) is the second argument: `drawPass` lays
+  a pale, untinted stone fill over the pass tiles. The third argument is the ROADS (`battle.js stripRoads()`): for every settlement the camp can route to at the
+  start, the part of its `routeFor` route that runs over `link` tiles, from the camp tile to the first tile of the settlement's land; routes leaving the strip at
+  the same tile share one road. Each road is drawn as a sandy dashed track ending at the edge of that land with a small cream arrowhead pointing at the nearest
+  settlement it leads to, so a strip that serves two targets shows two roads with two arrows (never a road to nowhere). Proof frames:
+  `screenshots/playtest-fix-after/mountain-pass-*.png` (seed 7, own 16 and 25, attack Wrenglen, region 21: the only seed-7 targets that need a pass are 21 and 11). Intent lines stay threat-only
+  (`intentWorthDrawing` unchanged).
+- **Tutorial C1 / C2** are on (`FEATURES.supply = true`): C1 points at the Auto toggle and is seen by the `supplyCreated` event (the sim's `supply` event, so a refused line never counts); C2 ("You can only attack
+  where your land touches theirs...") shows on the first refusal or 20 s in, pointing at the blocked settlement nearest the camp, only while one exists (`hasBlocked` fact), and leaves after 6 s
+  or on ×. `window.__hd.dragInfo()` now also returns `{ supply, unroutable }`, `__hd.supplyInfo()` returns `{ auto, lines, armed, refused }`.
+- **Region Works** (`docs/briefs/works-hookup.md`, all sections wired): `state.works` + `save.js sanitizeWorks` together (round trips in `meta.save.test.js`); `works.css` imported; the owned card's last row is
+  `createWorksPanel` (built once, patched in place; callbacks `onBuildWork / onUpgradeWork / onDemolishWork` from main.js to the world scene, which sounds, toasts (`worksToast`, `workName`) and runs
+  `afterWorksChange`: `markDirty`, card refresh, HUD, autosave; `tutorial.notify('workBuilt')` on a build); `worksPanelData(state, world, id, Date.now())` rides in `regionCardData`; map marks
+  (`derived.worksMarks = worksMarksData(...)` in `refreshDerived`, `drawWorksMarks` right after the settlements and before the garrison badges, clouds, fx and labels, hidden in fog, steady under Reduce Motion);
+  `startBattle` calls `playerBattleStats(state, world, regionId)` and `app/income.js effectiveRegionIncome` multiplies by `worksIncomeMult`, so the fight and the card show what `incomePerSec` pays.
+- **Works copy is derived, not typed** (`meta/works.js` `EFFECT_LINES`, `workEffectText`, `workBlurb`): one line of words per effect with `{n}`/`{level}` placeholders, the numbers read from `WORKS.effects`
+  (Barracks: camp troops and camp growth; Stables: march speed, supply time and field-clash strength; Shrine; Watchtower; Market). `meta.works.test.js` fails when a numeric effect in `config/works.js` has no line, when a
+  line's number is not the config's (every level), when a line outgrows a row, and when ANY string in `meta/works.js` (or a Works number in a scene, app or `ui/works*` file) contains a typed number.
+  The battle's supply tooltips and toasts show the interval as this battle plays it (`supplySec()`: `SUPPLY.intervalSec` x `battle.player.supplyIntervalMult`, shorter with Stables next door).
+  `tools/gallery/works.js` now uses the region card's own Works panel (`card.works`) instead of mounting a second one.
+- **Watchtower free scout**: `meta/intel.js` now exports `isScoutedOrFree` (`intelOf(...).scouted || worksScoutedFree(...)`), used by `canScout`, `canSabotage` and `intelPanelData` (which adds
+  `scoutedBy: 'watchtower'`; the panel shows a "Watchtower" tag beside the leader line); the world scene's garrison badges (`derived.scouted`) use the same predicate over the frontier.
+- **M3** (`FEATURES.works = true`): after the third conquest, while no Work is standing (`worksTutorialDue`), pointing at the label of `worksTutorialRegion` (an owned region with a free slot bordering
+  hostile land); once an OWNED card is open it follows `ui.regionCard.works.buildButton()` ("Tap Build to raise a Work here."), and with the chooser open `chooserRow('barracks')` ("Barracks add troops
+  to your camp in the fights next door."); a card with no free slot has no target, so the hint hides. Completed by `workBuilt`; the monitor (`tools/hintMonitor.js`) resolves all three stages on its own.
+
 ## Music (`game/audio/music*.js`, docs/MUSIC.md; wired in main.js and battle.js)
 - `createMusic(sfx, { seed, reverb })` in main.js (`?dev=1&music=noreverb` drops the convolver); it shares the
   sfx context and master gain, so master Sound mutes music too. `applyMusicSettings` sets volume 0 when
@@ -411,6 +512,93 @@ cost on hi-dpi). Reveal: puffs scale ×1.6 and fade over 1.4 s, staggered.
 - Settings: Music toggle + volume slider (live while dragging, saved on release); defaults `music: true,
   musicVolume: 0.4` in `defaultSettings()`. Dev hook `__hd.music` (`getDebug()`: started, scene, pending, layers,
   activeVoices, errors).
+
+## Accessibility, robustness, Keepsakes and the playtest fixes (rounds of 2026-10-01; DESIGN 7.5a)
+**Dialogs and the keyboard** (`ui/dialogs.js`, `ui/live.js`, `styles/components/a11y.css`)
+- Every panel that takes the screen is a *dialog*: `watchDialog(el)` (Settings, council, Realm, Regions, welcome, results) or `openDialog` (`createModal`). Opening moves focus in (the
+  `data-autofocus` element, else the first action, else the close button), makes everything else `inert` (except `[data-keep-live]`: the toasts), sets `<html data-dialog>`, traps Tab, owns
+  Escape (capture phase, topmost dialog only) and restores focus to the opener on close. `onDialogChange(count)` is how the battle pauses itself while a dialog is open.
+- `data-dialog` is also what `input/pointer.js` and the global M-mute handler check: **no map shortcut fires inside a dialog or on a focused button/input** (Space and Enter on a
+  button activate it, they never also pause). Letter shortcuts use `event.code`.
+- A mouse or touch press blurs the button it pressed (`click.detail > 0`, `main.js`), so Space (pause) never re-presses "Speed"; keyboard activation keeps focus.
+- Live regions: each toast message is its own polite status; `announce(text)` writes to one global polite region (the map cursor, the battle cursor, hints, results, import and copy
+  messages); the gold counter is deliberately NOT live. Reduce Motion follows the OS until the player chooses (`reduceMotionSet`), cuts the camera (`camera.instant`) and stills every loop.
+- `tools/a11ycheck.mjs [--only=desktop|phone|motion|keyboard]`: the browser's own accessibility tree (CDP `Accessibility.getFullAXTree`): no unnamed controls, dialogs trap and restore focus,
+  touch targets >= 44 px on a phone, Reduce Motion under `prefers-reduced-motion`, and the **keyboard-only game**: New Realm, the map cursor, the Regions list, a card, Attack, a
+  keyboard send, a win, Continue (about 30 assertions).
+
+**The keyboard on the maps (B1, B2)**
+- World: the `#world` canvas is `role=group aria-roledescription=map`, a tab stop only while the world scene is up (`tabIndex` 0/-1 in `enter`/`exit`). Arrow keys move a ring
+  (`overlays.drawCursor`) to the revealed region that lies most nearly that way (neighbours preferred, 65 degree cone); `[` `]` cycle the regions you can attack (the list's order), Enter/Space
+  open the card and put focus on its action, `+` `-` zoom, Shift+arrows pan; Escape from the card returns focus to the map. Every move is said through `announce` with the same sentence the
+  Regions list uses (`app/regionsList.js regionSummary`). Enter and Space act only once the cursor has been used from the keyboard (a mouse player's Space does nothing new).
+- **Regions list** (`ui/regionsPanel.js`, HUD button "Regions"): every revealed region as one button named by a sentence; frontier first (easiest first, walled-off last), then yours.
+  Choosing a row closes the panel and opens the card exactly like a map click. `world.js` keeps it fresh once a second while open.
+- Battle: arrows move a ring between settlements (`battle.js moveSiteCursor`), Enter selects/deselects one of yours or sends to another from the selection (or from the War Camp when nothing is
+  selected; Auto turns it into a supply line), an armed power targets the cursor site; the live region says what Enter would do (`previewSend` words). `activateSite` is the one function a click
+  and Enter share. Dev hooks: `__hd.mapCursor()`, `__hd.siteCursor()`, `__hd.regionHintBox(id)`, `__hd.hintOutline()`.
+- The send arrow is shape-coded (`render/sprites.js drawDragArrow`): solid + check + "Capture" (green), dashed + cross + "Not enough" (red), dotted + "No route" (grey); on touch the tooltip sits
+  84 px above the finger. `dragInfo()` reports `shape`, `mark`, `word`.
+
+**Colour-blind-safe factions** (`config/world.js`, `core/colorDistance.js`, `tests/ui.a11y.test.js`)
+- CIEDE2000 under protanopia, deuteranopia and tritanopia (Machado 2009, severity 1) between every pair of faction colours must be >= 15 (a test fails below that) and >= 20 normally.
+  Colours: azure `#3d7ef0` (you, unchanged), Free Folk `#a19c92` (was `#9a927f`), Crimson `#c63932` (was `#d8433f`), Violet `#6d1b99` (was `#9b5de5`: azure and violet were 1.9 apart for
+  deuteranopes), amber `#f29e38` (unchanged). Minimums: normal 24.5, deutan 19.3, protan 22.5, tritan 22.8. Violet got a dark and a light variant (`#3b1058`, `#d3b5ff`); banners and
+  emblems are about 25% bigger with a dark under-stroke, so the emblem (all five differ) carries as much as the colour.
+
+**Robustness** (unit tests in `tests/robust.test.js`, real-browser assertions in `tools/robustChecks.mjs`, run by `check.mjs`)
+- `scenes/flow.js`: a scene whose `enter` throws is exited and the previous scene entered again (`reverted: true`); `main.js` toasts it. Attack is also guarded by `attackable` and the card shows
+  "No passable border: conquer a neighbour first" (`attackBlock`); the tutorial picks only among `attackableFrontier`.
+- `app/stateContainer.js` keeps an `epoch` (boot, new realm, restart, dynasty, import): a pending welcome, prosperity cheer or idle pop carries its epoch and is dropped when it no longer matches.
+  Settings survive New Realm and restart. An untouched realm behind the title never "earns" (the visibility handler returns while `!sessionStarted`); a save with `lastSeen <= 0` counts as seen now.
+- `app/autosave.js`: every write carries a rising `saveSeq`; before writing, a tab reads the stored one and, if another tab has written since, stops for good and shows a persistent banner with
+  Reload (the `storage` event tells an idle tab at once); a tab that never entered a session never writes. A failed write toasts once.
+- `meta/save.js`: `plausibleBattle` (version, arrays, arena region, tiles) decides whether a saved battle is kept; the resume path is wrapped (clears it and toasts "That saved battle couldn't be
+  resumed" on any throw); a battle for an already-owned region is dropped. Every field is sanitised on load (finite, clamped, integer levels within their maximum, known upgrade ids,
+  owner ids below the number of factions, settings whitelisted, dynasty level capped); `importCode` refuses more than 256 KB. `ui/format.js`, `renderer.js` (no 2D context) and the boot
+  fallback (`textContent`, never `innerHTML`) are guarded.
+- `sw.js` (cache `hexdominion-v2-5`): deletes only `hexdominion-*` caches (the origin is shared with the owner's other Pages projects), serves the cached copy for a 5xx, a slow network (3.5 s) or a
+  captive portal's HTML (content type against destination), awaits and catches every cache write. `tools/serve.js --hooks` adds `?__respond=NNN` and `?__portal=1` for the real-browser check; the unit
+  test (`tests/sw.test.js`) runs the worker in `vm` against a fake CacheStorage.
+
+**Keepsakes wiring** (docs/briefs/keepsakes-hookup.md): `state.chronicle` (`createChronicle` in `createGame`, `sanitizeChronicle` in `withDefaults`, both imported from `meta/chronicleState.js`);
+`chronicleOnConquest` in `battle.js onResultsContinue` and `world.js onSurrender`, `chronicleOnProsperity` through `main.js runProsperity` (every prosperity tick), `chronicleOnDynasty` in
+`stateContainer.tryFoundDynasty`, each guarded so the story can never block a conquest; the Realm panel mounts the Chronicle, "Save the map" and the same button in the Found a Dynasty
+confirmation; phones get a two-column stats grid below 480 px. `tools/keepsakeChecks.mjs` plays it for real on desktop and phone.
+
+**Playtest fixes (2026-10-01)**
+- Hint placement (PLAYFEEL 4): a hint about a REGION keeps clear of the region's whole on-screen extent (`app/hintTargets.js regionHintBox`, capped at 55% of the viewport), the region is outlined
+  on the map (`overlays.drawHintRegion`, a bright pulsing outline; still under Reduce Motion), the coach's ring is off for it (`noRing`), and the bubble never takes a click (only its x does).
+  `tools/hintMonitor.js` measures against the same box and also fails a bubble that covers card information (the "Attack!" bubble sits in a slot the card opens above its button:
+  `regionCard.setHintSpace`; on a short screen it goes beside the card instead).
+- Region card: header, a body that scrolls inside, and a footer holding Attack/Accept Surrender (never over a row); compact below 420 px height; the bar is the CHANCE of winning with words
+  ("about 1 in 5", `app/chanceWords.js`), power and strength as small print. Battle timer pill: "0:31 - Swift 0:43", dimmed and worded once missed (`crowns.swiftDeadlineSec`). Speed cycle
+  1x/2x/3x, plus 0.5x with Settings > Slow battles (`settings.slowBattles`). Orders given while paused wait: ghost arrows and one toast. Phones zoom at most 28 px per unit.
+- Smaller: the C1 supply hint waits for the first capture of that battle; the scout panel prints what "weak point" means; Works says "Helps battles in the regions next to this one"; the welcome
+  card says "(capped at N h)" beside the figure; owned-region labels have a heavier outline; War Camp tents are about a third larger and tagged in the first battle; the landscape title is two
+  columns; Settings > Copy says "Copied"; the council hint names the Best value buy; toasts pause while hovered or focused; a tap on anything that has only a `title` shows it in a toast; refused
+  actions show a toast and shake the button; Effects volume slider and the M mute key; map chips and power names are at least 11 px.
+- `tools/playtestChecks.mjs` (run by `check.mjs`, plain mode) asserts all of it with real input on desktop, phone and landscape phone.
+- **No toast over an open dialog** (`ui/toasts.js setHeld`, wired in main.js to `onDialogChange`): while any modal dialog is open, new toasts wait in a queue (same
+  id or same words merge, at most 4, oldest dropped) and toasts already on screen step back into it (those with more than 1.2 s left); they come out one by one
+  250 ms after the last dialog closes. Feedback for actions taken INSIDE a dialog is shown inside it: the council's polite status line under its header
+  (`council.setStatus`: "Bought Steel, level 3", warnings in amber) plus the bought card's flash, Settings' Copied / Import lines, and "Map saved" beside the
+  Save the map button that was pressed (`realm.setSaveStatus`, in the Realm panel or the Found a Dynasty confirmation). `tools/hintMonitor.js` fails any frame in
+  which a toast overlaps an open `[aria-modal]` dialog (so `check.mjs` and `hints.mjs` both catch it); `check.mjs` also asserts the council status line.
+- **An armed power never turns a send drag into a pan** (`battle.js canStartDrag`): a drag that starts on one of your settlements while Rally/Firestorm/Bulwark waits
+  for its target stands the power down (a short toast) and sends. Before, every drag while a power was armed was a map pan; on a phone a hint's x button sat on the
+  enemy keep, ate the Rally target tap, and the battle could no longer be played (the RC2 playtest stall). Edge positions were measured with real touch at x = 40,
+  20, 8, 2 and a camp half off screen: the hit test and the 10 px touch slop behave the same at the edge (no pan). `check.mjs` arms Rally and drags from the camp.
+- **Battle hints keep off the enemy keep(s)** (soft obstacles added to every battle hint's `avoid`), and `hintMonitor` fails a bubble over an enemy keep.
+- **Touch drag word**: on touch, while the drag tooltip is showing (it already states the outcome, 84 px above the finger), the canvas outcome word is not drawn;
+  the shaft style and the check/cross stay. `dragInfo()` adds `wordDrawn` and `tooltip`; `check.mjs` asserts both cases.
+- **Realm with the continent won**: the Dynasty section moves to the top of the Realm body (`.is-dynasty-ready`), so Found a Dynasty is on screen on a phone.
+- **W2 framing** (`world.js frameForW2`): when hint W2 starts and its region is not comfortably in the free part of the screen (label outside, or under 70% of its
+  extent inside), the camera flies (700 ms, instant under Reduce Motion) to frame the home region and it; the hint waits for the flight.
+- Council effect lines stay on one line: when "+0 War Camp troops → +2 War Camp troops" does not fit, the current value keeps only its number (`.is-compact`).
+- **Power names are never ellipsised** (`ui/battleHud.js fitNames`): a full name that overflows its box gets `.is-short` (the short form: "March"); if the
+  visible form STILL overflows (phones always show the short form: "BULWARK" was 1 px too wide for its 58 px column at 390 px) it also gets `.is-tight`
+  (letter-spacing -0.03em); phones use no extra tracking. `check.mjs` asserts no `.power-name` overflows in the desktop and phone battles.
 
 ## Deployment: the project subpath (https://ka1e27.github.io/temp/)
 - The site is NEVER served from "/". `node tools/serve.js --base=/temp/` (also `--root=<dir>`, `--port=`) serves the repo
@@ -454,8 +642,9 @@ cost on hi-dpi). Reveal: puffs scale ×1.6 and fade over 1.4 s, staggered.
   (top-centre belongs to the leader banner).
 - `tools/shots.mjs --only=rc` writes the release-candidate gallery `screenshots/game/rc-*.png` (desktop, and `rc-phone-*`): title, first screen and first
   hint, frontier card, the tutorial battle with its arrow and a drag held over the soft target (green arrow), a fight, the victory card with its
-  crowns, the next region's scouted card and a mid-game realm with prosperity III. `docs/img/realm.jpg` (`rc-midgame-realm`) and `battle.jpg`
-  (`rc-tutorial-drag`) are the README's 1200 px JPEG copies.
+  crowns, the next region's scouted card and a mid-game realm with prosperity III. The README's `docs/img/realm.jpg` and `battle.jpg` (1200x750 JPEGs)
+  come from `tools/docshots.mjs` (since RC2): a mid-game realm with an owned card showing prosperity and Works, and a battle with no tutorial
+  arrow and a held 100 % drag over a capturable settlement (the solid green "Capture" arrow); PNG copies go to `screenshots/game/doc-*.png`.
 - **Launch assets** (`tools/launch-assets.mjs`, `tools/launch/launchArt.js`): `og.png` (1200x630), `icon-192.png`, `icon-512.png`,
   `icon-maskable-512.png`, `apple-touch-icon.png` (180), `favicon-32.png` and `favicon.svg` are rendered from the live game, never
   drawn separately. The icon composes `drawTileBase` (an island hex), `drawSettlement` (keep), `drawBanner` (player banner) and
@@ -470,8 +659,8 @@ cost on hi-dpi). Reveal: puffs scale ×1.6 and fade over 1.4 s, staggered.
   and downscaled in page, with an HTML wordmark over it. `--seed` / `--zoom` / `--dx` / `--dy` / `--x` / `--y` reframe it;
   the committed card is seed 6. `--out` and `--preview` write elsewhere (a run with no `--out` overwrites the repo-root assets).
   `tools/shellcards.mjs` (the v1 generator, it would overwrite all of these with v1 art) is disabled unless `--v1` is passed.
-  `docs/img/realm.jpg` and `battle.jpg` (README) are 1200 px JPEG copies of `rc-midgame-realm.png` and `rc-tutorial-drag.png`, made once because
-  `screenshots/` is git-ignored; retake them from `shots.mjs --only=rc` frames if the look changes. The service worker cache name was bumped (`hexdominion-v2-4`) and the shell now also precaches the maskable
+  `docs/img/realm.jpg` and `battle.jpg` (README) live in `docs/` because `screenshots/` is git-ignored; retake them with `node tools/docshots.mjs`
+  whenever the look changes (last retaken for RC2, after the colour-blind-safe faction colours). The service worker cache name was bumped (`hexdominion-v2-4`) and the shell now also precaches the maskable
   and apple icons.
 - **`tools/cdp.js` launches Chrome with `--disable-gpu`: canvas work is rasterised on the CPU.** Frame
   times measured through it (shots.mjs, pageshot) are software-raster numbers and far worse than

@@ -5,6 +5,7 @@
 import { h } from './dom.js';
 import { icon } from './icons.js';
 import { shortNumber, formatDurationWords } from './format.js';
+import { watchDialog } from './dialogs.js';
 
 /**
  * @param {{ onCollect?: () => void }} [callbacks]
@@ -23,16 +24,26 @@ export function createWelcome({ onCollect } = {}) {
   prosperedEl.hidden = true;
   // "Your treasury pays for up to 2 h away. Treasury upgrades raise it.": only when the absence ran past the cap (hours arrive as data)
   const capEl = h('p.welcome-cap', {}, '');
+  // "(capped at 2 h)" right beside the figure, so the number is never read as a full absence's worth
+  const capNoteEl = h('span.welcome-capnote', {}, '');
+  capNoteEl.hidden = true;
   capEl.hidden = true;
 
-  const el = h('div.welcome-card.glass-panel', {},
+  // the sentence a screen reader gets when the card opens (the dialog's description): the gold, in words
+  const summaryEl = h('p.visually-hidden', {}, '');
+  const el = h('div.welcome-card.glass-panel', { 'aria-describedby': 'welcome-summary' },
     h('h2.welcome-title', {}, 'Welcome back!'),
     h('p.welcome-away', {}, 'You were away for ', timeEl, '.'),
-    h('div.welcome-gold-row', {}, icon('coin', 24), goldEl, burstEl),
+    summaryEl,
+    h('div.welcome-gold-row', {}, icon('coin', 24), goldEl, h('span.visually-hidden', {}, ' gold'), capNoteEl, burstEl),
     prosperedEl,
     capEl,
     collectBtn,
   );
+
+  // Escape collects (Collect is a celebration, not a gate); Collect takes focus
+  collectBtn.dataset.autofocus = '';
+  watchDialog(el, { onEscape: () => { burst(); onCollect?.(); } });
 
   function burst() {
     const n = 10;
@@ -54,7 +65,13 @@ export function createWelcome({ onCollect } = {}) {
     if (!data) return;
     if (data.timeAwaySec != null) timeEl.textContent = formatDurationWords(data.timeAwaySec);
     if (data.goldEarned != null) goldEl.textContent = shortNumber(data.goldEarned);
-    capEl.hidden = !(data.capped && data.capHours > 0);
+    summaryEl.id = 'welcome-summary';
+    const capped = !!(data.capped && data.capHours > 0);
+    const capText = capped ? `capped at ${Number(data.capHours.toFixed(1))} h` : '';
+    capNoteEl.hidden = !capped;
+    capNoteEl.textContent = capped ? `(${capText})` : '';
+    summaryEl.textContent = `You were away for ${timeEl.textContent}. Your realm earned ${goldEl.textContent} gold${capped ? ` (${capText})` : ''}.`;
+    capEl.hidden = !capped;
     if (!capEl.hidden) capEl.textContent = `Your treasury pays for up to ${Number(data.capHours.toFixed(1))} h away. Treasury upgrades raise it.`;
     if (data.prospered) {
       const list = data.prospered;

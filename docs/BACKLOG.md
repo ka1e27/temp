@@ -101,7 +101,7 @@ Each run plays differently, not just bigger. Every edict must pass `campaign.mjs
 - **Why:** the idle genre's key prestige quality-of-life feature. Dynasty 2 must not mean
   re-fighting 15 trivial battles.
 
-### 10. Keepsakes
+### 10. Keepsakes (promoted to DESIGN §5.9)
 - **Chronicle:** a short log of notable moments (fastest battle, first capital,
   decapitations) in the Realm panel.
 - **Tapestry:** at dynasty end, export a PNG of the finished continent with your banner,

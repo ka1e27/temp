@@ -4,6 +4,7 @@ import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { shortNumber, formatClock, formatRate } from './format.js';
 import { createCrownRow } from './crownRow.js';
+import { watchDialog } from './dialogs.js';
 
 const DEFAULT_TIPS = [
   'Try sending from more than one settlement at once — a squad that arrives alone often just feeds the garrison.',
@@ -36,11 +37,20 @@ const DEFAULT_TIPS = [
  */
 export function createResults({ onContinue, onRetry, onBackToMap, onCrown, crownTexts } = {}) {
   const crownRow = createCrownRow({ size: 'lg', onAward: (_key, i) => onCrown?.(i), texts: crownTexts });
-  const bannerEl = h('div.results-banner', {}, '');
+  const bannerEl = h('h2.results-banner', {}, '');
   const regionEl = h('div.results-region', {}, '');
   const bodyEl = h('div.results-body', {});
 
-  const el = h('div.results-card.glass-panel', {}, bannerEl, regionEl, bodyEl);
+  // A screen reader hears the outcome as soon as the card opens: a polite status line ("Victory. Greenreach captured. +104 gold.") that is filled a moment
+  // AFTER the card shows (a change inside a hidden element is never announced).
+  const statusEl = h('p.visually-hidden', { role: 'status', 'aria-live': 'polite' }, '');
+  let summary = '';
+  const el = h('div.results-card.glass-panel', {}, bannerEl, regionEl, bodyEl, statusEl);
+  watchDialog(el, { titleEl: bannerEl, onEscape: null, initialFocus: () => el.querySelector('.btn-primary.results-action') || el.querySelector('.results-action') });
+  new MutationObserver(() => {
+    statusEl.textContent = '';
+    if (!el.hidden) setTimeout(() => { if (!el.hidden) statusEl.textContent = summary; }, 250);
+  }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
 
   /** A stat line. A zero is neutral and muted whatever its usual colour: "0 lost" is good news, not an alarm. */
   function stat(iconName, label, extraClass = '', value = null) {
@@ -89,6 +99,9 @@ export function createResults({ onContinue, onRetry, onBackToMap, onCrown, crown
     el.dataset.result = data.result;
     bannerEl.textContent = data.result === 'victory' ? 'VICTORY' : data.result === 'retreat' ? 'RETREATED' : 'DEFEAT';
     regionEl.textContent = data.regionName || '';
+    summary = data.result === 'victory'
+      ? `Victory. ${data.regionName || 'The region'} captured. +${shortNumber(data.bounty || 0)} gold${data.crownBonus > 0 ? `, +${shortNumber(data.crownBonus)} crown bonus` : ''}. ${formatClock(data.durationSec || 0)}.`
+      : `${data.result === 'retreat' ? 'Retreated' : 'Defeat'}. ${data.regionName || ''}`.trim();
     if (data.result === 'victory') renderVictory(data);
     else renderSetback(data);
   }

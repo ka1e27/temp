@@ -132,10 +132,13 @@ export function buildTileIndex(tiles) {
  * @param {Map<string,object>} byKey  q,r -> tile (from buildTileIndex)
  * @param {{q:number,r:number}} start
  * @param {{q:number,r:number}} goal
+ * @param {(tile: object) => boolean} [allow]  optional filter on tiles that may be entered (never applied to the goal)
+ * @param {(tile: object) => number} [extra]  optional extra cost (>= 0) added to entering a tile, e.g. to steer a path off
+ *   tiles it should avoid without forbidding them
  * @returns {object[]|null} path of tile objects from (excluding start) to (including goal),
  *   `[]` if start === goal, or `null` if unreachable.
  */
-export function findPath(byKey, start, goal) {
+export function findPath(byKey, start, goal, allow, extra) {
   if (start.q === goal.q && start.r === goal.r) return [];
   const startKey = hexKey(start.q, start.r);
   const goalKey = hexKey(goal.q, goal.r);
@@ -171,7 +174,8 @@ export function findPath(byKey, start, goal) {
       const nKey = hexKey(n.q, n.r);
       const nTile = byKey.get(nKey);
       if (!nTile || closed.has(nKey)) continue;
-      const baseCost = Number.isFinite(nTile.cost) ? nTile.cost : Infinity;
+      if (allow && nKey !== goalKey && !allow(nTile)) continue; // front lines: only tiles this side may cross (the goal always counts)
+      const baseCost = Number.isFinite(nTile.cost) ? nTile.cost + (extra ? extra(nTile) : 0) : Infinity;
       if (!Number.isFinite(baseCost)) continue;
       const cost = baseCost + riverCrossingPenalty(cur.tile, nTile, dir);
       const tentativeG = gScore.get(cur.key) + cost;

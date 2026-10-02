@@ -36,7 +36,7 @@ import { bounty } from './economy.js';
 // --- Par ----------------------------------------------------------------------
 
 /**
- * Which par band a region falls in: 'capital', or one of PAR.bands' ids (early/mid/deep).
+ * Which par band a region falls in: 'capital', or one of PAR.bands' ids (tier1/tier2/mid/deep).
  * @param {import('../world/generate.js').World} world
  * @param {number} regionId
  * @returns {string}
@@ -61,6 +61,17 @@ export function parFor(world, regionId, state) {
   const base = id === 'capital' ? PAR.capitalSec : PAR.bands.find((b) => b.id === id).parSec;
   const dynasty = state && state.dynasty ? Math.max(1, state.dynasty.level) : 1;
   return base + PAR.perDynastySec * (dynasty - 1);
+}
+
+/**
+ * The battle second by which a win still earns Swift (par plus the tolerance): the timer in battle counts down to it (DESIGN 4.8).
+ * @param {import('../world/generate.js').World} world
+ * @param {number} regionId
+ * @param {import('./state.js').GameState} [state]
+ * @returns {number}
+ */
+export function swiftDeadlineSec(world, regionId, state) {
+  return parFor(world, regionId, state) + PAR.toleranceSec;
 }
 
 // --- Tracking a battle ---------------------------------------------------------

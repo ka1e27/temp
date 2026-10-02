@@ -10,14 +10,15 @@
   right: var(--sp-3);
   width: min(360px, calc(100vw - 24px));
   max-height: calc(100vh - 96px);
-  overflow-y: auto;
-  overflow-x: hidden;
+  display: flex; /* the card inside is a column: header, a body that scrolls, a footer that stays (the card never outgrows the screen) */
+  flex-direction: column;
+  overflow: hidden;
   border-radius: var(--panel-radius);
   animation: hd-dock-in 260ms var(--ease-punch, cubic-bezier(0.2, 0.9, 0.3, 1.2));
   scrollbar-width: none;
 }
 .hd-dock::-webkit-scrollbar { display: none; }
-.hd-dock .region-card { max-width: none; }
+.hd-dock .region-card { max-width: none; flex: 1 1 auto; min-height: 0; }
 @keyframes hd-dock-in {
   0% { opacity: 0; transform: translateX(24px); }
   100% { opacity: 1; transform: translateX(0); }
@@ -33,6 +34,8 @@
     max-height: 62vh;
     animation-name: hd-sheet-in;
   }
+  /* the tutorial's "Attack!" bubble opens room above the button: the sheet grows by that much, so no row is pushed out of sight */
+  .hd-dock:has(.region-card-hintslot[data-px]:not([data-px="0"])) { max-height: 76vh; }
   @keyframes hd-sheet-in {
     0% { opacity: 0; transform: translateY(40px); }
     100% { opacity: 1; transform: translateY(0); }
@@ -102,7 +105,7 @@
   animation: hd-fade-in 400ms ease-out both;
 }
 .hd-help { font-family: var(--font-title); font-weight: 800; font-size: 1.05rem; }
-.hd-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); text-align: left; }
+.hd-controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); text-align: left; max-height: min(64vh, 560px); overflow-y: auto; padding-right: 4px; }
 .hd-controls h3 { font-size: var(--fs-md); margin-bottom: var(--sp-2); color: var(--gold); }
 .hd-controls p { font-size: var(--fs-sm); color: var(--text-muted); margin: 0 0 6px; line-height: 1.4; }
 .hd-controls b { color: var(--text); font-weight: 800; }
@@ -126,4 +129,25 @@
    of covering the progress bar (the desktop offset already clears it). */
 @media (max-width: 840px) {
   #ui:has(.battle-hud:not([hidden])) .toasts { top: 120px; }
+}
+
+/* "Open in another tab": a persistent bar over everything (it is an alert, not a dialog: the game stays playable, it just no longer saves). */
+.tab-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: calc(var(--z-toast) + 5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  background: #3a1d12;
+  border-bottom: 2px solid var(--warn);
+  color: var(--text);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  text-align: center;
 }

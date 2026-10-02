@@ -1,7 +1,7 @@
 // Combat math: troop strength, progressive fight resolution, tower volleys and squad
 // interception/engagement. Pure: no DOM, no Math.random, no Date.now. See docs/DESIGN.md
 // §4.4 and docs/ARCHITECTURE.md §6.
-import { BATTLE, SITE_TYPES, POWERS } from '../config/battle.js';
+import { BATTLE, SITE_TYPES, POWERS, CAMP_VOLLEY } from '../config/battle.js';
 import { worldDist, hexRadiusToWorld } from './geom.js';
 import { squadPosition } from './position.js';
 import { PLAYER_OWNER, FREE_FOLK_OWNER } from './owner.js';
@@ -42,13 +42,19 @@ export function effectiveCap(type, owner, player, capMult = 1) {
 /** Effective troops/sec growth for a site: type base × current owner's growth stat. */
 export function effectiveGrowth(type, owner, player, enemyFaction, enemy) {
   const base = SITE_TYPES[type].growth;
-  return base * ownerStats(owner, player, enemyFaction, enemy).growth;
+  // Barracks next door (Region Works, DESIGN §5.8): the player's War Camp grows faster
+  const camp = type === 'camp' && owner === PLAYER_OWNER ? (player.campGrowthMult ?? 1) : 1;
+  return base * camp * ownerStats(owner, player, enemyFaction, enemy).growth;
 }
 
-/** Per-troop strength for a squad on the march or assaulting (no site multiplier). */
-export function squadPerTroopStrength(owner, player, enemyFaction, enemy) {
+/**
+ * Per-troop strength for a squad on the march or assaulting (no site multiplier). `field` is true for a squad-against-squad clash
+ * in the open: the player's squads then also carry `player.fieldStrengthMult` (Stables next door, DESIGN §5.8: a cavalry charge).
+ */
+export function squadPerTroopStrength(owner, player, enemyFaction, enemy, field = false) {
   const s = ownerStats(owner, player, enemyFaction, enemy);
-  return s.atk * s.def;
+  const charge = field && owner === PLAYER_OWNER ? (player.fieldStrengthMult ?? 1) : 1;
+  return s.atk * s.def * charge;
 }
 
 /** Per-troop strength for a garrison sitting in a site (site defence × Bulwark included). */
@@ -104,10 +110,16 @@ export function isDead(count) {
 export function resolveTowerVolleys(battle, runtime, t) {
   const { player, enemy, arena } = battle;
   for (const site of battle.sites) {
-    if (site.type !== 'tower' || isDead(site.troops)) continue;
+    if (isDead(site.troops)) continue;
+    let cfg;
+    if (site.type === 'tower') cfg = SITE_TYPES.tower;
+    else if (site.type === 'camp' && site.owner === PLAYER_OWNER && player.campVolleyLevel > 0) {
+      // Watchtowers next door (DESIGN §5.8): the player's War Camp shoots like a tower, more often at a higher level
+      const level = Math.min(Math.floor(player.campVolleyLevel), CAMP_VOLLEY.volleySec.length);
+      cfg = { range: CAMP_VOLLEY.range, volleySec: CAMP_VOLLEY.volleySec[level - 1], volleyKills: CAMP_VOLLEY.kills };
+    } else continue;
     if (site.nextVolley === undefined) site.nextVolley = 0;
     if (t < site.nextVolley) continue;
-    const cfg = SITE_TYPES.tower;
     const towerTile = runtime.byIndex.get(site.tile);
     if (!towerTile) continue;
     const rangeWorld = hexRadiusToWorld(cfg.range);

@@ -125,7 +125,10 @@ export function createTitleScene(services) {
   }
 
   function frame(dt, t, nowMs) {
-    tAccum += dt;
+    // Reduce Motion: no drift, no breathing, no moving clouds: the title is a still picture
+    const still = !!container.get().state.settings.reduceMotion;
+    if (!still) tAccum += dt;
+    const tm = still ? 0 : t;
     camera.x = driftCx + Math.sin(tAccum * TITLE.driftSpeedX * 2.2) * driftRx;
     camera.y = driftCy + Math.cos(tAccum * TITLE.driftSpeedY * 2.6) * driftRy;
     camera.zoom = baseZoom * (1 + Math.sin(tAccum * TITLE.zoomBreatheSpeed) * TITLE.zoomBreatheAmount);
@@ -134,10 +137,10 @@ export function createTitleScene(services) {
     const { ctx } = renderer;
     renderer.beginFrame(camera);
     renderer.terrain.draw(ctx, camera, state.owner);
-    renderer.terrain.drawGlints(ctx, camera, t);
-    renderer.clouds.drawShadows(ctx, camera, t);
-    siteDrawer.draw(ctx, renderer, camera, state.owner, t);
-    renderer.clouds.drawAmbient(ctx, camera, t);
+    renderer.terrain.drawGlints(ctx, camera, tm);
+    renderer.clouds.drawShadows(ctx, camera, tm);
+    siteDrawer.draw(ctx, renderer, camera, state.owner, tm);
+    renderer.clouds.drawAmbient(ctx, camera, tm);
     void world; void nowMs;
   }
 

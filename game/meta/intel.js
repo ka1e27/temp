@@ -12,7 +12,7 @@ import { PLAYER_FACTION } from './state.js';
 import { incomePerSec } from './economy.js';
 import { levelOf, upgradeCost } from './upgrades.js';
 import { playerBattleStats, enemyBattleStats, difficulty } from './progression.js';
-import { buildArena } from '../battle/arena.js';
+import { buildArena, canBuildArena } from '../battle/arena.js';
 import { ownerStats, effectiveGrowth, effectiveCap } from '../battle/combat.js';
 import { PLAYER_OWNER, FREE_FOLK_OWNER } from '../battle/owner.js';
 import { hexDistance, lineBetween } from '../core/hex.js';
@@ -20,6 +20,7 @@ import { buildTileIndex, findPath } from '../battle/geom.js';
 import {
   ensureIntel, intelOf, sabotageLevel, sabotagePercent,
 } from './intelState.js';
+import { worksScoutedFree } from './worksEffects.js'; // the leaf (no cycle): a Watchtower next door scouts for free
 
 export * from './intelState.js';
 
@@ -54,6 +55,7 @@ export function tutorialRegionId(state, world) {
   let bestRatio = -Infinity;
   for (const region of world.regions) {
     if (!isFrontierRegion(state, world, region.id)) continue;
+    if (!canBuildArena(world, state.owner, region.id)) continue; // the lesson never points at a region that cannot be attacked (mountains all along its border)
     const { ratio } = difficulty(clean, world, region.id);
     if (ratio > bestRatio) { bestRatio = ratio; best = region.id; }
   }
@@ -83,10 +85,18 @@ export function scoutCost(state, world, regionId) {
   return Math.max(minCost, Math.round(incomePerSec(state, world) * incomeSeconds));
 }
 
+/**
+ * Scouted by the player's money OR for free by a Watchtower next door (DESIGN 5.7, 5.8). The Watchtower scouting is never stored: it follows the building.
+ * Exported so the map's garrison badges use the very same predicate as the card.
+ */
+export function isScoutedOrFree(state, world, regionId) {
+  return intelOf(state, regionId).scouted || worksScoutedFree(state, world, regionId);
+}
+
 /** Frontier region, not scouted yet, and the gold is there. */
 export function canScout(state, world, regionId) {
   if (!isFrontierRegion(state, world, regionId)) return false;
-  if (intelOf(state, regionId).scouted) return false;
+  if (isScoutedOrFree(state, world, regionId)) return false; // already scouted, or a Watchtower does it for free
   return state.gold >= scoutCost(state, world, regionId);
 }
 
@@ -130,8 +140,8 @@ export function sabotageCost(state, world, regionId) {
 /** Scouted, below the maximum, frontier and affordable. */
 export function canSabotage(state, world, regionId) {
   if (!isFrontierRegion(state, world, regionId)) return false;
-  const { scouted, sabotage } = intelOf(state, regionId);
-  if (!scouted || sabotage >= INTEL.sabotage.maxLevel) return false;
+  const { sabotage } = intelOf(state, regionId);
+  if (!isScoutedOrFree(state, world, regionId) || sabotage >= INTEL.sabotage.maxLevel) return false;
   return state.gold >= sabotageCost(state, world, regionId);
 }
 
@@ -197,6 +207,7 @@ export function sabotageBattleNote(state, regionId) {
  * @property {number} weakPoint             ScoutSite.id of the suggested first strike
  * @property {string} weakPointType
  * @property {string} weakPointReason       one short sentence: why that site
+ * @property {string} weakPointGloss        what "weak point" means, in one line (config/intel.js glossary)
  * @property {string[]} notes               at most INTEL.maxNotes short tactical notes
  * @property {number} sabotage              sabotage level the garrisons already reflect
  */
@@ -410,7 +421,7 @@ function groupSites(sites) {
 export function scoutReport(state, world, regionId, playerStats, enemyStats) {
   const region = world.regions[regionId];
   if (!region || state.owner[regionId] === PLAYER_FACTION) return null;
-  const player = playerStats || playerBattleStats(state, world);
+  const player = playerStats || playerBattleStats(state, world, regionId);
   const enemy = enemyStats || enemyBattleStats(world, state, regionId);
   const level = sabotageLevel(state, regionId);
 
@@ -466,6 +477,7 @@ export function scoutReport(state, world, regionId, playerStats, enemyStats) {
     weakPoint: weak.site.id,
     weakPointType: weak.site.type,
     weakPointReason: weak.reason,
+    weakPointGloss: INTEL.glossary.weakPoint, // plain words for the term, shown in the panel (touch has no hover)
     notes: buildNotes(sites, world, campTile, exposure),
     sabotage: level,
   };
@@ -480,6 +492,7 @@ export function scoutReport(state, world, regionId, playerStats, enemyStats) {
  * @property {number} regionId
  * @property {number} gold                   current gold, so the panel can say how much is missing
  * @property {boolean} scouted
+ * @property {'watchtower'|null} scoutedBy   set when a Watchtower next door did it (no purchase); the panel can say so
  * @property {number} scoutCost              0 = free
  * @property {ScoutReport|null} report       null until scouted
  * @property {number} sabotage               0..sabotageMax
@@ -497,12 +510,14 @@ export function scoutReport(state, world, regionId, playerStats, enemyStats) {
  * @returns {IntelPanelData}
  */
 export function intelPanelData(state, world, regionId) {
-  const { scouted, sabotage: level } = intelOf(state, regionId);
+  const { sabotage: level } = intelOf(state, regionId);
+  const scouted = isScoutedOrFree(state, world, regionId);
   const cost = sabotageCost(state, world, regionId);
   return {
     regionId,
     gold: state.gold,
     scouted,
+    scoutedBy: scouted && !intelOf(state, regionId).scouted ? 'watchtower' : null,
     scoutCost: scouted ? 0 : scoutCost(state, world, regionId),
     report: scouted ? scoutReport(state, world, regionId) : null,
     sabotage: level,

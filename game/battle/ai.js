@@ -23,7 +23,8 @@
 // below is phrased as "my faction vs a target site", so an enemy powers pass would be additive.
 import { BATTLE, SITE_TYPES, POWERS } from '../config/battle.js';
 import { ownerStats, PLAYER_OWNER } from './combat.js';
-import { getRuntime, pathBetweenTiles } from './runtime.js';
+import { getRuntime } from './runtime.js';
+import { routeCost, canRoute } from './routing.js';
 
 const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90 };
 
@@ -68,24 +69,11 @@ function tuning(personality) {
 }
 
 // --- geometry / projection ----------------------------------------------------------------
-const costCaches = new WeakMap();
-
+// Front lines (DESIGN §4.4): the cost of a leg is the cost of the route this faction may actually march (Infinity when
+// the rule leaves none), memoised by routing.js and dropped whenever a settlement changes hands. The AI is never
+// relaxed: a target it cannot route to simply is not a candidate.
 function pathCost(battle, a, b) {
-  let cache = costCaches.get(battle);
-  if (!cache) { cache = new Map(); costCaches.set(battle, cache); }
-  const key = a.id * 4096 + b.id;
-  let cost = cache.get(key);
-  if (cost === undefined) {
-    const path = pathBetweenTiles(battle, a.tile, b.tile);
-    if (!path) cost = Infinity;
-    else {
-      const byIndex = getRuntime(battle).byIndex;
-      cost = 0;
-      for (const i of path) cost += byIndex.get(i).cost;
-    }
-    cache.set(key, cost);
-  }
-  return cost;
+  return routeCost(battle, a.owner, a.id, b.id);
 }
 
 /** Remaining path cost of a marching squad (cost-1.0-hex equivalents). */
@@ -443,6 +431,7 @@ function runPlans(battle, t, me) {
     const from = battle.sites[plan.from];
     const to = battle.sites[plan.to];
     if (!from || !to || from.owner !== me || to.owner === me) continue; // stale: drop it
+    if (!canRoute(battle, me, from.id, to.id)) continue; // the front moved: the road is gone
     const n = Math.floor(Math.min(plan.count, from.troops * 0.95));
     if (n < 1) continue;
     commands.push({ type: 'send', owner: me, from: [from.id], to: to.id, fraction: Math.min(1, (n + 0.01) / from.troops) });

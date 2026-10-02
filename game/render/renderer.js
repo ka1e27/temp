@@ -20,6 +20,8 @@ export const MAX_DPR = 2;
  */
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d', { alpha: false });
+  // No 2D context (graphics off, a blocked or exhausted GPU, a very old browser): say so at boot (main.js shows the message) instead of a blank map that throws every frame.
+  if (!ctx) throw new Error('This browser could not start the game’s graphics (no 2D canvas). Try another browser, or switch hardware acceleration back on.');
   let dpr = 1;
   let cssW = canvas.clientWidth || 300;
   let cssH = canvas.clientHeight || 150;

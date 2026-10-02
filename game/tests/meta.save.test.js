@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   SAVE_KEY, serialize, deserialize, migrate, exportCode, importCode, saveTo, loadFrom, hasValidOwnerTable,
 } from '../meta/save.js';
-import { createGame } from '../meta/state.js';
+import { createGame, resetRegions } from '../meta/state.js';
 import { makeWorld } from './meta.fixtures.js';
 
 function memoryStorage() {
@@ -182,4 +182,35 @@ test('a new realm starts with empty per-dynasty feature state', () => {
   assert.deepEqual(state.metFactions, []);
   assert.deepEqual(state.intel, {});
   assert.deepEqual(state.prosperity, []);
+});
+
+// --- Region Works (DESIGN 5.8): state.works ------------------------------------------------------------------------------------------
+
+test('round trip: Region Works survive save and load exactly, and through an export code', () => {
+  const world = makeWorld();
+  const state = createGame(5, world, 100);
+  state.works = { 1: [{ type: 'market', level: 2 }, { type: 'barracks', level: 1 }], 3: [{ type: 'watchtower', level: 3 }] };
+  const restored = deserialize(serialize(state));
+  assert.deepEqual(restored, state);
+  assert.deepEqual(restored.works, state.works);
+  assert.deepEqual(importCode(exportCode(state)), state);
+});
+
+test('migrate: an old save has no Works, and junk in the field is cleaned, never thrown on', () => {
+  assert.deepEqual(migrate({ owner: [0, 1, 1], gold: 5 }).works, {});
+  for (const junk of [null, 5, 'str', true, []]) assert.deepEqual(migrate({ owner: [0], works: junk }).works, {}, JSON.stringify(junk));
+  const restored = migrate({
+    owner: [0, 1],
+    works: { 1: [{ type: 'market', level: 2 }, { type: 'market', level: 1 }, { type: 'nope', level: 1 }, { type: 'barracks', level: 99 }, 'x'], x: [{ type: 'market', level: 1 }], 2: 'junk' },
+  });
+  assert.deepEqual(restored.works, { 1: [{ type: 'market', level: 2 }] }, 'one Work per type, known types, sane levels, only real region ids');
+});
+
+test('a new realm, and a new dynasty (resetRegions), start with no Works', () => {
+  const world = makeWorld();
+  const state = createGame(1, world, 0);
+  assert.deepEqual(state.works, {});
+  state.works = { 1: [{ type: 'market', level: 1 }] };
+  resetRegions(state, world, 10);
+  assert.deepEqual(state.works, {});
 });

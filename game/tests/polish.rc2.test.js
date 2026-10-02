@@ -64,7 +64,7 @@ test('the council card carries the tag as data (the UI kit imports nothing) and 
 
 // --- The "Stuck?" hint -------------------------------------------------------------------------------------------------------
 
-const base = { hintsOn: true, tutorialStepId: null, battleT: 70, lastCaptureT: 0, done: false, fireReady: false, rallyReady: true };
+const base = { hintsOn: true, tutorialHintActive: false, battleT: 70, lastCaptureT: 0, done: false, fireReady: false, rallyReady: true };
 
 test('stuck hint: 60 s with no capture and a ready power names exactly the unlocked, ready powers', () => {
   assert.equal(STUCK_HINT.afterSec, 60);
@@ -83,10 +83,9 @@ test('stuck hint: not before 60 s since the last capture, not twice, not with hi
   assert.equal(stuckHintDue({ ...base, rallyReady: false, fireReady: false }), null, 'a locked or cooling power is never named');
 });
 
-test('stuck hint: never while the tutorial is in a battle step (3 to 5), fine on the map step and after the tutorial', () => {
-  for (const step of [3, 4, 5]) assert.equal(stuckHintDue({ ...base, tutorialStepId: step }), null, `step ${step}`);
-  assert.ok(stuckHintDue({ ...base, tutorialStepId: 6 }));
-  assert.ok(stuckHintDue({ ...base, tutorialStepId: null }));
+test('stuck hint: never while the tutorial has a hint of its own on screen, fine otherwise', () => {
+  assert.equal(stuckHintDue({ ...base, tutorialHintActive: true }), null);
+  assert.ok(stuckHintDue({ ...base, tutorialHintActive: false }));
 });
 
 // --- Intent lines ------------------------------------------------------------------------------------------------------------
@@ -103,12 +102,14 @@ test('intent lines: threats and races only, never an enemy reinforcing its own s
 // --- The arrow and the copy --------------------------------------------------------------------------------------------------
 
 test('the drag arrow colours are saturated green and red, and gold otherwise', () => {
-  assert.deepEqual(Object.keys(DRAG_ARROW).sort(), ['capture', 'fail', 'neutral']);
+  assert.deepEqual(Object.keys(DRAG_ARROW).sort(), ['blocked', 'capture', 'fail', 'neutral']);
   const hex = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
   const [cr, cg, cb] = hex(DRAG_ARROW.capture);
   const [fr, fg, fb] = hex(DRAG_ARROW.fail);
   assert.ok(cg > 180 && cr < 90 && cg - cb > 60, 'green is green');
   assert.ok(fr > 200 && fg < 100 && fb < 100, 'red is red');
+  const [br, bg, bb] = hex(DRAG_ARROW.blocked);
+  assert.ok(Math.max(br, bg, bb) - Math.min(br, bg, bb) < 40, 'the no-route arrow is grey');
 });
 
 test('no UI, scene or app copy promises a "larger" continent or world', () => {

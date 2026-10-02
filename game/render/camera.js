@@ -78,6 +78,7 @@ function settleAxis(pos, lo, hi, dt) {
  */
 export function createCamera({ minZoom = 0.01, maxZoom = 1000 } = {}) {
   const cam = {
+    instant: false, // Reduce Motion: flyTo cuts instead of flying (set by main.js)
     // --- state -------------------------------------------------------
     x: 0,
     y: 0,
@@ -188,6 +189,7 @@ export function createCamera({ minZoom = 0.01, maxZoom = 1000 } = {}) {
      * @returns {Promise<{cancelled:boolean}>}
      */
     flyTo(target, ms = 900, ease = 'inOutCubic') {
+      if (cam.instant) ms = 1; // Reduce Motion: every flight is a cut
       cam._cancelFlight({ cancelled: true });
       cam._vx = 0;
       cam._vy = 0;

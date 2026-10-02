@@ -437,7 +437,7 @@ async function hookTour(api, tag) {
   await sleep(700);
   await shot('world-pips');
 
-  await api.clickSelector('.hud-btn[aria-label="Realm"]');
+  await api.clickSelector('.hud-btn[aria-label="Realm stats"]');
   await sleep(600);
   await shot('realm');
   await api.clickSelector('.realm-close');
@@ -649,9 +649,24 @@ async function rcTour(api, tag) {
   await api.waitFor(() => window.__hd.scene === 'world', 6000, 'world scene');
   await sleep(2400);
   await shot('first-screen'); // hint 0 ("This is your realm")
-  await api.waitFor(() => window.__hd.state.tutorial.step >= 1, 9000, 'hint 1');
+  await api.waitFor(() => !!window.__hd.state.tutorial.seen.W0, 9000, 'hint W1');
+  await sleep(900);
+  await shot('move-and-zoom'); // W1: drag to move the map, scroll or pinch to zoom
+  // a real pan and a real zoom, like the hint asks
+  const vw = await api.eval(() => innerWidth);
+  const vh = await api.eval(() => innerHeight);
+  await api.drag({ x: vw * 0.5, y: vh * 0.62 }, { x: vw * 0.45, y: vh * 0.58 });
+  await sleep(400);
+  if (phone) {
+    await api.page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: vw / 2 - 60, y: vh * 0.55, id: 1 }, { x: vw / 2 + 60, y: vh * 0.55, id: 2 }] });
+    for (let i = 1; i <= 10; i++) { await api.page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: vw / 2 - 60 - i * 7, y: vh * 0.55, id: 1 }, { x: vw / 2 + 60 + i * 7, y: vh * 0.55, id: 2 }] }); await sleep(16); }
+    await api.page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } else {
+    for (let i = 0; i < 4; i++) { await api.page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: vw / 2, y: vh * 0.55, deltaX: 0, deltaY: -120 }); await sleep(60); }
+  }
+  await api.waitFor(() => !!window.__hd.state.tutorial.seen.W1, 4000, 'W1 seen');
   await sleep(1600);
-  await shot('first-hint'); // hint 1 (click a glowing region)
+  await shot('first-hint'); // W2: click a glowing region
 
   console.log(`[${label}rc] frontier card, Attack, the tutorial battle`);
   const id = await api.eval(async () => {
@@ -766,6 +781,97 @@ async function rcTour(api, tag) {
   await shot('midgame-realm');
 }
 
+
+/** Region Works (DESIGN 5.8) with REAL input: M3 in its three stages, the owned card, the chooser, demolish, the map marks and the Watchtower's free scout. */
+async function worksTour(api, tag) {
+  const phone = tag.startsWith('phone');
+  const shot = (n) => api.shot(`${tag}${n}`);
+  const tapAt = async (x, y) => (phone ? api.touchTap(x, y) : api.mouseClick(x, y));
+  const tapSel = async (sel, text) => {
+    const c = await api.centerOf(sel, text);
+    if (!c) throw new Error(`nothing to press: ${sel} ${text || ''}`);
+    await api.eval((q) => { const e = document.querySelector(q); if (e) e.scrollIntoView({ block: 'nearest' }); }, sel);
+    await sleep(200);
+    const c2 = await api.centerOf(sel, text);
+    await tapAt(c2.x, c2.y);
+  };
+  console.log(`[${tag}works] setup`);
+  await sleep(2200);
+  await api.hideDev();
+  await api.clickSelector('.title-actions button', 'New Realm');
+  await api.waitFor(() => window.__hd.scene === 'world', 6000, 'world scene');
+  await sleep(2600);
+  // a realm that has fought three times: three conquests, the early hints seen (they would gate the Works hint), gold to build with
+  await api.eval(() => {
+    const hd = window.__hd;
+    hd.conquerRegions(3);
+    hd.advanceTenure(9); // nine hours of tenure: prosperity III, so all three Works slots are open
+    hd.state.stats.battlesWon = 3;
+    hd.state.tutorial.seen = { W0: true, W1: true, W2: true, W3: true, B1: true, B2: true, B3: true, B4: true, B5: true, C1: true, C2: true, C3: true, P1: true, P2: true, M1: true, M2: true };
+    hd.state.settings.hints = true;
+    hd.state.gold = 4000;
+  });
+  await sleep(4200); // the mists part, the first hint's 1.5 s gap
+  await api.eval((z) => { const hd = window.__hd; hd.flyToRegion(hd.state.owner.findIndex((o, i) => o === 0 && i !== hd.world.startRegion), z, 500); }, phone ? 15 : 19);
+  await sleep(1800);
+  await shot('m3-stage1-region');
+  const regionId = await api.eval(async () => {
+    const { worksTutorialRegion } = await import(new URL('game/meta/works.js', document.baseURI).href);
+    return worksTutorialRegion(window.__hd.state, window.__hd.world);
+  });
+  console.log('  M3 region', regionId);
+  // select it with a real tap on its label (the hint's pointer is on it)
+  const p1 = await api.eval((rid) => window.__hd.regionScreenPos(rid), regionId);
+  await tapAt(p1.x, p1.y);
+  await sleep(1500);
+  await shot('m3-stage2-build');
+  await tapSel('.works-build');
+  await sleep(900);
+  await shot('m3-stage3-barracks');
+  // the chooser (the hint off so the picture is the panel)
+  await api.eval(() => { window.__hd.state.settings.hints = false; });
+  await sleep(600);
+  await shot('chooser');
+  await tapSel('.works-choice', 'Barracks');
+  await sleep(1100);
+  await shot('card-one-built');
+  // a second and a third Work, an upgrade, so the card shows mixed levels
+  await tapSel('.works-build');
+  await sleep(500);
+  await tapSel('.works-choice', 'Watchtower');
+  await sleep(900);
+  await tapSel('.works-upgrade:not([disabled])');
+  await sleep(900);
+  await shot('card-works');
+  // demolish: the confirm step in the row
+  await tapSel('.works-more');
+  await sleep(700);
+  await shot('demolish-confirm');
+  await tapSel('.works-keep');
+  await sleep(500);
+  // the map: the buildings by the keep, at a zoom where they read
+  await api.eval((rid, z) => { window.__hd.flyToRegion(rid, z, 400); }, regionId, phone ? 26 : 30);
+  await sleep(2600);
+  await shot('map-marks');
+  // a Watchtower next to a hostile region: its card shows the garrisons with no purchase, and says who scouted
+  const foeId = await api.eval(async () => {
+    const { worksScoutedFree } = await import(new URL('game/meta/works.js', document.baseURI).href);
+    const hd = window.__hd;
+    const r = hd.world.regions.find((x) => hd.state.owner[x.id] !== 0 && worksScoutedFree(hd.state, hd.world, x.id));
+    return r ? r.id : -1;
+  });
+  console.log('  free-scouted region', foeId);
+  if (foeId >= 0) {
+    await api.eval((rid, z) => window.__hd.flyToRegion(rid, z, 400), foeId, phone ? 14 : 17);
+    await sleep(1800);
+    const pf = await api.eval((rid) => window.__hd.regionScreenPos(rid), foeId);
+    await tapAt(pf.x, pf.y);
+    await sleep(1600);
+    await shot('watchtower-scout');
+  }
+  console.log(`[${tag}works] done`);
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true });
   const only = flags.only || 'all';
@@ -775,6 +881,7 @@ async function main() {
   const intel = only === 'intel';
   const living = only === 'living';
   const rc = only === 'rc';
+  const works = only === 'works';
   if (world && only !== 'phone') {
     console.log('== desktop 1440x900 ==');
     await session({ width: 1440, height: 900, mobile: false }, (api) => tour(api, ''));
@@ -800,6 +907,12 @@ async function main() {
     await session({ width: 1440, height: 900, mobile: false }, (api) => intelTour(api, ''));
     console.log('== intel, phone 390x844 (touch) ==');
     await session({ width: 390, height: 844, mobile: true }, (api) => intelTour(api, 'phone-'));
+  }
+  if (works) {
+    console.log('== works, desktop 1440x900 ==');
+    await session({ width: 1440, height: 900, mobile: false }, (api) => worksTour(api, ''));
+    console.log('== works, phone 390x844 (touch) ==');
+    await session({ width: 390, height: 844, mobile: true }, (api) => worksTour(api, 'phone-'));
   }
   if (hook) {
     console.log('== features, desktop 1440x900 ==');

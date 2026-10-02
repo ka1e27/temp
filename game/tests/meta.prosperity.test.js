@@ -270,3 +270,53 @@ test('stepping a clock from change to change integrates income across levels (ca
   const expected = 2 * (0.5 * 3600 * 1 + 1.5 * 3600 * 1.05 + 1 * 3600 * 1.1);
   assert.ok(Math.abs(gold - expected) < 1e-6, `${gold} vs ${expected}`);
 });
+
+test('a clock set back never lowers a held level, never reports it twice, and the income bonus stays', () => {
+  const { world, state } = setup();
+  updateProsperity(state, world, T0 + 9 * HOUR);
+  assert.deepEqual(state.prosperity.slice(0, 2), [3, 3]);
+  const bonus = prosperityIncomeMult(state, 0);
+  assert.ok(bonus > 1.14);
+  // 2 h back: tenure drops to level II, the stored III stays
+  assert.deepEqual(updateProsperity(state, world, T0 + 7 * HOUR), []);
+  assert.deepEqual(state.prosperity.slice(0, 2), [3, 3]);
+  // all the way back before the conquests: tenure is negative, nothing changes, nothing is reported
+  assert.deepEqual(updateProsperity(state, world, T0 - 5 * HOUR), []);
+  assert.deepEqual(state.prosperity.slice(0, 2), [3, 3]);
+  assert.equal(prosperityIncomeMult(state, 0), bonus);
+  const info = prosperityInfo(state, 0, T0 - 5 * HOUR);
+  assert.equal(info.level, 3, 'the card shows what the economy pays');
+  assert.ok(Math.abs(info.incomeBonus - PROSPERITY.incomeBonusPerLevel * 3) < 1e-12);
+  assert.equal(info.nextAt, null);
+  assert.equal(nextProsperityAt(state, 0, T0 - 5 * HOUR), null);
+  // the clock comes back: no "prospers!" fires again
+  assert.deepEqual(updateProsperity(state, world, T0 + 9 * HOUR), []);
+  assert.deepEqual(updateProsperity(state, world, T0 + 40 * HOUR), []);
+  // a conquest stamp in the far future (a wrongly set clock at conquest time) does not zero it either
+  state.conqueredAt[1] = T0 + 365 * 24 * HOUR;
+  assert.deepEqual(updateProsperity(state, world, T0 + 41 * HOUR), []);
+  assert.equal(state.prosperity[1], 3);
+});
+
+test('a held level climbs from where it is after a clock jump back, and levels still come one at a time', () => {
+  const { world, state } = setup();
+  updateProsperity(state, world, T0 + 3 * HOUR); // level II
+  assert.equal(state.prosperity[0], 2);
+  updateProsperity(state, world, T0 + 1 * HOUR); // clock back: still II
+  assert.equal(state.prosperity[0], 2);
+  assert.deepEqual(updateProsperity(state, world, T0 + 8 * HOUR), [{ regionId: 0, level: 3, from: 2 }]); // region 1 (taken 10 min later) is still at II
+});
+
+test('losing a region and a new dynasty are still the only things that reset a level', () => {
+  const { world, state } = setup();
+  updateProsperity(state, world, T0 + 9 * HOUR);
+  updateProsperity(state, world, T0 - HOUR); // clock back: held
+  assert.equal(state.prosperity[0], 3);
+  state.owner[0] = 2; // lost
+  updateProsperity(state, world, T0 - HOUR);
+  assert.equal(state.prosperity[0], 0);
+  assert.equal(prosperityIncomeMult(state, 0), 1);
+  resetRegions(state, world, T0 + 20 * HOUR); // new dynasty
+  updateProsperity(state, world, T0 + 20 * HOUR);
+  assert.ok(state.prosperity.every((v) => v === 0));
+});

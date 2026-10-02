@@ -1,25 +1,27 @@
 // Creating a marching squad by sending a share of a site's garrison. Shared by sim.js's
 // `send` command and powers.js's Rally (which fans a send out from every owned site).
-import { pathBetweenSites } from './runtime.js';
+import { routeFor } from './routing.js';
 import { PLAYER_OWNER } from './owner.js';
 
 
 /**
  * Sends `floor(troops * fraction)` troops (min 1, no-op if < 1) from one site toward
  * another as a new marching squad, per DESIGN §4.3 / ARCHITECTURE §6. No-ops if the source
- * and target are the same site or no path exists. Mutates `battle` in place and pushes a
- * `send` event on success.
+ * and target are the same site or there is no legal route under the front-line rule
+ * (routing.js, DESIGN §4.4); the route is fixed here and the squad never reroutes. Mutates
+ * `battle` in place and pushes a `send` event on success (`auto: true` when a supply line sent it).
  * @returns {object|null} the created squad, or null if nothing was sent.
  */
-export function sendFromSite(battle, fromSiteId, toSiteId, fraction) {
+export function sendFromSite(battle, fromSiteId, toSiteId, fraction, opts = null) {
   if (fromSiteId === toSiteId) return null;
   const from = battle.sites[fromSiteId];
   const to = battle.sites[toSiteId];
   if (!from || !to) return null;
   const count = Math.floor(from.troops * fraction);
   if (count < 1) return null;
-  const path = pathBetweenSites(battle, fromSiteId, toSiteId);
-  if (!path || path.length === 0) return null;
+  const route = routeFor(battle, from.owner, fromSiteId, toSiteId);
+  if (!route) return null;
+  const path = route.tiles.slice();
 
   from.troops -= count;
   const squad = {
@@ -36,8 +38,10 @@ export function sendFromSite(battle, fromSiteId, toSiteId, fraction) {
   };
   battle.squads.push(squad);
   if (squad.owner === PLAYER_OWNER) battle.stats.sent += count;
-  battle.events.push({
+  const event = {
     type: 'send', owner: squad.owner, from: fromSiteId, to: toSiteId, count, squad: squad.id,
-  });
+  };
+  if (opts && opts.auto) event.auto = true;
+  battle.events.push(event);
   return squad;
 }

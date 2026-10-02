@@ -6,9 +6,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateWorld } from '../world/generate.js';
 import { createGame } from '../meta/state.js';
-import { difficulty, frontier } from '../meta/progression.js';
-import { ECONOMY } from '../config/meta.js';
+import { difficulty, frontier, conquer, winChance, attackableFrontier } from '../meta/progression.js';
+import { ECONOMY, DIFFICULTY } from '../config/meta.js';
 import { sweepRows, tutorialRows } from '../../tools/balance.mjs';
+import { runCampaign } from '../../tools/campaign.mjs';
 
 const winRate = (rows) => rows.filter((r) => r.win).length / Math.max(1, rows.length);
 
@@ -76,12 +77,132 @@ test('labels tell the truth: bot win rate per label lands in its band (small swe
   assert.ok(winRate(easy) > winRate(fair) && winRate(fair) > winRate(hard) && winRate(hard) > winRate(deadly));
 });
 
-test('labels stay honest across faction personalities', () => {
+// Aggressive rivals are judged on campaign states (next test), not here: this ladder sends level-3..24 armies at keeps of every
+// depth, and against deep aggressive keeps the bot runs out of patience (config/battle.js PATIENCE_SEC) in a way no campaign ever
+// presents (the card only offers them once the army has grown into them).
+test('labels stay honest across faction personalities (synthetic ladder: defensive and swarm)', () => {
   const rows = sweepRows({ seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], own: 'half', regionStride: 3, ladder: [3, 5, 7, 9, 11, 14, 17, 20, 24] });
-  for (const personality of ['aggressive', 'defensive', 'swarm']) {
+  for (const personality of ['defensive', 'swarm']) {
     const fairish = rows.filter((r) => r.personality === personality && (r.label === 'Fair' || r.label === 'Hard'));
     if (fairish.length < 12) continue; // too few samples in this small sweep to judge
     const w = winRate(fairish);
     assert.ok(w >= 0.3 && w <= 0.95, `${personality}: Fair/Hard fights won ${(w * 100).toFixed(0)}%`);
   }
+});
+
+test('labels tell the truth in campaign states, per rival personality (campaign bot, seeds 1-12)', () => {
+  const rows = [];
+  for (let seed = 1; seed <= 12; seed++) rows.push(...runCampaign(seed, {}).battleDurations);
+  const wonShare = (xs) => xs.filter((r) => r.won).length / Math.max(1, xs.length);
+  let judged = 0;
+  for (const personality of ['passive', 'defensive', 'aggressive', 'swarm']) {
+    const mine = rows.filter((r) => r.personality === personality);
+    const easy = mine.filter((r) => r.label === 'Easy');
+    const fair = mine.filter((r) => r.label === 'Fair');
+    // the brief's bands are Easy >= 85% and Fair 60-85%; small n, so generous
+    if (easy.length >= 20) { judged += 1; assert.ok(wonShare(easy) >= 0.68, `${personality}: Easy fights won ${(100 * wonShare(easy)).toFixed(0)}% of ${easy.length}`); }
+    if (fair.length >= 20) { judged += 1; assert.ok(wonShare(fair) >= 0.4 && wonShare(fair) <= 0.92, `${personality}: Fair fights won ${(100 * wonShare(fair)).toFixed(0)}% of ${fair.length}`); }
+  }
+  assert.ok(judged >= 6, `only ${judged} personality/label cells had enough fights to judge`);
+  const easyAll = rows.filter((r) => r.label === 'Easy');
+  assert.ok(wonShare(easyAll) >= 0.8, `Easy fights won ${(100 * wonShare(easyAll)).toFixed(0)}% of ${easyAll.length}`);
+});
+
+// --- the chance of winning that the card's bar shows (DESIGN §5.3) -------------------------------------------------------------
+
+const BANDS = [ // [label, lowest win chance, highest win chance (exclusive, except Easy's cap)]
+  ['Easy', DIFFICULTY.winAtLabelEdge.Easy, DIFFICULTY.winChanceRange[1]],
+  ['Fair', DIFFICULTY.winAtLabelEdge.Fair, DIFFICULTY.winAtLabelEdge.Easy],
+  ['Hard', DIFFICULTY.winAtLabelEdge.Hard, DIFFICULTY.winAtLabelEdge.Fair],
+  ['Deadly', DIFFICULTY.winChanceRange[0], DIFFICULTY.winAtLabelEdge.Hard],
+];
+const labelAt = (ratio) => (ECONOMY.difficultyLabels.find((l) => ratio >= l.min) || ECONOMY.difficultyLabels[ECONOMY.difficultyLabels.length - 1]).label;
+
+test('winChance: the label bands are Easy >= 0.85, Fair 0.60-0.85, Hard 0.35-0.60, Deadly < 0.35, and winChance agrees at every boundary', () => {
+  assert.deepEqual(BANDS.map(([l, lo]) => [l, lo]).slice(0, 3), [['Easy', 0.85], ['Fair', 0.6], ['Hard', 0.35]]);
+  for (const [label, lo, hi] of BANDS) {
+    const entry = ECONOMY.difficultyLabels.find((l) => l.label === label);
+    if (entry.min > 0) {
+      // exactly on the label's lower edge: that label, and its lowest chance
+      assert.equal(labelAt(entry.min), label);
+      assert.ok(winChance(entry.min) >= lo, `${label} edge: ${winChance(entry.min)} < ${lo}`);
+      assert.ok(Math.abs(winChance(entry.min) - lo) < 1e-6, `${label}: the chance at its edge is the promised ${lo}`);
+      // just under it: the worse label, and strictly under this label's lowest chance
+      const under = entry.min * (1 - 1e-6);
+      assert.notEqual(labelAt(under), label);
+      assert.ok(winChance(under) < lo, `just under the ${label} edge: ${winChance(under)} should be under ${lo}`);
+    }
+    // a ratio well inside the band sits inside its chance band
+    const inside = entry.min > 0 ? entry.min * 1.02 : 0.3;
+    assert.equal(labelAt(inside), label);
+    assert.ok(winChance(inside) >= lo && winChance(inside) <= hi, `${label}: ${winChance(inside)} outside [${lo}, ${hi}]`);
+  }
+  // every ratio on a fine grid lands in the band of its own label
+  for (let ratio = 0.05; ratio < 6; ratio *= 1.01) {
+    const [, lo, hi] = BANDS.find(([l]) => l === labelAt(ratio));
+    const p = winChance(ratio);
+    assert.ok(p >= lo - 1e-12 && p <= hi + 1e-12, `ratio ${ratio.toFixed(3)} (${labelAt(ratio)}): winChance ${p}`);
+  }
+});
+
+test('winChance: monotonic, clamped to the configured range, safe on odd input, a surrender is a near-certainty', () => {
+  const [floor, ceil] = DIFFICULTY.winChanceRange;
+  let prev = -1;
+  for (let ratio = 0; ratio < 12; ratio += 0.01) {
+    const p = winChance(ratio);
+    assert.ok(p >= prev - 1e-12, `not monotonic at ratio ${ratio.toFixed(2)}: ${p} after ${prev}`);
+    assert.ok(p >= floor && p <= ceil, `out of range at ratio ${ratio.toFixed(2)}: ${p}`);
+    prev = p;
+  }
+  assert.equal(winChance(0), floor);
+  assert.equal(winChance(-3), floor);
+  assert.equal(winChance(NaN), floor);
+  assert.equal(winChance(undefined), floor);
+  assert.equal(winChance(Infinity), ceil);
+  assert.equal(winChance(1e9), ceil);
+  assert.ok(winChance(ECONOMY.surrenderRatio) >= 0.98, `a surrender (ratio ${ECONOMY.surrenderRatio}) is a near-certainty: ${winChance(ECONOMY.surrenderRatio)}`);
+  assert.ok(winChance(0.3) < 0.05, 'a hopeless fight reads hopeless');
+});
+
+test('difficulty() returns winChance, consistent with its own label, in real states (seeds 1-6, many decision points)', () => {
+  let checked = 0;
+  const seen = new Set();
+  for (let seed = 1; seed <= 6; seed++) {
+    const world = generateWorld(seed);
+    const state = createGame(seed, world, 0);
+    for (let step = 0; step < 30; step++) {
+      const fr = frontier(state, world);
+      if (!fr.length) break;
+      for (const id of fr) {
+        const d = difficulty(state, world, id);
+        assert.equal(d.winChance, winChance(d.ratio));
+        const [, lo, hi] = BANDS.find(([l]) => l === d.label);
+        assert.ok(d.winChance >= lo - 1e-12 && d.winChance <= hi + 1e-12, `seed ${seed} region ${id}: ${d.label} with winChance ${d.winChance}`);
+        seen.add(d.label);
+        checked += 1;
+      }
+      state.upgrades = { ...state.upgrades, muster: step * 6 }; // a growing army moves regions through the bands
+      const open = attackableFrontier(state, world);
+      if (!open.length) break;
+      conquer(state, world, open[step % open.length], 0);
+    }
+  }
+  assert.ok(checked > 200 && seen.size >= 3, `${checked} cards over labels ${[...seen]}`);
+});
+
+test('winChance against the bot in the fights a campaign picks (seeds 1-12): within 12 points of what the bot achieves, per ratio bin', () => {
+  const rows = [];
+  for (let seed = 1; seed <= 12; seed++) rows.push(...runCampaign(seed, {}).battleDurations);
+  // the bot only picks fights the card reads Fair or better, so the bins start at the Fair edge
+  const bins = [[1.1, 1.3], [1.3, 1.55], [1.55, 2.2], [2.2, Infinity]];
+  let judged = 0;
+  for (const [lo, hi] of bins) {
+    const xs = rows.filter((r) => r.ratio >= lo && r.ratio < hi);
+    if (xs.length < 25) continue;
+    judged += 1;
+    const won = xs.filter((r) => r.won).length / xs.length;
+    const said = xs.reduce((s, r) => s + winChance(r.ratio), 0) / xs.length;
+    assert.ok(Math.abs(won - said) <= 0.12, `ratio ${lo}-${hi}: the bot won ${(100 * won).toFixed(0)}% of ${xs.length}, winChance says ${(100 * said).toFixed(0)}%`);
+  }
+  assert.ok(judged >= 4, `only ${judged} bins had enough fights`);
 });

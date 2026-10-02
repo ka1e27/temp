@@ -1,7 +1,11 @@
-// Who owns what, as the PLAYER should currently SEE it inside a battle arena (DESIGN §7.3, PLAYFEEL §3).
+// Who owns what, as the PLAYER should currently SEE it inside a battle arena (DESIGN §7.3, §4.4, PLAYFEEL §3).
 // Pure bookkeeping (no DOM, no clock: callers pass `nowMs`), so the timing of the capture ripple,
 // the victory surrender cascade and the tile flood is unit-testable.
 //
+//  * WHO owns a tile comes from the simulation's own territory function (battle/territory.js `tileOwner`), the very rule that decides
+//    where squads may march (front lines, DESIGN §4.4), so what is drawn as your land is exactly the land you can cross. This file only
+//    adds TIMING on top (ripple, cascade, flood). Border-march corridors (`tile.link`) are no-man's-land: the sim never gives them an owner
+//    (-1), they are drawn untinted (render/arenaLayer.js adds a dashed edge) and they never ripple or flood.
 //  * Inside the target region every land tile (including impassable rock) belongs to its NEAREST
 //    settlement of that region, so the land itself recolours as settlements flip.
 //  * A capture ripples outward from the settlement: each tile of its cell flips a moment after the
@@ -10,6 +14,7 @@
 //    remaining enemy settlement flips one by one (cascade); until its turn each still DISPLAYS its
 //    old owner even though the simulation already flipped it.
 import { hexDistance } from '../core/hex.js';
+import { computeTerritory, tileOwner as simTileOwner } from '../battle/territory.js';
 
 /**
  * @param {import('../world/generate.js').World} world
@@ -21,6 +26,8 @@ export function createArenaOwnership(world, battle, regionId, worldOwners) {
   const region = world.regions[regionId];
   const regionTiles = region.tiles.map((i) => world.tiles[i]).filter((t) => t.land);
   const targetSites = battle.sites.filter((s) => world.tiles[s.tile]?.region === regionId);
+  // corridor tiles: untinted no-man's-land, never recoloured
+  const linkTiles = new Set((battle.arena.tiles || []).filter((t) => t.link).map((t) => t.i));
 
   // Voronoi over every land tile of the region (rock included): nearest target-region site by hex
   // distance, ties to the lower site id.
@@ -36,6 +43,7 @@ export function createArenaOwnership(world, battle, regionId, worldOwners) {
     }
     if (best != null) {
       voronoi.set(t.i, best);
+      if (linkTiles.has(t.i)) continue; // a corridor is nobody's: it does not ripple with the settlement that is nearest to it
       if (!cells.has(best)) cells.set(best, []);
       cells.get(best).push(t);
     }
@@ -55,9 +63,11 @@ export function createArenaOwnership(world, battle, regionId, worldOwners) {
   /** Owner the land of `tile` DISPLAYS at `nowMs` (-1 = none). Works for any world tile. */
   function tileOwner(tile, nowMs) {
     if (!tile || !tile.land || tile.region < 0) return -1;
+    const o = tileOverride.get(tile.i);
+    if (o && nowMs < o.until) return o.owner;
+    // every tile the arena knows comes from the simulation's territory function; anything else (never drawn by the arena) from the world
+    if (computeTerritory(battle).owners.has(tile.i)) return simTileOwner(battle, tile.i);
     if (tile.region === regionId) {
-      const o = tileOverride.get(tile.i);
-      if (o && nowMs < o.until) return o.owner;
       const sid = voronoi.get(tile.i);
       const site = sid == null ? null : battle.sites[sid];
       return site ? site.owner : -1;
@@ -101,7 +111,7 @@ export function createArenaOwnership(world, battle, regionId, worldOwners) {
    *   time (the scene spawns the shimmer at each `at`); `endMs` is when the last tile has flipped.
    */
   function startFlood(nowMs, startMs, msPerHex, keepTile, prevSiteOwner) {
-    const schedule = regionTiles.map((tile) => ({
+    const schedule = regionTiles.filter((t) => !linkTiles.has(t.i)).map((tile) => ({
       tile,
       at: startMs + hexDistance(tile.q, tile.r, keepTile.q, keepTile.r) * msPerHex,
     }));
@@ -133,6 +143,6 @@ export function createArenaOwnership(world, battle, regionId, worldOwners) {
   }
 
   return {
-    regionTiles, voronoi, cells, siteOwner, tileOwner, signature, onCapture, startFlood, startCascade, settle,
+    regionTiles, voronoi, cells, linkTiles, siteOwner, tileOwner, signature, onCapture, startFlood, startCascade, settle,
   };
 }

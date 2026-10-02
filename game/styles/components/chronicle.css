@@ -1,0 +1,149 @@
+/* The Chronicle section of the Realm panel (ui/chroniclePanel.js) — DESIGN §5.9.
+   data-mode on .chron: dynasty | all. Everything comes from tokens.css. */
+
+.chron { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+
+.chron-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
+.chron-title {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* the "This dynasty / All time" toggle: one pill, two halves */
+.chron-seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border-light);
+}
+.chron-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 2px 11px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.chron-seg-btn:hover { color: var(--text); }
+.chron-seg-btn[data-on='1'] { background: var(--btn-primary-grad); color: var(--btn-primary-text); }
+.chron-seg-count { opacity: 0.7; font-weight: 700; }
+@media (pointer: coarse) { .chron-seg-btn { min-height: var(--touch-target); padding-inline: 14px; } }
+
+/* the list: scrolls on its own on a desktop; on a phone it flows with the Realm panel, which scrolls */
+.chron-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 2px 4px 2px 0;
+  max-height: 272px;
+  list-style: none;
+}
+.chron-list[hidden], .chron-empty[hidden] { display: none; }
+.chron-seg-btn:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+/* inside the box, so the Realm body's own scroll clipping never cuts the ring */
+.chron-list:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: -2px; border-radius: var(--panel-radius-sm); }
+
+.chron-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 7px 8px 7px 6px;
+  border-radius: var(--panel-radius-sm);
+  border-left: 2px solid transparent;
+}
+.chron-row[data-highlight='1'] {
+  border-left-color: color-mix(in srgb, var(--gold) 70%, transparent);
+  background: linear-gradient(90deg, rgba(245, 196, 81, 0.09), transparent 70%);
+}
+.chron-row:hover { background: rgba(255, 255, 255, 0.04); }
+
+.chron-chip {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 12%, rgba(255, 255, 255, 0.05));
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, transparent);
+}
+.chron-row[data-highlight='1'] .chron-chip {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(245, 196, 81, 0.3);
+}
+.chron-chip .icon { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45)); }
+
+.chron-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.chron-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  line-height: 1.32;
+  color: var(--text);
+  text-wrap: pretty;
+}
+.chron-meta { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 700; color: var(--text-dim); }
+.chron-year { color: color-mix(in srgb, var(--gold) 80%, var(--text-muted)); }
+
+/* a dynasty divider in the all-time list */
+.chron-chapter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 2px;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.chron-chapter::after { content: ''; flex: 1; height: 1px; background: var(--panel-border-light); }
+.chron-chapter:first-child { margin-top: 2px; }
+
+.chron-empty {
+  margin: 0;
+  padding: var(--sp-3);
+  border-radius: var(--panel-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--panel-border-light);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+html.reduce-motion .chron-seg-btn { transition: none; }
+
+/* Phones: the Realm panel scrolls, so the list does not scroll inside it. */
+@media (max-width: 640px) {
+  .chron-list { max-height: none; overflow: visible; padding-right: 0; }
+  .chron-row { gap: 9px; }
+}
+
+/* "Save the map" (ui/saveMapButton.js): under the Chronicle in the Realm panel, and in the Found a Dynasty confirmation. The button
+   itself is the shared .btn; busy shows a progress cursor (the label already says "Saving..."). */
+.keepsake-save[aria-busy='true'] { cursor: progress; }
+.keepsake-save-box { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-3); }
+.keepsake-save-note { margin: 0; font-size: var(--fs-sm); font-weight: 700; line-height: 1.35; color: var(--text-muted); text-wrap: pretty; }
+/* the result of "Save the map", said beside the button (it sits in a dialog, so never as a toast) */
+.keepsake-save-status { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); font-weight: 800; color: var(--good); overflow-wrap: anywhere; }
+.keepsake-save-status[data-kind="warning"] { color: var(--warn); }
+.keepsake-save-status[hidden] { display: none; }

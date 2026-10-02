@@ -8,6 +8,7 @@
 @import url('./components/hud.css');
 @import url('./components/regioncard.css');
 @import url('./components/intel.css');
+@import url('./components/works.css');
 @import url('./components/council.css');
 @import url('./components/battlehud.css');
 @import url('./components/results.css');
@@ -15,3 +16,6 @@
 @import url('./components/overlays.css');
 @import url('./components/crowns.css');
 @import url('./components/leaderbanner.css');
+@import url('./components/chronicle.css');
+@import url('./components/regions.css');
+@import url('./components/a11y.css'); /* last: it only ever RAISES sizes (touch targets), so it must win the cascade */

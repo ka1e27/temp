@@ -6,6 +6,10 @@
 
 import { PLAYER_FACTION, defaultStats, defaultSettings } from './state.js';
 import { sanitizeIntel } from './intelState.js';
+import { sanitizeWorks } from './worksEffects.js';
+import { sanitizeChronicle } from './chronicleState.js';
+import { UPGRADES } from './upgrades.js';
+import { FACTIONS } from '../config/world.js';
 
 export const SAVE_KEY = 'hexdominion.v2';
 const CURRENT_VERSION = 1;
@@ -20,12 +24,47 @@ function plainObject(value) {
   return value != null && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
+/** A finite number clamped to [min, max] and truncated to an integer when `int`; anything else is `fallback`. */
+function clampNum(value, fallback, min, max, int = false) {
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  const c = Math.min(max, Math.max(min, n));
+  return int ? Math.trunc(c) : c;
+}
+
+const FREE_FOLK = 1;
+
+/** Owner per region: faction ids that exist (below the number of factions); junk becomes Free Folk, never the player's. */
 function numArray(value) {
-  return Array.isArray(value) ? value.map((v) => (typeof v === 'number' ? v : PLAYER_FACTION)) : [];
+  return Array.isArray(value) ? value.map((v) => (Number.isInteger(v) && v >= 0 && v < FACTIONS.length ? v : FREE_FOLK)) : [];
 }
 
 function nullableNumArray(value) {
-  return Array.isArray(value) ? value.map((v) => (typeof v === 'number' ? v : null)) : [];
+  return Array.isArray(value) ? value.map((v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)) : [];
+}
+
+/** Upgrade levels: only upgrades that exist, integer levels within their maximum (200 when they have none). The free Rally power is always at least level 1. */
+function sanitizeUpgrades(raw) {
+  const src = plainObject(raw);
+  const out = { rally: 1 };
+  for (const id of Object.keys(UPGRADES)) {
+    if (!(id in src)) continue;
+    const max = UPGRADES[id].max ?? 200;
+    out[id] = clampNum(src[id], 0, 0, max, true);
+  }
+  if (!(out.rally >= 1)) out.rally = 1;
+  return out;
+}
+
+/** Lifetime stats: the known counters only, each a finite non-negative number (`bestBattleSec` null or one). A string in `playSec` used to grow forever. */
+function sanitizeStats(raw) {
+  const d = defaultStats();
+  const src = plainObject(raw);
+  const out = {};
+  for (const k of Object.keys(d)) {
+    if (k === 'bestBattleSec') out[k] = typeof src[k] === 'number' && Number.isFinite(src[k]) && src[k] >= 0 ? src[k] : null;
+    else out[k] = clampNum(src[k], d[k], 0, 1e15);
+  }
+  return out;
 }
 
 /**
@@ -50,6 +89,53 @@ function factionIdList(value) {
 
 const SMALL_INT_MAX = 99;
 
+/** The sim's battle format (battle/sim.js `createBattle` writes `version: 1`). A saved battle of another version is dropped on load, never resumed. */
+export const BATTLE_SAVE_VERSION = 1;
+
+/**
+ * Is `b` a battle the game can resume? The right version, the arrays the sim and the scene index into, an arena naming a real region and real tiles. Cheap shape
+ * checks only (no sim is run): a save from another build, a hand-edited or half-written one, or `{}` is refused here instead of crashing the scene later.
+ * @param {unknown} b
+ * @param {number} [regionCount] when given, the arena's region id must be below it
+ * @returns {boolean}
+ */
+export function plausibleBattle(b, regionCount = Infinity) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return false;
+  if (b.version !== BATTLE_SAVE_VERSION) return false;
+  if (!Array.isArray(b.sites) || b.sites.length < 2 || !Array.isArray(b.squads)) return false;
+  const a = b.arena;
+  if (!a || typeof a !== 'object' || !Number.isInteger(a.regionId) || a.regionId < 0 || a.regionId >= regionCount) return false;
+  if (!Array.isArray(a.tiles) || a.tiles.length === 0 || !Array.isArray(a.sites) || a.sites.length !== b.sites.length) return false;
+  if (!Number.isFinite(b.t) || !b.player || typeof b.player !== 'object' || !b.enemy || typeof b.enemy !== 'object') return false;
+  return b.sites.every((s) => s && Number.isInteger(s.id) && Number.isInteger(s.tile) && Number.isFinite(s.troops) && Number.isInteger(s.owner));
+}
+
+/**
+ * The player's settings, whitelisted and clamped: only known keys, booleans where booleans belong, `speed` one of the real speeds, volumes finite and within
+ * 0..1. An old save that stored `reduceMotion: true` counts as the player's own choice (`reduceMotionSet`), so the OS preference never overrides it.
+ * @param {unknown} raw
+ * @returns {import('./state.js').GameSettings}
+ */
+export function sanitizeSettings(raw) {
+  const d = defaultSettings();
+  const src = plainObject(raw);
+  const bool = (k) => (typeof src[k] === 'boolean' ? src[k] : d[k]);
+  const unit = (k) => (typeof src[k] === 'number' && Number.isFinite(src[k]) ? Math.min(1, Math.max(0, src[k])) : d[k]);
+  return {
+    sound: bool('sound'),
+    reduceMotion: bool('reduceMotion'),
+    reduceMotionSet: typeof src.reduceMotionSet === 'boolean' ? src.reduceMotionSet : src.reduceMotion === true,
+    hints: bool('hints'),
+    speed: [0.5, 1, 2, 3].includes(src.speed) ? src.speed : d.speed,
+    // an older save that was left on the 0.5x assist speed keeps it available
+    slowBattles: typeof src.slowBattles === 'boolean' ? src.slowBattles : src.speed === 0.5,
+    leaderVoices: bool('leaderVoices'),
+    music: bool('music'),
+    musicVolume: unit('musicVolume'),
+    sfxVolume: unit('sfxVolume'),
+  };
+}
+
 /**
  * Per-region small counters (prosperity levels): non-negative integers capped at 99, junk
  * becomes 0 so region ids keep their slot. The living-map module clamps to its own maximum on read.
@@ -57,6 +143,27 @@ const SMALL_INT_MAX = 99;
 function smallIntList(value) {
   if (!Array.isArray(value)) return [];
   return value.map((v) => (Number.isInteger(v) && v > 0 ? Math.min(v, SMALL_INT_MAX) : 0));
+}
+
+/**
+ * The old tutorial was a linear counter ({ step, done }, steps 0 to 6: gold, region, Attack, War Camp drag, keep, Rally, council). The new one is a
+ * set of seen step ids. A save in the old shape keeps what it had seen; a player who finished the old tutorial is marked as having seen the steps
+ * it covered (W0 to W3, B1, B3, B5, M1) and will meet the new ones (send size, selecting several, supply lines, pause and speed, powers, scouting,
+ * works, the dynasty) when they become relevant.
+ * @param {unknown} raw
+ * @returns {{ seen: Object<string, boolean>, done: boolean }}
+ */
+export function migrateTutorial(raw) {
+  const src = plainObject(raw);
+  const seen = {};
+  if (src.seen && typeof src.seen === 'object' && !Array.isArray(src.seen)) {
+    for (const [id, v] of Object.entries(src.seen)) if (v && /^[A-Z]\d{1,2}$/.test(id)) seen[id] = true;
+    return { seen, done: !!src.done };
+  }
+  const OLD_ORDER = [['W0', 'W1'], ['W2'], ['W3'], ['B1'], ['B3'], ['B5'], ['M1']];
+  const reached = src.done ? OLD_ORDER.length : Math.max(0, Math.min(OLD_ORDER.length, num(src.step, 0)));
+  for (let i = 0; i < reached; i++) for (const id of OLD_ORDER[i]) seen[id] = true;
+  return { seen, done: false };
 }
 
 /**
@@ -69,28 +176,33 @@ function smallIntList(value) {
 function withDefaults(raw) {
   const src = plainObject(raw);
   const dynastySrc = plainObject(src.dynasty);
-  const tutorialSrc = plainObject(src.tutorial);
+  const owner = numArray(src.owner);
+  // an in-progress battle survives only if it can really be resumed AND its region is still the enemy's (a save of a won region would resume a ghost fight)
+  const battle = plausibleBattle(src.battle, owner.length) && owner[src.battle.arena.regionId] !== PLAYER_FACTION ? src.battle : null;
 
   return {
     version: CURRENT_VERSION,
-    seed: num(src.seed, 1),
+    seed: clampNum(src.seed, 1, 0, 4294967295, true),
     dynasty: {
-      level: num(dynastySrc.level, 1),
-      stars: num(dynastySrc.stars, 0),
+      level: clampNum(dynastySrc.level, 1, 1, 99, true), // a runaway level would make a continent nobody can generate
+      stars: clampNum(dynastySrc.stars, 0, 0, 1e6, true),
     },
-    gold: num(src.gold, 0),
-    owner: numArray(src.owner),
+    gold: clampNum(src.gold, 0, 0, 1e30),
+    owner,
     conqueredAt: nullableNumArray(src.conqueredAt),
     crowns: crownList(src.crowns),
     metFactions: factionIdList(src.metFactions),
     intel: sanitizeIntel(src.intel),
     prosperity: smallIntList(src.prosperity),
-    upgrades: { rally: 1, ...plainObject(src.upgrades) },
-    stats: { ...defaultStats(), ...plainObject(src.stats) },
-    settings: { ...defaultSettings(), ...plainObject(src.settings) },
-    tutorial: { step: num(tutorialSrc.step, 0), done: !!tutorialSrc.done },
-    lastSeen: num(src.lastSeen, 0),
-    battle: src.battle ?? null,
+    works: sanitizeWorks(src.works),
+    upgrades: sanitizeUpgrades(src.upgrades),
+    stats: sanitizeStats(src.stats),
+    chronicle: sanitizeChronicle(src.chronicle), // never throws: junk becomes an empty story, the lists are capped (meta/chronicleState.js)
+    settings: sanitizeSettings(src.settings),
+    tutorial: migrateTutorial(src.tutorial),
+    saveSeq: clampNum(src.saveSeq, 0, 0, 1e12, true),
+    lastSeen: clampNum(src.lastSeen, 0, 0, 1e14), // 0 = unknown: the shell treats it as "now" (no welcome-back for a clock that never ran)
+    battle,
   };
 }
 
@@ -221,6 +333,9 @@ function base64ToBytes(b64) {
   return bytes;
 }
 
+/** Longest import string accepted (characters, whitespace included): many times a realistic late-game save code. */
+export const MAX_IMPORT_CHARS = 262144;
+
 /** @param {import('./state.js').GameState} state @returns {string} */
 export function exportCode(state) {
   return bytesToBase64(utf8Encode(serialize(state)));
@@ -235,6 +350,8 @@ export function exportCode(state) {
  */
 export function importCode(code) {
   try {
+    // a real save code is a few KB; a pasted novel (or a hostile megabyte) is refused before it is decoded
+    if (String(code).length > MAX_IMPORT_CHARS) return null;
     const cleaned = String(code).replace(/\s+/g, '');
     const json = utf8Decode(base64ToBytes(cleaned));
     return deserialize(json);

@@ -4,6 +4,8 @@
 //   node tools/serve.js                       # the repo at http://localhost:8080/
 //   node tools/serve.js --base=/temp/         # the repo at http://localhost:8080/temp/, NOTHING at /
 //   node tools/serve.js --root=_site --port=9000
+//   node tools/serve.js --hooks               # test hooks for tools/check.mjs --base: ?__respond=503 answers with that status (an HTML error page), ?__portal=1 answers
+//                                             # 200 text/html whatever was asked for (a captive portal), so the service worker's fallbacks can be exercised for real
 //   env: PORT, BASE_PATH, ROOT_DIR (flags win)
 //
 // GitHub Pages serves this site from a project subpath (https://ka1e27.github.io/temp/), never from
@@ -37,6 +39,7 @@ function normaliseBase(raw) {
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 const BASE = normaliseBase(flags.base ?? process.env.BASE_PATH);
+const HOOKS = flags.hooks === 'true';
 
 // `.js` MUST be text/javascript or the browser refuses to execute the module.
 const MIME = {
@@ -71,6 +74,18 @@ const server = createServer(async (req, res) => {
     rel = rel.slice(BASE.length);
   }
   if (rel === '/') rel = '/index.html';
+
+  if (HOOKS) {
+    const forced = Number(url.searchParams.get('__respond'));
+    if (forced >= 100 && forced < 600) {
+      res.writeHead(forced, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end(`<h1>${forced}</h1>`);
+      return;
+    }
+    if (url.searchParams.has('__portal')) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end('<html><body>Sign in to the Wi-Fi network</body></html>');
+      return;
+    }
+  }
 
   // Contain path traversal: resolve, then verify the result is still under ROOT.
   const abs = join(ROOT, normalize(rel));

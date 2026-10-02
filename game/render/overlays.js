@@ -164,6 +164,25 @@ export function createOverlays(world) {
     drawOutline(ctx, camera, regionId, '#ffe9a6', 3.6 + breathe * 0.8, null, 1);
   }
 
+  /**
+   * The region a tutorial hint points at: a bright, thick, pulsing outline (a dark casing under a warm white core) and a faint wash. The frontier band is meant
+   * to invite; this one is meant to be found in a second, at any zoom, on any terrain. `t` 0 keeps it still (Reduce Motion).
+   */
+  function drawHintRegion(ctx, camera, regionId, t) {
+    const breathe = 0.5 + 0.5 * Math.sin(t * 5);
+    fillRegion(ctx, camera, regionId, '#fff6d0', 0.07 + breathe * 0.06);
+    const bandPx = 0.4 * camera.zoom;
+    drawInnerGlow(ctx, camera, regionId, '#ffe08a', [bandPx * 2.8, bandPx * 1.6, bandPx * 0.8], [0.14, 0.22, 0.32 + breathe * 0.12]);
+    drawOutline(ctx, camera, regionId, 'rgba(18,10,0,0.85)', 10.5, null, 1);
+    drawOutline(ctx, camera, regionId, '#fff3c0', 5.2 + breathe * 1.6, null, 1);
+  }
+
+  /** The keyboard cursor: a white dashed ring over a dark casing (it must read on every terrain and tint, and differ from the gold selection and the tutorial glow). */
+  function drawCursor(ctx, camera, regionId, t) {
+    drawOutline(ctx, camera, regionId, 'rgba(6,8,16,0.92)', 9, null, 1);
+    drawOutline(ctx, camera, regionId, '#ffffff', 4.4, [11, 7], 1, -t * 26);
+  }
+
   // --- frontier invitation: baked once per region + zoom bucket ------------------------
   // Clipped wide strokes over a many-segment Path2D are by far the most expensive thing
   // in the world frame on a hi-dpi GPU (~10 ms with a handful of frontier regions), yet
@@ -310,6 +329,8 @@ export function createOverlays(world) {
     drawHover,
     drawSelected,
     drawFrontierPulse,
+    drawHintRegion,
+    drawCursor,
     setPixelRatio,
     drawArenaGlow,
     drawTargetRing,

@@ -4,16 +4,22 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { createModal } from './modal.js';
+import { showControls } from './controls.js';
+import { watchDialog } from './dialogs.js';
 
+let toggleSeq = 0;
+
+// A switch is named by the visible label next to it (aria-labelledby), and says on / off through aria-checked.
 function toggleRow({ label, iconOn, iconOff, checked, onToggle }) {
+  const labelId = `settings-switch-${++toggleSeq}`;
   const btn = h('button.settings-toggle', {
-    role: 'switch', 'aria-checked': String(!!checked),
+    role: 'switch', 'aria-checked': String(!!checked), 'aria-labelledby': labelId,
     onClick: () => onToggle?.(!btn.classList.contains('is-on')),
   }, h('span.settings-toggle-knob', {}));
   btn.classList.toggle('is-on', !!checked);
 
   const row = h('div.settings-row', {},
-    h('span.settings-row-label', {}, iconOn ? icon(checked ? iconOn : (iconOff || iconOn), 18) : null, label),
+    h('span.settings-row-label', { id: labelId }, iconOn ? icon(checked ? iconOn : (iconOff || iconOn), 18) : null, label),
     btn,
   );
   row.setToggle = (on) => {
@@ -29,13 +35,13 @@ function toggleRow({ label, iconOn, iconOff, checked, onToggle }) {
 
 /**
  * @param {{ onToggleSound?: (v: boolean) => void, onToggleReduceMotion?: (v: boolean) => void,
- *   onToggleHints?: (v: boolean) => void, onToggleLeaderVoices?: (v: boolean) => void,
- *   onToggleMusic?: (v: boolean) => void, onMusicVolume?: (v: number, final: boolean) => void, onExport?: () => string, onImport?: (code: string) => boolean,
+ *   onToggleHints?: (v: boolean) => void, onToggleSlowBattles?: (v: boolean) => void, onToggleLeaderVoices?: (v: boolean) => void,
+ *   onToggleMusic?: (v: boolean) => void, onMusicVolume?: (v: number, final: boolean) => void, onSfxVolume?: (v: number, final: boolean) => void, onReplayTutorial?: () => void, onExport?: () => string, onImport?: (code: string) => boolean,
  *   onReset?: () => void, onClose?: () => void }} [callbacks]
  */
 export function createSettings({
-  onToggleSound, onToggleReduceMotion, onToggleHints, onToggleLeaderVoices, onToggleMusic, onMusicVolume,
-  onExport, onImport, onReset, onClose,
+  onToggleSound, onToggleReduceMotion, onToggleHints, onToggleSlowBattles, onToggleLeaderVoices, onToggleMusic, onMusicVolume, onSfxVolume,
+  onReplayTutorial, onExport, onImport, onReset, onClose,
 } = {}) {
   const soundRow = toggleRow({
     label: 'Sound', iconOn: 'sound-on', iconOff: 'sound-off', checked: true,
@@ -53,6 +59,14 @@ export function createSettings({
   });
   const volumeRow = h('div.settings-row.settings-volume-row', {},
     h('span.settings-row-label', {}, 'Music volume'), volumeInput);
+  // the sound effects have their own level (the score has Music volume); letting go of the slider plays a sample, so it can be heard
+  const sfxInput = h('input.settings-slider', {
+    type: 'range', min: 0, max: 100, step: 5, value: 100, 'aria-label': 'Effects volume',
+    onInput: (e) => onSfxVolume?.(Number(e.target.value) / 100, false),
+    onChange: (e) => onSfxVolume?.(Number(e.target.value) / 100, true),
+  });
+  const sfxRow = h('div.settings-row.settings-volume-row.settings-sfx-row', {},
+    h('span.settings-row-label', {}, 'Effects volume'), sfxInput);
   const motionRow = toggleRow({
     label: 'Reduce motion', checked: false,
     onToggle: (v) => { motionRow.setToggle(v); onToggleReduceMotion?.(v); },
@@ -62,17 +76,49 @@ export function createSettings({
     onToggle: (v) => { hintsRow.setToggle(v); onToggleHints?.(v); },
   });
 
+  const slowRow = toggleRow({
+    label: 'Slow battles', checked: false,
+    onToggle: (v) => { slowRow.setToggle(v); onToggleSlowBattles?.(v); },
+  });
+  slowRow.title = 'Adds a half-speed setting to the battle speed button';
+
+  // Replay the tutorial (every hint unseen again) and read every control
+  const helpRow = h('div.settings-row.settings-help-row', {},
+    h('button.btn.btn-secondary.settings-replay', { onClick: () => onReplayTutorial?.() }, icon('star', 16), 'Replay tutorial'),
+    h('button.btn.btn-secondary.settings-controls', { onClick: () => showControls() }, icon('scroll', 16), 'Controls'));
+
   const voicesRow = toggleRow({
     label: 'Leader voices', checked: true,
     onToggle: (v) => { voicesRow.setToggle(v); onToggleLeaderVoices?.(v); },
   });
 
   const exportArea = h('textarea.settings-code', {
-    readOnly: true, rows: 3, placeholder: 'Tap "Export" to generate a save code…',
+    readOnly: true, rows: 3, placeholder: 'Tap "Export" to generate a save code…', 'aria-label': 'Exported save code',
     onClick: (e) => e.target.select(),
   });
-  const importArea = h('textarea.settings-code', { rows: 3, placeholder: 'Paste a save code here…' });
-  const importMsg = h('span.settings-import-msg', {}, '');
+  const importArea = h('textarea.settings-code', { rows: 3, placeholder: 'Paste a save code here…', 'aria-label': 'Save code to import' });
+  // the result of an import is announced (polite live region)
+  const importMsg = h('span.settings-import-msg', { role: 'status', 'aria-live': 'polite' }, '');
+
+  // Copy: the code is long and a phone cannot select all of it by hand; "Copied" confirms it (said aloud as well, polite status)
+  const copyMsg = h('span.settings-import-msg', { role: 'status', 'aria-live': 'polite' }, '');
+  let copyTimer = 0;
+  async function copyCode() {
+    const text = exportArea.value || onExport?.() || '';
+    exportArea.value = text;
+    let done = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); done = true; }
+    } catch { /* not allowed here: fall back to selecting it */ }
+    if (!done) {
+      exportArea.select();
+      try { done = document.execCommand('copy'); } catch { done = false; }
+    }
+    copyMsg.textContent = done ? 'Copied' : 'Select the code and copy it';
+    copyMsg.classList.toggle('is-error', !done);
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => { copyMsg.textContent = ''; }, 2500);
+  }
 
   const resetBtn = h('button.btn.btn-danger.btn-block', { onClick: () => confirmReset() }, icon('flame', 16), 'Reset Save');
 
@@ -82,13 +128,17 @@ export function createSettings({
       h('button.btn-icon.settings-close', { onClick: () => onClose?.(), 'aria-label': 'Close' }, icon('close', 16)),
     ),
     h('div.settings-body.scroll-y', {},
-      h('section.settings-section', {}, soundRow, musicRow, volumeRow, motionRow, hintsRow, voicesRow),
+      h('section.settings-section', {}, soundRow, musicRow, volumeRow, sfxRow, motionRow, slowRow, hintsRow, helpRow, voicesRow),
       h('section.settings-section', {},
         h('h3.settings-subtitle', {}, 'Save code'),
         exportArea,
-        h('button.btn.btn-secondary.btn-block', {
-          onClick: () => { exportArea.value = onExport?.() || ''; exportArea.select(); },
-        }, 'Export'),
+        h('div.settings-import-row', {},
+          h('button.btn.btn-secondary.btn-block', {
+            onClick: () => { exportArea.value = onExport?.() || ''; exportArea.select(); },
+          }, 'Export'),
+          h('button.btn.btn-secondary.btn-block.settings-copy', { onClick: () => copyCode() }, icon('scroll', 16), 'Copy'),
+          copyMsg,
+        ),
         importArea,
         h('div.settings-import-row', {},
           h('button.btn.btn-secondary.btn-block', {
@@ -104,6 +154,9 @@ export function createSettings({
       h('section.settings-section', {}, resetBtn),
     ),
   );
+
+  // a dialog while it is visible: focus moves in, Tab is trapped, Escape closes, focus returns to the Settings button (ui/dialogs.js)
+  watchDialog(el, { onEscape: () => onClose?.() });
 
   function confirmReset() {
     const modal = createModal({
@@ -123,9 +176,11 @@ export function createSettings({
     if (data.sound != null) soundRow.setToggle(data.sound);
     if (data.reduceMotion != null) motionRow.setToggle(data.reduceMotion);
     if (data.hints != null) hintsRow.setToggle(data.hints);
+    if (data.slowBattles != null) slowRow.setToggle(data.slowBattles);
     if (data.leaderVoices != null) voicesRow.setToggle(data.leaderVoices);
     if (data.music != null) { musicRow.setToggle(data.music); volumeRow.classList.toggle('is-off', !data.music); }
     if (data.musicVolume != null) volumeInput.value = String(Math.round(data.musicVolume * 100));
+    if (data.sfxVolume != null) sfxInput.value = String(Math.round(data.sfxVolume * 100));
   }
 
   function destroy() {

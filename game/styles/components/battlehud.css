@@ -52,6 +52,18 @@
   color: var(--text-muted);
 }
 
+.power-btn.is-refused { animation: power-refused 480ms ease-out; box-shadow: 0 0 0 3px var(--bad); }
+@keyframes power-refused {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+.reduce-motion .power-btn.is-refused { animation: none; }
+.battle-swift { color: var(--gold-bright); white-space: nowrap; }
+.battle-swift.is-missed { color: var(--text-dim); opacity: 0.8; font-weight: 600; }
+
 /* --- top right: pause / speed / retreat ---------------------------------- */
 .battle-topright {
   position: absolute;
@@ -76,6 +88,24 @@
   gap: var(--sp-3);
   max-width: calc(100vw - 16px);
 }
+
+.battle-sendrow { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); max-width: 100%; }
+
+/* The Auto toggle (supply lines): a pill left of the send size. OFF is a quiet panel, ON is the gold primary with a halo, and the state is also spelled out. */
+.battle-auto {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  min-height: calc(var(--touch-target) + 8px); padding: 0 var(--sp-3) 0 var(--sp-2);
+  background: var(--panel-bg); -webkit-backdrop-filter: blur(var(--panel-blur)); backdrop-filter: blur(var(--panel-blur));
+  border: 1px solid var(--panel-border); border-radius: 999px; color: var(--text-muted);
+  transition: background var(--dur-fast), color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.battle-auto-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; }
+.battle-auto-icon svg { display: block; }
+.battle-auto-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }
+.battle-auto-name { font-weight: 800; font-size: var(--fs-sm); }
+.battle-auto-state { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
+.battle-auto.is-on { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: transparent; box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.4), 0 0 14px rgba(245, 196, 81, 0.35); }
+.battle-auto.is-on .battle-auto-state { opacity: 1; }
 
 .send-fraction-selector {
   display: flex;
@@ -110,13 +140,14 @@
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
   color: var(--text-muted);
-  font-size: 0.55rem;
+  font-size: 0.7rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.send-fraction-btn.is-active .send-fraction-key { color: var(--btn-primary-text); background: rgba(0, 0, 0, 0.25); }
+/* the active size's key badge: dark text on a translucent dark disc vanished where the badge leaves the gold chip (RC2: the "2" was unreadable at 50%) */
+.send-fraction-btn.is-active .send-fraction-key { color: var(--btn-primary-text); background: var(--gold); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.6); }
 
 /* 64px desktop / 56px phone (media query below), icon ~28px, a small-caps
    name below the circle, a hotkey badge (desktop only — Q/W/E/R/T), the
@@ -180,7 +211,7 @@
   background: rgba(0, 0, 0, 0.65);
   border: 1px solid var(--panel-border-light);
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 800;
   display: flex;
   align-items: center;
@@ -198,27 +229,32 @@
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.6);
   color: var(--gold);
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .power-name {
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
   text-align: center;
   /* "Forced March" is the longest name: wide enough that desktop never shows "FORCED MA..." */
-  max-width: 96px;
+  max-width: 112px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .power-name.is-locked { color: var(--text-dim); }
 .power-name-short { display: none; }
+/* a name that does not fit its room (any screen, any font) uses its short form ("March" for "Forced March") instead of an ellipsis */
+.power-name.is-short .power-name-full { display: none; }
+.power-name.is-short .power-name-short { display: inline; }
+/* still too wide in its short form (a narrow phone, a wide fallback font): tighten the tracking rather than cut it */
+.power-name.is-tight { letter-spacing: -0.03em; }
 
 .power-btn.is-locked { filter: grayscale(1); opacity: 0.45; }
 
@@ -265,7 +301,8 @@
   .power-buttons { max-width: 100%; justify-content: center; }
   .power-btn { width: 56px; height: 56px; }
   .power-hotkey { display: none; }
-  .power-name { font-size: 0.58rem; max-width: 62px; }
+  /* no extra tracking on phones: "BULWARK" was 1 px too wide for its 58 px column at 390 px and got an ellipsis */
+  .power-name { font-size: 0.7rem; max-width: 72px; letter-spacing: 0; }
   .power-name-full { display: none; }
   .power-name-short { display: inline; }
   .battle-speed span:last-child { display: inline; }
@@ -280,4 +317,33 @@
   .battle-bottom { bottom: calc(var(--sp-2) + env(safe-area-inset-bottom, 0px)); gap: var(--sp-2); }
   .power-btn { width: 52px; height: 52px; }
   .power-name { display: none; }
+}
+
+/* "Paused" in words (a battle also pauses itself while a dialog is open): a pill just under the top status pill. */
+.battle-paused-tag {
+  position: absolute;
+  left: 50%;
+  top: 94px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--panel-bg-solid);
+  border: 1px solid var(--panel-border-light);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.battle-paused-tag[hidden] { display: none; }
+@media (max-width: 840px) { .battle-paused-tag { top: 128px; } }
+@media (max-height: 480px) { .battle-paused-tag { top: 76px; } }
+
+/* A narrow AND short window (a desktop at 200% zoom: 720 x 450): the pill must keep its row UNDER the button cluster, not rise onto it */
+@media (max-height: 480px) and (max-width: 840px) {
+  .battle-top { top: 60px; }
 }

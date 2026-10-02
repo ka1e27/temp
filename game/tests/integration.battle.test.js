@@ -2,7 +2,7 @@
 // ownership timing (capture ripple, surrender cascade, victory flood).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createBattle, step, issue } from '../battle/sim.js';
+import { createBattle, step, issue, canRoute } from '../battle/sim.js';
 import { buildArena } from '../battle/arena.js';
 import { computeThreats, squadEtaSec, projectGarrison } from '../scenes/battleThreat.js';
 import { createArenaOwnership } from '../scenes/arenaOwnership.js';
@@ -22,12 +22,24 @@ function freshBattle() {
   return { world, battle: createBattle(arena, PLAYER, ENEMY) };
 }
 
-/** Sends `count` enemy troops from the enemy keep at one of the player's sites (bypassing the AI). */
+/**
+ * Sends `count` enemy troops at one of the player's sites (bypassing the AI). Since front lines (DESIGN 4.4) a send needs a route:
+ * the source is an enemy site with `canRoute(battle, 2, src, target)`, preferring the keep when it is allowed to fire.
+ */
 function launchEnemySquad(battle, targetSiteId, count) {
-  const enemyKeep = battle.sites.find((s) => s.owner === 2 && s.type === 'keep');
-  enemyKeep.troops = 200;
-  issue(battle, { type: 'send', owner: 2, from: enemyKeep.id, to: targetSiteId, fraction: count / 200 });
+  const foes = battle.sites.filter((s) => s.owner === 2);
+  const src = foes.find((s) => s.type === 'keep' && canRoute(battle, 2, s.id, targetSiteId)) || foes.find((s) => canRoute(battle, 2, s.id, targetSiteId));
+  assert.ok(src, 'some enemy site can reach the target');
+  src.troops = 200;
+  issue(battle, { type: 'send', owner: 2, from: src.id, to: targetSiteId, fraction: count / 200 });
   step(battle, 0.05);
+}
+/** One of the player's sites that an enemy site can send at (the front line; DESIGN 4.4), preferring a plain site over the camp. */
+function frontSite(battle) {
+  const reach = (m) => battle.sites.some((f) => f.owner === 2 && canRoute(battle, 2, f.id, m.id));
+  const mine = battle.sites.filter((s) => s.owner === 0 && reach(s));
+  assert.ok(mine.length, 'the enemy has a site facing one of ours');
+  return mine.find((s) => s.type !== 'camp') || mine[0];
 }
 
 test('threat readout: nothing incoming means no chips', () => {
@@ -37,7 +49,7 @@ test('threat readout: nothing incoming means no chips', () => {
 
 test('threat readout: a big squad on a small garrison says "falls, N short"; a small one says holds', () => {
   const { battle } = freshBattle();
-  const mine = battle.sites.find((s) => s.owner === 0 && s.type !== 'camp') || battle.sites.find((s) => s.owner === 0);
+  const mine = frontSite(battle);
   mine.troops = 10;
 
   launchEnemySquad(battle, mine.id, 40);
@@ -51,7 +63,7 @@ test('threat readout: a big squad on a small garrison says "falls, N short"; a s
 
   // A tiny squad against a strong garrison: holds, with a predicted loss.
   const b2 = freshBattle().battle;
-  const mine2 = b2.sites.find((s) => s.owner === 0);
+  const mine2 = frontSite(b2);
   mine2.troops = 60;
   launchEnemySquad(b2, mine2.id, 8);
   threat = computeThreats(b2).get(mine2.id);
@@ -73,7 +85,7 @@ test('threat readout ignores squads that are not heading for a player site', () 
 
 test('squad ETA shrinks as it marches; garrison projection grows then caps', () => {
   const { battle } = freshBattle();
-  const mine = battle.sites.find((s) => s.owner === 0);
+  const mine = frontSite(battle);
   launchEnemySquad(battle, mine.id, 20);
   const sq = battle.squads.find((s) => s.owner === 2);
   const e0 = squadEtaSec(battle, sq);

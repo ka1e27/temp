@@ -40,7 +40,21 @@
 }
 .owner-chip .icon { color: var(--chip-color, currentColor); }
 
-.region-card-body { display: flex; flex-direction: column; gap: var(--sp-3); }
+.region-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  flex: 1 1 auto;
+  min-height: 0; /* the body scrolls inside the card when the screen is short; the header above and the footer below stay put */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+/* The action footer: Attack (or Accept Surrender) is always on screen and never covers a row. */
+.region-card-footer { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--sp-2); }
+.region-card-footer[hidden] { display: none; }
+.region-card-hintslot { flex: 0 0 auto; height: 0; }
+.region-card-hintslot[hidden] { display: none; } /* opens at once: the bubble is placed against the card as it is this frame */
 
 .region-card-perk {
   display: flex;
@@ -112,7 +126,12 @@
 }
 .matchup-you-label strong { color: var(--faction-player); }
 
-.region-card-action { margin-top: var(--sp-1); }
+.region-card-action { margin-top: 0; }
+
+/* The chance of winning, in words under the bar (DESIGN 5.3); the two numbers are small print under that. */
+.matchup-chance { margin: 0; text-align: center; font-size: var(--fs-sm); font-weight: 800; color: var(--text); }
+.matchup-chance[hidden] { display: none; }
+.matchup-labels { font-size: var(--fs-xs); font-weight: 600; }
 
 /* Crowns (crownRow.js). Frontier: the open medals on desktop; on a phone bottom sheet one compact
    line instead (the sheet must stay short). Owned regions show their earned crowns everywhere. */
@@ -144,3 +163,37 @@
 .region-card-prosperity .icon { color: var(--gold); }
 .region-card-prosperity[hidden] { display: none; }
 .region-card-next { color: var(--text-dim); font-weight: 600; }
+
+/* Short screens (a phone on its side, 390 px high): tighter rows so the card fits without scrolling when it can; it scrolls when it cannot. */
+@media (max-height: 420px) {
+  .region-card { padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); }
+  .region-card-body { gap: 4px; }
+  .region-card-footer { gap: 4px; }
+  .region-card-name { font-size: var(--fs-md); }
+  .matchup-bar-track { height: 8px; }
+  .region-card-matchup { gap: 3px; }
+  .matchup-chip-row { margin-bottom: -2px; }
+  .region-card-perk { font-size: var(--fs-xs); }
+  .reward-line { font-size: var(--fs-xs); }
+  .region-card-rewards.is-pair { gap: 0 var(--sp-3); }
+  /* the three medals become the one "Par" line, as on a portrait phone */
+  .region-card-crowns:not(.is-owned) .crown-row,
+  .region-card-crowns:not(.is-owned) .region-card-crowns-label { display: none; }
+  .region-card-crowns:not(.is-owned) .region-card-par { display: block; }
+}
+
+/* A frontier region walled off by mountains: no Attack, a plain reason instead (arena.js canBuildArena). */
+.region-card-blocked {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3);
+  border-radius: var(--panel-radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed var(--panel-border-light);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.region-card-blocked[hidden] { display: none; }

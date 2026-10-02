@@ -162,6 +162,14 @@ const ICONS = {
   pause: () => [rect(5.5, 4, 4.4, 16, { rx: 1 }), rect(14.1, 4, 4.4, 16, { rx: 1 })],
   play: () => [polygon([[6, 3.5], [20, 12], [6, 20.5]])],
 
+  // A supply line: a source, chevrons flowing along the road, a destination. Symmetric about x = 12 so it sits centred in a round button.
+  supply: () => [
+    circle(3.8, 12, 2.8),
+    circle(20.2, 12, 2.8),
+    path('M7.6 7.8 11 12l-3.4 4.2', { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+    path('M12.6 7.8 16 12l-3.4 4.2', { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-opacity': 0.7 }),
+  ],
+
   speed: () => [
     polygon([[2.5, 5], [11, 12], [2.5, 19]]),
     polygon([[12, 5], [20.5, 12], [12, 19]], { 'fill-opacity': 0.65 }),

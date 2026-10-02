@@ -36,6 +36,9 @@
   font-weight: 700;
   font-size: var(--fs-md);
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.75), 0 0 4px rgba(0, 0, 0, 0.5);
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: rgba(12, 15, 24, 0.6); /* the tagline too sits straight on the map */
 }
 
 .title-actions {
@@ -49,11 +52,26 @@
 .title-version {
   position: absolute;
   bottom: var(--sp-3);
-  color: var(--text-dim);
-  font-size: var(--fs-xs);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  padding: 2px 12px;
+  border-radius: 999px;
+  /* it sits straight on the map: a dark backing so it reads over snow and sand too (DESIGN §7.5a) */
+  background: rgba(12, 15, 24, 0.82);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 700;
 }
 
 @media (max-width: 480px) {
   .title-screen { gap: var(--sp-5); }
+}
+
+/* A phone on its side (390 px high): the logo and the buttons sit side by side instead of stacked, and the version label goes to the corner, away from Settings. */
+@media (max-height: 520px) and (min-width: 600px) {
+  .title-screen { flex-direction: row; gap: 48px; padding: var(--sp-3) var(--sp-5); }
+  .title-logo-wrap { align-items: flex-start; text-align: left; }
+  .title-logo { font-size: clamp(2.2rem, 7vh, 3.6rem); }
+  .title-tagline { max-width: 330px; font-size: var(--fs-sm); }
+  .title-actions { width: min(300px, 40vw); gap: var(--sp-2); }
+  .title-btn { min-height: 46px; }
+  .title-version { left: var(--sp-3); bottom: var(--sp-2); }
 }

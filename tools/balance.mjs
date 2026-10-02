@@ -11,6 +11,8 @@
 // Usage:
 //   node tools/balance.mjs --tutorial [--seeds=1,2,...]   (first ring at game start: ratios, and
 //                          how long the optimiser bot and a first-timer take to win it)
+//   --works=KIND:LEVEL  every owned neighbour of the target carries that Work (barracks|stables|shrine|watchtower|all) at that level
+//   --supply      the bot also sets up supply lines (rear settlements feed the nearest front settlement)
 //   --varypowers  cycle which powers are owned (needed to fit what each power is worth)
 //   node tools/balance.mjs [--seeds=1,2,3,4,5,6] [--own=below|chain] [--tier=N]
 //                          [--ladder=0,2,4,...] [--dump=rows.json] [--json]
@@ -28,11 +30,10 @@ import { generateWorld } from '../game/world/generate.js';
 import { createGame } from '../game/meta/state.js';
 import { playerBattleStats, enemyBattleStats, difficulty } from '../game/meta/progression.js';
 import { buildArena } from '../game/battle/arena.js';
-import { createBattle, step, issue } from '../game/battle/sim.js';
+import { createBattle, step, issue, canRoute, routeFor } from '../game/battle/sim.js';
 import { think } from '../game/battle/ai.js';
 import { decide } from '../game/battle/bot.js';
-import { pathBetweenSites } from '../game/battle/runtime.js';
-import { TICK_SEC } from '../game/config/battle.js';
+import { TICK_SEC, patienceFor } from '../game/config/battle.js';
 
 export const LABELS = ['Easy', 'Fair', 'Hard', 'Deadly'];
 /** Win-rate band each label promises (DESIGN §5.3 as briefed by the lead). */
@@ -42,7 +43,7 @@ export const LABEL_BANDS = {
 // Negative rungs are handicaps (levels below zero: a weaker camp, softer blades) so the soft end of
 // the curve - tier 1-2 regions a fresh player beats at 100% - still gets some losses to fit.
 export const DEFAULT_LADDER = [-8, -6, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 17, 20, 24, 28, 33, 38, 44, 50, 58, 66, 76];
-export const BATTLE_CAP_SEC = 8 * 60; // same cap as the campaign: a timeout is a loss
+export const BATTLE_CAP_SEC = 8 * 60; // the old cap; battles now stop at the band's patience (config/battle.js PATIENCE_SEC): a timeout is a loss
 
 function parseArgs(argv) {
   const out = {};
@@ -89,6 +90,24 @@ function ownersFor(world, region, own) {
  * ladder unlocks them one at a time in arbitrary order, so the label must price each one. */
 export const UNLOCK_PATTERNS = [[0, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 1], [1, 1, 0, 0], [1, 1, 1, 0], [1, 1, 1, 1], [0, 0, 0, 1], [0, 1, 0, 0]];
 
+/**
+ * Region Works next to the target (DESIGN §5.8): every owned neighbour of `region` carries `kind` (barracks / stables / shrine /
+ * watchtower, or 'all' for the four at once) at `level`. Writes `state.works` directly (slots are a meta rule, not a battle one).
+ */
+export function withWorks(state, region, kind, level) {
+  if (!kind || kind === 'none') return state;
+  const single = kind.endsWith('1'); // 'watchtower1': only ONE owned neighbour has it, so the camp volley level is exactly `level`
+  const base = single ? kind.slice(0, -1) : kind;
+  const types = base === 'all' ? ['barracks', 'stables', 'shrine', 'watchtower'] : [base];
+  state.works = {};
+  for (const n of region.neighbors) {
+    if (state.owner[n] !== 0) continue;
+    state.works[n] = types.map((type) => ({ type, level }));
+    if (single) break;
+  }
+  return state;
+}
+
 export function stateAt(world, seed, region, level, own = 'half', powerRatio = 0.6, unlock = null) {
   const state = createGame(seed, world, 0);
   state.stats.battlesWon = 5; // a seasoned player (surrender offers are unlocked)
@@ -106,9 +125,9 @@ export function stateAt(world, seed, region, level, own = 'half', powerRatio = 0
 }
 
 /** Plays one full bot-vs-AI battle; returns { result, sec, timedOut }. `human` swaps in decideHuman. */
-export function runBattle(arena, player, enemy, capSec = BATTLE_CAP_SEC, human = false) {
+export function runBattle(arena, player, enemy, capSec = BATTLE_CAP_SEC, human = false, supply = false) {
   const battle = createBattle(arena, player, enemy);
-  const memo = {};
+  const memo = { supply };
   while (!battle.result && battle.t < capSec) {
     for (const cmd of think(battle, battle.t)) issue(battle, cmd);
     for (const cmd of (human ? decideHuman : decide)(battle, battle.t, memo)) issue(battle, cmd);
@@ -120,7 +139,8 @@ export function runBattle(arena, player, enemy, capSec = BATTLE_CAP_SEC, human =
 
 /**
  * A first-timer, not the optimiser: one order every 3.5-5 s, always "drag from the War Camp at the
- * nearest enemy settlement" (keep last), a second squad from a captured site once they own one,
+ * nearest enemy settlement the drag will let them reach" (front lines: unreachable targets do not glow; keep last),
+ * a second squad from a captured site once they own one,
  * Rally once after ~25 s when the hint tells them. Used to time the tutorial fight honestly.
  */
 export function decideHuman(battle, t, memo = {}) {
@@ -131,17 +151,19 @@ export function decideHuman(battle, t, memo = {}) {
   if (!camp) return [];
   const enemies = battle.sites.filter((x) => x.owner !== 0);
   if (enemies.length === 0) return [];
-  const nonKeep = enemies.filter((x) => x.type !== 'keep');
-  const pool = nonKeep.length ? nonKeep : enemies;
-  const cost = (a, b) => { const path = pathBetweenSites(battle, a.id, b.id); return path ? path.length : Infinity; };
+  const reachable = enemies.filter((x) => canRoute(battle, 0, camp.id, x.id));
+  if (reachable.length === 0) return [];
+  const nonKeep = reachable.filter((x) => x.type !== 'keep');
+  const pool = nonKeep.length ? nonKeep : reachable;
+  const cost = (a, b) => { const route = routeFor(battle, 0, a.id, b.id); return route ? route.tiles.length : Infinity; };
   const target = pool.slice().sort((a, b) => cost(camp, a) - cost(camp, b) || a.id - b.id)[0];
   const commands = [];
   if (t >= 25 && !memo.rallied && battle.player.powers.rally > 0 && t >= battle.cooldowns.rally) {
     const keep = enemies.find((x) => x.type === 'keep');
-    if (keep) { commands.push({ type: 'power', owner: 0, power: 'rally', target: keep.id }); memo.rallied = true; return commands; }
+    if (keep && battle.sites.some((x) => x.owner === 0 && canRoute(battle, 0, x.id, keep.id))) { commands.push({ type: 'power', owner: 0, power: 'rally', target: keep.id }); memo.rallied = true; return commands; }
   }
   const from = [camp.id];
-  const captured = battle.sites.filter((x) => x.owner === 0 && x.id !== camp.id && x.troops >= 8);
+  const captured = battle.sites.filter((x) => x.owner === 0 && x.id !== camp.id && x.troops >= 8 && canRoute(battle, 0, x.id, target.id));
   if (captured.length && memo.n % 2 === 0) from.push(captured[0].id);
   if (camp.troops >= 4) commands.push({ type: 'send', owner: 0, from, to: target.id, fraction: 0.5 });
   return commands;
@@ -159,7 +181,7 @@ export function tierBand(region) {
  */
 export function sweepRows({
   seeds = [1, 2, 3, 4, 5, 6], own = 'half', tier = null, ladder = DEFAULT_LADDER, maxRatio = 6, regionStride = 1,
-  powerRatios = [0.6], varyPowers = false,
+  powerRatios = [0.6], varyPowers = false, supply = false, works = null,
 } = {}) {
   const rows = [];
   for (const seed of seeds) {
@@ -171,17 +193,18 @@ export function sweepRows({
       for (const level of ladder) for (const powerRatio of powerRatios) {
         const unlock = varyPowers ? UNLOCK_PATTERNS[(region.id + Math.round(level * 3) + Math.round(powerRatio * 10) + seed) % UNLOCK_PATTERNS.length] : null;
         const state = stateAt(world, seed, region, level, own, powerRatio, unlock);
+        if (works) withWorks(state, region, works.kind, works.level);
         const d = difficulty(state, world, region.id);
-        const player = playerBattleStats(state, world);
+        const player = playerBattleStats(state, world, region.id);
         const enemy = enemyBattleStats(world, state, region.id);
         let arena;
         try { arena = buildArena(world, state.owner, region.id, player, enemy); } catch { break; }
-        const { result, sec, timedOut } = runBattle(arena, player, enemy);
+        const { result, sec, timedOut } = runBattle(arena, player, enemy, patienceFor(region), false, supply);
         rows.push({
-          seed, region: region.id, tier: region.tier, capital: region.isCapital,
+          seed, region: region.id, tier: region.tier, capital: region.isCapital, worksKind: works ? works.kind : 'none',
           band: tierBand(region), personality: enemy.personality, level, powerRatio,
           ratio: d.ratio, label: d.label, power: d.power, strength: d.strength,
-          win: result === 'win', sec, timedOut,
+          win: result === 'win', sec, timedOut, approach: arena.marches.filter((m) => m.approach).reduce((n, m) => n + m.tiles.length, 0), // tiles of the approach strip (a mountain border) in this arena, 0 for none
           enemySites: arena.sites.filter((s) => s.owner !== 0).map((s) => [s.type, s.troops, s.owner, s.capMult ?? 1]),
           friendSites: arena.sites.filter((s) => s.owner === 0).map((s) => [s.type, s.troops]),
           enemy: { troopMult: enemy.troopMult, growth: enemy.growth, thinkSec: enemy.thinkSec, atk: enemy.atk, def: enemy.def },
@@ -294,15 +317,15 @@ export function tutorialRows(seeds) {
   for (const seed of seeds) {
     const world = generateWorld(seed);
     const state = createGame(seed, world, 0);
-    const player = playerBattleStats(state, world);
     const ring = world.regions.filter((r) => r.tier === 1);
     for (const region of ring) {
+      const player = playerBattleStats(state, world, region.id);
       const d = difficulty(state, world, region.id);
       const enemy = enemyBattleStats(world, state, region.id);
       let arena;
       try { arena = buildArena(world, state.owner, region.id, player, enemy); } catch { continue; }
       const bot = runBattle(arena, player, enemy);
-      const human = runBattle(arena, player, enemy, BATTLE_CAP_SEC, true);
+      const human = runBattle(arena, player, enemy, BATTLE_CAP_SEC, true); // timed, not capped: the tutorial budget is measured on the clock
       rows.push({
         seed, region: region.name, sites: region.settlements.length, ratio: d.ratio, label: d.label,
         botWin: bot.result === 'win', botSec: bot.sec, humanWin: human.result === 'win', humanSec: human.sec,
@@ -338,6 +361,8 @@ async function main() {
     ladder: args.ladder ? String(args.ladder).split(',').map(Number) : DEFAULT_LADDER,
     powerRatios: args.powers ? String(args.powers).split(',').map(Number) : [0.6],
     varyPowers: !!args.varypowers,
+    supply: args.supply === 'overflow' ? 'overflow' : !!args.supply,
+    works: args.works ? { kind: String(args.works).split(':')[0], level: Number(String(args.works).split(':')[1] || 1) } : null,
   };
   if (args.tutorial) {
     printTutorial(tutorialRows(seeds));

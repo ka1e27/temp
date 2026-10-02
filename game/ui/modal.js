@@ -3,6 +3,7 @@
 // game/ui components. Browser only; no game-logic imports.
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
+import { openDialog, closeDialog } from './dialogs.js';
 
 /**
  * @typedef {Object} ModalAction
@@ -36,7 +37,7 @@ export function createModal(initial = {}, { onDismiss } = {}) {
   const backdrop = h('div.modal-backdrop', {
     onClick: (e) => { if (e.target === backdrop) dismiss(); },
   },
-    h('div.modal-panel.glass-panel', { role: 'dialog', 'aria-modal': 'true' },
+    h('div.modal-panel.glass-panel', { role: 'dialog' },
       h('div.modal-header', {}, titleEl, closeBtn),
       bodyEl,
       actionsEl,
@@ -47,10 +48,16 @@ export function createModal(initial = {}, { onDismiss } = {}) {
     if (dismissible) onDismiss?.();
   }
 
-  function onKeydown(e) {
-    if (e.key === 'Escape') dismiss();
-  }
-  window.addEventListener('keydown', onKeydown);
+  // Focus moves in (the first action: every confirmation lists its safe choice first), Tab is trapped, Escape dismisses, focus is restored on destroy
+  // (ui/dialogs.js). Callers append the backdrop right after creating it, so it is connected by the time this microtask runs.
+  queueMicrotask(() => {
+    if (!backdrop.isConnected) return;
+    openDialog(backdrop, {
+      labelEl: backdrop.firstChild, titleEl,
+      onEscape: () => dismiss(),
+      initialFocus: () => actionsEl.querySelector('button') || (dismissible ? closeBtn : null),
+    });
+  });
 
   function update(data = {}) {
     if (data.title != null) titleEl.textContent = data.title;
@@ -75,7 +82,7 @@ export function createModal(initial = {}, { onDismiss } = {}) {
   update(initial);
 
   function destroy() {
-    window.removeEventListener('keydown', onKeydown);
+    closeDialog(backdrop);
     backdrop.remove();
   }
 

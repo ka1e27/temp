@@ -62,6 +62,137 @@ export function createArenaLayer(world) {
 
   function end() {
     arena = null;
+    corridor = null;
+  }
+
+  // ---- border-march corridors (DESIGN 4.4) -------------------------------------------------------
+  // Corridors (`link` tiles) are no-man's-land: never tinted, never recoloured on a capture. Only their OUTLINE is drawn, a subtle dashed edge,
+  // so a player sees where troops may cross enemy ground without that ground looking like anyone's.
+  const DIRS = [[1, -1], [1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1]]; // the neighbour across edge k (between corners k and k+1)
+  let corridor = null; // world-space segments [x1, y1, x2, y2]
+  let pass = null; // mountain pass: { polys: [[x, y]...][], track: [x1, y1, x2, y2][] } (a strip that crosses a ridge)
+
+  /**
+   * @param {object[]} tiles the world tiles of the arena's `link` tiles
+   * @param {object[]} [passTiles] the subset that is a mountain pass (still mountains in the world; the arena lets troops cross them): drawn as a stone fill over the peaks
+   * @param {{ points: {x:number,y:number}[], exit: {x:number,y:number}|null, toward: {x:number,y:number}|null }[]} [roads] the routes squads take across the strip
+   *   (scenes/battle.js stripRoads: camp to the edge of a settlement's land, world units, lifted); drawn as a road ending in a marker that points at that settlement
+   */
+  function setCorridors(tiles, passTiles = [], roads = []) {
+    const keys = new Set(tiles.map((t) => `${t.q},${t.r}`));
+    const segs = [];
+    for (const t of tiles) {
+      const lift = elevOffset(t, 1);
+      for (let k = 0; k < 6; k++) {
+        if (keys.has(`${t.q + DIRS[k][0]},${t.r + DIRS[k][1]}`)) continue; // an inner edge between two corridor tiles
+        const a = HEX[k];
+        const b = HEX[(k + 1) % 6];
+        segs.push([t.x + a[0] * 0.98, t.y - lift + a[1] * 0.98, t.x + b[0] * 0.98, t.y - lift + b[1] * 0.98]);
+      }
+    }
+    corridor = segs;
+    pass = null;
+    if (passTiles.length) {
+      const polys = passTiles.map((t) => { const lift = elevOffset(t, 1); return HEX.map((c) => [t.x + c[0] * 0.98, t.y - lift + c[1] * 0.98]); });
+      // each road: the route's tile centres, then the edge of the settlement's land; the marker sits at that edge, pointing at the settlement
+      const lines = [];
+      const markers = [];
+      for (const r of roads || []) {
+        if (!r || !r.points || r.points.length < 2) continue;
+        const pts = r.points.map((p) => [p.x, p.y]);
+        if (r.exit) pts.push([r.exit.x, r.exit.y]);
+        lines.push(pts);
+        if (r.exit && r.toward) markers.push({ x: r.exit.x, y: r.exit.y, ang: Math.atan2(r.toward.y - r.exit.y, r.toward.x - r.exit.x) });
+      }
+      pass = { polys, lines, markers };
+    }
+  }
+
+  /** A mountain pass: the peaks are still there, but a pale, untinted track runs across them, so a player can see WHY troops may cross here. */
+  function drawPass(ctx, camera) {
+    ctx.save();
+    ctx.beginPath();
+    for (const poly of pass.polys) {
+      poly.forEach(([x, y], i) => { const p = camera.worldToScreen(x, y); if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+      ctx.closePath();
+    }
+    ctx.fillStyle = 'rgba(228, 212, 170, 0.66)'; // neutral stone-and-dust, never a faction colour
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.5, camera.zoom * 0.05);
+    ctx.strokeStyle = 'rgba(70, 52, 28, 0.7)';
+    ctx.stroke();
+    const trackPath = () => {
+      ctx.beginPath();
+      for (const line of pass.lines) {
+        line.forEach(([x, y], i) => { const p = camera.worldToScreen(x, y); if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+      }
+    };
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    trackPath();
+    // a road laid across the peaks: dark edge, sandy bed, cream dashes down the middle
+    ctx.strokeStyle = 'rgba(52, 38, 20, 0.8)';
+    ctx.lineWidth = Math.max(6, camera.zoom * 0.36);
+    ctx.stroke();
+    trackPath();
+    ctx.strokeStyle = '#ead9ae';
+    ctx.lineWidth = Math.max(4, camera.zoom * 0.26);
+    ctx.stroke();
+    ctx.setLineDash([Math.max(4, camera.zoom * 0.22), Math.max(4, camera.zoom * 0.17)]);
+    trackPath();
+    ctx.strokeStyle = 'rgba(122, 92, 52, 0.95)';
+    ctx.lineWidth = Math.max(1.6, camera.zoom * 0.075);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // where the road reaches a settlement's land: a small arrowhead pointing at that settlement (the strip may lead to more than one)
+    const s = Math.max(7, camera.zoom * 0.3);
+    for (const m of pass.markers) {
+      const p = camera.worldToScreen(m.x, m.y);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(m.ang);
+      ctx.beginPath();
+      ctx.moveTo(s * 1.1, 0);
+      ctx.lineTo(-s * 0.6, -s * 0.8);
+      ctx.lineTo(-s * 0.25, 0);
+      ctx.lineTo(-s * 0.6, s * 0.8);
+      ctx.closePath();
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(2, camera.zoom * 0.06);
+      ctx.strokeStyle = 'rgba(52, 38, 20, 0.9)';
+      ctx.fillStyle = '#ead9ae';
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function drawCorridors(ctx, camera) {
+    if (!arena || !corridor || corridor.length === 0) return;
+    const path = () => {
+      ctx.beginPath();
+      for (const [x1, y1, x2, y2] of corridor) {
+        const a = camera.worldToScreen(x1, y1);
+        const b = camera.worldToScreen(x2, y2);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+    };
+    ctx.save();
+    if (pass) drawPass(ctx, camera);
+    ctx.lineCap = 'butt';
+    const w = Math.max(1, camera.zoom * 0.035);
+    path();
+    ctx.strokeStyle = 'rgba(6, 10, 18, 0.22)';
+    ctx.lineWidth = w + 1.6;
+    ctx.stroke();
+    ctx.setLineDash([Math.max(3, camera.zoom * 0.16), Math.max(3, camera.zoom * 0.12)]);
+    path();
+    ctx.strokeStyle = 'rgba(238, 242, 252, 0.6)';
+    ctx.lineWidth = w;
+    ctx.stroke();
+    ctx.restore();
   }
 
   // ---- territory --------------------------------------------------------------
@@ -179,7 +310,7 @@ export function createArenaLayer(world) {
   }
 
   return {
-    begin, end, drawTerritory: drawTerritoryLayer, drawDim, setPixelRatio,
+    begin, end, drawTerritory: drawTerritoryLayer, drawDim, setPixelRatio, setCorridors, drawCorridors,
     get active() { return !!arena; },
   };
 }

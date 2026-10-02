@@ -1,6 +1,7 @@
 // The world-map marks for Scout and Sabotage (game/render/intelMarks.js) against a recording canvas
 // context: what gets drawn where and when, the elevation contract, and that every save() is restored.
 import { test } from 'node:test';
+import { FACTIONS } from '../config/world.js';
 import assert from 'node:assert/strict';
 import { drawScoutedGarrisons, drawWeakPointMarker, drawSabotageMark, badgeAlphaAtZoom } from '../render/intelMarks.js';
 import { elevOffset } from '../render/tiles.js';
@@ -98,8 +99,8 @@ test('drawScoutedGarrisons: neutral hamlets wear Free Folk stone, the rest the r
   const ctx = recorder();
   drawScoutedGarrisons(ctx, camera(30), [site({ id: 1 }), site({ id: 2, x: 12, y: 11, neutral: true })], 2, 30);
   const colours = new Set(ofOp(ctx, 'set:fillStyle').map((c) => c.args[0]));
-  assert.ok(colours.has('#d8433f'), 'region owner (Crimson Legion) colour');
-  assert.ok(colours.has('#9a927f'), 'neutral hamlet: Free Folk stone');
+  assert.ok(colours.has(FACTIONS[2].color), 'region owner (Crimson Legion) colour');
+  assert.ok(colours.has(FACTIONS[1].color), 'neutral hamlet: Free Folk stone');
   assert.equal(ofOp(ctx, 'fillText').length, 2);
 });
 

@@ -290,8 +290,9 @@ export function drawBanner(ctx, x, y, s, faction, t, opts = {}) {
   ctx.arc(x, topY - s * 0.04, s * 0.06, 0, Math.PI * 2);
   ctx.fill();
 
-  const w = s * 1.15;
-  const h = s * 0.6;
+  // a bigger cloth and emblem (colour-blind players tell factions apart by the emblem as much as by the colour: DESIGN 7.5a)
+  const w = s * 1.3;
+  const h = s * 0.74;
   const segs = 6;
   const amp = s * 0.14;
   const speed = 2.1;
@@ -332,7 +333,9 @@ export function drawBanner(ctx, x, y, s, faction, t, opts = {}) {
   const emx = x + w * 0.4;
   const midT = top[Math.round(segs * 0.4)][1];
   const midB = bot[Math.round(segs * 0.4)][1];
-  drawEmblem(ctx, f.emblem, emx, (midT + midB) / 2, s * 0.42, ACCENTS.cream);
+  const emy = (midT + midB) / 2;
+  drawEmblem(ctx, f.emblem, emx, emy + s * 0.02, s * 0.66, 'rgba(24,16,8,0.6)'); // a dark under-stroke: the cream emblem must read on pale cloth too
+  drawEmblem(ctx, f.emblem, emx, emy, s * 0.6, ACCENTS.cream);
 }
 
 // -------------------------------------------------------------- troop badge
@@ -476,7 +479,10 @@ export function drawRangeCircle(ctx, cx, cy, r, color, alpha = 0.16) {
  * terrain. A solid `color` shaft about 4.6 px wide at the usual battle zoom (it scales gently with `opts.zoom`, 3.6 to 6.2 px) inside a dark
  * casing with a soft shadow, light dashes flowing along it toward the target (the animation), and a big outlined head at the target.
  * `opts.zoom` is the camera's px per world unit (default: the usual desktop battle zoom).
- * @param {{ zoom?: number }} [opts]
+ *
+ * SHAPE as well as colour (DESIGN 7.5a): `opts.shape` is 'solid' (a capture, a reinforcement), 'dashed' (not enough) or 'dotted' (no route); `opts.mark` puts a check or a cross
+ * in the head; `opts.word` writes the outcome beside the head. Red and green are never the only difference between a good send and a bad one.
+ * @param {{ zoom?: number, shape?: 'solid'|'dashed'|'dotted', mark?: 'check'|'cross'|null, word?: string|null, viewW?: number }} [opts]
  */
 export function drawDragArrow(ctx, x1, y1, x2, y2, color, t, opts = {}) {
   const dx = x2 - x1;
@@ -491,31 +497,39 @@ export function drawDragArrow(ctx, x1, y1, x2, y2, color, t, opts = {}) {
   const bx = x2 - cos * headLen * 0.7; // the shaft ends inside the head
   const by = y2 - sin * headLen * 0.7;
   const half = 0.5;
+  const shape = opts.shape || 'solid';
+  // the pattern of the shaft: whole (a capture), long dashes (not enough), round dots (no route)
+  const pattern = shape === 'dashed' ? [core * 2.6, core * 1.7] : shape === 'dotted' ? [0.01, core * 2.1] : null;
   ctx.save();
-  ctx.lineCap = 'round';
+  ctx.lineCap = shape === 'dashed' ? 'butt' : 'round';
   ctx.lineJoin = 'round';
   const shaft = () => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(bx, by); };
-  // dark casing with a soft shadow: readable on grass, forest, snow and sand alike
+  // dark casing with a soft shadow: readable on grass, forest, snow and sand alike (a patterned shaft keeps its gaps: the casing is not a solid line behind it)
   ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
   ctx.shadowBlur = 7;
   ctx.strokeStyle = 'rgba(6, 10, 18, 0.82)';
   ctx.lineWidth = core + 3.8;
+  if (pattern) ctx.setLineDash(shape === 'dashed' ? [core * 2.6 + 3, core * 1.7 - 3] : [0.01, core * 2.1]);
   shaft();
   ctx.stroke();
   ctx.shadowBlur = 0;
-  // the colour itself: solid, saturated
+  // the colour itself: saturated, solid or patterned
   ctx.strokeStyle = color;
-  ctx.lineWidth = core;
-  shaft();
-  ctx.stroke();
-  // light dashes flowing toward the target
-  ctx.setLineDash([core * 1.5, core * 3.3]);
-  ctx.lineDashOffset = -((t || 0) * 64) % (core * 4.8);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
-  ctx.lineWidth = core * 0.4;
+  ctx.lineWidth = shape === 'dotted' ? core * 1.15 : core;
+  if (pattern) ctx.setLineDash(pattern);
   shaft();
   ctx.stroke();
   ctx.setLineDash([]);
+  if (!pattern) {
+    // light dashes flowing toward the target
+    ctx.setLineDash([core * 1.5, core * 3.3]);
+    ctx.lineDashOffset = -((t || 0) * 64) % (core * 4.8);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+    ctx.lineWidth = core * 0.4;
+    shaft();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   // the head: dark outline, then the colour
   const head = () => {
     ctx.beginPath();
@@ -535,5 +549,55 @@ export function drawDragArrow(ctx, x1, y1, x2, y2, color, t, opts = {}) {
   ctx.fillStyle = color;
   head();
   ctx.fill();
+  // the mark in the head: a check for a capture, a cross for not enough (white on a dark outline, so it reads on green, red and grey alike)
+  if (opts.mark) {
+    const mx = x2 - cos * headLen * 0.5;
+    const my = y2 - sin * headLen * 0.5;
+    const r = Math.max(3.4, headLen * 0.2);
+    const glyph = () => {
+      ctx.beginPath();
+      if (opts.mark === 'check') {
+        ctx.moveTo(mx - r * 0.95, my + r * 0.05);
+        ctx.lineTo(mx - r * 0.3, my + r * 0.7);
+        ctx.lineTo(mx + r * 1.0, my - r * 0.75);
+      } else {
+        ctx.moveTo(mx - r * 0.8, my - r * 0.8);
+        ctx.lineTo(mx + r * 0.8, my + r * 0.8);
+        ctx.moveTo(mx + r * 0.8, my - r * 0.8);
+        ctx.lineTo(mx - r * 0.8, my + r * 0.8);
+      }
+    };
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(6, 10, 18, 0.9)';
+    ctx.lineWidth = Math.max(3.2, r * 0.9);
+    glyph();
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.8, r * 0.5);
+    glyph();
+    ctx.stroke();
+  }
+  // the outcome in a word, beside the head and above it (a finger on a phone covers what is below): the words the tooltip says, where the eye already is
+  if (opts.word) {
+    ctx.font = '800 12px Nunito, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(opts.word).width + 14;
+    let px = x2 - cos * headLen * 0.3;
+    let py = Math.min(y2, y2 - sin * headLen * 0.3) - headLen * 0.75 - 14;
+    px = Math.max(w / 2 + 4, Math.min((opts.viewW || 4096) - w / 2 - 4, px));
+    py = Math.max(14, py);
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.88)';
+    ctx.beginPath();
+    ctx.roundRect(px - w / 2, py - 10, w, 20, 10);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(opts.word, px, py + 0.5);
+  }
   ctx.restore();
 }

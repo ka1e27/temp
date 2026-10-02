@@ -78,7 +78,9 @@ const centerOf = (sel, txt) => ev((s, t) => {
   const els = [...document.querySelectorAll(s)].filter((e) => e.getClientRects().length > 0 && !e.closest('[hidden]'));
   const el = t ? els.find((e) => e.textContent.toLowerCase().includes(t.toLowerCase())) : els[0];
   if (!el) return null;
-  const r = el.getBoundingClientRect();
+  let r = el.getBoundingClientRect();
+  // below the fold of a scrolling panel (the phone Realm panel's Found a Dynasty): a player scrolls to it first
+  if (r.bottom > innerHeight || r.top < 0) { el.scrollIntoView({ block: 'center' }); r = el.getBoundingClientRect(); }
   const x = r.left + r.width / 2;
   const y = r.top + r.height / 2;
   const top = document.elementFromPoint(x, y);
@@ -184,7 +186,7 @@ const settle = async (ms) => {
 // ---------------- the session ----------------------------------------------------------------------------------
 const stateNow = () => ev(() => ({
   scene: window.__hd.scene, gold: Math.round(window.__hd.state.gold), owned: window.__hd.state.owner.filter((o) => o === 0).length,
-  tut: window.__hd.state.tutorial, hints: window.__hd.state.settings.hints,
+  tut: Object.keys(window.__hd.state.tutorial.seen).join(','), hints: window.__hd.state.settings.hints,
 }));
 
 // With the War Council open: buy what is affordable (Army tab, then Realm), a real click each, and report what it cost.
@@ -263,8 +265,21 @@ await settle(3500);
 await shot('world-settled-hint0');
 note(`state: ${JSON.stringify(await stateNow())}`);
 // a new player reads hint 0 (5 s timeout or tap): wait it out, as they would
-await waitFor(() => window.__hd.state.tutorial.step >= 1, 9000);
-note(`hint 0 -> 1 after ${((Date.now() - tNew) / 1000).toFixed(1)} s from New Realm`);
+await waitFor(() => !!window.__hd.state.tutorial.seen.W0, 9000);
+note(`hint W0 (your realm) -> W1 (move and zoom the map) after ${((Date.now() - tNew) / 1000).toFixed(1)} s from New Realm`);
+await settle(1500);
+await shot('hintW1-move-and-zoom');
+// W1 asks for a pan and a zoom: a player does both with real input
+await dragTo({ x: W * 0.5, y: H * 0.62 }, { x: W * 0.45, y: H * 0.58 });
+await sleep(400);
+if (PHONE) {
+  await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: W / 2 - 60, y: H * 0.55, id: 1 }, { x: W / 2 + 60, y: H * 0.55, id: 2 }] });
+  for (let i = 1; i <= 10; i++) { await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: W / 2 - 60 - i * 7, y: H * 0.55, id: 1 }, { x: W / 2 + 60 + i * 7, y: H * 0.55, id: 2 }] }); await sleep(16); }
+  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+} else {
+  for (let i = 0; i < 4; i++) { await page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: W / 2, y: H * 0.55, deltaX: 0, deltaY: -120 }); await sleep(60); }
+}
+await waitFor(() => !!window.__hd.state.tutorial.seen.W1, 4000);
 await settle(1500);
 await shot('hint1-click-a-glowing-region');
 
@@ -280,7 +295,14 @@ const first = await ev(async () => {
   return { ids, pick, p, visible: visible.length, onScreen: !!p && p.x > 0 && p.x < innerWidth && p.y > 0 && p.y < innerHeight };
 });
 note(`frontier regions at start: ${first.ids.length}, ${first.visible} on screen; the hinted (tutorial) region is ${first.pick} at ${JSON.stringify(first.p)}`);
-if (!first.onScreen) note('FRICTION: the region the first hint points at is not on screen in the first frame');
+if (!first.onScreen) {
+  note('FRICTION: the region the first hint points at is not on screen (after the W1 pan and zoom): the player has to find it again');
+  // a player pans back to it; the bot flies there (dev hook) so the session can go on
+  await ev((id) => window.__hd.flyToRegion(id), first.pick);
+  await settle(1200);
+  first.p = await ev((id) => window.__hd.regionScreenPos(id), first.pick);
+  note(`  back on screen at ${JSON.stringify(first.p)}; W2 hint showing: ${await ev(() => !!document.querySelector('.coach:not([hidden])'))}`);
+}
 await tap(first.p.x, first.p.y);
 await settle(1500);
 await shot('card-attack-hint2');
@@ -321,7 +343,7 @@ async function playBattle(label, maxSec = 200) {
       const b = hd.battle;
       const all = hd.siteInfo();
       const vis = (s) => s.x > 10 && s.x < vw - 10 && s.y > 110 && s.y < vh - 190;
-      const mine = all.filter((s) => s.owner === 0 && s.troops >= 7);
+      const mine = all.filter((s) => s.owner === 0 && s.troops >= 7 && vis(s)); // a player drags only from what they can see (a drag that starts off a settlement pans the map)
       const foes = all.filter((s) => s.owner !== 0 && vis(s));
       let best = null;
       for (const f of foes) {
@@ -338,7 +360,7 @@ async function playBattle(label, maxSec = 200) {
       const keep = foes.find((s) => s.type === 'keep');
       let push = null;
       if (keep) {
-        const ids = all.filter((s) => s.owner === 0 && s.troops >= 6).map((s) => s.id);
+        const ids = all.filter((s) => s.owner === 0 && s.troops >= 6 && vis(s)).map((s) => s.id);
         if (ids.length >= 2) {
           const pv = previewSend(b, ids, keep.id, 1);
           if (pv.outcome === 'capture') push = { ids, to: keep.id, sending: pv.sending, left: Math.round(pv.remaining) };
@@ -367,7 +389,17 @@ async function playBattle(label, maxSec = 200) {
       const from = at(plan.best.from);
       const to = at(plan.best.to);
       if (from && to) {
+        const before = await ev(() => ({ x: window.__hd.camera.x, y: window.__hd.camera.y, sent: window.__hd.battle.stats.sent }));
+        const under = await ev((x, y, id) => {
+          const e = document.elementFromPoint(x, y);
+          const hd = window.__hd; const st = hd.siteInfo().find((q) => q.id === id);
+          return `${e ? `${e.tagName}.${String(e.className).slice(0, 30)}` : null}; phase ${hd.battlePhase}; armed ${!!document.querySelector('.power-btn.is-armed')}; site now owner ${st && st.owner} troops ${st && Math.round(st.troops)} at ${st && Math.round(st.x)},${st && Math.round(st.y)}; selection ${JSON.stringify(hd.selection())}; dialog ${document.documentElement.hasAttribute('data-dialog')}`;
+        }, from.x, from.y + 4, plan.best.from);
         await dragTo({ x: from.x, y: from.y + 4 }, { x: to.x, y: to.y + 4 });
+        const after = await ev(() => ({ x: window.__hd.camera.x, y: window.__hd.camera.y, sent: window.__hd.battle.stats.sent, zoom: window.__hd.camera.zoom }));
+        const moved = Math.hypot(after.x - before.x, after.y - before.y) * after.zoom;
+        // (the sim takes the order on its next tick, so stats.sent is not checked here; a drag that PANNED instead of sending is what strands the bot)
+        if (moved > 20) note(`FRICTION: a send drag from site ${plan.best.from} (${Math.round(from.x)},${Math.round(from.y)}; under the finger: ${under}) to ${plan.best.to} panned the map ${Math.round(moved)} px instead of sending`);
         sent += 1;
         if (firstSend == null) { firstSend = (Date.now() - t0) / 1000; note(`first send at ${firstSend.toFixed(1)} s into the fight: ${Math.round(plan.best.fraction * 100)}% to a ${plan.best.toType}, predicted capture with ${plan.best.left} left`); await settle(600); await shot(`${label}-first-send`); }
         await sleep(250);
@@ -532,7 +564,7 @@ if (flags.dynasty !== 'off') {
   await ev(() => window.__hd.conquerRegions(999));
   await settle(1800);
   note(`after conquering everything: owned ${(await D()).owned} of ${d1.regions}`);
-  await click('.hud-btn[aria-label="Realm"]');
+  await click('.hud-btn[aria-label="Realm stats"]');
   await settle(1200);
   await shot('realm-complete');
   note(`realm panel: ${(await ev(() => document.querySelector('.realm')?.innerText.replace(/\s+/g, ' ').slice(0, 600)))}`);
@@ -554,7 +586,7 @@ if (flags.dynasty !== 'off') {
   if (d2.stars !== d1.stars + d1.starBase + d1.level) note('FRICTION: the stars earned do not match starBase + the dynasty just completed');
   if (d2.seed === d1.seed) note('FRICTION: the new dynasty kept the same seed');
   if (d2.leaders.some((n, i) => n === d1.leaders[i])) note('FRICTION: a rival leader kept their name into the new dynasty');
-  note(`D2 hint state: ${JSON.stringify(await ev(() => ({ step: window.__hd.state.tutorial.step, done: window.__hd.state.tutorial.done, coach: document.querySelector('.coach-bubble:not([hidden])')?.innerText || null })))}`);
+  note(`D2 hint state: ${JSON.stringify(await ev(() => ({ seen: Object.keys(window.__hd.state.tutorial.seen).join(','), done: window.__hd.state.tutorial.done, coach: document.querySelector('.coach-bubble:not([hidden])')?.innerText || null })))}`);
   // the first region of D2, with real input
   // like D1, the player goes for the region the game points at (the easiest frontier region)
   const first2 = await ev(async () => {

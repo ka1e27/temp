@@ -5,7 +5,8 @@
   color-scheme: dark;
 
   /* --- Glass panels -------------------------------------------------- */
-  --panel-bg: rgba(16, 20, 30, 0.78);
+  /* 0.90 opaque: text sits on these over any map (snow, sand, grass) and must keep 4.5:1 or better (DESIGN §7.5a) */
+  --panel-bg: rgba(16, 20, 30, 0.9);
   --panel-bg-solid: #12151f;
   --panel-border: rgba(255, 255, 255, 0.08);
   --panel-border-light: rgba(255, 255, 255, 0.14);
@@ -17,8 +18,9 @@
 
   /* --- Text ------------------------------------------------------------ */
   --text: #f3ead7;
-  --text-muted: #a3a9b6;
-  --text-dim: #7b8190;
+  /* measured on --panel-bg-solid: muted 9.9:1, dim 8.2:1; over the worst case (a 90% panel on snow) 7.7:1 and 6.5:1 */
+  --text-muted: #b9c0cd;
+  --text-dim: #a8afbd;
 
   /* --- Semantic colours -------------------------------------------------- */
   --gold: #f5c451;
@@ -46,15 +48,15 @@
   /* --- Faction fallback palette (components should prefer data-provided
      colours; these exist for the gallery's mock data and any placeholder). */
   --faction-player: #3d7ef0;
-  --faction-freefolk: #9a927f;
-  --faction-crimson: #d8433f;
-  --faction-violet: #9b5de5;
+  --faction-freefolk: #a19c92;
+  --faction-crimson: #c63932;
+  --faction-violet: #6d1b99;
   --faction-amber: #f29e38;
 
   /* --- Type --------------------------------------------------------------- */
   --font-title: 'Cinzel', Georgia, serif;
   --font-ui: 'Nunito', system-ui, -apple-system, sans-serif;
-  --fs-xs: 0.72rem;
+  --fs-xs: 0.75rem; /* phones: 0.8rem, the 12 px floor of DESIGN §7.5a (see the media query below) */
   --fs-sm: 0.82rem;
   --fs-md: 0.95rem;
   --fs-lg: 1.15rem;
@@ -87,6 +89,14 @@
   --z-tooltip: 60;
 
   --touch-target: 44px;
+
+  /* the focus ring every control shows for keyboard use (DESIGN §7.5a): light blue, 3 px, 2 px off the control; 9:1 on the dark panels */
+  --focus-ring: #8fd6ff;
+}
+
+/* Phones: nothing below 12 px (0.8rem) */
+@media (max-width: 640px) {
+  :root { --fs-xs: 0.8rem; --fs-sm: 0.86rem; }
 }
 
 /* Reduce Motion (DESIGN §7.4 + settings.js): both the OS preference and the

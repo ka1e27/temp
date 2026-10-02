@@ -234,9 +234,10 @@ const SETTLEMENT_BUILDERS = {
   },
   camp(ctx, cx, baseY, s, wall, roof, faction) {
     const trim = faction.color;
-    tent(ctx, cx - s * 0.5, baseY + s * 0.04, s * 0.56, s * 0.5, trim);
-    tent(ctx, cx + s * 0.46, baseY + s * 0.03, s * 0.56, s * 0.48, trim);
-    tent(ctx, cx, baseY + s * 0.1, s * 0.62, s * 0.6, trim);
+    // about a third larger than it was: the first thing a new player looks for is where their troops start
+    tent(ctx, cx - s * 0.64, baseY + s * 0.04, s * 0.72, s * 0.64, trim);
+    tent(ctx, cx + s * 0.6, baseY + s * 0.03, s * 0.72, s * 0.62, trim);
+    tent(ctx, cx, baseY + s * 0.1, s * 0.84, s * 0.8, trim);
     void wall; void roof;
   },
 };

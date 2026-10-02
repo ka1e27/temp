@@ -83,3 +83,52 @@ test('formatPct: signed whole-number percentage from a fraction', () => {
   assert.equal(formatPct(0.25), '+25%');
   assert.equal(formatPct(1), '+100%');
 });
+
+// --- robustness: stray strings, missing fields and non-finite input never print "NaN", "Infinity" or "NaNd NaNh" ---------
+
+test('formatNum: numeric strings are parsed, non-numbers are a dash, only a real infinity is the infinity sign', () => {
+  assert.equal(formatNum('12'), '12');
+  assert.equal(formatNum(' 1234 '), '1.23K');
+  assert.equal(formatNum('-5'), '-5');
+  for (const bad of [NaN, undefined, null, '', '  ', 'abc', {}, [], true]) assert.equal(formatNum(bad), '—', `formatNum(${String(bad)})`);
+  assert.equal(formatNum(Infinity), '∞');
+  assert.equal(formatNum(-Infinity), '-∞');
+  assert.equal(formatNum(1234), '1.23K'); // numbers unchanged
+});
+
+test('formatRate: guarded like formatNum', () => {
+  assert.equal(formatRate('1.2'), '+1.2/s');
+  assert.equal(formatRate(-1.2), '-1.2/s');
+  for (const bad of [NaN, undefined, null, '', 'x']) assert.equal(formatRate(bad), '—');
+});
+
+test('formatDuration: non-finite and non-numeric input is a dash, strings are parsed, negatives clamp to 0s', () => {
+  for (const bad of [NaN, Infinity, -Infinity, undefined, null, '', 'soon', {}]) {
+    const out = formatDuration(bad);
+    assert.equal(out, '—', `formatDuration(${String(bad)})`);
+    assert.ok(!/NaN|Infinity/.test(out));
+  }
+  assert.equal(formatDuration('65'), '1m 05s');
+  assert.equal(formatDuration(-5), '0s');
+  assert.equal(formatDuration(0), '0s');
+  assert.equal(formatDuration(90061), '1d 1h');
+  // an absurd but finite span stays readable instead of exponent notation
+  assert.ok(!/e\+/.test(formatDuration(1e300)), formatDuration(1e300));
+  assert.ok(/d \d+h$/.test(formatDuration(1e300)));
+});
+
+test('formatPct: non-finite and non-numeric input is a dash, strings are parsed', () => {
+  for (const bad of [NaN, Infinity, -Infinity, undefined, null, '', 'x']) assert.equal(formatPct(bad), '—', `formatPct(${String(bad)})`);
+  assert.equal(formatPct('0.12'), '+12%');
+  assert.equal(formatPct(-0.06), '-6%');
+  assert.equal(formatPct(0), '+0%');
+});
+
+test('ui formatDurationWords: same guard (non-finite or non-numeric is a dash, strings are parsed)', async () => {
+  const { formatDurationWords } = await import('../ui/format.js');
+  for (const bad of [NaN, Infinity, -Infinity, undefined, null, '', 'x']) assert.equal(formatDurationWords(bad), '—');
+  assert.equal(formatDurationWords('3600'), '1h 0m');
+  assert.equal(formatDurationWords(59.6), '1m 0s');
+  assert.equal(formatDurationWords(-4), '0s');
+  assert.equal(formatDurationWords(12 * 60 + 6), '12m 6s');
+});

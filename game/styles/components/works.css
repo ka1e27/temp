@@ -1,0 +1,275 @@
+/* Region Works (ui/worksPanel.js, ui/worksChooser.js, ui/worksIcons.js) — DESIGN §5.8.
+   The panel sits in the OWNED region card: three slot rows (built | empty | locked) and, in place of them, the
+   chooser when a slot's "Build..." is tapped. Tuned for the ~330 px content width of the desktop card and the
+   390 px phone bottom sheet, which has a height budget (see the @media block at the end).
+   Everything comes from tokens.css; the per-Work tints are the only colours defined here. */
+
+.works-panel {
+  --works-line: rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px 9px;
+  border-radius: var(--panel-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--works-line);
+}
+.works-panel[hidden], .works-slots[hidden], .works-choose[hidden], .works-back[hidden], .works-sub[hidden] { display: none; }
+
+/* --- the five Work tints (icon colour on its chip) --------------------------------------------------- */
+.works-chip[data-type='barracks'] { --works-tint: #e9806a; }
+.works-chip[data-type='stables'] { --works-tint: #d2a06a; }
+.works-chip[data-type='shrine'] { --works-tint: #9fd6cc; }
+.works-chip[data-type='watchtower'] { --works-tint: #c9cfdc; }
+.works-chip[data-type='market'] { --works-tint: #f5c451; }
+
+.works-chip {
+  --works-tint: var(--text-dim);
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: var(--works-tint);
+  background: color-mix(in srgb, var(--works-tint) 16%, rgba(255, 255, 255, 0.05));
+  border: 1px solid color-mix(in srgb, var(--works-tint) 42%, transparent);
+}
+.works-chip .icon { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45)); }
+
+/* --- header ---------------------------------------------------------------------------------------- */
+.works-head { display: flex; align-items: baseline; gap: 8px; min-height: 20px; }
+.works-title {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.works-sub { font-size: var(--fs-xs); font-weight: 700; color: var(--text-dim); text-wrap: balance; }
+.works-sub-short { display: none; }
+@media (max-width: 640px) {
+  .works-sub-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* still read out */
+  .works-sub-short { display: inline; }
+}
+.works-back {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  color: var(--text-muted);
+}
+.works-back:hover { background: var(--btn-secondary-bg-hover); color: var(--text); }
+
+/* --- slot rows ------------------------------------------------------------------------------------- */
+.works-slots { display: flex; flex-direction: column; gap: 6px; }
+.works-slot {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 9px;
+  min-height: 40px;
+  min-width: 0;
+}
+.works-slot-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.works-slot-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.works-slot-name { font-size: var(--fs-sm); font-weight: 800; white-space: nowrap; }
+/* one line when it fits, two when it must (the Watchtower's two jobs), never a cut-off word */
+.works-slot-effect {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* level pips: three small gems, lit up to the Work's level */
+.works-pips { display: inline-flex; gap: 3px; align-items: center; }
+.works-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: background var(--dur-med) var(--ease-out), box-shadow var(--dur-med) var(--ease-out);
+}
+.works-pip[data-on='1'] {
+  background: radial-gradient(circle at 35% 30%, var(--gold-bright), var(--gold));
+  border-color: rgba(120, 70, 8, 0.55);
+  box-shadow: 0 0 6px rgba(245, 196, 81, 0.55);
+}
+
+/* the "..." at the end of a built row's name line: small and quiet, leads to Demolish. On touch screens its hit area grows to
+   44 px with negative margins, so the row does not get taller. */
+.works-more {
+  flex: none;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.works-more:hover, .works-more:focus-visible { background: var(--btn-secondary-bg); color: var(--text); }
+.works-more:focus-visible { border-color: var(--btn-secondary-border); }
+@media (pointer: coarse) {
+  .works-more { min-width: 44px; min-height: 44px; margin: -12px -14px -12px auto; }
+}
+
+/* the confirm step replaces the row's content in the same space */
+.works-confirm-text, .works-confirm-actions { display: none; }
+.works-slot[data-confirm='1'] .works-slot-main, .works-slot[data-confirm='1'] .works-upgrade { display: none; }
+.works-slot[data-confirm='1'] .works-confirm-text {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text);
+}
+.works-slot[data-confirm='1'] .works-confirm-actions { display: inline-flex; gap: 5px; }
+.works-slot[data-confirm='1'] .works-chip { border-color: rgba(235, 87, 87, 0.55); }
+.works-keep, .works-demolish { min-height: 32px; padding: 3px 10px; font-size: var(--fs-xs); white-space: nowrap; }
+@media (pointer: coarse) {
+  .works-keep, .works-demolish { min-height: var(--touch-target); }
+}
+
+/* buttons: compact, secondary; touch screens get the full 44 px target */
+.works-upgrade, .works-build {
+  min-height: 32px;
+  padding: 3px 10px;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+@media (pointer: coarse) {
+  .works-upgrade, .works-build { min-height: var(--touch-target); }
+  .works-slot { min-height: var(--touch-target); }
+}
+.works-btn-cost { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-bright); font-weight: 800; }
+.works-btn-cost:not(:empty)::before { content: '\00b7'; margin-right: 1px; color: var(--text-dim); }
+.works-btn-cost .icon { color: var(--gold); }
+.works-upgrade:disabled .works-btn-cost { color: inherit; }
+.works-upgrade[data-poor='1'] .works-btn-cost { color: var(--warn); }
+.works-upgrade[data-maxed='1'] { border-color: transparent; background: transparent; opacity: 1; color: var(--gold); }
+.works-upgrade[data-maxed='1'] .works-btn-cost { display: none; }
+
+/* state visibility: one row element, three faces */
+.works-slot[data-state='built'] .works-build, .works-slot[data-state='built'] .works-lock { display: none; }
+.works-slot[data-state='empty'] .works-slot-main, .works-slot[data-state='empty'] .works-upgrade,
+.works-slot[data-state='empty'] .works-lock { display: none; }
+.works-slot[data-state='locked'] .works-slot-main, .works-slot[data-state='locked'] .works-upgrade,
+.works-slot[data-state='locked'] .works-build { display: none; }
+
+.works-slot[data-state='empty'] .works-chip { color: var(--text-dim); border-style: dashed; background: transparent; }
+.works-slot[data-state='empty'] .works-build { grid-column: 2 / 4; justify-content: flex-start; }
+.works-build .icon { color: var(--gold); }
+.works-build-hint { margin-left: auto; font-size: var(--fs-xs); font-weight: 700; color: var(--warn); }
+.works-build-hint:empty { display: none; }
+.works-build[data-poor='1'] .works-btn-label { color: var(--text-muted); }
+
+.works-slot[data-state='locked'] .works-chip { color: var(--text-dim); background: rgba(255, 255, 255, 0.03); border-color: rgba(255, 255, 255, 0.08); }
+.works-slot[data-state='locked'] { min-height: 32px; }
+.works-lock { grid-column: 2 / 4; font-size: var(--fs-xs); font-weight: 700; color: var(--text-dim); }
+.works-lock-next { color: var(--text-dim); font-weight: 600; }
+
+/* --- chooser ------------------------------------------------------------------------------------------ */
+.works-chooser { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.works-chooser-intro { margin: 0; font-size: var(--fs-xs); font-weight: 600; line-height: 1.3; color: var(--text-dim); }
+.works-chooser-list { display: flex; flex-direction: column; gap: 4px; }
+.works-choice {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 44px;
+  padding: 5px 9px 5px 6px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--works-line);
+  color: var(--text);
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.works-choice:not(:disabled):hover { background: rgba(255, 255, 255, 0.11); }
+.works-choice:not(:disabled):active { transform: scale(0.985); }
+.works-choice:disabled { cursor: not-allowed; }
+.works-choice:disabled .works-chip { opacity: 0.7; }
+.works-choice[data-state='ready'] { border-color: rgba(245, 196, 81, 0.28); }
+.works-choice-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.works-choice-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.works-choice-name { font-size: var(--fs-sm); font-weight: 800; white-space: nowrap; }
+.works-scope {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.07);
+}
+.works-scope[data-scope='here'] { color: var(--gold); background: rgba(245, 196, 81, 0.14); }
+.works-scope[hidden] { display: none; }
+.works-choice-effect {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-muted);
+  /* two lines at most (Stables have three effects); never cut mid-word with an ellipsis on one line */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.works-choice-reason { font-size: var(--fs-xs); font-weight: 800; line-height: 1.2; color: var(--warn); }
+.works-choice[data-state='built'] .works-choice-reason { color: var(--text-dim); }
+.works-choice-reason[hidden] { display: none; }
+.works-choice-cost { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; font-size: var(--fs-sm); font-weight: 800; color: var(--gold-bright); }
+.works-choice-price { display: inline-flex; align-items: center; gap: 4px; }
+.works-choice-cost .icon { color: var(--gold); }
+.works-choice-cost[data-poor='1'] { color: var(--text-dim); }
+.works-choice-missing { font-size: 0.66rem; font-weight: 800; line-height: 1.1; color: var(--warn); white-space: nowrap; }
+.works-choice-missing[hidden] { display: none; }
+.works-choice[data-state='built'] .works-choice-cost { visibility: hidden; }
+
+/* --- Reduce Motion: pips and presses stop animating --------------------------------------------------- */
+html.reduce-motion .works-pip, html.reduce-motion .works-choice, html.reduce-motion .works-more { transition: none; }
+html.reduce-motion .works-choice:not(:disabled):active { transform: none; }
+
+/* --- Phone bottom sheet -------------------------------------------------------------------------------- */
+/* The sheet has a height budget (about half of a 844 px screen with the rest of the owned card), so:
+   rows sit a touch closer, and while the chooser is open the card's other rows step aside. */
+@media (max-width: 640px) {
+  .works-panel { padding: 7px 9px 8px; gap: 5px; }
+  .works-slot { min-height: 38px; }
+  .works-chooser-intro { font-size: 0.68rem; }
+  .works-choice { min-height: 42px; padding-block: 4px; }
+  .region-card:has(.works-panel[data-view='choose']) .region-card-perk,
+  .region-card:has(.works-panel[data-view='choose']) .region-card-prosperity,
+  .region-card:has(.works-panel[data-view='choose']) .region-card-rewards,
+  .region-card:has(.works-panel[data-view='choose']) .region-card-crowns { display: none; }
+}
+
+/* Touch screens come last so they win over the phone block above: a tap target is never under 44 px. */
+@media (pointer: coarse) {
+  .works-choice { min-height: var(--touch-target); }
+}

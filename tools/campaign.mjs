@@ -61,8 +61,15 @@
 // identical retry: the loop always forces at least one more buy-or-wait step first ("the
 // virtual player retries after buying more upgrades").
 //
+// REGION WORKS (DESIGN §5.8, docs/briefs/works-hookup.md §8). `--works=normal` (the default) is how an engaged player builds: a
+// Barracks (then Stables) in every owned region that touches enemy land, a Market in every region that does not, level I
+// only, plus a level II/III whenever it costs at most WORKS_UPGRADE_SEC seconds of the realm's income. A Work is one more
+// item in the savings pool: the cheapest of (core upgrades, wanted Works) is the next target, bought the instant it is
+// affordable. `--works=heavy` is the dominance check: every Work of every useful kind at every level, before ANY other
+// purchase (it should land within about +-15% of normal). `--works=none` builds nothing (clearly slower, not stalled).
+//
 // Usage:
-//   node tools/campaign.mjs [--seeds=1,2,3,4,5] [--verbose] [--json] [--no-army]
+//   node tools/campaign.mjs [--seeds=1,2,3,4,5] [--works=normal|heavy|none] [--verbose] [--json] [--no-army]
 //                           [--maxRegions=N] [--offlineAt=N --offlineHours=H [--offlineDynasty=D]] [--intel=finisher|heavy]
 //                           [--dynasties=N]   (plays N dynasties per seed with the stars earned; prints D1..DN times and waits)
 //                           [--checkinHours=H] (a player who, whenever nothing is readable, leaves for H hours: the game's offline cap
@@ -93,12 +100,14 @@ import { INTEL } from '../game/config/intel.js';
 import {
   UPGRADES, levelOf, upgradeCost, canBuy, buy,
 } from '../game/meta/upgrades.js';
+import * as Works from '../game/meta/works.js';
 import { buildArena } from '../game/battle/arena.js';
 import { createBattle, step, issue } from '../game/battle/sim.js';
 import { think } from '../game/battle/ai.js';
 import { decide } from '../game/battle/bot.js';
-import { TICK_SEC } from '../game/config/battle.js';
+import { TICK_SEC, patienceFor } from '../game/config/battle.js';
 import { ECONOMY } from '../game/config/meta.js';
+import { PLAYER_FACTION } from '../game/meta/state.js';
 import { formatDuration } from '../game/core/format.js';
 import { pathToFileURL } from 'node:url';
 
@@ -110,7 +119,7 @@ const POWER_SOFT_MULT = 2.2; // re-leveling an unlocked power must look this muc
                               // compete with the core pool — see "level powers occasionally"
 const PERK_PREFERENCE_MULT = 1.3; // value bump for a perk the player holds zero copies of
 const RETRY_MARGIN = 1.25; // after a loss, retry only once the ratio is this much better than at the loss
-const CAP_SEC = 8 * 60; // battle timeout (spec: 8 simulated minutes = a loss)
+// A battle that outlasts the band's patience (config/battle.js PATIENCE_SEC) is a loss: the player retreats.
 const INTEL_FINISHER_FACTOR = 6; // --intel=finisher: buy scout+sabotage only when it costs at most this many of the cheapest upgrade
 // A "wait" for the next affordable purchase can legitimately take a long time near the edge
 // of what the player can reach — that's still forward progress, not a stall, as long as the
@@ -158,6 +167,67 @@ function activePool(conquestCount, flags) {
 
 const POWER_ID_SET = new Set(['rally', 'firestorm', 'bulwark', 'march', 'levy']);
 
+// --- Region Works policy (see the header) ------------------------------------------------------
+const WORKS_UPGRADE_SEC = 5; // normal: a level II/III Work is bought only when it costs at most this many seconds of realm income
+// weight: a Work's price is multiplied by this when it competes with the core upgrades for "the cheapest thing" (a player who
+// likes Works leans to them).
+const WORKS_POLICIES = {
+  normal: { border: ['watchtower', 'barracks'], interior: ['market'], upgradeSec: WORKS_UPGRADE_SEC, weight: 1 },
+  heavy: { border: ['watchtower', 'barracks', 'shrine', 'stables'], interior: ['market'], upgradeSec: Infinity, weight: 0.5 },
+  // single-Work policies, to price each Work on its own against building nothing (docs: the Works worth table)
+  markets: { border: ['market'], interior: ['market'], upgradeSec: Infinity, weight: 1 },
+  barracks: { border: ['barracks'], interior: [], upgradeSec: Infinity, weight: 1 },
+  stables: { border: ['stables'], interior: [], upgradeSec: Infinity, weight: 1 },
+  shrines: { border: ['shrine'], interior: [], upgradeSec: Infinity, weight: 1 },
+  watchtowers: { border: ['watchtower'], interior: [], upgradeSec: Infinity, weight: 1 },
+};
+
+function worksPolicy(flags) {
+  const name = flags.works === undefined || flags.works === true ? 'normal' : String(flags.works);
+  return WORKS_POLICIES[name] ?? null; // 'none' (or anything else): no Works
+}
+
+/** The cheapest Work the policy wants right now: { kind: 'work', action, regionId, type, slot, level, cost, id } or null. */
+function nextWork(state, world, flags) {
+  const policy = worksPolicy(flags);
+  if (!policy) return null;
+  const income = incomePerSec(state, world);
+  let best = null;
+  const consider = (cand) => { if (!best || cand.cost < best.cost - 1e-9) best = cand; };
+  for (const region of world.regions) {
+    if (state.owner[region.id] !== PLAYER_FACTION) continue;
+    const border = region.neighbors.some((n) => state.owner[n] !== PLAYER_FACTION);
+    const wanted = border ? policy.border : policy.interior;
+    const slots = Works.workSlots(state, region.id);
+    const built = Works.worksOf(state, region.id);
+    if (built.length < slots) {
+      const type = wanted.find((t) => !built.some((w) => w.type === t));
+      if (type) {
+        const cost = Works.workCost(state, world, region.id, type, 1);
+        if (Number.isFinite(cost)) consider({ kind: 'work', action: 'build', regionId: region.id, type, slot: built.length, level: 1, cost, id: `work:${type}` });
+      }
+    }
+    built.forEach((w, slot) => {
+      if (!wanted.includes(w.type) || w.level >= 3) return;
+      const cost = Works.workCost(state, world, region.id, w.type, w.level + 1);
+      if (Number.isFinite(cost) && cost <= policy.upgradeSec * income) {
+        consider({ kind: 'work', action: 'upgrade', regionId: region.id, type: w.type, slot, level: w.level + 1, cost, id: `work:${w.type}` });
+      }
+    });
+  }
+  return best;
+}
+
+/** What the player is saving for: the cheapest of the pool upgrades and the wanted Works ('heavy' takes Works first). */
+function nextTarget(state, world, conquestCount, flags) {
+  const uid = cheapestTargetId(state, conquestCount, flags);
+  const up = uid ? { kind: 'upgrade', id: uid, cost: upgradeCost(uid, levelOf(state, uid)) } : null;
+  const work = nextWork(state, world, flags);
+  if (!work) return up;
+  if (!up) return work;
+  return work.cost * worksPolicy(flags).weight < up.cost ? work : up;
+}
+
 /** The single upgrade id the virtual player is currently saving toward. */
 function cheapestTargetId(state, conquestCount, flags) {
   let best = null;
@@ -174,15 +244,24 @@ function cheapestTargetId(state, conquestCount, flags) {
 }
 
 /** Buys the cheapest target repeatedly while affordable. Returns the purchases made. */
-function buyingPass(state, conquestCount, flags, goldSpent) {
+function buyingPass(state, world, conquestCount, flags, goldSpent) {
   const bought = [];
   for (;;) {
-    const id = cheapestTargetId(state, conquestCount, flags);
-    if (!id || !canBuy(state, id)) break;
-    const cost = upgradeCost(id, levelOf(state, id));
+    const target = nextTarget(state, world, conquestCount, flags);
+    if (!target) break;
+    if (target.kind === 'work') {
+      if (state.gold < target.cost - 1e-9) break;
+      const res = target.action === 'build' ? Works.buildWork(state, world, target.regionId, target.type) : Works.upgradeWork(state, world, target.regionId, target.slot);
+      if (!res) break; // defensive: the policy only asks for what the game allows
+      bought.push({ id: target.id, level: target.level, cost: res.cost });
+      goldSpent[target.id] = (goldSpent[target.id] || 0) + res.cost;
+      continue;
+    }
+    const id = target.id;
+    if (!canBuy(state, id)) break;
     const level = buy(state, id);
-    bought.push({ id, level, cost });
-    goldSpent[id] = (goldSpent[id] || 0) + cost;
+    bought.push({ id, level, cost: target.cost });
+    goldSpent[id] = (goldSpent[id] || 0) + target.cost;
   }
   return bought;
 }
@@ -224,14 +303,13 @@ function waitUntilAffordable(state, world, wallSecRef, cost) {
  * buys everything that then unlocks. No-ops (returns false) if nothing is left to buy for, or if
  * income is zero (both are stall conditions the caller handles). */
 function waitForNextPurchase(state, world, conquestCount, flags, goldSpent, log, wallSecRef) {
-  const id = cheapestTargetId(state, conquestCount, flags);
-  if (!id) return false;
-  const cost = upgradeCost(id, levelOf(state, id));
+  const target = nextTarget(state, world, conquestCount, flags);
+  if (!target) return false;
   const before = wallSecRef.sec;
-  if (!waitUntilAffordable(state, world, wallSecRef, cost)) return false;
+  if (!waitUntilAffordable(state, world, wallSecRef, target.cost)) return false;
   const waitSec = wallSecRef.sec - before;
-  if (waitSec > 0) log.push({ t: wallSecRef.sec, kind: 'wait', forId: id, waitSec });
-  for (const b of buyingPass(state, conquestCount, flags, goldSpent)) {
+  if (waitSec > 0) log.push({ t: wallSecRef.sec, kind: 'wait', forId: target.id, waitSec });
+  for (const b of buyingPass(state, world, conquestCount, flags, goldSpent)) {
     log.push({ t: wallSecRef.sec, kind: 'buy', ...b });
   }
   return true;
@@ -323,7 +401,7 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
     };
   }
 
-  const player = playerBattleStats(state, world);
+  const player = playerBattleStats(state, world, regionId);
   const enemy = enemyBattleStats(world, state, regionId);
   let arena;
   try {
@@ -339,7 +417,8 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
   const battle = createBattle(arena, player, enemy);
   const tracker = trackerOf(battle); // crowns (DESIGN §4.8): fed after EVERY step, exactly as the battle scene does
   const botMemo = {};
-  while (!battle.result && battle.t < CAP_SEC) {
+  const capSec = patienceFor(region, state.dynasty.level);
+  while (!battle.result && battle.t < capSec) {
     for (const cmd of think(battle, battle.t)) issue(battle, cmd);
     for (const cmd of decide(battle, battle.t, botMemo)) issue(battle, cmd);
     step(battle, TICK_SEC);
@@ -347,7 +426,7 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
   }
   const timedOut = !battle.result;
   if (hooks.onBattleEnd) hooks.onBattleEnd(battle, region, timedOut);
-  const battleSec = timedOut ? CAP_SEC : battle.stats.durationSec;
+  const battleSec = timedOut ? capSec : battle.stats.durationSec;
   advanceClock(state, world, wallSecRef, battleSec);
   battleDurations.push({
     band: bandFor(region), sec: battleSec, timedOut, won: battle.result === 'win',
@@ -416,7 +495,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
       stallReason = `stalled: exceeded ${fmtSec(MAX_WALL_SEC)} of simulated wall-clock (well past the 4-7h whole-continent target) without finishing`;
       break;
     }
-    for (const b of buyingPass(state, conquestCount, flags, goldSpent)) {
+    for (const b of buyingPass(state, world, conquestCount, flags, goldSpent)) {
       log.push({ t: wallSecRef.sec, kind: 'buy', ...b });
     }
 
@@ -521,7 +600,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
       // The player's view at the moment of victory (before shopping) and once the bounty and a
       // pass through the shop are spent: what the world screen would show right after the win.
       const before = frontierReadout(state, world);
-      for (const b of buyingPass(state, conquestCount, flags, goldSpent)) log.push({ t: wallSecRef.sec, kind: 'buy', ...b });
+      for (const b of buyingPass(state, world, conquestCount, flags, goldSpent)) log.push({ t: wallSecRef.sec, kind: 'buy', ...b });
       const after = frontierReadout(state, world);
       Object.assign(timeline[timeline.length - 1], {
         frontier: before.total, easyFairBefore: before.easyFair, easyFairAfter: after.easyFair, deadlyAfter: after.deadly,
@@ -538,7 +617,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
         const off = offlineEarnings(state, world, state.lastSeen + awaySec * 1000);
         wallSecRef.sec += awaySec;
         updateProsperity(state, world, wallSecRef.sec * 1000);
-        const spent = buyingPass(state, conquestCount, flags, goldSpent);
+        const spent = buyingPass(state, world, conquestCount, flags, goldSpent);
         offline = { atConquest: conquestCount, awaySec, paidSec: off.seconds, goldGained: off.gold, purchases: spent.length, returnedAtSec: wallSecRef.sec, easyFairOnReturn: frontierReadout(state, world).easyFair };
         for (const b of spent) log.push({ t: wallSecRef.sec, kind: 'buy', ...b });
         lastConquestWall = wallSecRef.sec;
@@ -588,6 +667,7 @@ export function runDynasties(seed, count, flags = {}) {
     const world = generateWorld(newSeed, { dynasty: state.dynasty.level + 1 });
     const next = foundDynasty(state, newSeed, world);
     if (!next) break;
+    Works.resetWorks(next); // a new continent: no Works (state.js's resetRegions does the same once integration has patched it)
     carry = { state: next, world };
   }
   return out;
@@ -792,6 +872,12 @@ function aggregate(results) {
       };
     }),
     intelSpent: median(results.map((r) => r.summary.goldSpent.intel || 0)),
+    // Region Works: the share of everything spent that went into them, and how many were built (medians over seeds)
+    worksShare: median(results.map((r) => {
+      const all = Object.values(r.summary.goldSpent).reduce((a, b) => a + b, 0);
+      const works = Object.entries(r.summary.goldSpent).filter(([k]) => k.startsWith('work:')).reduce((a, [, v]) => a + v, 0);
+      return all > 0 ? works / all : 0;
+    })),
     earlyReadout: (() => {
       const rows = [];
       for (const r of results) for (const t of r.timeline) if (t.n <= 5 && t.frontier > 0) rows.push(t);
@@ -838,6 +924,7 @@ function printAggregate(agg, seeds) {
     console.log(`    conquest ${String(b.n).padStart(2)}: bounty ${Math.round(b.bounty)}g (${(b.bounty / up).toFixed(1)} upgrades), crowns earned paid ${Math.round(b.crownBonus)}g, next upgrade ${Math.round(up)}g, income ${b.income.toFixed(1)}/s`);
   }
   if (agg.intelSpent) console.log(`  median gold spent on scouting and sabotage: ${Math.round(agg.intelSpent)}g`);
+  if (agg.worksShare) console.log(`  median share of all gold spent on Region Works: ${(agg.worksShare * 100).toFixed(1)}%`);
   console.log('  frontier regions readable as Easy/Fair right after conquest n (seeds with NONE before / after shopping, median after):');
   for (const [n, v] of Object.entries(agg.earlyReadout)) console.log(`    after conquest ${n}: none before shop ${v.noneBefore}/${v.seeds}, none after shop ${v.noneAfter}/${v.seeds}, median ${v.median}`);
   if (agg.stalls.length) {

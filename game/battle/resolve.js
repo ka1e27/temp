@@ -51,8 +51,8 @@ export function resolveCombat(battle, dt, t) {
     }
     seen.add(squad.id);
     seen.add(foe.id);
-    const aPerTroop = squadPerTroopStrength(squad.owner, player, arena.enemyFaction, enemy);
-    const bPerTroop = squadPerTroopStrength(foe.owner, player, arena.enemyFaction, enemy);
+    const aPerTroop = squadPerTroopStrength(squad.owner, player, arena.enemyFaction, enemy, true);
+    const bPerTroop = squadPerTroopStrength(foe.owner, player, arena.enemyFaction, enemy, true);
     const beforeA = squad.count;
     const beforeB = foe.count;
     const traded = applyStrengthTrade({

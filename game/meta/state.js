@@ -2,6 +2,8 @@
 // See docs/ARCHITECTURE.md §5 for the exact GameState contract this module
 // implements.
 
+import { createChronicle } from './chronicleState.js';
+
 /** Faction id that always identifies the player's own realm (see FACTIONS). */
 export const PLAYER_FACTION = 0;
 
@@ -22,12 +24,15 @@ export const PLAYER_FACTION = 0;
 /**
  * @typedef {Object} GameSettings
  * @property {boolean} sound
- * @property {boolean} reduceMotion
+ * @property {boolean} reduceMotion      starts from the OS prefers-reduced-motion until the player chooses (reduceMotionSet)
+ * @property {boolean} reduceMotionSet    the player has flipped the switch themselves: the OS preference no longer decides
  * @property {boolean} hints
- * @property {1|2|3} speed
+ * @property {0.5|1|2|3} speed          battle speed; 0.5 is an assist (DESIGN §7.5a)
  * @property {boolean} leaderVoices       rival leaders speak short lines (DESIGN §3.6)
+ * @property {boolean} slowBattles        Settings > Slow battles: the battle speed button also offers 0.5x (DESIGN 7.5a); off, it cycles 1x, 2x, 3x
  * @property {boolean} music              the generative score on/off (master `sound` still mutes everything)
  * @property {number} musicVolume         0..1, the score's own volume under the master
+ * @property {number} sfxVolume           0..1, the sound effects' own volume under the master
  */
 
 /**
@@ -50,10 +55,14 @@ export const PLAYER_FACTION = 0;
  * @property {number[]} metFactions       faction ids whose leader has already made first contact (this dynasty only)
  * @property {Object<string, {scouted: boolean, sabotage: number}>} intel  per region id, only regions the player paid to scout or sabotage (meta/intelState.js; this dynasty only)
  * @property {number[]} prosperity        per region id, 0..3 prosperity level last reported (meta/prosperity.js; this dynasty only)
+ * @property {Object<string, {type: string, level: number}[]>} works  per region id, this dynasty only (meta/worksEffects.js)
  * @property {Object<string, number>} upgrades  levels, missing = 0
  * @property {GameStats} stats
  * @property {GameSettings} settings
- * @property {{ step: number, done: boolean }} tutorial
+ * @property {import('./chronicleState.js').Chronicle} chronicle  the realm's story: this dynasty's chapter plus lifetime highlights (meta/chronicle.js); lifetime state, kept by Found a Dynasty
+ * @property {{ seen: Object<string, boolean>, done: boolean }} tutorial  the tutorial steps the player has seen or done (ids like 'W0', 'B1'; see
+ *   scenes/timing.js TUTORIAL_STEPS); `done` switches every hint off. Saves from before this shape ({ step, done }) are migrated by save.js.
+ * @property {number} saveSeq             rises with every write of the save: two tabs of the same origin must not overwrite each other (app/autosave.js)
  * @property {number} lastSeen            ms timestamp of last save
  * @property {object|null} battle         in-progress BattleState, for resume
  */
@@ -77,7 +86,7 @@ export function defaultStats() {
 /** @returns {GameSettings} */
 export function defaultSettings() {
   return {
-    sound: true, reduceMotion: false, hints: true, speed: 1, leaderVoices: true, music: true, musicVolume: 0.4,
+    sound: true, reduceMotion: false, reduceMotionSet: false, hints: true, speed: 1, slowBattles: false, leaderVoices: true, music: true, musicVolume: 0.4, sfxVolume: 1,
   };
 }
 
@@ -107,6 +116,8 @@ export function resetRegions(state, world, now) {
   // Scout / sabotage intel and prosperity levels belong to this continent too.
   state.intel = {};
   state.prosperity = [];
+  // Region Works (DESIGN 5.8) are built on this continent's regions: a new continent starts with none.
+  state.works = {};
   return state;
 }
 
@@ -129,8 +140,10 @@ export function createGame(seed, world, now) {
     // (see ARCHITECTURE §5: "levels, missing = 0").
     upgrades: { rally: 1 },
     stats: defaultStats(),
+    chronicle: createChronicle(),
     settings: defaultSettings(),
-    tutorial: { step: 0, done: false },
+    tutorial: { seen: {}, done: false },
+    saveSeq: 0,
     lastSeen: now,
     battle: null,
   };

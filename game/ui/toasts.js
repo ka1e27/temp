@@ -21,32 +21,98 @@ const DEFAULT_DURATION_MS = 4200;
  */
 
 export function createToasts() {
-  const el = h('div.toasts', {});
+  // `data-keep-live`: a dialog never makes the toasts inert, so they are still announced. Each toast's MESSAGE is its own polite status (not the whole
+  // toast, so its Dismiss button is not read out); the text is set a moment after the node exists, which is what makes it announce. A toast that is updated in
+  // place (a spree of purchases) changes that text once: one announcement of the latest words.
+  const el = h('div.toasts', { 'data-keep-live': '' });
   let seq = 0;
+  const say = (node, message) => { clearTimeout(node._sayTimer); node._sayTimer = setTimeout(() => { const m = node.querySelector('.toast-message'); if (m) m.textContent = message; }, 40); };
+
+  // A toast waits while it is being read: hovering it or focusing inside it pauses its timer; leaving restarts it with at least a couple of seconds (WCAG 2.2.1)
+  const arm = (node, ms) => {
+    clearTimeout(node._toastTimer);
+    node._dueMs = ms;
+    node._armedAt = Date.now();
+    node._toastTimer = setTimeout(() => dismiss(node), ms);
+  };
+  const hold = (node) => {
+    if (node._held) return;
+    node._held = true;
+    clearTimeout(node._toastTimer);
+    node._dueMs = Math.max(2500, (node._dueMs ?? DEFAULT_DURATION_MS) - (Date.now() - (node._armedAt ?? Date.now())));
+  };
+  const release = (node) => {
+    if (!node._held) return;
+    node._held = false;
+    arm(node, node._dueMs ?? 2500);
+  };
+
+  // While a modal dialog is open no toast may cover it: new toasts wait in a short queue (same id or same words merge, at most
+  // QUEUE_CAP, oldest dropped) and the ones already on screen step back into it; they come out one by one when the last dialog closes.
+  // Feedback for an action taken INSIDE a dialog is shown inside that dialog instead (the council's status line, Settings' Copied/Import lines).
+  const QUEUE_CAP = 4;
+  let held = false;
+  let queue = [];
+  let flushTimer = 0;
+  function enqueue(toast) {
+    queue = queue.filter((q) => !((toast.id != null && q.id === toast.id) || q.message === toast.message));
+    queue.push(toast);
+    if (queue.length > QUEUE_CAP) queue = queue.slice(-QUEUE_CAP);
+  }
+  function setHeld(on) {
+    on = !!on;
+    if (on === held) return;
+    held = on;
+    clearTimeout(flushTimer);
+    if (held) {
+      for (const node of [...el.children]) {
+        if (!node.isConnected || node.classList.contains('is-out')) continue;
+        const left = (node._dueMs ?? DEFAULT_DURATION_MS) - (node._held ? 0 : Date.now() - (node._armedAt ?? Date.now()));
+        if (left > 1200 && node._data) enqueue({ ...node._data, message: node.dataset.message, duration: Math.max(2500, left) });
+        clearTimeout(node._toastTimer);
+        node.remove(); // gone at once: it must not show over the dialog even for the length of a fade
+      }
+    } else {
+      const next = () => {
+        if (held || !queue.length) return;
+        update(queue.shift());
+        if (queue.length) flushTimer = setTimeout(next, 450);
+      };
+      flushTimer = setTimeout(next, 250); // let the dialog's close animation start first
+    }
+  }
 
   /** @param {ToastData} toast */
   function update(toast) {
     if (!toast || !toast.message) return;
+    if (held) { enqueue(toast); return; }
     if (toast.id != null) {
       const live = [...el.children].find((n) => n.dataset.id === String(toast.id) && n.isConnected && !n.classList.contains('is-out'));
       if (live) {
-        live.querySelector('.toast-message').textContent = toast.message;
-        clearTimeout(live._toastTimer);
-        live._toastTimer = setTimeout(() => dismiss(live), toast.duration ?? DEFAULT_DURATION_MS);
+        say(live, toast.message);
+        live.dataset.message = toast.message;
+        if (live._held) { live._dueMs = toast.duration ?? DEFAULT_DURATION_MS; } else arm(live, toast.duration ?? DEFAULT_DURATION_MS);
         return;
       }
     }
     const type = toast.type || 'info';
     const node = h(`div.toast.toast-${type}`, {},
       icon(toast.icon || DEFAULT_ICON[type] || 'bell', 18),
-      h('span.toast-message', {}, toast.message),
+      h('span.toast-message', { role: 'status', 'aria-live': 'polite' }, ''),
       h('button.toast-close', { onClick: () => dismiss(node), 'aria-label': 'Dismiss' }, icon('close', 12)),
     );
+    node.addEventListener('pointerenter', () => hold(node));
+    node.addEventListener('pointerleave', () => { if (!node.contains(document.activeElement)) release(node); });
+    node.addEventListener('focusin', () => hold(node));
+    node.addEventListener('focusout', () => { if (!node.matches(':hover')) release(node); });
+    node._data = toast;
     node.dataset.id = toast.id ?? `t${++seq}`;
+    node.dataset.message = toast.message;
     el.appendChild(node);
+    say(node, toast.message);
     requestAnimationFrame(() => node.classList.add('is-in'));
 
-    node._toastTimer = setTimeout(() => dismiss(node), toast.duration ?? DEFAULT_DURATION_MS);
+    arm(node, toast.duration ?? DEFAULT_DURATION_MS);
   }
 
   function dismiss(node) {
@@ -58,9 +124,11 @@ export function createToasts() {
   }
 
   function destroy() {
+    clearTimeout(flushTimer);
+    queue = [];
     for (const node of [...el.children]) clearTimeout(node._toastTimer);
     el.replaceChildren();
   }
 
-  return { el, update, destroy };
+  return { el, update, destroy, setHeld, isHeld: () => held, queued: () => queue.length };
 }

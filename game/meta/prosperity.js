@@ -10,7 +10,10 @@
 //   * `updateProsperity` syncs it to the truth and reports every level-up exactly once;
 //   * `prosperityIncomeMult` reads the STORED level, so offline earnings that run before the
 //     first update after a load automatically use the levels at departure (conservative);
-//   * a region the player does not own (lost, or a new dynasty) is silently reset to 0.
+//   * a region the player does not own (lost, or a new dynasty) is silently reset to 0;
+//   * while the player keeps owning a region its stored level NEVER goes down: a clock that moves back (a manual change, a
+//     restored VM) cannot drop the income bonus or make a level "re-fire" its celebration when the clock catches up again.
+//     The only resets are losing the region (an update while it is not owned) and a new dynasty (resetRegions / resetProsperity).
 import { PROSPERITY } from '../config/prosperity.js';
 import { PLAYER_FACTION } from './state.js';
 
@@ -57,11 +60,18 @@ function sanitize(v) {
   return Number.isInteger(v) && v > 0 ? Math.min(v, PROSPERITY.maxLevel) : 0;
 }
 
+/** The stored level of a region the player owns (0 when it is not owned or nothing is stored). */
+function heldLevel(state, regionId) {
+  return owned(state, regionId) && Array.isArray(state.prosperity) ? sanitize(state.prosperity[regionId]) : 0;
+}
+
 /**
  * Syncs `state.prosperity` to the levels at `now` and returns the level-ups since the last call
  * (each reported exactly once; a region that jumped from 0 to 2 while the game was closed is one
  * entry with `level: 2, from: 0`). Regions the player does not own (lost, or a new dynasty whose
- * `conqueredAt` was repopulated) drop to 0 silently. Creates `state.prosperity` if it is missing.
+ * `conqueredAt` was repopulated) drop to 0 silently. A region the player keeps never drops: the stored level is the
+ * larger of what it already was and what the tenure says now, so a clock set back changes nothing and is never
+ * celebrated twice. Creates `state.prosperity` if it is missing.
  * Call it every few seconds and right after `offlineEarnings`.
  * @param {import('./state.js').GameState} state
  * @param {import('../world/generate.js').World} world
@@ -75,7 +85,7 @@ export function updateProsperity(state, world, now) {
   const ups = [];
   for (let id = 0; id < n; id++) {
     const prev = sanitize(stored[id]);
-    const level = prosperityLevel(state, id, now);
+    const level = owned(state, id) ? Math.max(prev, prosperityLevel(state, id, now)) : 0;
     if (level > prev) ups.push({ regionId: id, level, from: prev });
     stored[id] = level;
   }
@@ -135,7 +145,7 @@ export function nextProsperityAt(state, regionId, now) {
   const th = PROSPERITY.thresholdsMs;
   let level;
   if (now != null) {
-    level = levelForTenure(now - at);
+    level = Math.max(levelForTenure(now - at), heldLevel(state, regionId)); // never below what is already credited
   } else {
     level = Array.isArray(state.prosperity) ? sanitize(state.prosperity[regionId]) : 0;
   }
@@ -173,7 +183,7 @@ export function nextProsperityChangeAt(state, world, now) {
  *   incomeBonus: number }}
  */
 export function prosperityInfo(state, regionId, now) {
-  const level = prosperityLevel(state, regionId, now);
+  const level = Math.max(prosperityLevel(state, regionId, now), heldLevel(state, regionId)); // what the economy pays and the map shows
   const nextAt = nextProsperityAt(state, regionId, now);
   return {
     level,

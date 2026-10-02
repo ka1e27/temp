@@ -661,7 +661,7 @@ test('progression can import the leaf without a cycle: intelState.js has no meta
 
 test('scoutReport falls back to the arena formula for a region buildArena cannot build (no passable border)', () => {
   let checked = 0;
-  for (const seed of [3, 7, 11]) {
+  for (const seed of [3, 4, 6, 7, 11]) {
     const { world, state } = stateWithConquests(seed, 6);
     for (const id of plainFrontier(state, world)) {
       const player = playerBattleStats(state, world);
@@ -677,5 +677,5 @@ test('scoutReport falls back to the arena formula for a region buildArena cannot
       checked += 1;
     }
   }
-  assert.ok(checked > 0, 'at least one unattackable frontier region exists in these worlds (seed 7, region 10)');
+  assert.ok(checked > 0, 'at least one unattackable frontier region exists in these worlds (seed 4 region 11, seed 6 region 23: a ridge thicker than BATTLE.corridorMaxTiles)');
 });

@@ -82,11 +82,14 @@ capital.
 | id | name | colour | emblem | personality |
 |---|---|---|---|---|
 | 0 | **You** (player realm) | Azure `#3d7ef0` | star | — |
-| 1 | **Free Folk** | Stone `#9a927f` | wheat | passive: never attacks, grows slowly, reinforces |
-| 2 | **Crimson Legion** | Crimson `#d8433f` | sword | aggressive: attacks early and often, commits big |
-| 3 | **Violet Covenant** | Violet `#9b5de5` | eye | defensive: extra forts & towers, counterattacks when you overextend |
+| 1 | **Free Folk** | Stone `#a19c92` | wheat | passive: never attacks, grows slowly, reinforces |
+| 2 | **Crimson Legion** | Crimson `#c63932` | sword | aggressive: attacks early and often, commits big |
+| 3 | **Violet Covenant** | Violet `#6d1b99` | eye | defensive: extra forts & towers, counterattacks when you overextend |
 | 4 | **Amber Horde** | Amber `#f29e38` | sun | swarm: fast growth, many small attacks, fast marches |
 
+- Faction colours are chosen so that every pair is ≥ 15 CIEDE2000 apart under deuteranopia,
+  protanopia and tritanopia (≥ 20 normally); a unit test enforces this. Emblems carry identity too,
+  so banners are large with a dark under-stroke.
 - The player starts in one coastal region near an edge. Tier 1–2 regions around it belong
   to the Free Folk (a gentle start). The rest of the map is split into three contiguous
   sectors, one per rival faction, each with a **capital region** deepest in its sector.
@@ -188,6 +191,17 @@ the enemy).
 - **Tap/click** your settlements to select several, then tap a target to send from all of
   them. Shift-drag (desktop) lassos. `A` selects all. Right-click / Esc clears.
 - Sending to your own settlement reinforces it.
+- **Supply lines (auto-send):** a standing order from one of your settlements to any
+  settlement. While it stands, the source automatically sends half its troops along its
+  route whenever it holds at least about 10 (checked every few seconds; numbers in config).
+  - **Create:** Ctrl-drag (desktop), long-press then drag (touch), or switch on **Auto** in
+    the battle HUD so that drags make supply lines instead of one-off sends.
+  - **Rules:** one line per source, and a new one replaces it. Repeating the gesture on the
+    same target, or right-clicking / long-pressing the source, removes it.
+  - **Capture and loss:** a line survives its target being captured (it then reinforces it)
+    and ends if the source falls.
+  - **Look:** drawn as flowing chevrons in your colour. Saved with the battle.
+  - **Why:** turns a battle from constant dragging into setting up flows and reacting.
 
 ### 4.4 Movement and combat (deterministic — no dice anywhere)
 - Squads march along the cheapest hex path. Terrain costs: road 0.55, grassland 1.0,
@@ -199,6 +213,26 @@ the enemy).
 - Fights resolve **progressively** over roughly half a second to two seconds (for visual
   impact), but the outcome is identical to the instant rule unless reinforcements arrive
   mid-fight — which is exactly the tactical opening a player should be able to exploit.
+- **Front lines (no marching through enemy land):** every arena tile belongs to someone.
+  Tiles of the target region belong to their nearest settlement's owner (they recolour live
+  as settlements flip), and your own land is yours.
+  - **The rule:** a squad marches only through its own side's land, neutral land (e.g. Free
+    Folk hamlets inside a rival region), and the tiles of the settlement it is attacking.
+    So you can attack a settlement only where its land touches land you can cross. Take the
+    near settlements to open a path to the keep. The same rule binds the enemy.
+  - **Routes:** a route is fixed when the squad sets out. A send with no legal route is
+    refused. While dragging, reachable targets glow and unreachable ones read "No route:
+    take a closer settlement first".
+  - **Rally:** sends only from settlements that have a route.
+  - **Border marches:** where a region would otherwise leave you no soft target (only the keep
+    reachable, or villages walled in behind it), the battle opens a short strip of **neutral
+    no-man's-land** (drawn untinted with a dashed edge) so that at least one ordinary
+    settlement can be attacked first. It is neutral in the rules too, so no squad ever
+    crosses enemy land.
+  - **Border marches stay short:** at most 3 tiles, the shortest strip to the nearest soft
+    site, and never along the keep. They exist only to open a first target. They never link
+    your own settlements together; a settlement cut off from the War Camp fights from where
+    it stands.
 - **Interception:** opposing squads that meet in the field stop and fight. You can catch a
   march before it reaches your village.
 - **Towers** loose an arrow volley every 0.5 s at the nearest enemy squad in range.
@@ -253,6 +287,8 @@ Winning a region's battle awards up to three crowns:
 - **Reward:** each crown adds +25% of the conquest bounty, which is realm-sized (§5.1).
 - **Surrender:** accepting a surrender (§5.3) awards Victory only. That makes it a real
   choice: the instant win, or fight for the full bounty.
+- **In battle,** the timer shows the Swift par as a countdown ("0:31 · Swift 0:43"), so Swift
+  is a goal you can chase. It dims once missed.
 - Crowns are fixed once the region is conquered. Retries after a loss count only the
   winning battle.
 - **Where crowns show:**
@@ -305,6 +341,9 @@ Easy / Fair / Hard / Deadly. If you outmatch a region by ≥ 3×, it **offers su
 conquer it instantly without a battle. (Makes second dynasties fast in the early game.)
 Surrender is never offered before you have won your first battle, so the tutorial battle
 always happens.
+- **The bar shows your chance of winning**, not a raw power ratio. It's derived from the same
+  calibration as the labels (e.g. "about 1 in 5"), so a Deadly region never looks like a close
+  fight. Your Army Power and their Strength stay as small numbers beside it.
 
 ### 5.4 Dynasty (prestige)
 When the whole continent is yours: **Found a Dynasty**. You keep dynasty stars, lifetime stats
@@ -369,20 +408,81 @@ react with a line (trigger `scouted`).
 Scout and sabotage state is per region and resets with the dynasty. Tuning numbers live in
 `game/config/intel.js`.
 
+### 5.8 Region Works (upgrades per region)
+- **Slots:** each region you own can build **Works**: 1 slot on conquest, +1 at Prosperity
+  II, +1 at Prosperity III.
+- **Building:** a Work is built and levelled (I–III) with gold from the owned region's card.
+  Costs scale with the region's depth and the Work's level.
+- **Effects are local.** "Next to" means the target region shares a border with the Work's
+  region. Effects from several regions stack.
+
+| Work | effect (per level) |
+|---|---|
+| **Barracks** | battles next to this region: your War Camp starts with more troops and grows faster |
+| **Stables** | battles next to this region: your squads march faster, hit harder in field clashes (cavalry), and your supply lines send more often |
+| **Shrine** | battles next to this region: power cooldowns are shorter |
+| **Watchtower** | regions next to this one are scouted for free, and in battles next to it your War Camp looses arrows like a tower |
+| **Market** | this region pays more income |
+
+- **Why:** it makes *where* you conquer and build a decision. Markets suit safe inner
+  regions; Barracks, Stables, Shrines and Watchtowers belong on the frontier facing your
+  next target. Owned regions stay interesting after conquest.
+- **On the map:** small building icons by the region's keep. The War Council keeps its
+  realm-wide upgrades; Works are the local, spatial layer on top.
+- Tuning numbers live in `game/config/works.js`.
+
+### 5.9 Keepsakes: the Chronicle and the Tapestry
+**Chronicle.** A running history of your realm in the Realm panel: short, dated, iconed entries
+for the moments worth remembering, e.g.:
+- the first conquest
+- each capital toppled, and decapitation
+- a triple-crown victory
+- a new fastest battle
+- the first Prosperity III
+- surrenders accepted
+- the dynasty founded
+
+Each dynasty keeps its own chapter, of at most about 40 entries; lifetime highlights carry over.
+Entries name regions and rival leaders, so the history reads like a story ("Year 2: Khan
+Gashrok's Amber Horde yields Dunspire").
+
+**Tapestry.** "Save the map" in the Realm panel, and offered on the Found a Dynasty screen,
+renders your whole continent with the real renderer: your territory, banners and region names.
+It's framed as a woven/parchment keepsake with the dynasty number, the date and the headline
+stats (regions, battles won, crowns, time played), and downloaded as a PNG. No server; it's
+balance-neutral pure delight. The map is the game's best screenshot, so let players keep it.
+
 ---
 
-## 6. First-time experience (≤ 3 minutes to first victory)
+## 6. First-time experience: a tutorial that teaches every control
 
-1. Title screen over the real continent slowly panning under clouds. **New Realm**.
-2. Camera flies to your home region. A single hint: "Your villages pay you gold." Gold ticks.
-3. The adjacent Free Folk region pulses. Hint: "Click a glowing region to attack."
-4. Battle. Hints appear one at a time, only when relevant, and never block:
-   "Drag from your War Camp to a settlement. The arrow tells you if you'll take it." (green =
-   capture, red = not enough) → "Take the keep to win." → after ~20 s:
-   "Try Rally — every settlement sends half its troops."
-5. Victory → the region floods blue, coins fly to the gold counter, the clouds part.
-   Hint: "Spend gold in the War Council."
-Every hint can be dismissed; a setting turns them off.
+Principles:
+- Teach **one thing at a time, when it is useful**, and advance when the player *does* it.
+  Never a wall of text.
+- The first battle teaches the essentials. Later battles introduce the rest, one control
+  per battle.
+- Every hint points exactly at what it talks about (PLAYFEEL §4 placement rules), can be
+  dismissed, and "Hints" in Settings turns them off.
+- "Replay tutorial" in Settings starts it again.
+- The `?` controls card lists everything, with mouse/keyboard and touch columns.
+
+Sequence (details in PLAYFEEL §4):
+1. **World:** your realm pays gold. Then pan and zoom the map (drag, scroll or pinch). Then
+   click a glowing region, then Attack.
+2. **Battle 1 (the essentials):**
+   - drag from the War Camp (green arrow = capture)
+   - choose how much to send (1–4 or the bar)
+   - capture to grow troops, and take the keep to win
+   - send from several settlements at once (click or tap to select; shift-drag lasso; `A`
+     for all)
+   - **Rally**: what it does and how to aim it
+3. **Battle 2:** supply lines (auto-send), front lines ("you can only attack where your land
+   touches theirs"), pause and speed.
+4. **Battle 3 and later, as each unlocks:** Firestorm and the other powers (hotkeys
+   Q/W/E/R/T, aiming, cooldowns), clearing a selection (right-click or Esc).
+5. **World, as each becomes relevant:** the War Council after the first victory, Scout on
+   the first unscouted frontier card, Region Works after the third conquest, Found a Dynasty
+   when the continent is yours.
 
 ---
 
@@ -454,6 +554,38 @@ Everything is drawn procedurally on canvas: no image assets.
 - Icons: a small hand-made inline SVG set (coin, sword, shield, boot, horn, flame, bell,
   crown, star, clock, castle, tower, tent, gear, sound on/off).
 - Numbers are formatted short: 950, 1.2K, 34.5K, 1.20M, 3.4B, then letter pairs.
+
+### 7.5a Accessibility (requirements, not nice-to-haves)
+- **Keyboard:** the whole core loop is playable without a pointer.
+  - World: a **Regions** list panel in the HUD, which also serves as a realm overview for
+    everyone, plus an arrow-key map cursor (Enter opens the card).
+  - Battle: an arrow-key site cursor. Enter selects your site or sends to another; a power
+    armed with its hotkey takes the target under the cursor.
+  - Every panel and dialog: focus moves in, Tab is trapped, Escape closes, focus is restored.
+  - Shortcuts never fire through a focused button or an open dialog; letter keys use physical
+    key codes.
+  - A battle auto-pauses while a dialog is open.
+- **Screen readers:** every control has a name and state (powers: "Rally, level 1, ready";
+  switches; fractions with pressed state). Toasts, hints, results and the welcome-back card
+  are polite live regions. The canvas has a text summary.
+- **Motion:** Reduce Motion starts from the OS `prefers-reduced-motion`. It freezes the title
+  drift, makes camera flights instant, parts the clouds without animation, stills the pulses,
+  and turns infinite CSS animations off.
+- **Never colour alone:**
+  - The send arrow's outcome is also a shape: a solid shaft with ✓ for capture, dashed with
+    × for not enough, dotted for no route. The outcome word sits by the arrowhead, and on
+    touch the tooltip appears above the finger.
+  - Faction colours stay distinguishable under deuteranopia and protanopia (azure vs violet
+    especially), with larger emblems on banners.
+- **Contrast and size:**
+  - Text ≥ 4.5:1 over real map backdrops: lighter muted/dim tokens, and panels about 90%
+    opaque where text sits.
+  - Text floor of 12 px on phones (map chips 11 px).
+  - Touch targets ≥ 44 px.
+  - A visible focus ring on every control.
+- **Assist:** a 0.5× battle speed (Settings → "Slow battles"; when on, the speed button
+  cycles 0.5×/1×/2×/3×, otherwise 1×/2×/3×); "Paused" shown as text; toasts pause while hovered or
+  focused; a separate sound-effects volume and an M mute key.
 
 ### 7.6 Sound
 Synthesised with WebAudio (no files): send, clash, capture, lose settlement, arrow, fireball,

@@ -111,3 +111,29 @@ test('casting a power is not activity: it must not reset the impatience clock', 
   assert.ok(cmds.some((c) => c.type === 'power' && c.power === 'levy'), 'levy is cast as soon as it is ready');
   assert.ok(!memo.lastAct, 'but that alone does not count as the bot having done something');
 });
+
+test('the bot never sends a squad the arrows on its way will shoot down (towers, DESIGN §4.4)', () => {
+  const build = (towers) => {
+    const specs = [
+      { type: 'camp', owner: 0, troops: 150, at: 0 },
+      { type: 'village', owner: 2, troops: 4, at: 9 },
+    ];
+    if (towers) specs.push({ type: 'tower', owner: 2, troops: 900, at: 4 }, { type: 'tower', owner: 2, troops: 900, at: 6 });
+    const arena = lineArena(11, specs);
+    for (const t of arena.tiles) t.link = true; // open land: this test is about arrows, not front lines
+    return createBattle(arena, PLAYER, ENEMY);
+  };
+  const firstSend = (battle) => {
+    const memo = {};
+    for (let i = 0; i < 400; i++) {
+      const cmds = decide(battle, battle.t, memo).filter((c) => c.type === 'send' && c.to === 1);
+      if (cmds.length) return Math.floor(battle.sites[cmds[0].from[0]].troops * cmds[0].fraction);
+      step(battle, 0.05);
+    }
+    return 0;
+  };
+  const open = firstSend(build(false));
+  const covered = firstSend(build(true));
+  assert.ok(open >= 3 && open < 12, `nothing shoots: a small squad is enough (${open})`);
+  assert.ok(covered >= 25, `two towers cover the road: the squad carries what they can kill and then some (${covered})`);
+});

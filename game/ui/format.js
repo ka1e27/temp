@@ -6,7 +6,7 @@
 // in the game agrees on one number format (3 significant digits: 950,
 // 1.23K, 12.3K, 123K, 1.20M, ...). That file is owned by the core module;
 // this one re-exports it under the name the rest of game/ui already calls.
-import { formatNum } from '../core/format.js';
+import { formatNum, toNumber, NO_VALUE } from '../core/format.js';
 
 /**
  * @param {number} n
@@ -17,6 +17,7 @@ export function shortNumber(n) {
 
 /** `+950` / `-950` / `+1.2K` — for stat deltas (income change, troop losses). */
 export function formatSigned(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return NO_VALUE;
   return n > 0 ? `+${shortNumber(n)}` : shortNumber(n);
 }
 
@@ -27,6 +28,7 @@ export function formatSigned(n) {
  * Below 10, keep one decimal; from 10 up, fall back to shortNumber.
  */
 export function formatRate(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return NO_VALUE; // never "NaN/s"
   const abs = Math.abs(n);
   if (abs < 10) return n.toFixed(1);
   if (abs < 1000) return Math.round(n).toString();
@@ -35,11 +37,13 @@ export function formatRate(n) {
 
 /** `12%`, or `12.5%` with `decimals: 1`. `fraction` is 0..1 (0.12 → "12%"). */
 export function formatPercent(fraction, decimals = 0) {
+  if (typeof fraction !== 'number' || !Number.isFinite(fraction)) return NO_VALUE;
   return `${(fraction * 100).toFixed(decimals)}%`;
 }
 
 /** `m:ss`, or `h:mm:ss` once it runs past an hour. For battle timers/cooldowns. */
 export function formatClock(totalSeconds) {
+  if (typeof totalSeconds !== 'number' || !Number.isFinite(totalSeconds)) return '—'; // a NaN or Infinity must never print "NaN:NaN"
   const s = Math.max(0, Math.round(totalSeconds));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -48,9 +52,11 @@ export function formatClock(totalSeconds) {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
-/** `4h 12m` / `12m 6s` / `45s` — for "time away" on the welcome-back card. */
+/** `4h 12m` / `12m 6s` / `45s` — for "time away" on the welcome-back card; "—" for a non-finite or non-numeric value. */
 export function formatDurationWords(totalSeconds) {
-  const s = Math.max(0, Math.round(totalSeconds));
+  const secs = toNumber(totalSeconds);
+  if (!Number.isFinite(secs)) return NO_VALUE;
+  const s = Math.max(0, Math.round(secs));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;

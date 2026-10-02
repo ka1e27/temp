@@ -19,7 +19,7 @@ export const TITLE = Object.freeze({
 export const WORLD_SCENE = Object.freeze({
   minZoomFactor: 0.85, // × fitZoom(world.bounds)
   maxZoomDesktop: 70,
-  maxZoomPhone: 50,
+  maxZoomPhone: 28, // a region should not fill a phone screen (it used to reach 50)
   panPaddingWorld: 2, // world units of pad beyond land bounds for pan clamp
   hoverBrighten: 0.08,
   frontierPulsePeriodSec: 2.2,
@@ -68,28 +68,75 @@ export const DEFEAT = Object.freeze({
 });
 
 /**
+ * The tutorial (DESIGN §6, PLAYFEEL §4): one hint at a time, each pointing exactly at what it talks about, each marked SEEN when the player does
+ * the thing (or dismisses it, or its timeout runs out). Steps are a set of seen ids, not a counter: the order below is the priority when several
+ * are eligible, `after` lists steps that must be seen first, and the rules that say WHEN a step is eligible live in game/app/tutorialRules.js.
  * @typedef {Object} TutorialStep
- * @property {number} id
- * @property {string} text
- * @property {string} anchor  logical anchor key resolved by the scene that owns it
- * @property {'timeout'|'tap'|'regionSelected'|'battleStart'|'send'|'captureOrTimeout'
- *   |'powerUsed'|'councilOpened'} advance
- * @property {number} [timeoutSec]
+ * @property {string} id
+ * @property {'world'|'battle'} scene
+ * @property {string} text          the hint on a desktop
+ * @property {string} [textTouch]   the hint for touch (tap, pinch, long-press instead of click, scroll, shift-drag)
+ * @property {string} [textAim]     B5 only: what it says once Rally is armed and the player has to pick the target
+ * @property {string} anchor        logical target key resolved by the scene that owns the step
+ * @property {string[]} [after]     steps that must be seen before this one can show
+ * @property {string[]} seenOn      the events that mark it seen (whether or not it is on screen: the player already knows it)
+ * @property {number} [timeoutSec]  seen after this long ON SCREEN (never blocks the player)
+ * @property {boolean} [activeOnly]  its events only mark it seen while it is the step on screen (B3: a capture before it showed should still show it)
+ * @property {string} [needs]       a feature flag that must be on (supply lines, works): the step stays silent until that feature lands
  */
 
 /** @type {TutorialStep[]} */
 export const TUTORIAL_STEPS = Object.freeze([
-  { id: 0, text: 'This is your realm. Its villages pay you gold every second.', anchor: 'gold', advance: 'timeoutOrTap', timeoutSec: 5 },
-  { id: 1, text: 'Click a glowing region to see what it offers.', anchor: 'frontier', advance: 'regionSelected' },
-  { id: 2, text: 'Attack! Battles take a minute or two.', anchor: 'attack', advance: 'battleStart' },
-  { id: 3, text: "Drag from your War Camp to a settlement. The arrow tells you if you'll take it.", anchor: 'camp', advance: 'send' },
-  { id: 4, text: 'Captured settlements grow troops for you. Take the enemy keep (the castle) to win.', anchor: 'enemyKeep', advance: 'captureOrTimeout', timeoutSec: 10 },
-  { id: 5, text: 'Try Rally: every settlement sends half its troops at once.', anchor: 'rally', advance: 'powerUsed' },
-  { id: 6, text: 'Spend gold in the War Council to grow stronger.', anchor: 'council', advance: 'councilOpened' },
+  { id: 'W0', scene: 'world', text: 'This is your realm. Its villages pay you gold every second.', anchor: 'gold', seenOn: ['tap'], timeoutSec: 5 },
+  { id: 'W1', scene: 'world', text: 'Drag to move the map. Scroll (or pinch) to zoom.', textTouch: 'Drag to move the map. Pinch to zoom.', anchor: 'mapCard', after: ['W0'], seenOn: ['panAndZoom'], timeoutSec: 30 },
+  { id: 'W2', scene: 'world', text: 'Click a glowing region to see what it offers.', textTouch: 'Tap a glowing region to see what it offers.', anchor: 'region', after: ['W1'], seenOn: ['regionSelected'] },
+  { id: 'W3', scene: 'world', text: 'Attack! Battles take a minute or two.', anchor: 'attack', seenOn: ['battleStart'] },
+  { id: 'B1', scene: 'battle', text: "Drag from your War Camp to a settlement. The arrow turns green and says 'capture' if you'll take it.", textTouch: "Drag from your War Camp to a settlement. The arrow turns green and says 'capture' if you'll take it.", anchor: 'camp', seenOn: ['send'] },
+  { id: 'B2', scene: 'battle', text: 'Choose how much to send: press 1–4 or tap the bar.', textTouch: 'Choose how much to send: tap the bar.', anchor: 'sendBar', after: ['B1'], seenOn: ['sizeChanged'] },
+  { id: 'B3', scene: 'battle', text: 'Captured settlements grow troops for you. Take their keep (the castle) to win.', anchor: 'enemyKeep', after: ['B1'], seenOn: ['capture'], activeOnly: true, timeoutSec: 10 },
+  {
+    id: 'B4', scene: 'battle', anchor: 'twoSites', after: ['B1'], seenOn: ['multiSend'],
+    text: 'Click your settlements to select several (or shift-drag to lasso, A for all), then click a target.',
+    textTouch: 'Tap your settlements to select several, then tap a target.',
+  },
+  {
+    id: 'B5', scene: 'battle', anchor: 'rally', after: ['B1'], seenOn: ['rally'],
+    text: 'Rally: every settlement you own sends half its troops to one place at once. Press Q or tap Rally, then pick the target.',
+    textTouch: 'Rally: every settlement you own sends half its troops to one place at once. Tap Rally, then tap the target.',
+    textAim: 'Now pick where everyone goes: click a settlement.',
+  },
+  {
+    id: 'C1', scene: 'battle', anchor: 'supply', after: ['B1'], seenOn: ['supplyCreated'], needs: 'supply',
+    text: 'Set up a supply line: Ctrl-drag (or long-press, or switch on Auto) and troops keep flowing on their own.',
+    textTouch: 'Set up a supply line: long-press a settlement, then drag. Or switch on Auto.',
+  },
+  { id: 'C2', scene: 'battle', text: 'You can only attack where your land touches theirs. Take the near settlements first.', anchor: 'blocked', after: ['B1'], seenOn: [], needs: 'supply', timeoutSec: 6 },
+  {
+    id: 'C3', scene: 'battle', anchor: 'pauseSpeed', after: ['B1'], seenOn: ['pauseOrSpeed'],
+    text: 'Space pauses. The speed button runs the battle faster.',
+    textTouch: 'Tap pause to stop the battle. The speed button runs it faster.',
+  },
+  {
+    id: 'P1', scene: 'battle', anchor: 'firestorm', seenOn: ['firestorm'],
+    text: 'Firestorm: press W (or tap it), then click where it should land. Powers recharge; watch the ring.',
+    textTouch: 'Firestorm: tap it, then tap where it should land. Powers recharge; watch the ring.',
+  },
+  {
+    id: 'P2', scene: 'battle', anchor: 'selection', after: ['B4'], seenOn: ['selectionCleared'],
+    text: 'Right-click or Esc clears your selection.',
+    textTouch: 'Tap an empty spot to clear your selection.',
+  },
+  { id: 'M1', scene: 'world', text: 'Spend gold in the War Council to grow stronger.', anchor: 'council', seenOn: ['councilOpened'] },
+  { id: 'M2', scene: 'world', text: 'Scout a region to see its garrisons and weak point.', anchor: 'scout', after: ['M1'], seenOn: ['scouted'] },
+  { id: 'M3', scene: 'world', text: 'Build Works in your regions: Barracks and Stables help the battles next to them.', anchor: 'worksRegion', after: ['M1'], seenOn: ['workBuilt'], needs: 'works' },
+  { id: 'M4', scene: 'world', text: 'Found a Dynasty: start again, stronger, on a new continent.', anchor: 'realm', seenOn: ['realmOpened'] },
 ]);
 
-/** The live send arrow: saturated green when the send would capture, red when it would not (gold otherwise). Read by battle.js and tools/check.mjs. */
-export const DRAG_ARROW = Object.freeze({ capture: '#2bd46b', fail: '#ff4545', neutral: '#f5c451' });
+/** The live send arrow: saturated green when the send would capture, red when it would not (gold otherwise), grey when there is no route (front lines). Read by battle.js and tools/check.mjs. */
+export const DRAG_ARROW = Object.freeze({ capture: '#2bd46b', fail: '#ff4545', neutral: '#f5c451', blocked: '#8d96a5' });
+
+/** The words for a send or supply order that has no route (DESIGN 4.4). One string, shared by the drag tooltip, the refusal and the tutorial. */
+export const NO_ROUTE_TEXT = 'No route: take a closer settlement first';
 
 /**
  * The "Stuck?" coach hint (once per battle, hints on, never during the tutorial's battle steps): when this much battle time has passed since the

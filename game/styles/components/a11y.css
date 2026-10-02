@@ -1,0 +1,20 @@
+/* Accessibility sizing (DESIGN §7.5a): 44 px touch targets on a finger, wherever a control is smaller than that to look at. The look stays; the HIT area grows
+   (min sizes where the control may grow, an invisible ::after where it must not). tools/a11ycheck.mjs measures every interactive element on a phone. */
+@media (pointer: coarse), (max-width: 640px) {
+  .hud-btn, .btn-icon { min-width: 44px; min-height: 44px; }
+  .council-tab { min-height: 44px; padding-inline: var(--sp-4); }
+  .council-buymax { min-height: 44px; padding-inline: var(--sp-4); }
+  .intel-btn, .works-build, .works-upgrade, .works-keep, .works-demolish, .works-back, .region-card-action, .btn { min-height: 44px; }
+  .settings-slider { min-height: 44px; }
+  .settings-toggle, .battle-auto, .upgrade-card-buy, .pill[role='button'] { position: relative; }
+  /* the switch is 44 x 26 to look at: its hit area is 44 x 44 */
+  .settings-toggle::after { content: ''; position: absolute; left: 50%; top: 50%; width: 100%; min-width: 44px; height: 44px; transform: translate(-50%, -50%); }
+}
+@media (pointer: coarse), (max-width: 640px) {
+  /* room for the switch's 44 px hit area inside its own row (the neighbouring rows must not overlap it) */
+  .settings-row { min-height: 48px; align-items: center; }
+}
+
+/* The map canvas takes keyboard focus (a ring on one region is the cursor, drawn on the canvas): the browser's own outline is kept thin and inside the screen. */
+#world:focus, #world:focus-visible { outline: none; }
+html[data-input='keyboard'] #world:focus { outline: 2px solid var(--focus-ring, #fff); outline-offset: -4px; } /* only while the last input was the keyboard */

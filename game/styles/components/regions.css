@@ -1,0 +1,47 @@
+/* The Regions list panel (ui/regionsPanel.js). It shares the Settings / Realm panel frame (overlays.css); only the list is its own. */
+.regions-header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-4) var(--sp-4) 0; }
+.regions-title { font-size: var(--fs-lg); }
+.regions-body { padding: var(--sp-3) var(--sp-4) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); overflow-y: auto; min-height: 0; }
+.regions-hint { margin: 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.regions-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+.regions-group { margin: 0; display: flex; align-items: center; gap: var(--sp-2); font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.regions-group.is-frontier { color: var(--gold-bright); }
+.regions-count { font-size: var(--fs-xs); padding: 0 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.regions-group-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.region-row {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--panel-radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.region-row:hover { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.2); }
+.region-row[data-kind='frontier'] { border-color: color-mix(in srgb, var(--gold) 35%, transparent); }
+.region-row-emblem {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: color-mix(in srgb, var(--chip-color, #9a927f) 22%, rgba(255, 255, 255, 0.04));
+  border: 1px solid color-mix(in srgb, var(--chip-color, #9a927f) 55%, transparent);
+  color: var(--chip-color, currentColor);
+}
+.region-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.region-row-name { font-weight: 800; font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.region-row-sub { font-size: var(--fs-xs); color: var(--text-muted); }
+.region-row-status { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: var(--fs-xs); font-weight: 700; }
+.region-row-status.is-owned { color: var(--gold-bright); }
+.region-row-chance { color: var(--text-muted); font-weight: 600; }
+.region-row-blocked { background: rgba(255, 255, 255, 0.08); color: var(--text-muted); }
+.matchup-chip.diff-easy { color: var(--diff-easy); background: color-mix(in srgb, var(--diff-easy) 18%, transparent); }
+.matchup-chip.diff-fair { color: var(--diff-fair); background: color-mix(in srgb, var(--diff-fair) 18%, transparent); }
+.matchup-chip.diff-hard { color: var(--diff-hard); background: color-mix(in srgb, var(--diff-hard) 18%, transparent); }
+.matchup-chip.diff-deadly { color: var(--diff-deadly); background: color-mix(in srgb, var(--diff-deadly) 18%, transparent); }

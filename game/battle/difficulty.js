@@ -46,7 +46,8 @@ export function estimateDifficulty(arena, player, enemy) {
   }
   const power = troops * player.atk * player.def * Math.pow(player.growth, DIFFICULTY.growthExp)
     * (1 + DIFFICULTY.powerBonusPerUnlocked * powerUnits(player));
-  strength *= DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1);
+  const strip = (arena.marches || []).filter((m) => m.approach).reduce((n, m) => n + m.tiles.length, 0);
+  strength *= DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1) * (1 + DIFFICULTY.approachPerTile * strip);
   const ratio = strength > 0 ? power / strength : (power > 0 ? Infinity : 1);
   return { power, strength, ratio };
 }

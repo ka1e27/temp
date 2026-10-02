@@ -8,8 +8,10 @@ import { PLAYER_FACTION, resetRegions } from './state.js';
 import { UPGRADES, POWER_IDS, levelOf } from './upgrades.js';
 import { perkMultipliers, perkAccumulate } from './perks.js';
 import { bounty } from './economy.js';
+import { worksBattleEffects, NO_WORKS_EFFECTS } from './worksEffects.js'; // the leaf: works.js imports this file
 import { hexDistance } from '../core/hex.js';
 import { hash32 } from '../core/rng.js';
+import { canBuildArena, arenaBlockedReason, approachTiles } from '../battle/arena.js';
 import { sabotageTroopMult, clearRegionIntel } from './intelState.js'; // the dependency-free leaf: intel.js imports this file
 
 // --- Player --------------------------------------------------------------
@@ -17,10 +19,13 @@ import { sabotageTroopMult, clearRegionIntel } from './intelState.js'; // the de
 /**
  * @param {import('./state.js').GameState} state
  * @param {import('../world/generate.js').World} world
+ * @param {number} [targetRegionId] the region about to be fought over: the Works of the owned regions next to it (Region
+ *   Works, DESIGN §5.8) join the army. Leave it out for a stat block that belongs to no particular battle.
  * @returns {import('../battle/sim.js').PlayerStats}
  */
-export function playerBattleStats(state, world) {
+export function playerBattleStats(state, world, targetRegionId) {
   const perks = perkMultipliers(state, world);
+  const works = targetRegionId == null ? NO_WORKS_EFFECTS : worksBattleEffects(state, world, targetRegionId);
   const starAtkDef = 1 + state.dynasty.stars * DYNASTY.atkDefPerStar;
   const mult = (id) => 1 + levelOf(state, id) * UPGRADES[id].magnitude;
 
@@ -31,11 +36,16 @@ export function playerBattleStats(state, world) {
     atk: PLAYER_BASE.atk * mult('steel') * perks.atk * starAtkDef,
     def: PLAYER_BASE.def * mult('armour') * perks.def * starAtkDef,
     growth: PLAYER_BASE.growth * mult('recruitment') * perks.growth,
-    speed: PLAYER_BASE.speed * mult('logistics') * perks.speed,
-    campTroops: PLAYER_BASE.campTroops + levelOf(state, 'muster') * UPGRADES.muster.magnitude,
+    speed: PLAYER_BASE.speed * mult('logistics') * perks.speed * works.speedMult,
+    campTroops: PLAYER_BASE.campTroops + levelOf(state, 'muster') * UPGRADES.muster.magnitude + works.campTroops,
     garrisonShare: PLAYER_BASE.garrisonShare,
     capBonus: PLAYER_BASE.capBonus,
-    cooldownMult: perks.cooldownMult,
+    cooldownMult: perks.cooldownMult * works.cooldownMult,
+    campVolleyLevel: works.campVolleyLevel, // Watchtowers next door: the War Camp looses arrows like a tower (CAMP_VOLLEY)
+    campGrowthMult: works.campGrowthMult,       // Barracks next door: the War Camp's troops-per-second x this
+    supplyIntervalMult: works.supplyIntervalMult, // Stables next door: supply lines fire this much sooner (x the interval)
+    fieldStrengthMult: works.fieldStrengthMult,   // Stables next door: squads clash in the open this much stronger (the charge)
+    worksCampTroops: works.campTroops,      // the part of campTroops that came from Barracks (the difficulty card credits only part of it)
     powers,
   };
 }
@@ -105,7 +115,8 @@ export function enemyBattleStats(world, state, regionId) {
   const tier = Math.max(0, region.tier);
 
   const decapitated = isDecapitated(state, world, region.faction);
-  const dynastyMult = Math.pow(DYNASTY.enemyMultPerDynasty, Math.max(0, state.dynasty.level - 1));
+  const done = Math.max(0, state.dynasty.level - 1); // dynasties completed
+  const dynastyMult = done === 0 ? 1 : DYNASTY.enemyMultFirst * Math.pow(DYNASTY.enemyMultPerDynasty, done - 1);
 
   // Depth: the tutorial ring keeps its plain tier; every other region's DEPTH is its place on the
   // world's difficulty ladder (ladderPosition), a fractional tier from 2 to the deepest one in the
@@ -114,7 +125,8 @@ export function enemyBattleStats(world, state, regionId) {
   const atkDefTable = ENEMY_SCALING.atkDefByTier;
   const depth = enemyDepth(world, region);
 
-  let troopMult = Math.pow(ENEMY_SCALING.troopPerTier, depth) * dynastyMult;
+  let troopMult = ENEMY_SCALING.troopAtDepth1 * Math.pow(ENEMY_SCALING.troopPerTier, depth - 1) * dynastyMult;
+  if (faction.personality === 'passive') troopMult *= ENEMY_SCALING.freeFolkTroopMult;
   if (region.isCapital) troopMult *= ENEMY_SCALING.capitalMult;
   if (decapitated) troopMult *= ENEMY_SCALING.decapitationMult;
   troopMult *= sabotageTroopMult(state, regionId); // DESIGN §5.7: 1, 0.85, 0.70 (garrisons only: growth, atk and def stay)
@@ -176,6 +188,38 @@ export function frontier(state, world) {
     if (region.neighbors.some(owned)) out.push(region.id);
   }
   return out;
+}
+
+/**
+ * Can the player attack this region right now? False when it is the player's own, or when no arena can be built for it:
+ * the border it shares with the player's land is mountains and no passable strip of at most BATTLE.corridorMaxTiles tiles
+ * leads round them (arena.js canBuildArena). The region card shows "No passable border: conquer a neighbour first" for a
+ * frontier region that fails this, instead of Attack.
+ * @param {import('./state.js').GameState} state
+ * @param {import('../world/generate.js').World} world
+ * @param {number} regionId
+ * @returns {boolean}
+ */
+export function attackable(state, world, regionId) {
+  return state.owner[regionId] !== PLAYER_FACTION && canBuildArena(world, state.owner, regionId);
+}
+
+/**
+ * Why a region cannot be attacked, or null when it can: 'owned' | 'not-adjacent' | 'no-passable-border' | 'no-region'.
+ * @returns {string|null}
+ */
+export function attackBlocker(state, world, regionId) {
+  return arenaBlockedReason(world, state.owner, regionId);
+}
+
+/**
+ * `frontier()` without the regions whose border is only mountains (see `attackable`): the ones the player can actually attack.
+ * @param {import('./state.js').GameState} state
+ * @param {import('../world/generate.js').World} world
+ * @returns {number[]}
+ */
+export function attackableFrontier(state, world) {
+  return frontier(state, world).filter((id) => canBuildArena(world, state.owner, id));
 }
 
 /**
@@ -264,9 +308,15 @@ function supportTroops(state, world, region, player) {
  * Fitted against bot-vs-AI battles by tools/balance.mjs (see DIFFICULTY in config/meta.js).
  */
 function estimatePower(state, world, region, player) {
-  const troops = player.campTroops + supportTroops(state, world, region, player);
+  const troops = player.campTroops - (1 - DIFFICULTY.worksCampCredit) * (player.worksCampTroops || 0)
+    + supportTroops(state, world, region, player);
   return troops * player.atk * player.def * Math.pow(player.growth, DIFFICULTY.growthExp)
-    * (1 + DIFFICULTY.powerBonusPerUnlocked * powerUnits(player));
+    * (1 + DIFFICULTY.powerBonusPerUnlocked * powerUnits(player))
+    * (1 + DIFFICULTY.volleyPerLevel * (player.campVolleyLevel || 0))
+    * (1 + DIFFICULTY.campGrowthCredit * ((player.campGrowthMult || 1) - 1))
+    * (1 + DIFFICULTY.supplyCredit * (1 / (player.supplyIntervalMult || 1) - 1))
+    * (1 + DIFFICULTY.fieldCredit * ((player.fieldStrengthMult || 1) - 1))
+    * (1 + DIFFICULTY.cooldownCredit * (1 / (player.cooldownMult || 1) - 1));
 }
 
 /**
@@ -296,6 +346,46 @@ function estimateStrength(world, region, enemy) {
     * (DIFFICULTY.tierFactor[region.tier] ?? 1);
 }
 
+/** The label bands as { label, min (ratio), lo, hi (win chance) }, best first; built once from ECONOMY and DIFFICULTY. */
+const WIN_BANDS = (() => {
+  const [floor, ceil] = DIFFICULTY.winChanceRange;
+  const labels = ECONOMY.difficultyLabels; // best first, the last one has min 0
+  return labels.map((entry, i) => ({
+    label: entry.label,
+    min: entry.min,
+    lo: i === labels.length - 1 ? floor : DIFFICULTY.winAtLabelEdge[entry.label],
+    hi: i === 0 ? ceil : DIFFICULTY.winAtLabelEdge[labels[i - 1].label],
+  }));
+})();
+/** The anchors (ratio at a label's lower edge, the win chance promised there), worst first, and the logit slope of each gap. */
+const WIN_ANCHORS = WIN_BANDS.filter((b) => b.min > 0).reverse().map((b) => ({ ratio: b.min, logit: Math.log(b.lo / (1 - b.lo)) }));
+const WIN_SLOPES = WIN_ANCHORS.slice(1).map((a, i) => (a.logit - WIN_ANCHORS[i].logit) / Math.log(a.ratio / WIN_ANCHORS[i].ratio));
+
+/**
+ * The estimated chance of winning a fight, 0..1, from the card's ratio (power / strength): what the region card's bar shows
+ * (DESIGN §5.3). Monotonic in the ratio and clamped to DIFFICULTY.winChanceRange. It agrees with the label at every edge: the
+ * chance is 0.85 at the Easy edge (ratio 1.55) and above it for Easy, 0.60..0.85 for Fair, 0.35..0.60 for Hard and under 0.35 for
+ * Deadly; a ratio just under an edge reads just under the band's lower value. Calibrated on real campaign states (see
+ * DIFFICULTY.winAtLabelEdge). One curve serves every rival: the card's personality and tier factors already put each of them on
+ * the same ratio scale (the measured curves of the four personalities lie within 6 points of this one).
+ * @param {number} ratio  power / strength; 0, negatives and NaN read as hopeless, Infinity as certain
+ * @returns {number}
+ */
+export function winChance(ratio) {
+  const [floor, ceil] = DIFFICULTY.winChanceRange;
+  if (!(ratio > 0)) return floor;
+  if (ratio === Infinity) return ceil;
+  const band = WIN_BANDS.find((b) => ratio >= b.min) || WIN_BANDS[WIN_BANDS.length - 1];
+  // the segment this ratio lies on (the outermost ones are extended past the first and last anchor)
+  let seg = WIN_SLOPES.length - 1;
+  for (let i = 1; i < WIN_ANCHORS.length; i++) if (ratio < WIN_ANCHORS[i].ratio) { seg = i - 1; break; }
+  const anchor = WIN_ANCHORS[seg];
+  const logit = anchor.logit + WIN_SLOPES[seg] * Math.log(ratio / anchor.ratio);
+  const p = 1 / (1 + Math.exp(-logit));
+  // inside the label's own band, whatever rounding does at the edges (a ratio exactly on an edge belongs to the better label)
+  return Math.min(Math.max(p, band.lo), band.hi === ceil ? ceil : band.hi - 1e-9);
+}
+
 function labelFor(ratio) {
   for (const entry of ECONOMY.difficultyLabels) {
     if (ratio >= entry.min) return entry.label;
@@ -307,22 +397,26 @@ function labelFor(ratio) {
  * @param {import('./state.js').GameState} state
  * @param {import('../world/generate.js').World} world
  * @param {number} regionId
- * @returns {{ power: number, strength: number, ratio: number, label: string, surrender: boolean }}
+ * @returns {{ power: number, strength: number, ratio: number, label: string, surrender: boolean, approach: number, winChance: number }}
+ *   `winChance`: the estimated chance of winning, 0..1 (see `winChance(ratio)`), what the card's bar shows
+ *   `approach`: tiles of the War Camp's approach strip (0 for an ordinary border; the card charges for them)
  */
 export function difficulty(state, world, regionId) {
   const region = world.regions[regionId];
-  const player = playerBattleStats(state, world);
+  const player = playerBattleStats(state, world, regionId);
   const enemy = enemyBattleStats(world, state, regionId);
 
   const power = estimatePower(state, world, region, player);
-  const strength = estimateStrength(world, region, enemy);
+  // a border of mountains puts the War Camp behind a strip of no-man's-land: those fights play harder (DIFFICULTY.approachPerTile)
+  const approach = approachTiles(world, state.owner, regionId) || 0;
+  const strength = estimateStrength(world, region, enemy) * (1 + DIFFICULTY.approachPerTile * approach);
   const ratio = strength > 0 ? power / strength : Infinity;
 
   // Surrender is a reward for a proven army: never offered before the first battle is won, so the
   // tutorial fight always happens (DESIGN §5.3).
   const surrender = ratio >= ECONOMY.surrenderRatio && state.stats.battlesWon > 0;
 
-  return { power, strength, ratio, label: labelFor(ratio), surrender };
+  return { power, strength, ratio, label: labelFor(ratio), surrender, approach, winChance: winChance(ratio) };
 }
 
 // --- Perks (UI display) ------------------------------------------------------

@@ -6,7 +6,7 @@ import { hexDistance } from '../core/hex.js';
 import { drawHexTint, elevOffset } from '../render/tiles.js';
 import { ACCENTS, factionColor } from '../render/palette.js';
 import {
-  frontier, revealed, difficulty, conquer, canFoundDynasty,
+  frontier, revealed, difficulty, conquer, canFoundDynasty, attackable, attackBlocker,
 } from '../meta/progression.js';
 import { incomePerSec, bounty } from '../meta/economy.js';
 import {
@@ -18,25 +18,41 @@ import {
 } from '../meta/crowns.js';
 import { newContacts, markMet, seedContacts } from '../meta/leaders.js';
 import {
-  intelPanelData, intelOf, scoutReport, scout, sabotage, intelToast, sabotagePercent, clearRegionIntel,
+  intelPanelData, intelOf, scoutReport, scout, sabotage, intelToast, sabotagePercent, clearRegionIntel, tutorialRegionId, isScoutedOrFree,
 } from '../meta/intel.js';
+import {
+  worksPanelData, worksMarksData, buildWork, upgradeWork, demolishWork, worksToast, workName, worksTutorialDue, worksTutorialRegion,
+} from '../meta/works.js';
+import { drawWorksMarks } from '../render/worksMarks.js';
 import { drawScoutedGarrisons, drawWeakPointMarker } from '../render/intelMarks.js';
 import { prosperityInfo } from '../meta/prosperity.js';
+import { chronicleOnConquest, chroniclePanelData } from '../meta/chronicle.js';
+import { saveText } from '../meta/keepsake.js';
+import { chanceWords } from '../app/chanceWords.js';
+import { regionsListData } from '../app/regionsList.js';
+import { announce } from '../ui/live.js';
+import { saveTapestry } from './worldImage.js';
 import { CROWN_BONUS_PCT } from '../app/crownCopy.js';
 import { shortNumber } from '../ui/format.js';
 import { perkDisplay, dynastyStarText } from '../app/perkInfo.js';
 import { bestValueUpgrade } from '../app/bestValue.js';
 import { effectiveRegionIncome } from '../app/income.js';
 import { drawRegionLabels } from '../render/labels.js';
-import { WORLD_SCENE, VICTORY, TUTORIAL_STEPS } from './timing.js';
+import { WORLD_SCENE, VICTORY } from './timing.js';
+import { regionHintBox } from '../app/hintTargets.js';
+import { FEATURES } from '../app/features.js';
 import {
-  createSiteDrawer, pickLandTile, regionLabelAnchors, realmFraming, frameInRect, freeRect, openCameraLimits,
+  createSiteDrawer, pickLandTile, regionLabelAnchors, realmFraming, frameInRect, freeRect, openCameraLimits, unionBounds, HEX_MARGIN,
 } from './worldLayers.js';
 
 const FOG_FADE_SEC = 1.6;
 const DERIVED_REFRESH_MS = 300;
-const CARD_SETTLE_MS = 520; // the dock / sheet animation is 260-300 ms, plus a frame or two of camera nudge
 const SURRENDER_HINT = 'Accept their surrender, or attack for crowns!';
+// M3's later stages. On a phone the chooser fills the bottom of the screen and the bubble has to sit over the card, so it is ONE short line there (it must not cover the region name).
+const M3_TEXT = {
+  build: 'Tap Build to raise a Work here.', buildTouch: 'Tap Build',
+  pick: 'Pick Barracks: it adds troops to your camp next door.', pickTouch: 'Pick Barracks',
+};
 const CONTACT_RETRY_MS = 1000; // a first contact blocked by a hint or the 15 s gap is offered again
 const CONTACT_AFTER_CONQUEST_MS = 1200; // lands when the mists part
 
@@ -58,13 +74,14 @@ export function createWorldScene(services) {
   let lastHudMs = -1e9;
   let lastCouncilMs = -1e9;
   let lastRealmMs = -1e9;
+  let lastRegionsMs = -1e9;
+  let cursorId = -1; // the map's keyboard cursor: a region (arrow keys move it, Enter opens its card)
+  let keyboardCursor = false; // the cursor has been moved from the keyboard (so Enter and Space mean "open it")
   let contactCheckAtMs = 0;
   let nextCelebrationMs = 0; // one prosperity celebration per 0.7 s
   let lastAmbientMs = -1e9;
   let visualLevels = []; // region id -> prosperity level drawn (0 under fog, mid-flood and for anything not yours)
   let coachSig = '';
-  let cardOpenedAtMs = -1e9; // when the region card last opened: its slide-in (and the camera nudge) must finish before a hint anchors to it
-  let coachAt = 0;
   let nudgeRaf = 0;
   const newFrontier = new Map(); // region id -> ms when its 'newly attackable' pulse begins
 
@@ -127,13 +144,16 @@ export function createWorldScene(services) {
     derived.labels = labels;
 
     // Scout reports are cached per (region, ownership, sabotage, stats) in meta/intel.js, so this is cheap.
+    // A Watchtower next door scouts for free (DESIGN 5.7, 5.8): the very predicate the card uses decides who wears garrison badges.
     derived.scouted = [];
-    for (const [key, entry] of Object.entries(state.intel || {})) {
-      const id = Number(key);
-      if (!entry.scouted || state.owner[id] === PLAYER_FACTION || !isVisibleRegion(id)) continue;
+    const scoutable = new Set(Object.keys(state.intel || {}).map(Number));
+    for (const id of derived.frontier) scoutable.add(id);
+    for (const id of scoutable) {
+      if (state.owner[id] === PLAYER_FACTION || !isVisibleRegion(id) || !isScoutedOrFree(state, world, id)) continue;
       const report = scoutReport(state, world, id);
       if (report) derived.scouted.push({ id, report });
     }
+    derived.worksMarks = worksMarksData(state, world); // the buildings by each keep (render/worksMarks.js)
   }
 
   function isVisibleRegion(regionId) {
@@ -157,7 +177,7 @@ export function createWorldScene(services) {
 
     const ownerFactionId = state.owner[regionId];
     const ownerFaction = world.factions[ownerFactionId];
-    const owner = { name: ownerFaction.name, color: ownerFaction.color, emblem: ownerFaction.emblem };
+    const owner = { name: ownerFaction.name, color: ownerFaction.color, colorLight: ownerFaction.colorLight, emblem: ownerFaction.emblem };
     const perk = perkDisplay(region.perk, world, region);
     if (ownerFactionId === PLAYER_FACTION) {
       return {
@@ -170,6 +190,7 @@ export function createWorldScene(services) {
           const p = prosperityInfo(state, regionId, Date.now());
           return { level: p.level, label: p.label, nextInMs: p.nextInMs, bonusPct: Math.round(p.incomeBonus * 100) };
         })(),
+        works: worksPanelData(state, world, regionId, Date.now()),
       };
     }
     return {
@@ -182,12 +203,16 @@ export function createWorldScene(services) {
       income: effectiveRegionIncome(state, world, region),
       bounty: bounty(state, world, regionId),
       difficulty: difficulty(state, world, regionId),
+      chanceText: chanceWords(difficulty(state, world, regionId).winChance), // "about 1 in 5": the bar shows the chance of winning (DESIGN 5.3)
+      attackBlock: (() => { const r = attackBlocker(state, world, regionId); return r === 'no-passable-border' || r === 'unbuildable' ? r : null; })(), // no arena can be built: the card says why
       intel: intelPanelData(state, world, regionId),
       parSec: parFor(world, regionId, state),
       crownBonusPct: CROWN_BONUS_PCT,
     };
   }
 
+  let hintOutlineRegion = -1; // the region the open hint points at: it gets a bright pulsing outline
+  let hintSlotPx = 84; // the room the card opens above Attack for the "Attack!" bubble (grows to the bubble's real height)
   let cardOffersSurrender = false; // the open card shows Accept Surrender instead of Attack
 
   function refreshRegionCard() {
@@ -254,18 +279,37 @@ export function createWorldScene(services) {
     ui.council.update({ upgrades: Object.keys(UPGRADES).map(councilRow) });
   }
 
+  // Keepsakes: the "Save the map" button's words and busy state (the picture takes about half a second to render, and a second press must not start a second render)
+  let savingMap = false;
+  const saveWords = () => ({ label: saveText('button'), busyLabel: saveText('busy'), busy: savingMap, hint: saveText('hint') });
+
   function updateRealm() {
     const { state } = container.get();
     const { world } = container.get();
     ui.realm.update({
       stats: state.stats, dynasty: { ...state.dynasty, starText: dynastyStarText() }, canFoundDynasty: canFoundDynasty(state),
       crowns: crownTotals(state, world),
+      chronicle: chroniclePanelData(state, world, Date.now()),
+      save: saveWords(),
     });
+  }
+
+  async function onSaveMap() {
+    if (savingMap) return;
+    savingMap = true;
+    updateRealm();
+    const { state, world } = container.get();
+    const res = await saveTapestry(state, world, Date.now());
+    savingMap = false;
+    updateRealm();
+    // pressed inside the Realm panel (or the Found a Dynasty confirmation): the result is said there, beside the button
+    const message = res.ok ? saveText('done', { file: res.file }) : saveText('failed');
+    if (ui.realm.setSaveStatus && !ui.realm.el.hidden) ui.realm.setSaveStatus(message, res.ok ? 'success' : 'warning');
+    else ui.toasts.update({ type: res.ok ? 'success' : 'warning', icon: 'map', message });
   }
 
   // --- selection ----------------------------------------------------------------
   function setSelected(id) {
-    if (id != null && (id !== selectedRegionId || ui.regionCard.dock.hidden)) cardOpenedAtMs = performance.now();
     selectedRegionId = id;
     ui.regionCard.dock.hidden = id == null;
     if (id == null) return;
@@ -362,7 +406,8 @@ export function createWorldScene(services) {
     let i = 0;
     for (const r of world.regions) {
       if (!beforeRevealed[r.id] && after[r.id]) {
-        renderer.clouds.revealRegion(r.id, now + 250 + i * VICTORY.cloudPartStaggerMs);
+        // Reduce Motion: the mists part at once, with no stagger (the region simply stops being hidden)
+        if (!state.settings.reduceMotion) renderer.clouds.revealRegion(r.id, now + 250 + i * VICTORY.cloudPartStaggerMs);
         i++;
       }
     }
@@ -401,6 +446,13 @@ export function createWorldScene(services) {
 
   // --- callbacks ----------------------------------------------------------------
   function onAttack(regionId) {
+    const { state, world } = container.get();
+    // a region whose border is only mountains has no arena (arena.js canBuildArena): the card says so instead of offering Attack; this guards every other way in
+    if (!attackable(state, world, regionId)) {
+      sfx.play('error');
+      ui.toasts.update({ type: 'warning', icon: 'flame', message: 'No passable border: conquer a neighbour first.' });
+      return;
+    }
     goto.battle({ regionId });
   }
 
@@ -414,6 +466,7 @@ export function createWorldScene(services) {
     // Accepting a surrender earns Victory only (DESIGN 4.8), one crown of bonus bounty.
     const crownAward = awardCrowns(state, world, regionId, crownsForSurrender(), result.bounty);
     state.stats.surrenders += 1;
+    try { chronicleOnConquest(state, world, regionId, { surrender: true, decapitated: !!result.decapitated }); } catch (err) { console.warn('[chronicle] surrender line skipped:', err); } // the story never blocks a conquest
     const gained = result.bounty + crownAward.bonusGold;
     applyConquestVisuals(regionId, beforeRevealed, gained, { oldOwner });
     if (result.decapitated) services.speak('decapitation', oldOwner, regionId); // before the toast: the leader shows first on a phone
@@ -435,8 +488,9 @@ export function createWorldScene(services) {
   function onScout(regionId) {
     const { state, world } = container.get();
     const res = scout(state, world, regionId); // { cost } | false: pays and records
-    if (!res) { sfx.play('error'); return; }
+    if (!res) { refused('Not enough gold to scout that region.'); return; }
     sfx.play('click');
+    tutorial.notify('scouted');
     // The leader first, then the toast: on a phone the toast waits until the banner has gone.
     services.speak('scouted', state.owner[regionId], regionId, regionId); // the leader notices; the gate does the rest
     ui.toasts.update({ type: 'info', icon: 'eye', message: intelToast('scouted', { region: world.regions[regionId].name }) });
@@ -446,7 +500,7 @@ export function createWorldScene(services) {
   function onSabotage(regionId) {
     const { state, world } = container.get();
     const res = sabotage(state, world, regionId); // { cost, level } | false
-    if (!res) { sfx.play('error'); return; }
+    if (!res) { refused('Not enough gold to sabotage.'); return; }
     sfx.play('upgrade');
     ui.toasts.update({
       type: 'warning', icon: 'flame',
@@ -456,15 +510,52 @@ export function createWorldScene(services) {
     afterIntel();
   }
 
+  // --- Region Works (DESIGN 5.8) ------------------------------------------------------------------
+  function afterWorksChange() {
+    markDirty(); // rebuilds derived.worksMarks and, through difficulty(), every frontier chip
+    refreshRegionCard(); // the panel shows the new level and price at once
+    updateHud(performance.now(), { force: true }); // gold changed
+    services.autosave.save();
+  }
+
+  function onBuildWork(regionId, slot, type) {
+    const { state, world } = container.get();
+    const res = buildWork(state, world, regionId, type);
+    if (!res) { refused('Not enough gold to build that.'); return; } // refused: nothing changed
+    sfx.play('upgrade');
+    ui.toasts.update({ type: 'success', icon: 'castle', message: worksToast('built', { work: workName(type), region: world.regions[regionId].name }) });
+    afterWorksChange();
+    tutorial.notify('workBuilt');
+  }
+
+  function onUpgradeWork(regionId, slot) {
+    const { state, world } = container.get();
+    const res = upgradeWork(state, world, regionId, slot);
+    if (!res) { refused('Not enough gold to upgrade that.'); return; }
+    sfx.play('upgrade', { pitch: 1 + 0.12 * (res.level - 1) }); // a little higher at level III
+    ui.toasts.update({ type: 'success', icon: 'star', message: worksToast('upgraded', { work: workName(res.type), region: world.regions[regionId].name, level: res.level }) });
+    afterWorksChange();
+  }
+
+  function onDemolishWork(regionId, slot) {
+    const { state, world } = container.get();
+    const res = demolishWork(state, world, regionId, slot); // the panel already asked "Demolish Barracks? Refund N gold"
+    if (!res) { refused('That could not be demolished.'); return; }
+    sfx.play('coin', { volume: 0.5 }); // the refund comes back as gold: the coin cue, quietly
+    ui.toasts.update({ icon: 'coin', message: worksToast('demolished', { work: workName(res.type), region: world.regions[regionId].name, refund: res.refund }) });
+    afterWorksChange();
+  }
+
   function onBuy(id) {
     const { state } = container.get();
     const level = buy(state, id);
     if (level) {
       sfx.play('upgrade');
-      // one toast for a run of purchases (a spree in the council would otherwise pile four over the map on a phone)
-      ui.toasts.update({ id: 'upgrade-bought', type: 'success', message: `${UPGRADES[id].name} → level ${level}` });
+      // feedback for a purchase made in the council stays IN the council (the bought card flashes; a polite status line under the header), never a toast over the dialog
+      ui.council.setStatus(`Bought ${UPGRADES[id].name}, level ${level}`);
     } else {
       sfx.play('error');
+      ui.council.setStatus('Not enough gold for that upgrade.', 'warning');
     }
     markDirty();
     updateCouncil(true); // a purchase changes which upgrade is the best value now
@@ -476,13 +567,20 @@ export function createWorldScene(services) {
     const res = buyMax(state, id);
     if (res.levels > 0) {
       sfx.play('upgrade');
-      ui.toasts.update({ type: 'success', message: `${UPGRADES[id].name} +${res.levels} levels` });
+      ui.council.setStatus(`Bought ${UPGRADES[id].name} +${res.levels} ${res.levels === 1 ? 'level' : 'levels'}, now level ${res.level ?? ''}`.replace(/, now level $/, ''));
     } else {
       sfx.play('error');
+      ui.council.setStatus('Not enough gold for another level.', 'warning');
     }
     markDirty();
     updateCouncil(true);
     updateHud(performance.now(), { force: true });
+  }
+
+  /** A refused action is SEEN as well as heard (the error blip is nothing with the sound off, or to a player who cannot hear it): a warning toast, updated in place so repeats never pile up. */
+  function refused(message) {
+    sfx.play('error');
+    ui.toasts.update({ id: 'refused', type: 'warning', icon: 'flame', message, duration: 2400 });
   }
 
   function onFoundDynasty() {
@@ -506,8 +604,48 @@ export function createWorldScene(services) {
   function onRealmOpen() {
     setSelected(null);
     ui.council.el.hidden = true;
+    ui.regions.el.hidden = true;
     ui.realm.el.hidden = false;
     updateRealm();
+    tutorial.notify('realmOpened');
+  }
+
+  // --- the Regions list: every region you can see, as buttons (a way round the map for a keyboard, a screen reader and a thumb) ----------------------------------
+  function updateRegions() {
+    const { state, world } = container.get();
+    ui.regions.update({ rows: regionsListData(state, world, { revealAll: services.devRevealAll }) });
+  }
+
+  function onRegionsOpen() {
+    setSelected(null);
+    ui.council.el.hidden = true;
+    ui.realm.el.hidden = true;
+    updateRegions();
+    ui.regions.el.hidden = false;
+  }
+
+  function onRegionsClose() {
+    ui.regions.el.hidden = true;
+  }
+
+  /** A row was chosen: the panel closes, the region's card opens (exactly as a click on the map would), and focus moves to the card's action. */
+  function onRegionsSelect(id) {
+    ui.regions.el.hidden = true;
+    sfx.play('click', { volume: 0.5 });
+    openRegion(id);
+  }
+
+  /** Opens a region's card from the keyboard or the list: the cursor goes there, the camera follows if it is out of sight, focus lands on the card's action. */
+  function openRegion(id) {
+    cursorId = id;
+    revealCursor(id);
+    setSelected(id);
+    queueMicrotask(() => focusCard());
+  }
+
+  function focusCard() {
+    const act = cardAction() || cardScout() || ui.regionCard.el.querySelector('button:not([disabled])');
+    if (act && act.focus) act.focus({ preventScroll: true });
   }
 
   function showWelcome(w) {
@@ -533,12 +671,19 @@ export function createWorldScene(services) {
     if (!ui.welcome.el.hidden) { ui.welcome.el.hidden = true; return true; }
     if (!ui.council.el.hidden) { ui.council.el.hidden = true; return true; }
     if (!ui.realm.el.hidden) { ui.realm.el.hidden = true; return true; }
-    if (selectedRegionId != null) { setSelected(null); return true; }
+    if (!ui.regions.el.hidden) { ui.regions.el.hidden = true; return true; }
+    if (selectedRegionId != null) {
+      const focusWasInCard = ui.regionCard.dock.contains(document.activeElement);
+      setSelected(null);
+      if (focusWasInCard) renderer.canvas.focus({ preventScroll: true }); // Escape from the card goes back to the map cursor
+      return true;
+    }
     return false;
   }
 
   // --- input --------------------------------------------------------------------
   function onTap(sx, sy, wx, wy) {
+    keyboardCursor = false; // the mouse is in use
     tutorial.notify('tap');
     const regionId = regionAt(wx, wy);
     if (regionId == null) {
@@ -556,9 +701,98 @@ export function createWorldScene(services) {
     renderer.canvas.style.cursor = id != null ? 'pointer' : '';
   }
 
-  function onKey(key) {
-    if (key === 'Escape') closeTopPanel();
+  // --- the map's keyboard cursor (DESIGN 7.5a): a canvas that takes focus, a ring on one region, arrow keys to the neighbour that way, Enter to open its card ------------------
+  const seenRegion = (id) => !!(derived.revealed[id] || services.devRevealAll);
+  const allRows = () => { const { state, world } = container.get(); return regionsListData(state, world, { revealAll: services.devRevealAll }); };
+  const summaryOf = (id) => { const row = allRows().find((r) => r.id === id); return row ? row.summary : container.get().world.regions[id].name; };
+
+  /** The cursor starts on the open card's region, else the region the tutorial points at, else home; it never rests on a region that is still under the mists. */
+  function ensureCursor() {
+    const { world } = container.get();
+    if (cursorId >= 0 && seenRegion(cursorId)) return;
+    const pick = selectedRegionId != null ? selectedRegionId : hintRegionId();
+    cursorId = pick >= 0 && seenRegion(pick) ? pick : world.startRegion;
   }
+
+  /** The camera follows the cursor when its region is out of sight (or under a bar). */
+  function revealCursor(id) {
+    const a = anchors[id];
+    if (!a) return;
+    const p = camera.worldToScreen(a.x, a.y);
+    if (p.x < 48 || p.y < 110 || p.x > renderer.cssWidth - 48 || p.y > renderer.cssHeight - 48) camera.flyTo({ x: a.x, y: a.y, zoom: camera.zoom }, 350);
+  }
+
+  function setCursor(id) {
+    cursorId = id;
+    revealCursor(id);
+    announce(summaryOf(id));
+  }
+
+  /** Arrow key: the revealed region whose label lies most nearly that way (neighbours preferred), within about 65 degrees of it. */
+  function moveCursor(dx, dy) {
+    const { world } = container.get();
+    ensureCursor();
+    const from = anchors[cursorId];
+    const mine = world.regions[cursorId];
+    let best = -1;
+    let bestScore = Infinity;
+    for (const region of world.regions) {
+      if (region.id === cursorId || !seenRegion(region.id) || !anchors[region.id]) continue;
+      const vx = anchors[region.id].x - from.x;
+      const vy = anchors[region.id].y - from.y;
+      const d = Math.hypot(vx, vy);
+      if (d < 1e-6) continue;
+      const cos = (vx * dx + vy * dy) / d;
+      if (cos < 0.42) continue;
+      const score = d * (1.7 - cos) * (mine.neighbors.includes(region.id) ? 0.5 : 1.6);
+      if (score < bestScore) { bestScore = score; best = region.id; }
+    }
+    if (best < 0) { announce('No region that way.'); return; }
+    setCursor(best);
+  }
+
+  /** [ and ]: the regions you can attack, in the Regions list's order (easiest first). */
+  function cycleFrontier(step) {
+    const ids = allRows().filter((r) => r.kind === 'frontier').map((r) => r.id);
+    if (!ids.length) { announce('No region to attack.'); return; }
+    ensureCursor();
+    const i = ids.indexOf(cursorId);
+    setCursor(ids[(i < 0 ? (step > 0 ? 0 : ids.length - 1) : (i + step + ids.length) % ids.length)]);
+  }
+
+  function onKey(key, event) {
+    if (key === 'Escape') { closeTopPanel(); return; }
+    // the map's own keys apply only while the MAP has focus (a focused button keeps its own keys)
+    if (!event || document.activeElement !== renderer.canvas || event.ctrlKey || event.metaKey || event.altKey) return;
+    const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+    if (arrows[key]) {
+      event.preventDefault();
+      keyboardCursor = true;
+      const [dx, dy] = arrows[key];
+      if (event.shiftKey) camera.panBy(-dx * 90, -dy * 90); else moveCursor(dx, dy);
+      return;
+    }
+    if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+      // after a mouse click the map has focus too, and Space must not surprise a mouse player: it opens the cursor's card only once the cursor is in use from the keyboard
+      if (!keyboardCursor && !services.isKeyboardUser()) return;
+      event.preventDefault();
+      ensureCursor();
+      sfx.play('click', { volume: 0.5 });
+      openRegion(cursorId);
+      return;
+    }
+    if (key === '[' || key === ']') { event.preventDefault(); keyboardCursor = true; cycleFrontier(key === ']' ? 1 : -1); return; }
+    if (key === '+' || key === '=') { event.preventDefault(); camera.zoomAt(1.3, renderer.cssWidth / 2, renderer.cssHeight / 2); return; }
+    if (key === '-' || key === '_') { event.preventDefault(); camera.zoomAt(1 / 1.3, renderer.cssWidth / 2, renderer.cssHeight / 2); }
+  }
+
+  /** The map takes keyboard focus: it says where the cursor is and what the keys do. */
+  function onCanvasFocus() {
+    if (!sceneIsActive()) return;
+    ensureCursor();
+    announce(`Map. ${summaryOf(cursorId)} Arrow keys move between regions, Enter opens the card, brackets cycle the regions you can attack.`);
+  }
+  renderer.canvas.addEventListener('focus', onCanvasFocus);
 
   function installHandlers() {
     const h = input.handlers;
@@ -609,6 +843,9 @@ export function createWorldScene(services) {
     nextCelebrationMs = performance.now() + 900; // let the camera settle before the first "prospers!"
     input.setEnabled(true);
     installHandlers();
+    renderer.canvas.tabIndex = 0; // the map is the first keyboard stop in the world
+    // a keyboard activation (New Realm, a battle's Continue) hides what had focus: focus goes to the map, so the keys keep working without a Tab hunt
+    requestAnimationFrame(() => { const a = document.activeElement; if (!a || a === document.body || !a.getClientRects().length) renderer.canvas.focus({ preventScroll: true }); });
     services.hideAllPanels();
     ui.hud.el.hidden = false;
     enteredAtMs = performance.now();
@@ -623,9 +860,6 @@ export function createWorldScene(services) {
     applyCameraLimits();
     if (payload.cameFromBattle) {
       fogAlpha = 1;
-      // Finishing the first battle skips whatever battle hints were left.
-      const tut = state.tutorial;
-      if (!tut.done && state.stats.battlesWon >= 1 && tut.step >= 3 && tut.step < 6) tut.step = 6;
       if (payload.conquered) {
         // Continue after a victory: pull back, part the mists, coins to the counter, new frontier pulses.
         const c = payload.conquered;
@@ -652,7 +886,7 @@ export function createWorldScene(services) {
     if (!payload.cameFromBattle && services.pendingWelcome) {
       const w = services.pendingWelcome;
       services.pendingWelcome = null;
-      showWelcome(w);
+      if (w.epoch === container.epoch) showWelcome(w); // a welcome made for a realm that was since replaced is never shown
     }
     updateHud(enteredAtMs, { force: true });
     coachSig = '';
@@ -663,84 +897,186 @@ export function createWorldScene(services) {
     ui.regionCard.dock.hidden = true;
     ui.council.el.hidden = true;
     ui.realm.el.hidden = true;
+    ui.regions.el.hidden = true;
+    renderer.canvas.tabIndex = -1; // the map is a keyboard stop only while it is the world's map
     ui.welcome.el.hidden = true;
     ui.coach.update({ visible: false });
     renderer.canvas.style.cursor = '';
   }
 
-  // --- tutorial anchors -----------------------------------------------------------
-  function resolveAnchor(anchorKey) {
+  // --- tutorial hints (PLAYFEEL §4: W0-W3, M1-M4) -----------------------------------------
+  // Each frame: the facts go to the tutorial controller, which names the step; the step's anchor becomes a LIVE target (a getter the coach
+  // re-reads every frame, so the pointer follows pans, zooms and flights and hides while the target is off screen or under a panel).
+  const isUp = (e) => !!e && e.isConnected && e.getClientRects().length > 0 && !e.closest('[hidden]');
+  const hudBtn = (label) => ui.hud.el.querySelector(`.hud-btn[aria-label="${label}"]`);
+  const cardAction = () => ui.regionCard.el.querySelector('.region-card-action:not([hidden])');
+  const cardScout = () => ui.regionCard.el.querySelector('.intel-scout-btn');
+
+  /** The region the first hints talk about: the easiest frontier region (the tutorial region while the realm is still its start region). */
+  function hintRegionId() {
     const { state, world } = container.get();
-    if (anchorKey === 'gold') return { el: ui.hud.el.querySelector('.hud-gold-block') };
-    if (anchorKey === 'council') return { el: ui.hud.el.querySelector('.hud-btn[aria-label="War Council"]') };
-    // Short landscape screens have no room beside the card for the bubble; the button speaks for itself.
-    if (anchorKey === 'attack' && renderer.cssHeight < 520) return null;
-    if (anchorKey === 'attack' && !ui.regionCard.dock.hidden) {
-      const btn = ui.regionCard.el.querySelector('.region-card-action:not([hidden])');
-      if (btn) {
-        // A point near the button's right end: the coach ring is sized to its target and a
-        // full-width button would get a card-sized circle.
-        const r = btn.getBoundingClientRect();
-        if (services.isPhone()) {
-          // Bottom sheet: point at the sheet's top edge so the bubble sits ABOVE the card
-          // instead of covering its numbers.
-          const d = ui.regionCard.dock.getBoundingClientRect();
-          return { x: Math.min(renderer.cssWidth - 60, d.left + d.width * 0.75), y: d.top - 2, side: 'up' };
+    const t = tutorialRegionId(state, world);
+    if (t >= 0) return t;
+    let best = -1;
+    let bestRatio = -Infinity;
+    for (const id of derived.frontier) {
+      if (!attackable(state, world, id)) continue; // never point the lesson at a region that cannot be attacked
+      const d = difficulty(state, world, id);
+      if (d.ratio > bestRatio) { bestRatio = d.ratio; best = id; }
+    }
+    return best;
+  }
+
+  function hintFacts(nowMs) {
+    const { state, world } = container.get();
+    const owned = state.owner.filter((o) => o === PLAYER_FACTION).length;
+    const cardOpen = !ui.regionCard.dock.hidden && selectedRegionId != null;
+    const action = cardOpen ? cardAction() : null;
+    const scout = cardOpen ? cardScout() : null;
+    return {
+      scene: 'world',
+      // nothing modal in the way, and the scene has had a moment (the hint waits for the mists and the first framing)
+      panelsClosed: ui.welcome.el.hidden && ui.settings.el.hidden && ui.council.el.hidden && ui.realm.el.hidden && ui.regions.el.hidden && nowMs - enteredAtMs > 900,
+      cardOpen,
+      cardAttackable: isUp(action),
+      cardUnscouted: isUp(scout) && !scout.disabled,
+      frontierCount: derived.frontier.length,
+      battlesWon: state.stats.battlesWon,
+      conquests: Math.max(0, owned - 1),
+      realmComplete: canFoundDynasty(state),
+      ownedFrontierCount: world.regions.filter((r) => state.owner[r.id] === PLAYER_FACTION && r.neighbors.some((n) => state.owner[n] !== PLAYER_FACTION)).length,
+      // M3 (PLAYFEEL §4): after the third conquest, while no Work has been built; it points at the owned region that borders the most enemy land
+      worksDue: FEATURES.works && owned - 1 >= 3 && worksTutorialDue(state),
+      worksRegion: FEATURES.works && owned - 1 >= 3 ? worksTutorialRegion(state, world) : -1,
+      features: FEATURES,
+    };
+  }
+
+  /** A region as a hint target: the box is its whole on-screen extent (hintTargets.regionHintBox), the label is the point that tells whether it is covered by a panel. */
+  function regionTarget(id) {
+    const label = () => { const a = anchors[id]; return camera.worldToScreen(a.x, a.y); };
+    return {
+      get: () => regionHintBox(container.get().world.regions[id].bbox, (x, y) => camera.worldToScreen(x, y), { w: renderer.cssWidth, h: renderer.cssHeight }, label()),
+      probe: label,
+    };
+  }
+
+  /** The live target for a step, with the side the bubble should prefer, or null when there is nothing to point at right now. */
+  function hintTarget(def) {
+    const phone = services.isPhone();
+    switch (def.anchor) {
+      case 'gold': return { target: { find: () => ui.hud.el.querySelector('.hud-gold-block') } };
+      case 'mapCard': return { card: true };
+      case 'region': {
+        const id = hintRegionId();
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `region${id}`, outline: id, noRing: true };
+      }
+      case 'attack': {
+        // above the button, in the room the card opens for it (setHintSpace); on a short screen (a phone on its side) there is no room to spare: beside the card, over the map
+        const short = renderer.cssHeight < 520;
+        return { target: { find: cardAction }, prefer: short ? 'left' : 'above', slot: !short };
+      }
+      case 'council': {
+        // names a good first buy (the council's own Best value pick), so a new player is not left to guess among nine cards
+        refreshBestValue(performance.now(), false);
+        const best = bestValueId && UPGRADES[bestValueId] ? bestValueId : null;
+        const text = best === 'muster' ? 'Muster gives your War Camp more troops: a good first buy.'
+          : best ? `${UPGRADES[best].name} is the best value right now: a good first buy.` : undefined;
+        return { target: { find: () => hudBtn('War Council') }, text, key: best || 'none' };
+      }
+      case 'scout': {
+        // on a phone the bubble sits in room the card opens above the Scout row (it would cover the strength bar otherwise); elsewhere it sits beside the card
+        const room = phone && renderer.cssHeight >= 520;
+        return { target: { find: cardScout }, prefer: room ? 'above' : 'left', slot: room ? 'scout' : false };
+      }
+      case 'realm': return { target: { find: () => hudBtn('Realm') } };
+      case 'worksRegion': {
+        // Three stages, each following its target: the label of the owned region at the edge of the realm; once its card is open, the Build button;
+        // once the chooser is open, Barracks. A card on a region with no free slot has nothing to point at, so the hint hides.
+        const { state, world } = container.get();
+        const works = ui.regionCard.works;
+        const ownedCard = !ui.regionCard.dock.hidden && selectedRegionId != null && state.owner[selectedRegionId] === PLAYER_FACTION;
+        if (ownedCard) {
+          if (works.view === 'choose') return { target: { find: () => works.chooserRow('barracks') }, prefer: phone ? 'above' : 'left', key: 'pick', text: services.isTouch() ? M3_TEXT.pickTouch : M3_TEXT.pick };
+          return { target: { find: () => works.buildButton() }, prefer: phone ? 'above' : 'left', key: 'build', text: services.isTouch() ? M3_TEXT.buildTouch : M3_TEXT.build };
         }
-        // The bubble hangs 26 px under this point, which would land inside the card's bottom padding: push it clear of the card's edge.
-        const card = ui.regionCard.el.getBoundingClientRect();
-        const gap = Math.max(0, Math.round(card.bottom + 12 - (r.top + r.height / 2 + 26)));
-        return { x: r.right - 44, y: r.top + r.height / 2, gap };
+        const id = worksTutorialRegion(state, world);
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `works${id}`, outline: id, noRing: true };
       }
+      default: return null;
     }
-    if (anchorKey === 'frontier' || anchorKey === 'attack') {
-      const ids = derived.frontier;
-      if (ids.length === 0) return null;
-      let best = ids[0];
-      let bestRatio = -Infinity;
-      for (const id of ids) {
-        const d = difficulty(state, world, id);
-        if (d.ratio > bestRatio) { bestRatio = d.ratio; best = id; }
-      }
-      const a = anchors[best];
-      const p = camera.worldToScreen(a.x, a.y);
-      return { x: p.x, y: p.y };
+  }
+
+  // W1 "drag to move the map, scroll or pinch to zoom": seen once the camera has been panned AND zoomed by the player (flights are the scene's own)
+  let panZoom = { x: NaN, y: NaN, zoom: NaN, panned: 0, zoomed: 0 };
+  function watchPanZoom() {
+    if (camera._flight) { panZoom.x = camera.x; panZoom.y = camera.y; panZoom.zoom = camera.zoom; return; }
+    if (Number.isFinite(panZoom.zoom)) {
+      panZoom.panned += Math.hypot(camera.x - panZoom.x, camera.y - panZoom.y) * camera.zoom;
+      panZoom.zoomed += Math.abs(Math.log(camera.zoom / panZoom.zoom));
+      if (panZoom.panned > 24 && panZoom.zoomed > 0.05) tutorial.notify('panAndZoom'); // a modest drag and a modest pinch count (the thresholds used to be 50 px and 10%)
     }
-    return null;
+    panZoom.x = camera.x; panZoom.y = camera.y; panZoom.zoom = camera.zoom;
+  }
+
+  /**
+   * Hint W2 ("Click a glowing region") is about to start: if its region is not comfortably on screen (the W1 pan and zoom can push it away; RC2 playtest, seed 23),
+   * fly gently to frame the home region and it together (instant under Reduce Motion). True while that flight runs: the hint waits for it.
+   */
+  let w2Framed = false;
+  function frameForW2() {
+    if (w2Framed) return camera.isMoving();
+    w2Framed = true;
+    const id = hintRegionId();
+    if (id < 0) return false;
+    const { state, world } = container.get();
+    const W = renderer.cssWidth;
+    const H = renderer.cssHeight;
+    const rect = freeRect(W, H, { reserveCard: false });
+    const bb = world.regions[id].bbox;
+    const a = camera.worldToScreen(bb.minX - HEX_MARGIN, bb.minY - HEX_MARGIN);
+    const b = camera.worldToScreen(bb.maxX + HEX_MARGIN, bb.maxY + HEX_MARGIN);
+    const area = Math.max(1, (b.x - a.x) * (b.y - a.y));
+    const inW = Math.max(0, Math.min(b.x, rect.x1) - Math.max(a.x, rect.x0));
+    const inH = Math.max(0, Math.min(b.y, rect.y1) - Math.max(a.y, rect.y0));
+    const label = anchors[id] ? camera.worldToScreen(anchors[id].x, anchors[id].y) : null;
+    const labelIn = !!label && label.x > rect.x0 && label.x < rect.x1 && label.y > rect.y0 && label.y < rect.y1;
+    if (labelIn && (inW * inH) / area >= 0.7) return false; // comfortably on screen: nothing to do
+    const home = world.regions.filter((r) => state.owner[r.id] === PLAYER_FACTION).map((r) => r.bbox);
+    const u = unionBounds([...home, bb]);
+    const bounds = { minX: u.minX - HEX_MARGIN, minY: u.minY - HEX_MARGIN, maxX: u.maxX + HEX_MARGIN, maxY: u.maxY + HEX_MARGIN };
+    const phone = services.isPhone();
+    const target = frameInRect(camera, bounds, rect, { padding: phone ? 18 : 30, maxZoom: Math.max(camera.zoom, phone ? 22 : 32) });
+    camera.flyTo(target, state.settings.reduceMotion ? 1 : 700);
+    return true;
   }
 
   function updateCoach(nowMs) {
-    let def = tutorial.currentStepDef();
-    // Step 2 ("Attack!") only makes sense with a region card open; without one, keep
-    // nudging toward a frontier region instead.
-    if (def && def.id === 2 && ui.regionCard.dock.hidden) def = TUTORIAL_STEPS[1];
-    // A hint anchored to the card waits for its slide-in to finish (about 0.3 s): no half-second of bubble over a moving card.
-    const cardSettling = def && def.id === 2 && nowMs - cardOpenedAtMs < CARD_SETTLE_MS;
-    const calm = ui.welcome.el.hidden && ui.settings.el.hidden && !camera.isMoving() && nowMs - enteredAtMs > 900 && !cardSettling;
-    // Only steps that make sense on the map show here (3-5 belong to battle).
-    const mapStep = def && (def.id <= 2 || def.id === 6);
-    // The council hint points at the top-right HUD, where the region card sits: it waits for the card to close.
-    const blockedByPanel = def && def.id === 6 && (!ui.council.el.hidden || !ui.realm.el.hidden || !ui.regionCard.dock.hidden);
-    if (!def || !mapStep || !calm || blockedByPanel || (def.id <= 1 && !ui.council.el.hidden)) {
+    watchPanZoom();
+    const facts = hintFacts(nowMs);
+    const def = tutorial.pick(facts);
+    if (!def || def.id !== 'W2') w2Framed = false;
+    else if (frameForW2()) { if (coachSig !== 'off') { coachSig = 'off'; ui.coach.update({ visible: false }); } return; }
+    const off = () => {
+      hintOutlineRegion = -1;
+      ui.regionCard.setHintSpace(0);
       if (coachSig !== 'off') { coachSig = 'off'; ui.coach.update({ visible: false }); }
-      return;
-    }
-    const target = resolveAnchor(def.anchor);
-    // A hint pointing at something off-screen or under the HUD bar would only confuse.
-    const offscreen = target && target.x != null
-      && (target.x < 16 || target.x > renderer.cssWidth - 16 || target.y < 96 || target.y > renderer.cssHeight - 16);
-    if (!target || offscreen) {
-      if (coachSig !== 'off') { coachSig = 'off'; ui.coach.update({ visible: false }); }
-      return;
-    }
-    // Step 2 says "Attack!": if the card in front of the player offers a surrender instead, say that.
-    const surrenderHint = def.id === 2 && cardOffersSurrender;
-    const text = surrenderHint ? SURRENDER_HINT : def.text;
-    const sig = `${target.el ? `${def.id}|el` : `${def.id}|${Math.round(target.x)},${Math.round(target.y)},${target.gap || 0}`}${surrenderHint ? '|s' : ''}`;
-    if (sig === coachSig && nowMs - coachAt < 400) return;
-    coachSig = sig;
-    coachAt = nowMs;
-    ui.coach.update({ visible: true, text, target });
+    };
+    if (!def) { off(); return; }
+    const res = hintTarget(def);
+    if (!res) { off(); return; }
+    hintOutlineRegion = res.outline ?? -1; // the region the hint is about glows on the map (drawHintRegion)
+    // "Attack!" opens room for its bubble ABOVE the button, inside the card, so it covers no number the player is deciding on
+    if (res.slot) {
+      hintSlotPx = Math.max(hintSlotPx, Math.min(130, Math.ceil(ui.coach.bubble.offsetHeight || 0) + 28));
+      ui.regionCard.setHintSpace(hintSlotPx, res.slot === 'scout' ? 'scout' : 'footer');
+    } else ui.regionCard.setHintSpace(0);
+    // Step W3 says "Attack!": if the card in front of the player offers a surrender instead, say that.
+    const text = res.text || (def.id === 'W3' && cardOffersSurrender ? SURRENDER_HINT : (services.isTouch() && def.textTouch) || def.text);
+    coachSig = `${def.id}|${res.key || ''}|${text}`;
+    ui.coach.update({ visible: true, id: def.id, text, target: res.target, card: res.card, prefer: res.prefer, noRing: !!res.noRing });
   }
 
   // --- frame ----------------------------------------------------------------------
@@ -751,8 +1087,11 @@ export function createWorldScene(services) {
     const { state, world } = container.get();
     const { ctx } = renderer;
     const fx = renderer.fx;
+    // Reduce Motion: the clouds, the sea glints and the frontier and selection pulses stand still (`tm` is a frozen clock), and the mists are there at once
+    const rm = !!state.settings.reduceMotion;
+    const tm = rm ? 0 : t;
 
-    if (fogAlpha < 1) fogAlpha = Math.min(1, fogAlpha + dt / FOG_FADE_SEC);
+    if (fogAlpha < 1) fogAlpha = rm ? 1 : Math.min(1, fogAlpha + dt / FOG_FADE_SEC);
 
     // Territory as the player should currently SEE it: a region mid-flood still
     // shows its old owner underneath the live flood overlay.
@@ -770,7 +1109,7 @@ export function createWorldScene(services) {
 
     renderer.beginFrame(camera, fx.shakeOffset());
     renderer.terrain.draw(ctx, camera, visualOwners, visualLevels);
-    renderer.terrain.drawGlints(ctx, camera, t);
+    renderer.terrain.drawGlints(ctx, camera, tm);
     if (hoveredRegionId != null && hoveredRegionId !== selectedRegionId) renderer.overlays.drawHover(ctx, camera, hoveredRegionId);
     let boosts = null;
     if (newFrontier.size) {
@@ -781,9 +1120,13 @@ export function createWorldScene(services) {
         else boosts.set(id, nowMs < startMs ? -1 : k);
       }
     }
-    renderer.overlays.drawFrontierPulse(ctx, camera, derived.frontier.filter((id) => id !== selectedRegionId && (boosts?.get(id) ?? 0) >= 0), t, boosts);
-    if (selectedRegionId != null) renderer.overlays.drawSelected(ctx, camera, selectedRegionId, t);
-    renderer.clouds.drawShadows(ctx, camera, t);
+    renderer.overlays.drawFrontierPulse(ctx, camera, derived.frontier.filter((id) => id !== selectedRegionId && (boosts?.get(id) ?? 0) >= 0), tm, boosts);
+    // the region the tutorial is pointing at: a bright pulsing outline, much louder than the regular frontier band (still, under Reduce Motion)
+    if (hintOutlineRegion >= 0 && hintOutlineRegion !== selectedRegionId && !ui.coach.el.hidden) renderer.overlays.drawHintRegion(ctx, camera, hintOutlineRegion, tm);
+    // the keyboard cursor: a bright dashed ring on its region, only while the map has focus from the keyboard
+    if (cursorId >= 0 && document.activeElement === renderer.canvas && (keyboardCursor || services.isKeyboardUser()) && seenRegion(cursorId)) renderer.overlays.drawCursor(ctx, camera, cursorId, tm);
+    if (selectedRegionId != null) renderer.overlays.drawSelected(ctx, camera, selectedRegionId, tm);
+    renderer.clouds.drawShadows(ctx, camera, tm);
     drawFlood(ctx, nowMs);
     // The living layers. Ground life (caravans, boats) sits above territory and shadows but BELOW settlements; air life
     // (smoke, windmill sails, birds) above settlements and banners. The ambient never reads game state during a frame.
@@ -797,6 +1140,12 @@ export function createWorldScene(services) {
     ambient.update(dt);
     ambient.drawGround(ctx, camera, vb);
     siteDrawer.draw(ctx, renderer, camera, state.owner, t, isVisibleRegion, { hideHamlets: camera.zoom < 12 });
+    drawWorksMarks(ctx, camera, derived.worksMarks || [], camera.zoom, {
+      color: factionColor(PLAYER_FACTION), // the realm's banner colour on barracks and watchtower flags
+      t: state.settings.reduceMotion ? undefined : t, // omitted under Reduce Motion: still flags and flames
+      alpha: fogAlpha,
+      skip: (m) => !derived.revealed[m.regionId] && !services.devRevealAll, // never draw into fog
+    });
     drawIntelMarks(ctx, state, t);
     ambient.drawAir(ctx, camera, vb);
     celebrateProspering(nowMs);
@@ -804,7 +1153,7 @@ export function createWorldScene(services) {
     if (services.pendingIdlePop) {
       const pop = services.pendingIdlePop;
       services.pendingIdlePop = null;
-      const region = world.regions[pop.regionId];
+      const region = pop.epoch === container.epoch ? world.regions[pop.regionId] : null;
       if (region && camera.zoom > 7) {
         const tile = world.tiles[world.settlements[region.keep].tile];
         fx.spawn('floatText', tile.x, tile.y - 0.6, { text: `+${shortNumber(pop.gold)}`, color: ACCENTS.gold, size: 0.42 });
@@ -814,7 +1163,7 @@ export function createWorldScene(services) {
     fx.update(dt);
     fx.draw(ctx, camera);
 
-    renderer.clouds.draw(ctx, camera, services.devRevealAll ? [] : derived.hidden, t, nowMs, fogAlpha);
+    renderer.clouds.draw(ctx, camera, services.devRevealAll ? [] : derived.hidden, tm, nowMs, fogAlpha);
     for (const d of derived.labels) d.priority = d.regionId === selectedRegionId ? 0 : d.kind;
     drawRegionLabels(ctx, camera, derived.labels, {
       fade: Math.min(1, fogAlpha * 1.5), time: state.settings.reduceMotion ? undefined : t,
@@ -824,6 +1173,7 @@ export function createWorldScene(services) {
     checkFirstContacts(nowMs);
     if (!ui.council.el.hidden && nowMs - lastCouncilMs > 250) { lastCouncilMs = nowMs; updateCouncil(); }
     if (!ui.realm.el.hidden && nowMs - lastRealmMs > 1000) { lastRealmMs = nowMs; updateRealm(); }
+    if (!ui.regions.el.hidden && nowMs - lastRegionsMs > 1000) { lastRegionsMs = nowMs; updateRegions(); }
     if (selectedRegionId != null) refreshRegionCardThrottled(nowMs);
     updateCoach(nowMs);
   }
@@ -849,6 +1199,7 @@ export function createWorldScene(services) {
     if (!queue || queue.length === 0 || nowMs < nextCelebrationMs) return;
     const { world } = container.get();
     const u = queue.shift();
+    if (u.epoch !== container.epoch) return; // queued for a realm that was since replaced
     const region = world.regions[u.regionId];
     if (!region) return;
     nextCelebrationMs = nowMs + 700;
@@ -923,15 +1274,33 @@ export function createWorldScene(services) {
     onCouncilClose() { ui.council.el.hidden = true; },
     onRealmOpen,
     onRealmClose() { ui.realm.el.hidden = true; },
+    onRegionsOpen,
+    onRegionsClose,
+    onRegionsSelect,
     onAttack,
     onSurrender,
     onScout,
     onSabotage,
+    onBuildWork,
+    onUpgradeWork,
+    onDemolishWork,
     onBuy,
     onBuyMax,
     onFoundDynasty,
+    onSaveMap,
     onWelcomeCollect,
     showWelcome,
+    /** The region the open hint outlines on the map (-1: none): for the placement checks. */
+    devHintOutline() { return hintOutlineRegion; },
+    /** The map cursor's region id (-1 before it is used): for the keyboard-only check. */
+    devMapCursor() { return cursorId; },
+    /** The box a hint about this region must keep clear (hintTargets.regionHintBox), for the placement monitor. */
+    regionHintBoxOf(id) {
+      const { world } = container.get();
+      const a = anchors[id];
+      if (!a || !world.regions[id]) return null;
+      return regionHintBox(world.regions[id].bbox, (x, y) => camera.worldToScreen(x, y), { w: renderer.cssWidth, h: renderer.cssHeight }, camera.worldToScreen(a.x, a.y));
+    },
     regionScreenPos(id) {
       const a = anchors[id];
       return a ? camera.worldToScreen(a.x, a.y) : null;

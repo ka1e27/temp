@@ -6,6 +6,7 @@ import { PLAYER_FACTION } from './state.js';
 import { UPGRADES, levelOf } from './upgrades.js';
 import { perkMultipliers } from './perks.js';
 import { prosperityIncomeMult } from './prosperity.js';
+import { worksIncomeMult } from './worksEffects.js'; // the leaf (DESIGN §5.8): a Market raises its own region's income
 
 /**
  * Gold/s a single region pays, before taxes/perks/dynasty stars.
@@ -23,12 +24,14 @@ export function regionIncome(region) {
 /**
  * @param {import('./state.js').GameState} state
  * @param {import('../world/generate.js').World} world
- * @returns {number} total gold/s across every owned region (each one grown by its prosperity level, DESIGN §5.6)
+ * @returns {number} total gold/s across every owned region (each one grown by its prosperity level, DESIGN §5.6, and its Market, §5.8)
  */
 export function incomePerSec(state, world) {
   let sum = 0;
   for (const region of world.regions) {
-    if (state.owner[region.id] === PLAYER_FACTION) sum += regionIncome(region) * prosperityIncomeMult(state, region.id);
+    if (state.owner[region.id] === PLAYER_FACTION) {
+      sum += regionIncome(region) * prosperityIncomeMult(state, region.id) * worksIncomeMult(state, region.id);
+    }
   }
   const taxMult = 1 + levelOf(state, 'taxes') * UPGRADES.taxes.magnitude;
   const perks = perkMultipliers(state, world);

@@ -4,7 +4,158 @@ Branch `redesign` (v1 preserved at tag `v1-final` and playable at `classic.html`
 Nothing has been committed or pushed yet; `main` (which auto-deploys to GitHub Pages) is
 untouched.
 
-## CURRENT STATE (2026-09-30 ~10:15): release candidate, feature-complete
+## ROUND 3 (2026-09-30 ~11:00): user playtest feedback, in progress
+The user played the RC and asked for: fixing misplaced tutorial hints; teaching sending, Rally and
+every control (incl. shift-drag); auto-send; no marching through enemy territory; centred ×/gear
+buttons; per-area upgrades. Lead design (DESIGN §4.3 supply lines, §4.4 front lines, §5.8 Region
+Works, §6 tutorial; PLAYFEEL §4 placement rules + new step table W0-M4). Assigned in parallel:
+- **Balance** (sim owner): A front lines (`battle/territory.js`, canRoute/routeFor/previewSend
+  routable/refused), B supply lines in sim (`battle.supply`, SUPPLY config), report the API → then
+  C Works effects hookup → D full recalibration.
+- **Features**: Region Works (`game/meta/works.js`, `config/works.js`, worksPanel/worksChooser/
+  worksMarks, gallery, `docs/briefs/works-hookup.md`); no state/save edits (integration applies).
+- **Integration**: A hint placement fixes + an automated tip-to-target assertion across viewports,
+  B icon-button centring + check, C the expanded tutorial + Replay + controls card → D supply/route
+  UI after balance's API → E Works UI after features.
+
+- Balance A+B DONE (~11:40): front lines + supply lines in the sim (canRoute/routeFor/tileOwner/
+  computeTerritory, refused event, battle.supply, SUPPLY config, a player-only deadlock fallback),
+  25 tests. API relayed to integration (D unlocked). Lead: War Camp placement maximises attackable
+  non-keep sites; halo/link tiles if none; keep-first only when unavoidable.
+
+- Features Region Works DONE (~12:30): `game/meta/{works,worksEffects}.js` (leaf split to avoid a cycle),
+  `config/works.js`, worksPanel/worksChooser/worksIcons/worksMarks, 68 tests, gallery `screenshots/works/`,
+  `docs/briefs/works-hookup.md`. Lead: add demolish (50 % refund, confirm); one per type per region;
+  Watchtower scouts from L1. Balance C and integration E unlocked.
+
+- Works demolish DONE (~12:50): `demolishWork` with 50 % refund across levels, an in-row confirm (Keep default,
+  6 s auto-cancel), not farmable (tested), hookup doc updated. The features engineer is finished.
+
+- Integration + balance hit the usage limit (~13:00); resumed 13:41. Suite 773/774 (integration's threat test).
+
+- **Balance A-D DONE** (~15:00): front lines + corridors (`openCorridors`, soft-before-keep: 0 shielded arenas),
+  supply lines, camp volley, Works hooks (+ Watchtower de-dominated), bot legal-route relay, recalibration: D1 1.30 h,
+  D2 1.25×, D3 1.48×, waits OK except seed 7 (129 m), tutorial 65 s, labels Easy 97/Fair 78/Hard 59, Swift 51 %.
+  Lead: corridors must be NEUTRAL (tileOwner -1, drawn untinted/dashed; the user asked for no enemy-land marching;
+  DESIGN §4.4 Border marches); Barracks +camp growth, Stables +supply frequency (DESIGN §5.8); fix defensive-tower
+  labels (seed 7). Short final balance round running. Integration told about link tiles, Works callers, camp arrows.
+
+- **Balance final round DONE** (~16:30): link tiles neutral (tileOwner -1, 500+ route proof); Barracks ×1.16, Shrine
+  ×1.07, Watchtower ×1.14, Market full-set ×1.15, Stables ×1.02 (misses); the seed-7 root cause was bot arrow-sizing
+  (fixed; defensive-tower Easy 64→99 %); refit (troopPerTier 1.78); D1 1.31 h / D2 1.32× / D3 1.43×, waits ≤ 24 m in D1
+  on 36 seeds. PROBLEM: winning battles too long (tier 1-2 1m51, tier 2 ~4 min, capitals 2m30). Lead: one more
+  balance round on battle length (tier 1 ≤ 90 s, tier 2 ≤ 120 s, mid 60-120, capitals 120-180) + Stables field-clash
+  strength (DESIGN §5.8). Integration owns Works copy (derive from config).
+
+- Both hit the usage limit (~17:30); resumed 18:43. Suite 794/796 (balance label tests, mid-retune).
+
+- **Integration A-E DONE** (~20:00): coach rewrite (live targets, tip ≤ 4.5 px at 7 viewports, `tools/hints.mjs` +
+  `hintMonitor.js` assertion), icon centring (`tools/iconcheck.mjs`), set-based tutorial (W0-M4, Replay, controls card),
+  supply/route UI (reach glow, grey No route, refusal shake, Ctrl/long-press/Auto+S, chevrons along routeFor, neutral
+  corridors drawn untinted/dashed), Works UI + derived copy + guards. 794/796 (balance labels). Follow-ups sent:
+  verify the supply-desk-2 frame (the straight gold arrow to an unreachable keep?), 44 px touch targets for the ×s,
+  touch-action on chrome, phone M3 bubble.
+
+- Integration follow-ups DONE (~21:00): the gold arrow was the TUTORIAL hand pointing at an unreachable keep (bug:
+  noRoute scored as arrival 0; fixed + asserted); short-hop chevrons; waiting-line stub; `tools/supplyshots.mjs`; 44 px
+  touch hit areas (iconcheck asserts); touch-action on chrome (pinch no longer zooms the page); phone M3 one-liner.
+  Lead: the clean frame shows a LONG neutral corridor along the enemy region past the keep (the connector guarantee).
+  Sent to balance: drop connectors, cap border marches at 3 tiles, never along the keep (DESIGN §4.4).
+
+- **Discovery round** (~21:30, the user asked "look for more to work on"): three READ-ONLY fresh-eyes auditors
+  launched on Sonnet 5.5: a playtester (new player, no design docs, real input desktop/phone/late game →
+  `screenshots/fresheyes/`), a code bug-hunter (save integrity, time jumps, purity, dynasty reset, leaks, SW, errors),
+  and an accessibility auditor (keyboard, screen reader, contrast/colour-blind, motion, touch →
+  `screenshots/a11y/`). Features engineer building **Keepsakes** (DESIGN §5.9: Chronicle + Tapestry PNG export,
+  `docs/briefs/keepsakes-hookup.md`). Balance still on battle length + corridor cap. Integration on standby.
+
+- **Balance battle-length round DONE** (~22:30, 798/798): tier 1 42 s, tier 2 112 s (was ~245), mid 137 s, capital 204 s
+  (campaign pooled 1m25/2m17/3m24); tutorial 60.6 s; D1 1.46 h, D2 1.29×, D3 1.39×; labels Easy 96/Fair 60/Hard 37;
+  Stables cavalry charge (+25 % field strength/level, III ×1.06); corridors ≤ 3 tiles, no connectors. Lead: adopt
+  config A (mid/capital accepted; capital design fix stays on the backlog); split the tier-1/tier-2 Swift par (last small item).
+
+- Swift par split DONE (~23:00): tier1 43 s / tier2 114 s / mid 136 / capital 207 / deep 164 (only 7 samples) → Swift
+  49-51 % per band, overall 50 %; Unbroken 70 %. 826/827 (the generateWorld timing flake). Balance engineer idle.
+
+- **A11y audit DONE** (~01:00): blockers: no keyboard path for world/battle, unnamed battle controls and settings
+  switches, no dialog focus management; major: no live regions, shortcuts leak through dialogs, Reduce Motion ignores the
+  OS and misses camera/clouds/pulses, colour-only send arrow, contrast, azure≈violet for deut/prot. Lead wrote DESIGN
+  §7.5a and sent integration an a11y round (Tier A semantics/dialogs/live/motion/contrast/targets; Tier B keyboard
+  Regions panel + map/battle cursors, shape-coded arrow, colour-blind-safe factions, 12 px floor, SFX slider, 0.5×).
+
+- **Bug-hunt audit DONE** (~01:30): HIGH: Attack on unbuildable (mountain-border) regions soft-locks (20 % of states); stale
+  welcome/prosperity survive New Realm (negative gold); two tabs clobber the save; MEDIUM: unresumable battle bricks Continue;
+  sw.js deletes OTHER apps' caches on the shared ka1e27.github.io origin (+5xx/captive-portal/timeout); weak save
+  sanitisation; LOW: silent save failures, null getContext, formatters, clock-back prosperity re-celebrations. Clean:
+  purity, determinism (world/battle/replay), dynasty reset, leaks, time gaps, prototype pollution. Routed: balance
+  (canBuildArena + arena fallback, monotonic prosperity, core formatters); integration (robustness round between a11y
+  Tier A and Tier B: try/catch scene entry, pending epochs, multi-tab saveSeq + banner, battle schema validation, SW fixes,
+  sanitisation, save-fail toast, getContext fallback).
+
+- **Keepsakes DONE** (~02:30): chronicle (chronicleState leaf + chronicle.js, 10 kinds, caps 40/60), chroniclePanel, tapestry
+  (composeTapestry + worldImage.renderWorldImage + saveTapestry + saveMapButton), 68 tests, keepsakes-check 93/93, hookup doc.
+  Lead: confirmed year/events; Tapestry numerals in Nunito lining, desktop width ~700 (~2.9 MB); phone Realm 2-col stats.
+  Integration queue: a11y Tier A → robustness → Keepsakes hookup → a11y Tier B.
+
+- Keepsakes tweaks DONE (~03:00): Nunito lining numerals, tapestryWidth desktop 700 (2.9 MB) / phone 600 (2.3 MB), phone
+  2-col Realm CSS specified in hookup §8. The features engineer is finished.
+
+- All three hit the usage limit (~04:00); resumed 11:23 (2026-10-01). Suite 906/912 (balance's difficulty/arena work in flight).
+
+- **Fresh-eyes playtest DONE** (~12:30): no blockers, 0 console errors. Major: the W2 hint covers its target region (the
+  monitor checked only the label box), the phone W3 hint covers bounty/par, the landscape card overflows, Space after clicking
+  Speed cycles speed, the power/strength bar misleads on Deadly. Lead (DESIGN §5.3 win-chance bar, §4.8 Swift countdown,
+  §7.5a speed cycle + Slow battles setting): balance adds `winChance()`; integration queue = a11y Tier A → robustness →
+  playtest fixes (14 items) → Keepsakes hookup → a11y Tier B. Noted for later: the early idle promise feels thin (income +2-4/s).
+
+- **Balance robustness DONE** (~13:30, 920/920): canBuildArena/arenaBlockedReason/attackableFrontier; approach strips may cross
+  mountain ridges (arena-only pass tiles, ≤3) → blocked states 20 %→6.7 % (0 throw mismatches over 145k arenas); card charges
+  strips (approachPerTile 0.3); removed the leftover ensureConnected connectors (469 arenas); monotonic prosperity; core
+  formatters guarded; winChance(ratio) exact at the label edges. Campaign unchanged (D1 1.42 h). APIs relayed to integration
+  (+ draw mountain passes, tutorial picks among attackableFrontier, ui formatter guards).
+
+- **Integration mega-round DONE** (~15:30): a11y Tier A+B (dialogs.js/live.js, Regions panel, map + battle keyboard cursors,
+  keyboard-only full game, shape-coded arrow, new faction colours Free Folk #a19c92 / Crimson #c63932 / Violet #6d1b99 with an
+  enforced CIEDE2000 test, SFX slider + M, 0.5× via Slow battles), robustness 1-9 (flow.js revert, attackable card, epochs,
+  saveSeq multi-tab banner, plausibleBattle, SW hexdominion-only + 5xx/timeout/portal, sanitisation, getContext), playtest
+  fixes 1-14, Keepsakes hookup. 933/933; check --base=temp, a11ycheck 152, iconcheck, galleries pass. DESIGN palette updated.
+  Sent: mountain-pass proof, FORCED MARCH truncation at 1280, full hints.mjs rerun → then final QA (RC2).
+
+- 2026-10-01 ~16:50: the user switched engineers to **Opus 5.5 (medium)** / lead does hard tasks. The Sonnet integration engineer hit the
+  usage limit mid final QA (rc2-* gallery done, FORCED MARCH fix likely done). The final QA (RC2) was handed to a fresh
+  **opus55-engineer**: mountain-pass proof, hints.mjs ×7, full regression, playtest through D2, docs/img + README, go/no-go.
+
+- **Final QA (RC2) DONE** (~19:00, opus55-engineer): tests 933/933; check.mjs all sections + `--base=temp` pass; hints.mjs 7/7 viewports
+  ALL HINTS PLACED; a11ycheck, iconcheck, works-check, keepsakes-check pass; playtest desktop+phone × seeds 7, 23 through Found a Dynasty and a
+  D2 win. Fixed: phone "BULWA…" ellipsis (`.is-tight` + no phone tracking; check.mjs now asserts no power name overflows), the gold tutorial arrow
+  drawn over the player's own green drag arrow (hidden while dragging), the unreadable active send-size key badge, the W2 hint pointing at a
+  region whose label is off screen (coach hides it), the pass road now starts at the War Camp, README images retaken with the new faction
+  colours (`tools/docshots.mjs`), README claims (S key, sliders, tools), a works-check timing flake, playtest bot (pans back, scrolls,
+  drags only from visible settlements, logs drags that pan). Region 10 of seed 7 is NOT a pass target in the current world; the pass proof uses
+  region 21 (Wrenglen). Open for the lead: toasts over open dialogs (phone Realm ×), phone hint bubbles over enemy keeps, the phone touch tooltip
+  over the "Capture" word, the phone Found a Dynasty button below the fold, the W1 zoom can lose the W2 region, short-lived battle hints (1.5 s).
+- **RC2 polish round DONE** (~21:00, opus55-engineer, lead's decisions A-F): toasts queue while a dialog is open (council/Save-the-map feedback inline, polite;
+  hintMonitor fails a toast over a dialog); battle hints avoid enemy keeps (monitor rule proven to fail without the fix: 83 frames at 390x844); touch drag hides the
+  canvas word under the tooltip; Dynasty section first when Found a Dynasty is available; Works nbsp; compact council effect lines; rc2shots phone Tapestry at
+  600; W2 frames home + target when its region is off screen. **The edge-drag bug was real, not the edge**: an ARMED power made every drag a pan (canStartDrag),
+  and on the phone the hint's x sat on the enemy keep and ate the Rally target tap; fixed (a drag from your settlement stands the power down and sends) + check.
+  Pass roads now follow the routes squads take, each ending at a settlement's land with an arrowhead. Full regression green (see the engineer's report).
+
+- **Opus RC2 QA DONE** (~18:30): GO with conditions; all checks pass (933 tests, check desktop/phone/playtest/robust/keepsakes,
+  --base=temp 393, hints ×7, a11y 152, icons 25, works 48, keepsakes 93); mountain pass verified on seed 7 region 21; fixed
+  phone BULWA… truncation, double tutorial arrow, unreadable key badge, hint pointing at the corner; README/docs/img refreshed.
+  Lead decisions → a final polish round (same Opus agent): toasts queue while dialogs are open + inline dialog feedback, hints
+  avoid settlements, touch hides the canvas outcome word, Dynasty first in phone Realm, small copy fixes, W2 reframes the camera,
+  investigate the edge-drag pan bug, mountain-pass track matches the squad route.
+
+- **RC2 polish DONE** (~19:30): the edge-drag stall was REAL — an armed power made every drag pan (Rally stuck armed because
+  the hint × sat on the keep and ate the target tap); fixed (a drag from own site cancels the power and sends) + check. Toasts
+  queue while dialogs are open + inline council/save status; hints avoid enemy keeps (monitor proven to catch it); touch
+  hides the canvas word under the tooltip; Dynasty first in phone Realm; W2 camera framing; strip roads follow squad
+  routes with arrowheads. 933/933, check desktop 183 / phone 180 / --base=temp 405, a11y 152, icons 25, hints ×7, galleries
+  pass. 169 files changed since commit 6bbcdc4. **Waiting on the user: new local commit + publish decision.**
+
+## PREVIOUS STATE (2026-09-30 ~10:15): release candidate, feature-complete
 - All features are in the game: the core redesign, plus music, battle crowns, rival leader
   voices, scout/sabotage, the living map + prosperity, bold green/red drag arrow, the stuck
   hint, and the council "Best value" tag. World-gen fixes (no stray islets, thin beaches, lush
@@ -14,8 +165,9 @@ untouched.
   (Pages subpath, SW scope, offline reload, manifest, classic.html); the shots tour has 0 page
   errors; four real-input playtests from the tutorial into dynasty 2. Final gallery:
   `screenshots/game/rc-*.png`.
-- All engineers are finished. **Open decisions for the user:** (1) a local checkpoint commit on
-  `redesign` (asked repeatedly, no answer yet); (2) publishing = merging to `main`, which deploys
+- All engineers are finished. **Committed locally** as `6bbcdc4` on `redesign` (2026-09-30, user approved;
+  one-off identity Claude <noreply@anthropic.com>, matching repo history; nothing pushed).
+  **Open decision for the user:** publishing = merging to `main`, which deploys
   to ka1e27.github.io/temp. NEVER do either without explicit approval. `.github/workflows/pages.yml`
   has a local edit adding `check.mjs --base=temp`. `.claude/agents/sonnet55-engineer.md` is
   untracked; keep it out of game commits unless the user wants it.
@@ -316,7 +468,8 @@ what each module actually exports + gotchas.
   measurements aren't invalidated mid-run.
 
 ## Team model
-The user asked that the engineers run on **Sonnet 5.5** (`claude-sonnet-5-5`). Use
-`subagent_type: sonnet55-engineer` (agent definition `model: claude-sonnet-5-5` in
-`C:\Users\kyleg\Projects\.claude\agents\` and `.claude/agents/` here; loads at session
-start). Verify the model ID once per session with a one-line check agent.
+Since 2026-10-01 the user wants delegated engineers on **Opus 5.5 at medium effort**, and the lead does
+harder or judgment-heavy tasks directly. Use `subagent_type: opus55-engineer` (defined in
+`C:UserskylegProjects.claudeagents` and this repo's `.claude/agents/`; loads only at session start).
+In a session started before that file existed, use a general-purpose agent with `model: "opus"`.
+Sonnet 5.5 (`sonnet55-engineer`) is no longer preferred.

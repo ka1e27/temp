@@ -7,7 +7,7 @@
 // either one. This keeps mechanics fully testable in isolation (a test can construct a
 // battle and step() it without any AI ever deciding to do something unplanned) and keeps
 // ai.js/bot.js symmetric.
-import { BATTLE, SITE_TYPES, POWERS } from '../config/battle.js';
+import { BATTLE, SITE_TYPES, POWERS, SUPPLY } from '../config/battle.js';
 import {
   effectiveCap, effectiveGrowth, squadPerTroopStrength, garrisonPerTroopStrength,
   ownerStats, resolveTowerVolleys, resolveEngagements, PLAYER_OWNER,
@@ -16,10 +16,12 @@ import { applyPower, processPending } from './powers.js';
 import { sendFromSite } from './squads.js';
 import { advanceMovement, mergeSquads } from './movement.js';
 import { resolveCombat, applyGrowth, checkEndConditions } from './resolve.js';
-import { getRuntime, pathBetweenSites } from './runtime.js';
+import { getRuntime } from './runtime.js';
+import { canRoute, routeFor, routeCost } from './routing.js';
+import { computeTerritory, tileOwner, territoryVersion } from './territory.js';
 import { squadPosition } from './position.js';
 
-export { squadPosition };
+export { squadPosition, canRoute, routeFor, routeCost, computeTerritory, tileOwner, territoryVersion };
 
 /** @returns {object} a fresh BattleState (ARCHITECTURE §6) for an arena + stat blocks. */
 export function createBattle(arena, player, enemy, opts = {}) {
@@ -60,6 +62,7 @@ export function createBattle(arena, player, enemy, opts = {}) {
     enemy: enemyCopy,
     sites,
     squads: [],
+    supply: [],
     cooldowns: { rally: 0, firestorm: 0, bulwark: 0, march: 0, levy: 0 },
     effects: { marchUntil: 0 },
     pending: [],
@@ -82,12 +85,24 @@ export function issue(battle, command) {
 function applyCommand(battle, cmd, t) {
   if (!cmd) return;
   if (cmd.type === 'send') {
+    // Front lines (DESIGN §4.4): sources with no legal route are dropped; if that leaves nothing, the send is refused.
     const froms = Array.isArray(cmd.from) ? cmd.from : [cmd.from];
+    let dropped = 0;
+    let routable = 0;
     for (const fromId of froms) {
       const site = battle.sites[fromId];
-      if (!site || site.owner !== cmd.owner) continue;
+      if (!site || site.owner !== cmd.owner || fromId === cmd.to) continue;
+      if (!canRoute(battle, cmd.owner, fromId, cmd.to)) { dropped += 1; continue; }
+      routable += 1;
       sendFromSite(battle, fromId, cmd.to, cmd.fraction);
     }
+    if (dropped > 0 && routable === 0) {
+      battle.events.push({ type: 'refused', reason: 'noRoute', owner: cmd.owner, to: cmd.to });
+    }
+  } else if (cmd.type === 'supply') {
+    applySupply(battle, cmd, t);
+  } else if (cmd.type === 'unsupply') {
+    applyUnsupply(battle, cmd);
   } else if (cmd.type === 'power') {
     applyPower(battle, cmd, t);
   } else if (cmd.type === 'retreat') {
@@ -95,6 +110,84 @@ function applyCommand(battle, cmd, t) {
     battle.stats.durationSec = t;
     battle.events.push({ type: 'end', result: 'retreat' });
   }
+}
+
+// --- Supply lines (DESIGN §4.3) --------------------------------------------------------------------------------
+// battle.supply = [{ owner, from, to, nextAt }]: a standing order, at most one per source. Plain JSON, saved with the battle.
+function supplyLines(battle) {
+  if (!Array.isArray(battle.supply)) battle.supply = []; // a save from before supply lines
+  return battle.supply;
+}
+
+function asList(v) {
+  return Array.isArray(v) ? v : [v];
+}
+
+/** `{type:'supply', owner, from, to}` (from may be a list): creates or replaces each source's line. The first send
+ * happens on this very tick (if the source holds enough), then every `SUPPLY.intervalSec`. A source with no route to
+ * the target gets no line; if none of them can, a `refused` event says so. Repeating the same order changes nothing. */
+function applySupply(battle, cmd, t) {
+  const to = battle.sites[cmd.to];
+  if (!to) return;
+  const lines = supplyLines(battle);
+  let made = 0;
+  let dropped = 0;
+  for (const fromId of asList(cmd.from)) {
+    const site = battle.sites[fromId];
+    if (!site || site.owner !== cmd.owner || fromId === cmd.to) continue;
+    if (!canRoute(battle, cmd.owner, fromId, cmd.to)) { dropped += 1; continue; }
+    made += 1;
+    const at = lines.findIndex((l) => l.from === fromId);
+    if (at >= 0 && lines[at].to === cmd.to && lines[at].owner === cmd.owner) continue;
+    const line = { owner: cmd.owner, from: fromId, to: cmd.to, nextAt: t };
+    if (at >= 0) lines[at] = line;
+    else lines.push(line);
+    battle.events.push({ type: 'supply', owner: cmd.owner, from: fromId, to: cmd.to });
+  }
+  if (dropped > 0 && made === 0) {
+    battle.events.push({ type: 'refused', reason: 'noRoute', owner: cmd.owner, to: cmd.to });
+  }
+}
+
+/** `{type:'unsupply', owner, from}` (from may be a list): removes those sources' lines. */
+function applyUnsupply(battle, cmd) {
+  const lines = supplyLines(battle);
+  for (const fromId of asList(cmd.from)) {
+    const at = lines.findIndex((l) => l.from === fromId && l.owner === cmd.owner);
+    if (at < 0) continue;
+    lines.splice(at, 1);
+    battle.events.push({ type: 'unsupply', owner: cmd.owner, from: fromId, reason: 'removed' });
+  }
+}
+
+const SUPPLY_EPS = 1e-9;
+
+/** Runs every standing line: each one checks in every `SUPPLY.intervalSec` and, if its source still belongs to the
+ * line's owner, holds at least `SUPPLY.minTroops` and has a route, sends `SUPPLY.fraction` of its troops as an
+ * ordinary squad (its `send` event carries `auto: true`). A line whose source changed hands ends; one whose target
+ * was captured goes on (it now reinforces). */
+function processSupply(battle, t) {
+  const lines = supplyLines(battle);
+  if (lines.length === 0) return;
+  const keep = [];
+  for (const line of lines) {
+    const from = battle.sites[line.from];
+    if (!from || !battle.sites[line.to] || from.owner !== line.owner) {
+      battle.events.push({ type: 'unsupply', owner: line.owner, from: line.from, reason: 'lost' });
+      continue;
+    }
+    if (t + SUPPLY_EPS >= line.nextAt) {
+      if (from.troops >= SUPPLY.minTroops && canRoute(battle, line.owner, line.from, line.to)) {
+        sendFromSite(battle, line.from, line.to, SUPPLY.fraction, { auto: true });
+      }
+      // Stables next door (DESIGN §5.8): the player's lines check in sooner
+      const interval = SUPPLY.intervalSec * (line.owner === PLAYER_OWNER ? (battle.player.supplyIntervalMult ?? 1) : 1);
+      line.nextAt += interval;
+      if (line.nextAt <= t) line.nextAt = t + interval;
+    }
+    keep.push(line);
+  }
+  battle.supply = keep;
 }
 
 /** Advances the battle by `dt` seconds. Clears then fills `battle.events`. */
@@ -114,6 +207,7 @@ export function step(battle, dt) {
   battle.tick += 1;
   const t = battle.t;
 
+  processSupply(battle, t);
   const blocked = resolveEngagements(battle);
   advanceMovement(battle, dt, t, blocked);
   mergeSquads(battle);
@@ -129,26 +223,39 @@ export function step(battle, dt) {
 /**
  * Predicts the outcome of a send assuming nothing else changes (ARCHITECTURE §6): used for
  * the drag tooltip. Read-only — never mutates `battle`.
+ *
+ * Front lines (DESIGN §4.4): the march times use the real route. `routable` is true when at least one source has a
+ * legal route; `unroutable` lists the source site ids that have none (a real send drops them). When no source can
+ * route, `outcome` is `'noRoute'` and nothing is sent.
  */
 export function previewSend(battle, from, to, fraction) {
   const froms = Array.isArray(from) ? from : [from];
   const toSite = battle.sites[to];
   const contributions = [];
+  const unroutable = [];
+  let routable = false;
 
   for (const fromId of froms) {
     const site = battle.sites[fromId];
-    if (!site) continue;
+    if (!site || !toSite || fromId === to) continue;
+    const route = routeFor(battle, site.owner, fromId, to);
+    if (!route) { unroutable.push(fromId); continue; }
+    routable = true;
     const count = Math.floor(site.troops * fraction);
     if (count < 1) continue;
-    const path = pathBetweenSites(battle, fromId, to);
-    if (!path) continue;
-    contributions.push({ count, owner: site.owner, seconds: pathDurationSec(battle, site.owner, path) });
+    contributions.push({ count, owner: site.owner, seconds: pathDurationSec(battle, site.owner, route.tiles) });
   }
 
   const sending = contributions.reduce((sum, c) => sum + c.count, 0);
   if (sending === 0 || !toSite) {
     return {
-      sending: 0, arriveSec: 0, defenderAtArrival: toSite ? toSite.troops : 0, outcome: 'fail', remaining: toSite ? toSite.troops : 0,
+      sending: 0,
+      arriveSec: 0,
+      defenderAtArrival: toSite ? toSite.troops : 0,
+      outcome: toSite && !routable && unroutable.length > 0 ? 'noRoute' : 'fail',
+      remaining: toSite ? toSite.troops : 0,
+      routable,
+      unroutable,
     };
   }
 
@@ -178,7 +285,7 @@ export function previewSend(battle, from, to, fraction) {
     }
   }
 
-  return { sending, arriveSec, defenderAtArrival, outcome, remaining };
+  return { sending, arriveSec, defenderAtArrival, outcome, remaining, routable, unroutable };
 }
 
 function pathDurationSec(battle, owner, path) {

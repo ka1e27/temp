@@ -62,20 +62,26 @@ export const PLAYER_BASE = Object.freeze({
 // A star has one clear effect: +3% income and +3% bounty, no attack or defence (a power star shortened every later dynasty:
 // at DESIGN's +20% income / +4% attack and defence D2 took 0.44x and D3 0.27x of D1's time). Longer dynasties come from
 // tougher enemies, but only gently: a bigger multiplier stretches them as walls (1.65 gave 5 seeds of 12 a wait over
-// 40 minutes). Result: D1 1.4 h, D2 1.8 h (1.3x), D3 2.0 h (1.4x), a wait over 40 min on 1, 0 and 2 seeds of 12.
+// 40 minutes). With front lines, Region Works, the arrow-aware bot, the patience cap (config/battle.js) and the troop ladder of
+// ENEMY_SCALING (16 seeds, the campaign builds Works the way an engaged player does):
+// D1 1.46 h, D2 1.89 h (1.29x), D3 2.03 h (1.39x), a wait over 40 min on 0, 1 and 2 seeds of 16 (worst 26, 43 and 92 min; the 92 is
+// one seed, a structural outlier of the dynasty-3 world).
+// The first step is bigger than the later ones: stars pile up, so a single multiplier gave D2 about 1.2x while D3 had 1.35x.
 export const DYNASTY = Object.freeze({
   incomePerStar: 0.03,       // DESIGN 0.20
   atkDefPerStar: 0,          // DESIGN 0.04: stars do not touch the fight
   bountyPerStar: 0.03,       // DESIGN 0.10
   regionsPerDynasty: 1,      // each new dynasty's continent has this many more regions (more steps do not lengthen a run: the top of the ladder does)
   maxRegions: 46,
-  enemyMultPerDynasty: 1.38, // garrisons x this per dynasty completed
+  enemyMultFirst: 1.7,       // garrisons x this once the first dynasty is completed (dynasty 2) ...
+  enemyMultPerDynasty: 1.25, // ... and x this again for every further dynasty completed (dynasty 3 is 2.05x dynasty 1)
   starBase: 3,               // stars earned on founding = starBase + the dynasty level just completed
 });
 
 // Difficulty readout (DESIGN §5.3): Army Power vs region Strength, ratio -> label. Calibrated by
 // tools/balance.mjs + a band-violation fit over ~35k bot-vs-AI battles (synthetic level ladders on seeds 1-12 in
-// three border-ownership modes, plus every frontier fight at every decision point of 48 campaigns) so ECONOMY.difficultyLabels mean what they say across tiers, factions and how
+// three border-ownership modes, plus every frontier fight at every decision point of 52 campaigns, with a battle that outlasts the
+// bot's patience (PATIENCE_SEC in config/battle.js) counted as lost) so ECONOMY.difficultyLabels mean what they say across tiers, factions and how
 // much border you hold: Easy >= 85 % wins, Fair 60-85, Hard 35-60, Deadly < 35, and ratio >= surrenderRatio
 // wins ~99 %. The yardstick is the bot in game/battle/bot.js (a good human: one look at the board every 3 s).
 //   power    = (campTroops + supportWeight x border garrisons) x atk x def x growth^growthExp
@@ -88,14 +94,43 @@ export const DIFFICULTY = Object.freeze({
   powerWeight: { rally: 1, firestorm: 1.51, bulwark: 0.72, march: 0.55, levy: 4.23 }, // x the above: what each power is worth in a fight
   powerLevelWeight: 0.163,    // each power level past the first adds this share of its unlock
   supportWeight: 1.3,         // border sites also keep producing troops through the fight
+  // The War Camp's arrows (Region Works, DESIGN §5.8): one Watchtower level next door is worth about this share of Army Power
+  // (measured by tools/balance.mjs --works=watchtower1:N against CAMP_VOLLEY: x1.11 / x1.13 / x1.18 at volley level 1 / 2 / 3).
+  volleyPerLevel: 0.06,
+  // Barracks troops (Region Works) are real troops at the War Camp, but fewer of the fight's weight than a Muster level's: they
+  // only start there, with no extra production behind them. The bot won about 6% / 11% / 14% less than the card said at
+  // Barracks level I / II / III when it credited them in full (tools/balance.mjs --works=barracks:N); this share of them counts.
+  worksCampCredit: 0.3,
+  // Barracks' camp growth and Stables' supply interval (Region Works), credited per unit of (growth multiplier - 1) and of
+  // (1 / interval multiplier - 1). Measured with tools/balance.mjs --works=barracks1:N / stables1:N, see the table at the end of
+  // game/config/works.js.
+  campGrowthCredit: 0.25,
+  // A region whose border with the player is mountains is attacked from a War Camp that stands 1-3 tiles back, behind a strip of
+  // no-man's-land (arena.js planApproach). Those fights play harder than the card reads: the bot won 31% / 24% / 11% of them at a
+  // strip of 1 / 2 / 3 tiles where the labels promised the same as an ordinary border (30 sweep seeds, 412 fights). Strength x
+  // (1 + this x strip tiles) brings the label back (the needed factors were 1.27 / 1.59 / 2.7).
+  approachPerTile: 0.3,
+  // The chance of winning the card shows (progression.js winChance): the win rate each label promises at its LOWER edge (DESIGN
+  // §5.3: Easy >= 85%, Fair 60-85%, Hard 35-60%, Deadly under 35%). Between the three edges the chance runs along a straight line in
+  // (ln ratio, logit of the win rate); the two segments have almost the same slope (3.97 and 3.88), the slope of the measured
+  // curve, and beyond them the nearer segment is extended. Against the bot in 5468 fights from real campaign states (36 seeds,
+  // every frontier region at every decision point) the curve is within 5 points in every ratio bin, whole-sample and for each
+  // rival personality; the first ring (tier 1) plays safer than it reads (the card deliberately reads it harder), tier 2 a little
+  // harder. The range is kept off the certainties: a surrender (ratio 3) is about 0.99.
+  winAtLabelEdge: Object.freeze({ Easy: 0.85, Fair: 0.60, Hard: 0.35 }),
+  winChanceRange: Object.freeze([0.01, 0.99]),
+  fieldCredit: 0.08,        // Stables' charge (squad-against-squad strength), per unit of (multiplier - 1): +75% in clashes at level III is worth about x1.06
+  supplyCredit: 0,          // the bot turns faster supply lines into no strength at all (lines lose to its own pooling), so none is credited
+  // Shorter power cooldowns (Shrines, the Old Shrine perk): per unit of (1 / cooldown multiplier - 1).
+  cooldownCredit: 0.3,
   growthExp: 0.5,
-  strengthScale: 0.092,
+  strengthScale: 0.0681,     // band fit on sweep rows plus every frontier fight of 36 + 16 x 3 campaigns, with battles that outlast PATIENCE_SEC lost (config/battle.js)
   overCapCredit: 2,          // troops above 2x a site's cap bleed off before they matter
   horizonSec: 90,            // a garrison regrows while you fight: this many seconds of growth
   depthPerTier: 0.79,        // strength x this per tier above 3: the ladder's atk/def climb slightly over-credits depth
   // Tier 1 plays far easier than its size says (the bot wins it at any upgrade level); the card deliberately
   // reads it harder (2.27 x the Free Folk factor 0.585 x the scale) so the first ring shows Easy-but-not-trivial
   // and stays under the surrender ratio on every seed.
-  tierFactor: [1, 2.27, 0.948],
-  personality: Object.freeze({ passive: 0.585, defensive: 1.42, aggressive: 1.63, swarm: 2.48 }), // Free Folk never attack; rival AIs punish a 3-second-cadence player
+  tierFactor: [1, 1.5, 1.094], // tier 1: the first ring reads Easy on 28 of 30 seeds (the tutorial pick on 10 of 12) and stays under the surrender ratio (card ratio 1.3-2.7); tier 2 was 0.948 before the ladder cliff was smoothed
+  personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.48 }), // Free Folk never attack; rival AIs punish a 3-second-cadence player
 });

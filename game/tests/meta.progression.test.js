@@ -10,6 +10,9 @@ import { ENEMY_SCALING, BATTLE } from '../config/battle.js';
 import { makeWorld, makeGame, ownEverything } from './meta.fixtures.js';
 import { incomePerSec } from '../meta/economy.js';
 
+/** Garrison multiplier of a region at `depth` on the enemy ladder (config/battle.js ENEMY_SCALING). */
+const troopScale = (depth) => ENEMY_SCALING.troopAtDepth1 * Math.pow(ENEMY_SCALING.troopPerTier, depth - 1);
+
 function close(actual, expected, msg) {
   assert.ok(Math.abs(actual - expected) < 1e-6, `${msg}: expected ${expected}, got ${actual}`);
 }
@@ -51,7 +54,7 @@ test('enemyBattleStats: tier and growth scaling, thinkSec by tier, Free Folk gro
   const state = makeGame(world);
   const e = enemyBattleStats(world, state, 1); // Millbrook: tier 1, Free Folk, not a capital
   const depth = enemyDepth(world, world.regions[1]);
-  close(e.troopMult, Math.pow(ENEMY_SCALING.troopPerTier, depth), 'troopMult');
+  close(e.troopMult, troopScale(depth), 'troopMult');
   close(e.growth, Math.pow(ENEMY_SCALING.growthPerTier, depth) * BATTLE.freeFolkGrowthMult, 'growth (passive × freeFolkGrowthMult)');
   assert.equal(e.thinkSec, ENEMY_SCALING.thinkSecByTier[1]);
   assert.equal(e.personality, 'passive');
@@ -64,14 +67,14 @@ test('enemyBattleStats: a faction capital is scaled up by ENEMY_SCALING.capitalM
   const e = enemyBattleStats(world, state, 3); // Crimson Keep: tier 2, capital
   const depth = enemyDepth(world, world.regions[3]); // troops scale with depth (a fractional tier on the world's ladder)
   assert.ok(depth >= 1 && depth <= ENEMY_SCALING.atkDefByTier.length - 1, `depth ${depth}`);
-  close(e.troopMult, Math.pow(ENEMY_SCALING.troopPerTier, depth) * ENEMY_SCALING.capitalMult, 'capital troopMult');
+  close(e.troopMult, troopScale(depth) * ENEMY_SCALING.capitalMult, 'capital troopMult');
 });
 
 test('enemyBattleStats: decapitation weakens the rest of a faction once its capital falls', () => {
   const world = makeWorld();
   const state = makeGame(world);
   const before = enemyBattleStats(world, state, 4); // Ashport: same faction as the Crimson capital (region 3)
-  const base = Math.pow(ENEMY_SCALING.troopPerTier, enemyDepth(world, world.regions[4]));
+  const base = troopScale(enemyDepth(world, world.regions[4]));
   close(before.troopMult, base, 'no decapitation yet');
 
   state.owner[3] = PLAYER_FACTION; // conquer the Crimson capital
@@ -83,7 +86,7 @@ test('enemyBattleStats: each founded dynasty scales enemy garrisons up further',
   const world = makeWorld();
   const state = makeGame(world, { dynasty: { level: 3 } }); // two dynasties completed
   const e = enemyBattleStats(world, state, 1);
-  const expected = Math.pow(ENEMY_SCALING.troopPerTier, enemyDepth(world, world.regions[1])) * Math.pow(DYNASTY.enemyMultPerDynasty, 2);
+  const expected = troopScale(enemyDepth(world, world.regions[1])) * DYNASTY.enemyMultFirst * DYNASTY.enemyMultPerDynasty;
   close(e.troopMult, expected, 'dynasty-scaled troopMult');
 });
 

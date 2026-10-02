@@ -16,6 +16,10 @@ import { PLAYER_FACTION } from '../meta/state.js';
 import { generateWorld } from '../world/generate.js';
 import { createCamera } from '../render/camera.js';
 import { TUTORIAL_STEPS } from '../scenes/timing.js';
+import { effectiveRegionIncome } from '../app/income.js';
+import { incomePerSec } from '../meta/economy.js';
+import { conquer } from '../meta/progression.js';
+import { worksIncomeMult } from '../meta/worksEffects.js';
 
 function memoryStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -105,37 +109,74 @@ test('idle ticker accrues wall-clock income and schedules pops from the owned re
   assert.ok(pop.gold > 0);
 });
 
-test('tutorial controller advances on the right events and honours the hints setting', () => {
+test('tutorial controller: a set of seen steps, the right step for the facts, events and timeouts, the hints setting, replay', () => {
   const { state } = createStateContainer({ storage: memoryStorage(), now: () => 1 }).newRealm(7);
   const tut = createTutorialController({ getState: () => state });
-  assert.equal(tut.currentStepDef().id, 0);
-  tut.notify('send'); // wrong event: ignored
-  assert.equal(state.tutorial.step, 0);
-  tut.notify('tap');
-  assert.equal(state.tutorial.step, 1);
-  tut.notify('regionSelected');
-  assert.equal(state.tutorial.step, 2);
-  tut.notify('battleStart');
-  assert.equal(state.tutorial.step, 3);
-  tut.dismiss();
-  assert.equal(state.tutorial.step, 4);
-  // step 4 has a 10 s timeout
+  const world = { scene: 'world', panelsClosed: true, cardOpen: false, cardAttackable: false, cardUnscouted: false, frontierCount: 3, battlesWon: 0, conquests: 0, realmComplete: false, ownedFrontierCount: 1 };
+  assert.deepEqual(state.tutorial, { seen: {}, done: false });
+  assert.equal(tut.pick(world).id, 'W0');
+  tut.notify('nothing'); // not W0's event
+  assert.equal(tut.pick(world).id, 'W0');
   tut.update(4);
-  assert.equal(state.tutorial.step, 4);
-  tut.update(7);
-  assert.equal(state.tutorial.step, 5);
-  tut.notify('powerUsed', { power: 'firestorm' });
-  assert.equal(state.tutorial.step, 5, 'only Rally counts');
-  tut.notify('powerUsed', { power: 'rally' });
-  assert.equal(state.tutorial.step, 6);
+  assert.equal(tut.pick(world).id, 'W0');
+  tut.update(1.5); // W0 has a 5 s timeout, counted while it is on screen
+  assert.ok(state.tutorial.seen.W0);
+  assert.equal(tut.pick(world).id, 'W1', 'W1 follows W0');
+  tut.notify('panAndZoom');
+  assert.equal(tut.pick(world).id, 'W2');
+  // W2 needs a frontier; the card opening (W3) wins once a region is selected and attackable
+  tut.notify('regionSelected');
+  assert.ok(state.tutorial.seen.W2);
+  assert.equal(tut.pick({ ...world, cardOpen: true, cardAttackable: true }).id, 'W3');
+  tut.notify('battleStart');
+  assert.equal(tut.pick({ ...world, cardOpen: true, cardAttackable: true }), null, 'nothing else on the map before the first victory');
+  // a battle: B1 first, then B2 (send size), B3 after the size hint or the first capture (and only while it is shown)
+  const battle = { scene: 'battle', live: true, t: 3, battlesBefore: 0, ownSites: 1, enemySites: 3, captured: 0, rallyReady: false, firestormReady: false, selectedCount: 0, noRouteSeen: false };
+  assert.equal(tut.pick(battle).id, 'B1');
+  assert.equal(tut.pick({ ...battle, scene: 'world' }), null, 'a battle step is silent on the map');
+  assert.equal(tut.pick(battle).id, 'B1');
+  tut.dismiss();
+  assert.ok(state.tutorial.seen.B1, 'the x marks the current step seen');
+  assert.equal(tut.pick(battle).id, 'B2');
+  tut.notify('sizeChanged');
+  assert.equal(tut.pick(battle).id, 'B3');
+  tut.notify('capture');
+  assert.ok(state.tutorial.seen.B3, 'a capture while B3 is on screen marks it seen');
+  assert.equal(tut.pick({ ...battle, ownSites: 2 }).id, 'B4');
+  tut.notify('multiSend');
+  assert.equal(tut.pick({ ...battle, ownSites: 2, t: 10, rallyReady: true }), null, 'Rally waits for 15 s');
+  assert.equal(tut.pick({ ...battle, ownSites: 2, t: 16, rallyReady: true }).id, 'B5');
+  tut.notify('rally');
+  // steps that need a feature stay silent until it is on; Firestorm only when it is ready
+  assert.equal(tut.pick({ ...battle, battlesBefore: 1, t: 25, features: {} }).id, 'C3', 'C1 and C2 need supply lines; C3 goes ahead without them');
+  const noCapture = tut.pick({ ...battle, battlesBefore: 1, t: 25, captured: 0, features: { supply: true } });
+  assert.notEqual(noCapture && noCapture.id, 'C1', 'the supply-line hint waits for the first capture of this battle');
+  assert.equal(tut.pick({ ...battle, battlesBefore: 1, t: 25, captured: 1, features: { supply: true } }).id, 'C1');
+  tut.notify('pauseOrSpeed');
+  assert.ok(state.tutorial.seen.C3, 'an event marks a step seen even when it is not the one on screen');
+  assert.equal(tut.pick({ ...battle, firestormReady: true }).id, 'P1');
+  // the world again
+  assert.equal(tut.pick({ ...world, battlesWon: 1 }).id, 'M1');
   tut.notify('councilOpened');
-  assert.equal(state.tutorial.done, true);
-  assert.equal(tut.currentStepDef(), null);
-
-  state.tutorial = { step: 0, done: false };
+  assert.equal(tut.pick({ ...world, battlesWon: 1, cardOpen: true, cardUnscouted: true }).id, 'M2');
+  assert.equal(tut.pick({ ...world, battlesWon: 1, realmComplete: true }).id, 'M4');
+  const m3 = { ...world, battlesWon: 3, conquests: 3, ownedFrontierCount: 2, features: { works: true }, worksDue: true, worksRegion: 4 };
+  assert.equal(tut.pick({ ...m3, worksRegion: -1 }), null, 'M3 needs an owned region with a free slot and a hostile border to point at');
+  assert.equal(tut.pick({ ...m3, worksDue: false }), null, 'and no Work built yet');
+  assert.equal(tut.pick(m3).id, 'M3');
+  tut.notify('workBuilt');
+  assert.ok(state.tutorial.seen.M3, 'a Work built marks M3 seen');
+  // hints off: nothing shows, nothing is lost
   state.settings.hints = false;
-  assert.equal(tut.currentStepDef(), null, 'hints off hides every step');
-  assert.equal(TUTORIAL_STEPS.length, 7);
+  assert.equal(tut.pick(world), null);
+  state.settings.hints = true;
+  // replay: every step unseen again, hints on
+  tut.replay();
+  assert.deepEqual(state.tutorial, { seen: {}, done: false });
+  assert.equal(tut.pick(world).id, 'W0');
+  state.tutorial.done = true;
+  assert.equal(tut.pick(world), null, 'done switches every hint off');
+  assert.equal(TUTORIAL_STEPS.map((x) => x.id).join(' '), 'W0 W1 W2 W3 B1 B2 B3 B4 B5 C1 C2 C3 P1 P2 M1 M2 M3 M4');
 });
 
 test('pickLandTile resolves tile centres (and mountain faces) to the tile drawn there', () => {
@@ -209,4 +250,20 @@ test('bake bucket choice: covers the range, with hysteresis', () => {
   const b = pickBucket(30);
   assert.equal(pickBucket(b * 1.1, b), b, 'small zoom wiggles keep the bucket');
   assert.notEqual(pickBucket(b * 1.6, b), b, 'a real zoom change re-buckets');
+});
+
+test('the income the region cards show adds up to what the game pays, Markets included (app/income.js mirrors meta/economy.js)', () => {
+  const { state, world } = createStateContainer({ storage: memoryStorage(), now: () => 1 }).newRealm(7);
+  for (let i = 0; i < 3; i++) {
+    const next = world.regions.find((r) => state.owner[r.id] !== PLAYER_FACTION && r.neighbors.some((n) => state.owner[n] === PLAYER_FACTION));
+    conquer(state, world, next.id, 1000 + i);
+  }
+  const owned = world.regions.filter((r) => state.owner[r.id] === PLAYER_FACTION);
+  const sum = () => owned.reduce((a, r) => a + effectiveRegionIncome(state, world, r), 0);
+  assert.ok(Math.abs(sum() - incomePerSec(state, world)) < 1e-9, 'no Works: the cards sum to incomePerSec');
+  const before = effectiveRegionIncome(state, world, owned[1]);
+  state.works = { [owned[1].id]: [{ type: 'market', level: 2 }] };
+  assert.ok(worksIncomeMult(state, owned[1].id) > 1, 'a Market raises its region');
+  assert.ok(Math.abs(sum() - incomePerSec(state, world)) < 1e-9, 'with a Market: the cards still sum to incomePerSec');
+  assert.ok(effectiveRegionIncome(state, world, owned[1]) > before, 'and the Market region shows its raise');
 });

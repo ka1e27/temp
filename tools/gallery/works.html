@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hex Dominion 2 — Region Works Gallery</title>
+<meta name="theme-color" content="#0b0d12">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+
+<!-- The real, shipped stylesheets. works.css is not @imported by main.css yet (integration adds that
+     line, see docs/briefs/works-hookup.md), so the gallery links it directly. -->
+<link rel="stylesheet" href="../../game/styles/main.css">
+<link rel="stylesheet" href="../../game/styles/components/works.css">
+
+<style>
+  /* Gallery-only chrome. None of this ships with the game. */
+  html { margin: 0; background: #0b0d12; }
+  body { margin: 0; background: transparent; font-family: var(--font-ui); color: var(--text); }
+  #gallery-bg {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(ellipse 62% 50% at 32% 36%, rgba(134, 180, 106, 0.55), transparent 68%),
+      radial-gradient(ellipse 50% 60% at 68% 62%, rgba(95, 154, 85, 0.45), transparent 68%),
+      linear-gradient(160deg, #2f6d8f 0%, #235a79 30%, #1a4560 60%, #102c3d 100%);
+  }
+  #gallery-bg::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 200px 30px rgba(0, 0, 0, 0.45); }
+
+  #gallery-nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 10px 20px;
+    background: rgba(8, 10, 16, 0.85);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .gallery-brand { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; }
+  .gallery-brand small { display: block; font-family: var(--font-ui); font-weight: 700; color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.02em; }
+  .gallery-modes { display: flex; gap: 8px; flex-wrap: wrap; }
+  .gallery-modes button {
+    padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.06); color: var(--text-muted); font-weight: 800; font-size: 0.8rem; cursor: pointer;
+  }
+  .gallery-modes button.is-active { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: transparent; }
+  body.gallery-bare #gallery-nav { display: none; }
+  .gallery-view[hidden] { display: none; }
+
+  /* --- panel states ------------------------------------------------------------------------- */
+  #view-panels, #view-chooser { padding: 20px; }
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fill, 360px); gap: 22px 20px; align-items: start; justify-content: center; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; width: 360px; }
+  .state-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(255, 255, 255, 0.78); text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+  .state-label small { text-transform: none; letter-spacing: 0; font-weight: 700; color: rgba(255,255,255,0.6); margin-left: 6px; }
+  .state-cell .region-card { max-width: none; }
+
+  /* --- phone: 390 px wide viewport, cards fill it like the bottom sheet does ------------------- */
+  body.phone #view-panels, body.phone #view-chooser { padding: 8px; }
+  body.phone .state-grid { grid-template-columns: 1fr; gap: 14px; }
+  body.phone .state-cell { width: 100%; }
+  body.only-cards .specimens { display: none; }
+
+  /* --- icon and mark specimens -------------------------------------------------------------------- */
+  #view-icons { padding: 20px; display: flex; flex-direction: column; gap: 18px; max-width: 1100px; margin: 0 auto; }
+  .spec-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; padding: 14px 16px; border-radius: 14px; background: rgba(10, 14, 22, 0.66); border: 1px solid rgba(255,255,255,0.08); }
+  .spec { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text-muted); font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+  .spec-sizes { display: flex; align-items: flex-end; gap: 10px; }
+  #mark-canvas { border-radius: 12px; max-width: 100%; }
+
+  /* --- map ---------------------------------------------------------------------------------------- */
+  #view-map { position: relative; height: calc(100vh - 57px); }
+  body.gallery-bare #view-map { height: 100vh; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #map-caption {
+    position: absolute; left: 14px; bottom: 12px; padding: 6px 10px; border-radius: 8px;
+    background: rgba(8, 10, 16, 0.72); color: var(--text-muted); font-size: 0.74rem; font-weight: 700; max-width: 70%;
+  }
+  body.gallery-bare #map-caption { display: none; }
+
+  /* sheet mode: one card docked like the phone bottom sheet, with a 50 % guide */
+  body.sheet .state-grid { display: block; }
+</style>
+</head>
+<body>
+<div id="gallery-bg"></div>
+
+<div id="gallery-nav">
+  <div class="gallery-brand">Region Works<small>Panel and chooser states in the real region card, icons, map marks. Real meta and render modules.</small></div>
+  <div class="gallery-modes">
+    <button data-mode="panels" class="is-active">Panel states</button>
+    <button data-mode="chooser">Chooser states</button>
+    <button data-mode="icons">Icons and marks</button>
+    <button data-mode="map">World map</button>
+  </div>
+</div>
+
+<main id="view-panels" class="gallery-view"><div id="panel-grid" class="state-grid"></div></main>
+<main id="view-chooser" class="gallery-view" hidden><div id="chooser-grid" class="state-grid"></div></main>
+<main id="view-icons" class="gallery-view" hidden>
+  <div class="spec-row" id="icon-row"></div>
+  <div class="spec-row"><canvas id="mark-canvas"></canvas></div>
+</main>
+<main id="view-map" class="gallery-view" hidden>
+  <canvas id="map"></canvas>
+  <div id="map-caption"></div>
+</main>
+
+<script type="module" src="./works.js"></script>
+</body>
+</html>

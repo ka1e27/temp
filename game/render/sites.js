@@ -53,7 +53,7 @@ export function createSiteSpriteCache() {
     let e = bannerCache.get(key);
     if (e) return e;
     const sb = bucket * 0.46;
-    const fw = Math.ceil(1.55 * sb) + 2;
+    const fw = Math.ceil(1.8 * sb) + 2;
     const fh = Math.ceil(2.2 * sb) + 2;
     const ox = Math.ceil(0.16 * sb) + 1;
     const oy = Math.ceil(2.05 * sb) + 1;

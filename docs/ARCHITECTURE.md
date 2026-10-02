@@ -54,6 +54,7 @@ game/
             crowns.js leaders.js intel.js prosperity.js ambient.js music.js
                             one file per later feature; their modules import them directly. ALL tuning numbers live here
   core/     (pure)  rng.js hex.js noise.js pathfind.js format.js events.js
+                    colorDistance.js    CIEDE2000 between hex colours, normal and under the three colour-vision deficiencies (faction colours are tested with it)
   world/    (pure)  generate.js terrain.js connectivity.js lakes.js rivers.js regions.js factions.js
                     settlements.js roads.js perks.js names.js        the generator, in the order of §4
                     caravanRoutes.js    polylines over tile.road where carts may roll (settlement-to-keep, keep-to-keep)
@@ -79,7 +80,9 @@ game/
             prosperityDecor.js          prosperity decoration baked into the chunks (from prosperityPlan)
             ambient.js ambientCaravans.js ambientBirds.js ambientSprites.js ambientArt.js
                                         the living map: carts, smoke, sails, boats, birds; sprite cache; art
-            units.js arenaLayer.js      battle squads and intent lines; live arena territory and dim
+            units.js arenaLayer.js      battle squads and intent lines; live arena territory (from the sim), its corridor edges, and the dim
+            supplyLines.js              supply-line chevrons along a route and the send drag's reach / no-route marks (pure drawing)
+            worksMarks.js               the Region Works buildings by each keep on the world map
             fx.js fx-pool.js fx-kinds.js fx-kinds-progress.js fx-draw.js fx-easing.js   particle system
   scenes/   (browser)
             flow.js timing.js           scene manager; every choreography timing constant
@@ -90,7 +93,9 @@ game/
             stuckHint.js                when the "Stuck?" coach hint is due (60 s, hints on, ready power, never in tutorial battle steps) - pure
   app/      (browser glue, no rendering)
             stateContainer.js autosave.js idle.js income.js     live {state, world}, autosave, idle ticker, income numbers
-            tutorial.js perkInfo.js devhooks.js     tutorial steps, perk and dynasty-star copy (derived from meta/perks.js, config/meta.js), window.__hd (?dev=1)
+            tutorial.js tutorialRules.js features.js   the tutorial controller (a SET of seen steps), each step's rule (pure), feature flags (supply, works)
+            hintTargets.js              shared on-screen target boxes and distance/overlap maths (the coach and tools/hintMonitor.js)
+            perkInfo.js devhooks.js     perk and dynasty-star copy (derived from meta/perks.js, config/meta.js), window.__hd (?dev=1)
             crownCopy.js                CROWN_BONUS_PCT and CROWN_TEXTS for the crown copy, derived from config/crowns.js
             bestValue.js                the ONE Army upgrade with the most Army Power per gold (the council's "Best value" tag)
             app.css                     where the glue places kit components (region card dock), title scrim, dev overlay
@@ -98,6 +103,10 @@ game/
             dom.js format.js icons.js   h() builder, number/time formatting, inline SVG icon set
             hud.js regionCard.js council.js realm.js settings.js title.js welcome.js results.js
             battleHud.js coach.js modal.js toasts.js tooltip.js devpanel.js
+            controls.js                 the "?" controls card (mouse/keyboard and touch columns) and its data
+            dialogs.js live.js          dialog manager (focus in, inert behind, Tab trap, Escape, restore) and the one global polite live region
+            regionsPanel.js             the Regions list: every revealed region as a button named by a sentence
+            chroniclePanel.js saveMapButton.js   the Realm panel's story and "Save the map" (Keepsakes)
             crownRow.js                 the three crown medals (region card, victory card, phone sheet)
             intelPanel.js               Scout/Sabotage section of the region card
             leaderBanner.js             rival leader banner (click-through, auto-hides)
@@ -114,8 +123,12 @@ docs/       DESIGN.md ARCHITECTURE.md   what / how (source of truth)
             INTEGRATION-NOTES.md MUSIC.md PLAYFEEL.md STATUS.md BACKLOG.md briefs/ img/ legacy/
 tools/                                  (none of it is imported by the game)
   serve.js cdp.js                       static server (--base, --root, --port); DevTools-protocol driver, no deps
-  check.mjs                             real-input smoke gate; --base=temp is the deployed-shape run (SW, offline, manifest)
+  check.mjs                             real-input smoke gate; --base=temp is the deployed-shape run (SW, offline, manifest); --only=desktop|phone|robust|keepsakes|playtest|deploy
+  robustChecks.mjs keepsakeChecks.mjs playtestChecks.mjs   the robustness, Keepsakes and playtest-fix scenarios check.mjs runs (own Chrome each)
+  a11ycheck.mjs                         the accessibility tree, dialogs, touch targets, Reduce Motion and a keyboard-only game
   shots.mjs playtest.mjs                screenshot tour; first-session playtest with real input
+  hints.mjs hintMonitor.js              tutorial hint placement at 7 viewports with real input, measured after every frame (exits 1 on a miss)
+  iconcheck.mjs iconMetrics.js          icon-only buttons: visible icon centre within 1 px of the button centre, gear inside the HUD bar
   launch-assets.mjs launch/launchArt.js og.png and every icon, rendered by the game's own renderer
   worldcli.mjs balance.mjs campaign.mjs ASCII world preview; difficulty-label harness; whole-continent virtual player
   musicrender.mjs                       renders the score to WAV and measures it
@@ -231,11 +244,14 @@ GameState = {
   gold: number,
   owner: number[],            // owner faction id per region id (initialised from world)
   conqueredAt: (number|null)[],   // ms timestamp per region, null if not conquered by player
+  crowns, metFactions, intel, prosperity, works,   // per-continent feature state (reset by a new dynasty); see their meta/*State.js leaves
   upgrades: { [upgradeId]: number },  // levels, missing = 0
   stats: { battlesWon, battlesLost, regionsConquered, goldEarned, troopsSent,
-           settlementsTaken, bestBattleSec, playSec, surrenders },
-  settings: { sound: true, reduceMotion: false, hints: true, speed: 1 },
-  tutorial: { step: number, done: boolean },
+           settlementsTaken, bestBattleSec, playSec, surrenders, crownsEarned },
+  chronicle: Chronicle,       // the realm's story (meta/chronicleState.js); lifetime state, kept by a new dynasty
+  settings: { sound, reduceMotion, reduceMotionSet, hints, speed (0.5|1|2|3), slowBattles, leaderVoices, music, musicVolume, sfxVolume },  // whitelisted and clamped on load
+  saveSeq: number,            // rises with every write: two tabs must not overwrite each other (app/autosave.js)
+  tutorial: { seen: { [stepId]: true }, done: boolean },   // a set of seen steps (W0..M4); an old { step, done } save is migrated by save.js
   lastSeen: number,           // ms timestamp of last save (for offline earnings)
   battle: BattleState | null, // in-progress battle, for resume
 }
@@ -313,7 +329,8 @@ BattleState = {
 
 Events (`battle.events`, consumed by render/fx/audio/UI each frame; positions in world units):
 `send {owner, from, to, count, squad}` · `clash {x, y, a, b}` · `clashEnd {x, y, winner}` ·
-`assault {site, owner}` · `capture {site, from, to, x, y}` · `arrow {site, squad, x1, y1, x2, y2}` ·
+`assault {site, owner}` · `capture {site, from, to, x, y}` · `arrow {site, squad, x1, y1, x2, y2}` (a tower's, or the War Camp's with Watchtower Works) ·
+`supply {owner, from, to}` · `unsupply {owner, from, reason: 'removed'|'lost'}` · `refused {reason: 'noRoute', owner, to}` (`send` carries `auto: true` for a supply line's own sends) ·
 `power {owner, power, x, y, target}` · `firestorm {x, y, radius}` · `surrender {sites: []}` ·
 `end {result}`.
 

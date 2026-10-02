@@ -5,6 +5,22 @@
 
 const NAMED_SUFFIXES = ['', 'K', 'M', 'B', 'T'];
 
+/** What every formatter prints for a value that is not a number at all (NaN, undefined, null, '', text) or, except formatNum, infinite. */
+export const NO_VALUE = '—';
+
+/**
+ * A number from whatever a caller hands over: numbers pass through, numeric strings ('12', ' 3.5 ') are parsed, everything else
+ * (undefined, null, '', objects, text) is NaN. The formatters call this first so a stray string or a missing field prints a dash
+ * instead of 'NaN', 'Infinity' or '∞'.
+ * @param {unknown} v
+ * @returns {number}
+ */
+export function toNumber(v) {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '') return Number(v);
+  return NaN;
+}
+
 /** 'aa', 'ab', ..., 'az', 'ba', ... for magnitudes past T (3 sig figs each). */
 function letterSuffix(tierPastNamed) {
   const first = Math.floor(tierPastNamed / 26);
@@ -34,10 +50,14 @@ function decimalsFor(tier, value) {
  * when the value is under 10 and not whole, e.g. "4.5"); at and above 1000,
  * scales by powers of 1000 with the suffix K/M/B/T, then two-letter suffixes
  * aa/ab/ac/... — always keeping 3 significant digits (1.23K, 12.3K, 123K).
- * @param {number} n
+ * Numeric strings are parsed ('12' is "12"); NaN, undefined, null and other non-numbers are "—"; only a real +-Infinity
+ * (a currency that overflowed) is "∞" / "-∞".
+ * @param {number|string} n
  */
 export function formatNum(n) {
-  if (!Number.isFinite(n)) return n > 0 ? '∞' : n < 0 ? '-∞' : 'NaN';
+  n = toNumber(n);
+  if (Number.isNaN(n)) return NO_VALUE;
+  if (!Number.isFinite(n)) return n > 0 ? '∞' : '-∞';
   const neg = n < 0;
   const x = Math.abs(n);
 
@@ -80,8 +100,10 @@ export function formatNum(n) {
   return neg ? `-${out}` : out;
 }
 
-/** A per-second rate with an explicit sign, e.g. `formatRate(1.2)` -> "+1.2/s". */
+/** A per-second rate with an explicit sign, e.g. `formatRate(1.2)` -> "+1.2/s"; "—" when there is no number. */
 export function formatRate(n) {
+  n = toNumber(n);
+  if (Number.isNaN(n)) return NO_VALUE;
   const sign = n < 0 ? '-' : '+';
   return `${sign}${formatNum(Math.abs(n))}/s`;
 }
@@ -89,10 +111,13 @@ export function formatRate(n) {
 /**
  * Duration as the largest one or two units, e.g. "12s", "4m 05s", "3h 12m",
  * "2d 4h". Seconds are always zero-padded when shown next to minutes;
- * minutes/hours are not padded when shown next to the unit above them.
- * @param {number} sec
+ * minutes/hours are not padded when shown next to the unit above them. Negative input is "0s"; a non-finite or
+ * non-numeric one is "—" (never "NaNd NaNh"); numeric strings are parsed.
+ * @param {number|string} sec
  */
 export function formatDuration(sec) {
+  sec = toNumber(sec);
+  if (!Number.isFinite(sec)) return NO_VALUE;
   const total = Math.max(0, Math.floor(sec));
   if (total < 60) return `${total}s`;
   if (total < 3600) {
@@ -107,16 +132,18 @@ export function formatDuration(sec) {
   }
   const d = Math.floor(total / 86400);
   const h = Math.floor((total % 86400) / 3600);
-  return `${d}d ${h}h`;
+  return `${d >= 1e6 ? formatNum(d) : d}d ${h}h`; // absurd spans stay readable ("1.16Md"), not "1.157e+295d"
 }
 
 /**
  * A signed whole-number percentage, e.g. `formatPct(0.12)` -> "+12%".
  * `x` is a fraction (0.12 means 12%), matching how perk/upgrade bonuses are
- * stored (see game/meta/perks.js's PERK_PCT table).
- * @param {number} x
+ * stored (see game/meta/perks.js's PERK_PCT table). "—" for a non-finite or non-numeric value; numeric strings are parsed.
+ * @param {number|string} x
  */
 export function formatPct(x) {
+  x = toNumber(x);
+  if (!Number.isFinite(x)) return NO_VALUE;
   const v = Math.round(x * 100);
   const sign = v < 0 ? '-' : '+';
   return `${sign}${Math.abs(v)}%`;

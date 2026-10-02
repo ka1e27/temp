@@ -22,6 +22,10 @@
   padding: var(--sp-3) var(--sp-4) 0;
 }
 .council-title { font-size: var(--fs-lg); }
+/* in-council feedback ("Bought Steel II"): a polite status line under the header, never a toast over the dialog */
+.council-status { min-height: 0; padding: 0 var(--sp-4); font-size: var(--fs-sm); font-weight: 800; color: var(--good); overflow: hidden; max-height: 0; transition: max-height var(--dur-fast) var(--ease-out), padding var(--dur-fast); }
+.council-status.is-on { max-height: 2.6em; padding-top: var(--sp-2); }
+.council-status[data-kind="warning"] { color: var(--warn); }
 
 .council-toolbar {
   display: flex;
@@ -112,6 +116,11 @@
   font-weight: 700;
 }
 .upgrade-card-current { color: var(--text-muted); }
+/* one line: when "+0 War Camp troops → +2 War Camp troops" does not fit, the current value keeps only its number */
+.upgrade-card-effect { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+.upgrade-card-effect > span { min-width: 0; }
+.upgrade-card-effect.is-compact .upgrade-card-current-tail { display: none; }
+.upgrade-card-effect.is-compact .upgrade-card-next { overflow: hidden; text-overflow: ellipsis; }
 .upgrade-card-arrow { color: var(--text-dim); }
 .upgrade-card-next { color: var(--good); }
 .upgrade-card.is-maxed .upgrade-card-next { color: var(--gold); }
@@ -170,3 +179,4 @@
 }
 .upgrade-card-tag[hidden] { display: none; }
 .upgrade-card.is-best-value { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold, #f5c451) 45%, transparent); }
+.upgrade-card-level { white-space: nowrap; flex-shrink: 0; } /* "Lv 0" never splits over two lines beside the Best value tag */

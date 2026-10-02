@@ -129,6 +129,8 @@
 .intel-emblem { display: inline-flex; color: var(--intel-faction, var(--text-muted)); }
 .intel-weak { color: var(--text-muted); font-weight: 700; }
 .intel-weak strong { color: var(--text); font-weight: 800; }
+.intel-weak { flex-wrap: wrap; }
+.intel-gloss { flex-basis: 100%; padding-left: 21px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-muted); line-height: 1.3; }
 .intel-ring {
   width: 11px;
   height: 11px;

@@ -25,6 +25,7 @@ function getAudioContextCtor() {
  *   setMuted(muted: boolean): void,
  *   isMuted(): boolean,
  *   setVolume(v: number): void,
+ *   setEffectsLevel(v: number): void,
  *   getContext(): AudioContext|null,
  *   getBus(): GainNode|null,
  *   onUnlock(fn: (ctx: AudioContext) => void): () => void,
@@ -38,6 +39,7 @@ export function createSfx() {
   let noiseBuf = null;
   let muted = false;
   let volume = 0.8;
+  let effectsLevel = 1; // Settings > Effects volume: the sound effects only (the master volume also carries the score)
   let voiceCost = 0;
   const lastPlayedAt = Object.create(null); // cue name -> ctx.currentTime
   const unlockListeners = []; // music.js waits here for the context to exist
@@ -98,7 +100,7 @@ export function createSfx() {
     if (now - (lastPlayedAt[name] ?? -Infinity) < spec.gap) return;
     if (voiceCost + spec.cost > MAX_VOICE_COST) return; // mix is already busy
 
-    const callGain = Math.max(0, opts.volume ?? 1);
+    const callGain = Math.max(0, opts.volume ?? 1) * effectsLevel;
     if (callGain <= 0) return;
     const pitch = Math.max(0.1, opts.pitch ?? 1);
 
@@ -126,6 +128,11 @@ export function createSfx() {
 
   function isMuted() {
     return muted;
+  }
+
+  /** The level of the sound EFFECTS alone, 0..1 (the score has its own volume). */
+  function setEffectsLevel(v) {
+    effectsLevel = clamp01(v);
   }
 
   function setVolume(v) {
@@ -162,5 +169,5 @@ export function createSfx() {
     };
   }
 
-  return { unlock, play, setMuted, isMuted, setVolume, getContext, getBus, onUnlock };
+  return { unlock, play, setMuted, isMuted, setVolume, setEffectsLevel, getContext, getBus, onUnlock };
 }

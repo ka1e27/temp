@@ -93,19 +93,45 @@ boot ──► title ──► world ⇄ battle ──► (victory|defeat card) 
   "Upgrade Muster to arrive with a bigger army", …) and *Try again* / *Back to map*.
 - Retreat asks for confirmation, then shows a lighter card.
 
-## 4. Tutorial (first realm only; each hint dismissible; "Hints" setting disables)
+## 4. Tutorial (first realm; each hint dismissible; "Hints" setting disables; "Replay tutorial" in Settings)
 
-| step | when | hint | anchor | advances on |
+### Hint placement rules (non-negotiable; a hint that points at the wrong thing is worse than none)
+- A hint's pointer **ends on its target**: within 8 px of the target's on-screen box, for
+  world objects (settlements, regions) and UI elements alike.
+- It **follows its target every frame** as the camera pans, zooms or flies. It is never a
+  position computed once.
+- It **never covers its target** or the thing the player must press. It flips side to stay
+  clear, and it stays fully on screen at every supported viewport (1280×720 up to 1920×1080,
+  390×844 portrait, 844×390 landscape, 768×1024).
+- It **hides while its target is off screen** or under another panel, and reappears when
+  visible. It never points at empty map.
+- **At most one hint at a time.** A new hint waits at least 1.5 s after the previous one
+  appeared.
+
+### Steps
+| # | when | hint (short) | points at | advances on |
 |---|---|---|---|---|
-| 0 | world, first load after New Realm | "This is your realm. Its villages pay you gold every second." | gold counter | 5 s or click |
-| 1 | after 0 | "Click a glowing region to see what it offers." | the easiest frontier region | region selected |
-| 2 | region card open | "Attack! Battles take a minute or two." | Attack button | battle starts |
-| 3 | battle, flight landed | "Drag from your War Camp to a settlement. The arrow tells you if you'll take it." (animated hand/arrow from the camp to the nearest site the default send takes comfortably) | camp | first player send |
-| 4 | after first send | "Captured settlements grow troops for you. Take the enemy keep (the castle) to win." | enemy keep | first capture or 10 s |
-| 5 | battle t ≥ 20 s and Rally ready | "Try Rally: every settlement sends half its troops at once." | Rally button | Rally used |
-| 6 | world, after first victory | "Spend gold in the War Council to grow stronger." | Council button | council opened |
+| W0 | world, first load after New Realm | "This is your realm. Its villages pay you gold every second." | gold counter | 5 s or click |
+| W1 | after W0 | "Drag to move the map. Scroll (or pinch) to zoom." | map centre (no pointer, small card) | a pan and a zoom |
+| W2 | after W1 | "Click a glowing region to see what it offers." | the easiest frontier region's label | region selected |
+| W3 | region card open | "Attack! Battles take a minute or two." | Attack button | battle starts |
+| B1 | battle 1, flight landed | "Drag from your War Camp to a settlement. The arrow turns green and says 'capture' if you'll take it." (animated hand from the camp to the comfortable target) | War Camp | first player send |
+| B2 | after B1 | "Choose how much to send: press 1–4 or tap the bar." | send-size bar | size changed |
+| B3 | after B2 or the first capture | "Captured settlements grow troops for you. Take their keep (the castle) to win." | enemy keep | first capture or 10 s |
+| B4 | player owns ≥ 2 sites | desktop: "Click your settlements to select several (or shift-drag to lasso, A for all), then click a target." touch: "Tap your settlements to select several, then tap a target." | two of your settlements | a send from ≥ 2 sources |
+| B5 | Rally ready, t ≥ 15 s | "Rally: every settlement you own sends half its troops to one place at once. Press Q or tap Rally, then pick the target." | Rally button, then the keep | Rally used |
+| C1 | battle 2, landed | "Set up a supply line: Ctrl-drag (or long-press, or switch on Auto) and troops keep flowing on their own." | Auto toggle and a settlement | a supply line created |
+| C2 | battle 2, first "No route" or 20 s | "You can only attack where your land touches theirs. Take the near settlements first." | a blocked settlement | 6 s or click |
+| C3 | battle 2, after C1 | "Space pauses. The speed button runs the battle faster." | pause and speed buttons | pause or speed used |
+| P1 | first battle with Firestorm unlocked | "Firestorm: press W (or tap it), then click where it should land. Powers recharge; watch the ring." | Firestorm button | Firestorm used |
+| P2 | battle with ≥ 2 selected | "Right-click or Esc clears your selection." | selection | cleared |
+| M1 | world, after the first victory | "Spend gold in the War Council to grow stronger." | Council button | council opened |
+| M2 | first unscouted frontier card | "Scout a region to see its garrisons and weak point." | Scout button | scouted |
+| M3 | after the 3rd conquest | "Build Works in your regions: Barracks and Stables help the battles next to them." | an owned frontier region | a Work built |
+| M4 | continent conquered | "Found a Dynasty: start again, stronger, on a new continent." | Realm button | Realm opened |
 
-A `?` button in the battle HUD shows a one-screen controls card (mouse and touch columns).
+The `?` button in the battle HUD shows a one-screen controls card (mouse/keyboard and touch
+columns) covering every control above.
 
 ## 5. Audio mix
 

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hex Dominion 2 — Keepsakes Gallery</title>
+<meta name="theme-color" content="#0b0d12">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+
+<!-- The real, shipped stylesheets. chronicle.css is not @imported by main.css yet (integration adds that line, see
+     docs/briefs/keepsakes-hookup.md), so the gallery links it directly. -->
+<link rel="stylesheet" href="../../game/styles/main.css">
+<link rel="stylesheet" href="../../game/styles/components/chronicle.css">
+
+<style>
+  /* Gallery-only chrome. None of this ships with the game. */
+  html { margin: 0; background: #0b0d12; }
+  body { margin: 0; background: transparent; font-family: var(--font-ui); color: var(--text); }
+  #gallery-bg {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(ellipse 62% 50% at 32% 36%, rgba(134, 180, 106, 0.55), transparent 68%),
+      radial-gradient(ellipse 50% 60% at 68% 62%, rgba(95, 154, 85, 0.45), transparent 68%),
+      linear-gradient(160deg, #2f6d8f 0%, #235a79 30%, #1a4560 60%, #102c3d 100%);
+  }
+  #gallery-bg::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 200px 30px rgba(0, 0, 0, 0.45); }
+
+  #gallery-nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 10px 20px;
+    background: rgba(8, 10, 16, 0.85);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .gallery-brand { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; }
+  .gallery-brand small { display: block; font-family: var(--font-ui); font-weight: 700; color: var(--text-dim); font-size: 0.7rem; letter-spacing: 0.02em; }
+  .gallery-modes { display: flex; gap: 8px; flex-wrap: wrap; }
+  .gallery-modes button, .g-btn {
+    padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.06); color: var(--text-muted); font-weight: 800; font-size: 0.8rem; cursor: pointer;
+  }
+  .gallery-modes button.is-active { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: transparent; }
+  body.gallery-bare #gallery-nav { display: none; }
+  .gallery-view[hidden] { display: none; }
+
+  /* The lead's chosen phone layout for the Realm stats (docs/briefs/keepsakes-hookup.md section 8): two columns below 480 px, so the
+     Chronicle is reached sooner. Not yet in overlays.css (integration's file): the gallery applies it so the shots show what ships.
+     Add ?stats1=1 to see the current single column. */
+  @media (max-width: 480px) {
+    body:not(.stats-one) .realm-stats-grid { grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+    body:not(.stats-one) .realm-stat { gap: 6px; padding: var(--sp-2) 6px; }
+    body:not(.stats-one) .realm-stat-label { min-width: 0; line-height: 1.2; }
+  }
+
+  /* --- chronicle states: the real Realm panel with the Chronicle mounted in it ------------------------ */
+  #view-chronicle { padding: 20px; }
+  .state-grid { display: grid; grid-template-columns: repeat(auto-fill, 440px); gap: 22px 20px; align-items: start; justify-content: center; }
+  .state-cell { display: flex; flex-direction: column; gap: 8px; width: 440px; }
+  .state-label { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(255, 255, 255, 0.78); text-shadow: 0 1px 3px rgba(0,0,0,0.7); }
+  .state-label small { text-transform: none; letter-spacing: 0; font-weight: 700; color: rgba(255,255,255,0.6); margin-left: 6px; }
+  /* the Realm panel is position:absolute in the game; here each sits in its own frame */
+  .realm-frame { position: relative; height: 640px; overflow: hidden; transform: translateZ(0); border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.1); background: rgba(6, 10, 18, 0.3); }
+  .realm-frame .realm { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: calc(100% - 24px); max-height: calc(100% - 24px); }
+  body.phone #view-chronicle { padding: 8px; }
+  body.phone .state-grid { grid-template-columns: 1fr; gap: 14px; }
+  body.phone .state-cell { width: 100%; }
+  body.phone .realm-frame { height: 640px; }
+  body.phone .realm-frame .realm { top: 0; width: 100%; max-height: 100%; border-radius: 14px; }
+
+  /* --- tapestry ---------------------------------------------------------------------------------------- */
+  #view-tapestry { padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  #tapestry-stage { width: min(100%, 1180px); }
+  #tapestry-stage canvas { display: block; width: 100%; height: auto; border-radius: 6px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55); }
+  .tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 0.74rem; font-weight: 700; color: rgba(255,255,255,0.7); }
+  body.gallery-bare .tools { display: none; }
+  #tapestry-note { max-width: 900px; text-align: center; font-size: 0.74rem; font-weight: 700; color: rgba(255,255,255,0.62); }
+</style>
+</head>
+<body>
+<div id="gallery-bg"></div>
+
+<div id="gallery-nav">
+  <div class="gallery-brand">Keepsakes<small>The Chronicle (real Realm panel) and the Tapestry (real renderer map). Real meta, UI and render modules.</small></div>
+  <div class="gallery-modes">
+    <button data-mode="chronicle" class="is-active">Chronicle</button>
+    <button data-mode="tapestry">Tapestry</button>
+  </div>
+</div>
+
+<main id="view-chronicle" class="gallery-view"><div id="chronicle-grid" class="state-grid"></div></main>
+<main id="view-tapestry" class="gallery-view" hidden>
+  <div class="tools">
+    <button class="g-btn" id="save-btn" type="button">Save PNG</button>
+    <button class="g-btn" id="save-real-btn" type="button">Save the map</button>
+    <span id="tapestry-info"></span>
+  </div>
+  <div id="tapestry-stage"></div>
+  <div id="tapestry-note"></div>
+</main>
+
+<script type="module" src="./keepsakes.js"></script>
+</body>
+</html>

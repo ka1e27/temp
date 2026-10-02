@@ -11,6 +11,7 @@ import { squadPosition } from './position.js';
 import { tileAt } from './runtime.js';
 import { worldDist, hexRadiusToWorld } from './geom.js';
 import { sendFromSite } from './squads.js';
+import { canRoute } from './routing.js';
 
 /** Only the player can act as a caster today (see file header). */
 function statsFor(battle, owner) {
@@ -66,6 +67,19 @@ export function applyPower(battle, command, t) {
     if (typeof target !== 'number' || !battle.sites[target]) return;
     appliedTarget = target;
     pos = tileAt(battle, battle.sites[target].tile);
+    // Front lines (DESIGN §4.4): only settlements with a legal route send. If there are other settlements of ours but
+    // none can reach the target, the power is refused and costs nothing.
+    let others = 0;
+    let routable = 0;
+    for (const site of battle.sites) {
+      if (site.owner !== owner || site.id === target) continue;
+      others += 1;
+      if (canRoute(battle, owner, site.id, target)) routable += 1;
+    }
+    if (others > 0 && routable === 0) {
+      battle.events.push({ type: 'refused', reason: 'noRoute', owner, to: target });
+      return;
+    }
     for (const site of battle.sites) {
       if (site.owner !== owner || site.id === target) continue;
       sendFromSite(battle, site.id, target, cfg.share);

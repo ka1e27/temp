@@ -5,6 +5,7 @@ import { perkMultipliers } from '../meta/perks.js';
 import { UPGRADES, levelOf } from '../meta/upgrades.js';
 import { DYNASTY, ECONOMY } from '../config/meta.js';
 import { prosperityIncomeMult } from '../meta/prosperity.js';
+import { worksIncomeMult } from '../meta/worksEffects.js'; // the leaf: a Market raises its own region's income (DESIGN 5.8)
 
 /**
  * @param {import('../meta/state.js').GameState} state
@@ -17,7 +18,8 @@ export function effectiveRegionIncome(state, world, region) {
   const perks = perkMultipliers(state, world);
   const starMult = 1 + state.dynasty.stars * DYNASTY.incomePerStar;
   // Prosperity pays +5% income per level on a region the player holds (the STORED level, like economy.js's own line).
-  return regionIncome(region) * prosperityIncomeMult(state, region.id) * taxMult * perks.income * starMult;
+  // ... and a Market in the region adds its own percentage, exactly as meta/economy.js's incomePerSec does.
+  return regionIncome(region) * prosperityIncomeMult(state, region.id) * worksIncomeMult(state, region.id) * taxMult * perks.income * starMult;
 }
 
 /**

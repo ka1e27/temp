@@ -146,19 +146,21 @@ export function createIntelPanel({ onScout, onSabotage } = {}) {
     }
   }
 
-  function renderReport(report) {
+  function renderReport(report, scoutedBy) {
     renderChips(report);
 
     clear(personalityEl);
     personalityEl.style.setProperty('--intel-faction', report.faction.color || '#9a927f');
     personalityEl.appendChild(h('span.intel-emblem', {}, icon(report.faction.emblem || 'flag', 15)));
     personalityEl.appendChild(h('span', { title: report.faction.name }, report.personalityLine));
+    if (scoutedBy === 'watchtower') personalityEl.appendChild(h('span.intel-source.pill', { title: 'Scouted for free by a Watchtower next door' }, 'Watchtower'));
 
     clear(weakEl);
     weakEl.title = report.weakPointReason || '';
     weakEl.appendChild(h('span.intel-ring', { 'aria-hidden': 'true' }));
     weakEl.appendChild(h('span.intel-weak-label', {}, 'Weak point:'));
     weakEl.appendChild(h('strong', {}, (report.weakPointType || '?').replace(/^./, (c) => c.toUpperCase())));
+    weakEl.appendChild(h('span.intel-gloss', {}, report.weakPointGloss || '')); // the words, explained in plain sight: touch has no hover
 
     clear(notesEl);
     notesEl.hidden = !(report.notes && report.notes.length);
@@ -241,10 +243,10 @@ export function createIntelPanel({ onScout, onSabotage } = {}) {
     if (scouted) {
       const r = next.report;
       const sig = [next.regionId, r.total.toFixed(2), r.weakPoint, r.sabotage, r.groups.length,
-        r.notes.join('|'), r.personalityLine].join('#');
+        r.notes.join('|'), r.personalityLine, next.scoutedBy || ''].join('#');
       if (sig !== lastReportSig) {
         lastReportSig = sig;
-        renderReport(r);
+        renderReport(r, next.scoutedBy);
       }
       renderSabotage(next);
       // Slide the report in the moment a scout completes, not when the card merely opens on a scouted region.

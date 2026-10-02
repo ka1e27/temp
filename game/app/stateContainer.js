@@ -5,6 +5,7 @@ import { generateWorld } from '../world/generate.js';
 import { createGame, resetRegions } from '../meta/state.js';
 import { loadFrom } from '../meta/save.js';
 import { foundDynasty } from '../meta/progression.js';
+import { chronicleOnDynasty } from '../meta/chronicle.js';
 
 function randomSeed() {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
@@ -21,6 +22,9 @@ function randomSeed() {
 export function createStateContainer({ storage, now }) {
   let state = null;
   let world = null;
+  // Rises every time the realm is REPLACED (boot, new realm, restart, a new dynasty, an import): anything computed for the old realm (a welcome-back card, queued
+  // prosperity cheers, an idle coin pop) carries the epoch it was made in and is dropped when it no longer matches.
+  let epoch = 0;
 
   /** Loads the save if one exists and its world regenerates cleanly; else starts a fresh realm. */
   function boot() {
@@ -34,6 +38,7 @@ export function createStateContainer({ storage, now }) {
       try {
         world = generateWorld(loaded.seed >>> 0, { dynasty: loaded.dynasty?.level });
         state = loaded;
+        epoch += 1;
         // A hand-edited / older save whose owner table doesn't fit this world is repaired, not trusted.
         if (!Array.isArray(state.owner) || state.owner.length !== world.regions.length) resetRegions(state, world, now());
         else if (!Array.isArray(state.conqueredAt) || state.conqueredAt.length !== world.regions.length) {
@@ -53,14 +58,21 @@ export function createStateContainer({ storage, now }) {
   function newRealm(seed) {
     const s = (seed ?? randomSeed()) >>> 0;
     world = generateWorld(s);
+    epoch += 1;
+    const prev = state;
     state = createGame(s, world, now());
+    // the player's SETTINGS are not part of a realm: sound, Reduce Motion, hints... survive a new realm, a reset and a reseed
+    if (prev && prev.settings) state.settings = { ...prev.settings };
     return { state, world };
   }
 
   /** A fresh game on the CURRENT world (title "New Realm" when nothing was saved yet, so the
    *  continent the player has been looking at is the one they start on). */
   function restart() {
+    epoch += 1;
+    const prev = state;
     state = createGame(world.seed, world, now());
+    if (prev && prev.settings) state.settings = { ...prev.settings }; // settings outlive the realm
     return { state, world };
   }
 
@@ -76,7 +88,10 @@ export function createStateContainer({ storage, now }) {
     const next = foundDynasty(state, seed);
     if (!next) return false;
     world = generateWorld(seed, { dynasty: next.dynasty.level });
-    state = resetRegions(next, world, now());
+    const t = now();
+    state = resetRegions(next, world, t);
+    try { chronicleOnDynasty(state, world, { t }); } catch (err) { console.warn('[chronicle] dynasty line skipped:', err); } // closes the old chapter, opens the next (Keepsakes); never blocks founding
+    epoch += 1;
     return { state, world };
   }
 
@@ -92,6 +107,7 @@ export function createStateContainer({ storage, now }) {
       const newWorld = generateWorld(newState.seed >>> 0, { dynasty: newState.dynasty?.level });
       world = newWorld;
       state = newState;
+      epoch += 1;
       return true;
     } catch {
       return false;
@@ -100,5 +116,6 @@ export function createStateContainer({ storage, now }) {
 
   return {
     boot, newRealm, restart, reseed, tryFoundDynasty, get, replaceState,
+    get epoch() { return epoch; },
   };
 }

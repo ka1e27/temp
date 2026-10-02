@@ -313,8 +313,13 @@ export function createInput(canvas, camera, handlers = {}) {
 
   function onKeyDown(event) {
     if (!enabled) return;
-    const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const target = event.target;
+    const tag = (target && target.tagName) || document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (target && target.isContentEditable)) return;
+    // an open dialog owns the keyboard (ui/dialogs.js handles its Escape and Tab before this ever runs)
+    if (document.documentElement.hasAttribute('data-dialog')) return;
+    // Space / Enter on a focused button or link ACTIVATE it: the map's shortcut for the same key must not fire as well (Space used to pause twice)
+    if ((event.key === ' ' || event.key === 'Spacebar' || event.key === 'Enter') && (tag === 'BUTTON' || tag === 'A' || tag === 'SUMMARY')) return;
     if (event.key === 'Escape') {
       cancelActiveDrag();
       handlers.onCancel?.();

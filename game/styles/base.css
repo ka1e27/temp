@@ -64,6 +64,12 @@ svg { display: block; flex-shrink: 0; }
 :where(#ui *) { pointer-events: auto; }
 .passthrough, .battle-hud, .toasts, .coach-ring { pointer-events: none; }
 
+/* A pinch that starts on the game's own chrome (HUD, cards, panels, modals, toasts) must never zoom the PAGE: the viewport stays user-scalable for
+   accessibility (pinching the page itself is still possible outside the game), and the MAP zooms from the canvas, which owns its touches
+   (`touch-action: none`, input/pointer.js). `pan-x pan-y` keeps every panel scrolling; sliders keep their own horizontal drag. */
+#ui, #ui *, .modal-backdrop, .modal-backdrop * { touch-action: pan-x pan-y; }
+#ui input[type="range"], .modal-backdrop input[type="range"] { touch-action: pan-y; }
+
 /* Thin, quiet scrollbars for any panel that scrolls (council, realm). */
 .scroll-y { overflow-y: auto; overflow-x: hidden; }
 .scroll-y::-webkit-scrollbar { width: 8px; }
@@ -139,6 +145,12 @@ svg { display: block; flex-shrink: 0; }
 .btn-danger:not(:disabled):hover { background: rgba(235, 87, 87, 0.28); }
 
 .btn-icon {
+  /* Flex centring, whatever the element (a bare <button class="btn-icon"> is not a .btn): the icon sits in the middle of the circle. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex: none;
   padding: 0;
   width: var(--touch-target);
   height: var(--touch-target);
@@ -148,6 +160,7 @@ svg { display: block; flex-shrink: 0; }
   color: var(--text);
 }
 .btn-icon:not(:disabled):hover { background: var(--btn-secondary-bg-hover); }
+.btn-icon > svg, .btn-icon > .icon { display: block; margin: 0; }
 
 .btn-block { width: 100%; }
 
@@ -164,13 +177,50 @@ svg { display: block; flex-shrink: 0; }
   color: var(--text-muted);
 }
 
-/* Reduce Motion: collapse decorative animation, keep state changes instant. */
+/* Reduce Motion (DESIGN §7.5a): the OS preference or the in-game switch put .reduce-motion on <html>. Every looping animation is named here and switched off,
+   and then nothing animates for longer than an instant: a one-shot animation ends in its final state at once (state changes still happen, they just do not move). */
 html.reduce-motion .anim,
-html.reduce-motion [class*='pulse'],
-html.reduce-motion [class*='shake'] {
+html.reduce-motion [class*='shake'],
+html.reduce-motion .coach-ring,                                          /* coach-pulse */
+html.reduce-motion .upgrade-card.is-affordable .upgrade-card-buy,        /* buy-glow */
+html.reduce-motion .upgrade-card.upgrade-bought,                         /* upgrade-bought-flash */
+html.reduce-motion .power-btn.is-ready,                                  /* power-ready-glow */
+html.reduce-motion .power-btn.is-armed,                                  /* power-armed-pulse */
+html.reduce-motion .power-btn.power-just-ready,                          /* power-just-ready-pop */
+html.reduce-motion .results-card,                                        /* results-pop */
+html.reduce-motion .modal-panel,                                         /* modal-pop */
+html.reduce-motion .gold-pulse,                                          /* hud-gold-pulse */
+html.reduce-motion .hud-gold-block.is-flashing::before,                  /* hud-gold-flash-bg */
+html.reduce-motion .hud-gold-block.is-flashing .hud-gold-icon,           /* hud-gold-flash-pop */
+html.reduce-motion .coin-burst-piece,                                    /* coin-burst-fly: the coin burst */
+html.reduce-motion .intel-ring {                                         /* intel-pulse-ring */
   animation: none !important;
+}
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  animation-delay: 0s !important;
+  scroll-behavior: auto !important;
 }
 
 /* A coin inside a gold button (Buy, Collect, Scout) took the button's dark text colour and read as a black dot:
    make it a pale coin so its rim and mark show. */
 .btn-primary .icon-coin { color: #fff3c9; }
+
+/* --- Focus ring (DESIGN §7.5a): one author ring on EVERY control, for keyboard use only (:focus-visible) ---------------------------------------------- */
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+button:focus-visible, [role='button']:focus-visible, [role='switch']:focus-visible, [role='tab']:focus-visible, a:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.55); /* a dark halo so the ring reads on a bright backdrop too */
+}
+/* the map canvas is focusable (keyboard cursor): its ring is drawn INSIDE the window so it is never clipped */
+#world:focus-visible { outline-offset: -4px; box-shadow: none; }
+/* dialogs and cards take programmatic focus on the container: no ring around the whole panel */
+[tabindex='-1']:focus, [tabindex='-1']:focus-visible { outline: none; box-shadow: none; }

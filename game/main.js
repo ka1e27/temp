@@ -17,9 +17,11 @@ import { createBattleHud } from './ui/battleHud.js';
 import { createResults } from './ui/results.js';
 import { createTitle } from './ui/title.js';
 import { createToasts } from './ui/toasts.js';
+import { onDialogChange } from './ui/dialogs.js';
 import { createSettings } from './ui/settings.js';
 import { createCoach } from './ui/coach.js';
 import { createRealm } from './ui/realm.js';
+import { createRegionsPanel } from './ui/regionsPanel.js';
 import { createWelcome } from './ui/welcome.js';
 import { createDevPanel } from './ui/devpanel.js';
 import { createTooltip } from './ui/tooltip.js';
@@ -43,6 +45,7 @@ import { offlineCapHours } from './app/income.js';
 import { CROWN_TEXTS } from './app/crownCopy.js';
 import { createLeaderVoice } from './meta/leaders.js';
 import { baselineProsperity, updateProsperity } from './meta/prosperity.js';
+import { chronicleOnProsperity } from './meta/chronicle.js';
 import { PLAYER_FACTION } from './meta/state.js';
 
 const VERSION = '2.0.0';
@@ -68,6 +71,15 @@ function getStorage() {
 }
 
 /** Welcome-card form of level-ups: [{ name, level }]. */
+/** The one door every prosperity tick goes through: the level-ups, and the realm's story hears about a first Prosperity III (Keepsakes). The story can never break the tick. */
+function runProsperity(state, world, now) {
+  const ups = updateProsperity(state, world, now);
+  if (ups.length) {
+    try { chronicleOnProsperity(state, world, ups, { t: now }); } catch (err) { console.warn('[chronicle] prosperity line skipped:', err); }
+  }
+  return ups;
+}
+
 function prosperedList(world, ups) {
   return ups.map((u) => ({ name: world.regions[u.regionId].name, level: u.level }));
 }
@@ -81,8 +93,29 @@ function levelsOf(state) {
 function boot() {
   const params = new URLSearchParams(location.search);
   const isDev = params.get('dev') === '1';
+  // Touch or mouse? The last pointer the player used decides the wording of the hints (tap, pinch and long-press against click, scroll and shift-drag);
+  // before any input, the device's primary pointer does.
+  let lastPointerType = null;
+  const notePointer = (e) => { if (e.pointerType) lastPointerType = e.pointerType; };
+  window.addEventListener('pointerdown', notePointer, { capture: true, passive: true });
+  window.addEventListener('pointermove', notePointer, { capture: true, passive: true });
+  const isTouch = () => (lastPointerType ? lastPointerType === 'touch' : !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches));
+  // Keyboard or pointer? The map's focus ring and its keyboard cursor are drawn only for someone using the keyboard: a mouse player whose click moved focus to the
+  // map (or to which the game moved it) must not be left with a dashed ring round a region. The last real input decides (html[data-input]).
+  let usingKeyboard = false;
+  const setModality = (kb) => { usingKeyboard = kb; document.documentElement.dataset.input = kb ? 'keyboard' : 'pointer'; };
+  setModality(false);
+  window.addEventListener('keydown', (e) => { if (!['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) setModality(true); }, { capture: true, passive: true });
+  window.addEventListener('pointerdown', () => setModality(false), { capture: true, passive: true });
+  const isKeyboardUser = () => usingKeyboard;
+  const afterFrame = []; // dev hooks called at the end of every frame
 
   const canvas = document.getElementById('world');
+  // The map is a keyboard stop while the world scene is up (tabIndex 0 there): arrow keys move a ring between regions, Enter opens one (scenes/world.js)
+  canvas.tabIndex = -1;
+  canvas.setAttribute('role', 'group');
+  canvas.setAttribute('aria-roledescription', 'map');
+  canvas.setAttribute('aria-label', 'World map. Arrow keys move between regions, Enter opens a region, brackets cycle the regions you can attack, plus and minus zoom, Shift with the arrows moves the map.');
   const uiRoot = document.getElementById('ui');
   const storage = getStorage();
 
@@ -97,20 +130,23 @@ function boot() {
   let pendingWelcome = null;
   let bootProsperity = []; // level-ups the welcome card did not take (an absence too short for it)
   if (resumed) {
+    // a save with no usable clock (sanitised to 0) was not away "since 1970": treat it as seen just now (no welcome-back for a clock that never ran)
+    if (!(bootState.lastSeen > 0)) bootState.lastSeen = Date.now();
     // 1. Silent sync to the levels at DEPARTURE (a save from before prosperity existed gets its levels here, without
     //    a celebration per region). 2. Offline gold, paid with those levels (the conservative rule). 3. The levels
     //    gained while away, reported once: on the welcome card, or celebrated on the map if there is no card.
     baselineProsperity(bootState, bootWorld, bootState.lastSeen);
     const awaySec = Math.max(0, (Date.now() - bootState.lastSeen) / 1000); // the REAL absence: offlineEarnings pays (and reports) only the capped part
     const off = offlineEarnings(bootState, bootWorld, Date.now());
-    const ups = updateProsperity(bootState, bootWorld, Date.now());
+    const ups = runProsperity(bootState, bootWorld, Date.now());
     if (off.seconds >= WORLD_SCENE.welcomeBackMinSec && off.gold > 0.05) {
       pendingWelcome = {
         timeAwaySec: awaySec, goldEarned: off.gold, prospered: prosperedList(bootWorld, ups),
         capHours: offlineCapHours(bootState), capped: awaySec > off.seconds + 1,
+        epoch: container.epoch, // made for THIS realm: New Realm, a reset, an import or a new dynasty drops it (it used to survive them and show as a ghost welcome with negative gold)
       };
     } else {
-      bootProsperity = ups;
+      bootProsperity = ups.map((u) => ({ ...u, epoch: container.epoch }));
     }
   }
 
@@ -157,8 +193,22 @@ function boot() {
     try { return loadFrom(storage) != null; } catch { return false; }
   }
 
+  // Reduce Motion starts from the OS (`prefers-reduced-motion`) and keeps following it until the player flips the switch in Settings (`reduceMotionSet`).
+  const osMotion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  if (osMotion && osMotion.addEventListener) {
+    osMotion.addEventListener('change', () => {
+      const st = container.get().state;
+      if (st.settings.reduceMotionSet) return;
+      applySettings(st);
+      ui.settings.update({ reduceMotion: st.settings.reduceMotion });
+    });
+  }
+
   function applySettings(s) {
+    if (osMotion && !s.settings.reduceMotionSet) s.settings.reduceMotion = osMotion.matches;
+    camera.instant = !!s.settings.reduceMotion; // every camera flight is a cut
     sfx.setMuted(!s.settings.sound);
+    sfx.setEffectsLevel(s.settings.sfxVolume ?? 1);
     renderer.fx.setReduceMotion(!!s.settings.reduceMotion);
     renderer.setReduceMotion(!!s.settings.reduceMotion); // ambient life: no birds, still sails, half the smoke
     document.documentElement.classList.toggle('reduce-motion', !!s.settings.reduceMotion);
@@ -182,21 +232,43 @@ function boot() {
     // framing zoom now, behind the boot splash (a few tens of ms), instead of as a hitch on the first pan.
     renderer.ambient.rebuild({ owner: state.owner, prosperity: state.prosperity });
     renderer.ambient.prewarm(fit * 1.25);
+    purgeStalePending(); // the realm was replaced (import, reset, new dynasty, reseed): nothing queued for the old one may show in the new one
   }
 
   const autosave = createAutosave({
     storage,
     getState: () => cur().state,
     now: () => Date.now(),
-    // Never persist an untouched realm that is only the backdrop of the title.
-    canSave: () => sessionStarted || hasSaveOnDisk(),
+    // Only a tab that has ENTERED a session (Continue or New Realm) ever writes: a tab idling on the title, booted from a save, must not overwrite the progress of
+    // the tab being played.
+    canSave: () => sessionStarted,
+    // another tab wrote a newer save: this tab stops saving for good and says so, persistently
+    onConflict: () => showTabBanner(),
+    // saving failed (storage full, private mode...): said once, in words
+    onFailure: () => ui.toasts.update({ type: 'warning', icon: 'flame', message: 'Couldn’t save your progress (browser storage is full or off). Use Settings > Export to keep a copy.', duration: 9000 }),
   });
+
+  let tabBanner = null;
+  function showTabBanner() {
+    if (tabBanner) return;
+    tabBanner = h('div.tab-banner', { role: 'alert' },
+      h('span', {}, 'Hex Dominion is open in another tab, so this tab has stopped saving. Reload here to continue from the newest save.'),
+      h('button.btn.btn-primary', { onClick: () => window.location.reload() }, 'Reload'));
+    uiRoot.appendChild(tabBanner);
+  }
 
   // --- UI: every panel built once, mounted hidden, toggled by scenes -------------
   let titleScene;
   let worldScene;
   let battleScene;
-  const sceneManager = createSceneManager();
+  // A scene that throws while it is entered is closed and the previous one comes back, with a word about it (scenes/flow.js).
+  const sceneManager = createSceneManager({
+    onError: (err, name) => {
+      console.error(`[scene] could not enter ${name}:`, err);
+      const message = (err && err.userMessage) || (name === 'battle' ? 'Couldn’t start that battle.' : 'Something went wrong; back to where you were.');
+      try { ui.toasts.update({ type: 'warning', icon: 'flame', message, duration: 5200 }); } catch { /* the UI is not up yet */ }
+    },
+  });
   // Every scene change goes through here, so the score follows: it crossfades on the next bar line.
   // A leader banner is placed under the chrome of the scene it spoke in, so it never outlives a scene change.
   const goto = {
@@ -212,8 +284,8 @@ function boot() {
   function openSettings() {
     const s = cur().state.settings;
     ui.settings.update({
-      sound: s.sound, reduceMotion: s.reduceMotion, hints: s.hints, leaderVoices: s.leaderVoices !== false,
-      music: s.music !== false, musicVolume: s.musicVolume ?? 0.4,
+      sound: s.sound, reduceMotion: s.reduceMotion, hints: s.hints, slowBattles: !!s.slowBattles, leaderVoices: s.leaderVoices !== false,
+      music: s.music !== false, musicVolume: s.musicVolume ?? 0.4, sfxVolume: s.sfxVolume ?? 1,
     });
     ui.settings.el.hidden = false;
   }
@@ -227,6 +299,7 @@ function boot() {
     hud: createHud({
       onCouncil: () => worldScene.onCouncilOpen(),
       onRealm: () => worldScene.onRealmOpen(),
+      onRegions: () => worldScene.onRegionsOpen(),
       onSettings: () => openSettings(),
     }),
     regionCard: createRegionCard({
@@ -235,6 +308,9 @@ function boot() {
       onSurrender: (id) => worldScene.onSurrender(id),
       onScout: (id) => worldScene.onScout(id),
       onSabotage: (id) => worldScene.onSabotage(id),
+      onBuildWork: (id, slot, type) => worldScene.onBuildWork(id, slot, type),
+      onUpgradeWork: (id, slot) => worldScene.onUpgradeWork(id, slot),
+      onDemolishWork: (id, slot) => worldScene.onDemolishWork(id, slot),
     }),
     council: createCouncil({
       onBuy: (id) => worldScene.onBuy(id),
@@ -243,11 +319,17 @@ function boot() {
     }),
     realm: createRealm({
       onFoundDynasty: () => worldScene.onFoundDynasty(),
+      onSaveMap: () => worldScene.onSaveMap(),
       onClose: () => worldScene.onRealmClose(),
+    }),
+    regions: createRegionsPanel({
+      onSelect: (id) => worldScene.onRegionsSelect(id),
+      onClose: () => worldScene.onRegionsClose(),
     }),
     welcome: createWelcome({ onCollect: () => worldScene.onWelcomeCollect() }),
     battleHud: createBattleHud({
       onSendFraction: (f) => battleScene.onSendFraction(f),
+      onAuto: () => battleScene.onAuto(),
       onPower: (id) => battleScene.onPower(id),
       onPauseToggle: () => battleScene.onPauseToggle(),
       onSpeed: (s) => battleScene.onSpeed(s),
@@ -265,15 +347,36 @@ function boot() {
       onToggleSound: (v) => { cur().state.settings.sound = v; sfx.setMuted(!v); autosave.save(); },
       onToggleReduceMotion: (v) => {
         cur().state.settings.reduceMotion = v;
+        cur().state.settings.reduceMotionSet = true; // the player's own choice from now on
         applySettings(cur().state);
         autosave.save();
       },
       onToggleHints: (v) => { cur().state.settings.hints = v; autosave.save(); },
+      // Slow battles: the speed button also offers 0.5x. Turned off while the battle is at 0.5x, the next press goes to 1x (ui/battleHud.js cycle).
+      onToggleSlowBattles: (v) => {
+        const st = cur().state.settings;
+        st.slowBattles = v;
+        if (!v && st.speed === 0.5) st.speed = 1;
+        autosave.save();
+      },
+      // "Replay tutorial": every step unseen again, hints on, back to the map with a word about it
+      onReplayTutorial: () => {
+        tutorial.replay();
+        ui.settings.update({ hints: true });
+        autosave.save();
+        closeSettings();
+        ui.toasts.update({ id: 'tutorial-replay', type: 'info', icon: 'star', message: 'Tutorial restarted. Hints will guide you again.' });
+      },
       onToggleMusic: (v) => { cur().state.settings.music = v; applyMusicSettings(cur().state); autosave.save(); },
       onMusicVolume: (v, final) => {
         cur().state.settings.musicVolume = v;
         applyMusicSettings(cur().state);
         if (final) autosave.save();
+      },
+      onSfxVolume: (v, final) => {
+        cur().state.settings.sfxVolume = v;
+        sfx.setEffectsLevel(v);
+        if (final) { sfx.play('click'); autosave.save(); } // let go of the slider: a sample, so the level can be heard
       },
       onToggleLeaderVoices: (v) => {
         cur().state.settings.leaderVoices = v;
@@ -302,7 +405,20 @@ function boot() {
       },
       onClose: () => closeSettings(),
     }),
-    coach: createCoach({ onDismiss: () => tutorial.dismiss() }),
+    // The coach is placed at the END of every frame (selfTick: false), against the frame's final camera, and keeps off these panels.
+    coach: createCoach({
+      onDismiss: () => tutorial.dismiss(),
+      selfTick: false,
+      obstacles: () => [
+        ui.hud.el, ui.regionCard.dock, ui.council.el, ui.realm.el, ui.regions.el, ui.settings.el, ui.welcome.el, ui.results.el,
+        // toasts slide in: their box is padded so a hint placed beside an arriving toast is still clear of it when it settles
+        ui.toasts.el.children.length ? () => { const r = ui.toasts.el.getBoundingClientRect(); return { x: r.left - 8, y: r.top - 8, w: r.width + 16, h: r.height + 28, weight: 0.03 }; } : null,
+        ui.leaderBanner.isShowing() ? ui.leaderBanner.el : null,
+        ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-top'),
+        ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-topright'),
+        ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-bottom'),
+      ],
+    }),
     toasts: createToasts(),
     tooltip: createTooltip(),
     // Rival leaders (DESIGN 3.6): a click-through banner under whatever top chrome is on screen.
@@ -311,7 +427,6 @@ function boot() {
         ui.hud.el,
         ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-top'),
         ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-topright'),
-        ui.toasts.el,
       ],
     }),
   };
@@ -330,12 +445,21 @@ function boot() {
   ui.toasts.el.hidden = false; // toasts manage their own children
   ui.leaderBanner.el.hidden = false; // the banner hides itself between lines
 
+  /** Anything queued for a realm that has since been replaced is dropped (see the container's epoch). */
+  function purgeStalePending() {
+    const e = container.epoch;
+    if (services.pendingWelcome && services.pendingWelcome.epoch !== e) services.pendingWelcome = null;
+    if (services.pendingIdlePop && services.pendingIdlePop.epoch !== e) services.pendingIdlePop = null;
+    if (Array.isArray(services.pendingProsperity)) services.pendingProsperity = services.pendingProsperity.filter((u) => u.epoch === e);
+  }
+
   /** Hides everything scene-specific (settings + toasts are global overlays). */
   function hideAllPanels() {
     ui.hud.el.hidden = true;
     cardDock.hidden = true;
     ui.council.el.hidden = true;
     ui.realm.el.hidden = true;
+    ui.regions.el.hidden = true;
     ui.welcome.el.hidden = true;
     ui.battleHud.el.hidden = true;
     ui.results.el.hidden = true;
@@ -405,6 +529,8 @@ function boot() {
 
   // Phones have room for ONE thing at the top: a leader line and a toast that fire together show the leader first, and the
   // toast waits until the banner has gone (callers speak BEFORE they toast, so the banner is already up).
+  // No toast over an open dialog: while one is open, toasts queue and come out after it closes (ui/toasts.js setHeld)
+  onDialogChange((count) => ui.toasts.setHeld(count > 0));
   const toastUpdate = ui.toasts.update;
   const toastQueue = []; // { toast, at }
   let toastTimer = 0;
@@ -430,9 +556,9 @@ function boot() {
 
   const services = {
     camera, renderer, ui, input, container, sfx, music, tutorial, goto, speak, voice,
-    hideAllPanels, openSettings, closeSettings, isPhone: () => renderer.cssWidth < 768,
+    hideAllPanels, openSettings, closeSettings, isPhone: () => renderer.cssWidth < 768, isTouch, isKeyboardUser,
     hasSaveOnDisk, applyWorld, autosave,
-    startSession: () => { sessionStarted = true; },
+    startSession: () => { sessionStarted = true; purgeStalePending(); applySettings(cur().state); }, // a new realm may have replaced the state: its settings (Reduce Motion, mute) apply now
     version: VERSION,
     pendingWelcome,
     pendingIdlePop: null,
@@ -469,13 +595,20 @@ function boot() {
       loseBattle: () => battleScene.forceLose(),
       screenPosOfSite: (id) => battleScene.screenPosOfSite(id),
       siteInfo: () => battleScene.siteInfo(),
+      afterFrame,
       tutorialArrow: () => battleScene.tutorialArrow(),
       dragInfo: () => battleScene.dragInfo(),
+      siteCursor: () => battleScene.siteCursorId(),
+      mapCursor: () => worldScene.devMapCursor(),
+      supplyInfo: () => battleScene.supplyInfo(),
       stuckHint: () => battleScene.stuckHint(),
+      selection: () => battleScene.selection(),
       threatInfo: () => battleScene.threatInfo(),
       get battle() { return battleScene.battle; },
       get battlePhase() { return battleScene.phase; },
       regionScreenPos: (id) => worldScene.regionScreenPos(id),
+      regionHintBox: (id) => worldScene.regionHintBoxOf(id),
+      hintOutline: () => worldScene.devHintOutline(),
       conquerRegions: (n) => worldScene.devConquer(n),
       conquerRegion: (id) => worldScene.devConquerRegion(id),
       surrender: (id) => worldScene.devSurrender(id),
@@ -494,8 +627,8 @@ function boot() {
         for (let i = 0; i < state.conqueredAt.length; i++) {
           if (state.owner[i] === PLAYER_FACTION && state.conqueredAt[i] != null) state.conqueredAt[i] -= hours * 3600 * 1000;
         }
-        const ups = updateProsperity(state, world, Date.now());
-        services.pendingProsperity.push(...ups);
+        const ups = runProsperity(state, world, Date.now());
+        services.pendingProsperity.push(...ups.map((u) => ({ ...u, epoch: container.epoch })));
         return ups.length;
       },
       reseed: (seed) => {
@@ -556,6 +689,35 @@ function boot() {
 
   autosave.attachLifecycleHooks();
   // A hidden tab stops the score's scheduler and mutes its bus (it resumes on the same bar grid).
+  // Touch has no hover: what lives only in a title tooltip (a scouted chip's garrison, a crown medal's rule, the prosperity bonus...) appears in a toast when it is tapped.
+  // Buttons keep doing what they do; only plain titled things (chips, labels, medals) explain themselves.
+  uiRoot.addEventListener('click', (e) => {
+    if (!isTouch() || !e.target || !e.target.closest) return;
+    const t = e.target.closest('[title]');
+    if (!t || t.closest('button, a, input, select, textarea, [role="button"], [role="switch"]')) return;
+    const text = t.getAttribute('title');
+    if (text) ui.toasts.update({ id: 'title-info', type: 'info', icon: 'bell', message: text, duration: 4500 });
+  }, true);
+
+  // A mouse or touch press must not leave focus on the button it pressed: Space is the pause key, and with focus still on "Speed" it pressed Speed again (the speed
+  // cycled instead of pausing). Keyboard activation (click.detail is 0) keeps focus: a keyboard player's focus ring stays where they put it (:focus-visible).
+  document.addEventListener('click', (e) => {
+    if (e.detail === 0 || !e.target || !e.target.closest) return;
+    const b = e.target.closest('button, [role="button"], summary');
+    if (b && document.activeElement === b) b.blur();
+  });
+  // M mutes and unmutes the sound from anywhere (not while typing, and not inside a dialog): it says so, in a toast a screen reader announces too
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyM' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (document.documentElement.dataset.dialog) return;
+    const st = cur().state.settings;
+    st.sound = !st.sound;
+    sfx.setMuted(!st.sound);
+    ui.settings.update({ sound: st.sound });
+    ui.toasts.update({ id: 'sound-toggle', type: 'info', icon: st.sound ? 'sound-on' : 'sound-off', message: st.sound ? 'Sound on' : 'Sound off: press M to turn it back on', duration: 2200 });
+    autosave.save();
+  });
   document.addEventListener('visibilitychange', () => music.setPaused(document.hidden));
   window.addEventListener('pagehide', () => music.setPaused(true));
   window.addEventListener('pageshow', () => music.setPaused(document.hidden));
@@ -565,19 +727,22 @@ function boot() {
   // Coming back to a tab that rAF had paused: credit the wall-clock gap once.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
+    // an untouched realm shown behind the title is not being played: nothing was earned there while the tab was away
+    if (!sessionStarted) return;
     const { state, world } = cur();
+    if (!(state.lastSeen > 0)) state.lastSeen = Date.now();
     const awaySec = Math.max(0, (Date.now() - state.lastSeen) / 1000);
     const off = offlineEarnings(state, world, Date.now()); // paid with the levels at departure
-    const ups = updateProsperity(state, world, Date.now()); // levels gained while away, reported once
+    const ups = runProsperity(state, world, Date.now()); // levels gained while away, reported once
     if (off.seconds >= WORLD_SCENE.welcomeBackMinSec && off.gold > 0.05) {
       const w = {
         timeAwaySec: awaySec, goldEarned: off.gold, prospered: prosperedList(world, ups),
-        capHours: offlineCapHours(state), capped: awaySec > off.seconds + 1,
+        capHours: offlineCapHours(state), capped: awaySec > off.seconds + 1, epoch: container.epoch,
       };
       if (sceneManager.name === 'world') worldScene.showWelcome(w);
       else services.pendingWelcome = w;
     } else if (ups.length) {
-      services.pendingProsperity.push(...ups);
+      services.pendingProsperity.push(...ups.map((u) => ({ ...u, epoch: container.epoch })));
     }
   });
 
@@ -605,7 +770,7 @@ function boot() {
       // Idle income is wall-clock: use the unclamped gap (capped at 2 s; longer
       // gaps are settled by the visibility handler / offline earnings).
       const pop = idleTicker.tick(devSpeedX8 ? rawDt * 8 : rawDt);
-      if (pop) services.pendingIdlePop = pop;
+      if (pop) services.pendingIdlePop = { ...pop, epoch: container.epoch };
       if (sceneManager.name !== 'title') cur().state.stats.playSec += dt;
       // A timed hint (step 0 lasts 5 s, step 4 lasts 10 s) counts down only while it is ON SCREEN: it used to
       // start on the title screen, so a player who lingered there never saw the first hint at all.
@@ -614,12 +779,14 @@ function boot() {
       // celebrates. (Not on the title screen: nothing is being played there.)
       if (sceneManager.name !== 'title' && nowMs - lastProsperityMs > 5000) {
         lastProsperityMs = nowMs;
-        const ups = updateProsperity(cur().state, cur().world, Date.now());
-        if (ups.length) services.pendingProsperity.push(...ups);
+        const ups = runProsperity(cur().state, cur().world, Date.now());
+        if (ups.length) services.pendingProsperity.push(...ups.map((u) => ({ ...u, epoch: container.epoch })));
       }
 
       const t0 = performance.now();
       sceneManager.frame(dt, tAccum, nowMs);
+      ui.coach.tick(); // the hint follows its target: placed against this frame's final camera
+      for (const fn of afterFrame) fn(); // dev: per-frame monitors (tools/hintMonitor.js) measure the finished frame
       perf.cpuMs = performance.now() - t0;
     } catch (err) {
       if (nowMs - errorLogAt > 1500) {
@@ -665,8 +832,15 @@ try {
   console.error('Hex Dominion failed to start', err);
   const boot0 = document.getElementById('boot');
   if (boot0) {
-    boot0.innerHTML = `<div style="max-width:34rem;padding:2rem;font:16px/1.6 system-ui,sans-serif;color:#f3ead7">
-      <h1 style="font-size:28px;color:#eb5757">Something went wrong</h1>
-      <p>${(err && err.message) || err}</p></div>`;
+    // textContent, never innerHTML: an error message is text, not markup
+    const box = document.createElement('div');
+    box.style.cssText = 'max-width:34rem;padding:2rem;font:16px/1.6 system-ui,sans-serif;color:#f3ead7';
+    const title = document.createElement('h1');
+    title.style.cssText = 'font-size:28px;color:#eb5757';
+    title.textContent = 'Something went wrong';
+    const msg = document.createElement('p');
+    msg.textContent = String((err && err.message) || err);
+    box.append(title, msg);
+    boot0.replaceChildren(box);
   }
 }

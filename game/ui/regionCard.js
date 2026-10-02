@@ -13,6 +13,7 @@ import { icon } from './icons.js';
 import { shortNumber, formatRate, formatClock, formatDurationWords } from './format.js';
 import { createCrownRow } from './crownRow.js';
 import { createIntelPanel } from './intelPanel.js';
+import { createWorksPanel } from './worksPanel.js';
 
 /**
  * @typedef {Object} RegionCardData
@@ -32,6 +33,7 @@ import { createIntelPanel } from './intelPanel.js';
  * @property {number} [crownBonusPct] e.g. 25: "crowns +25% bounty each"
  * @property {import('./intelPanel.js').IntelPanelData} [intel]  frontier only: Scout / Sabotage panel data
  * @property {{ level: number, label: string, nextInMs: number|null, bonusPct: number }} [prosperity]  owned regions
+ * @property {import('./worksPanel.js').WorksPanelData} [works]  owned regions: the Region Works section (meta/works.js worksPanelData)
  */
 
 const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
@@ -45,18 +47,30 @@ function setIcon(holder, name, size) {
 
 /**
  * @param {{ onAttack?: (id: number) => void, onSurrender?: (id: number) => void,
- *   onScout?: (id: number) => void, onSabotage?: (id: number) => void }} [callbacks]
+ *   onScout?: (id: number) => void, onSabotage?: (id: number) => void,
+ *   onBuildWork?: (id: number, slot: number, type: string) => void, onUpgradeWork?: (id: number, slot: number) => void,
+ *   onDemolishWork?: (id: number, slot: number) => void }} [callbacks]
  */
-export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, crownTexts } = {}) {
+export function createRegionCard({
+  onAttack, onSurrender, onScout, onSabotage, onBuildWork, onUpgradeWork, onDemolishWork, crownTexts,
+} = {}) {
   let currentId = null;
   let lastSig = '';
   let mode = null; // 'locked' | 'owned' | 'frontier': which set of children is mounted in the body
 
   // --- header ---------------------------------------------------------------------------
-  const nameEl = h('h3.region-card-name', {}, '');
+  const nameEl = h('h2.region-card-name', {}, '');
   const tierEl = h('span.region-card-tier.pill', {}, '');
   const ownerChip = h('span.owner-chip', {});
   const bodyEl = h('div.region-card-body', {});
+  // The footer is OUTSIDE the scrolling body: Attack (or Accept Surrender) is always visible and never covers a row. Above the buttons sits a hint slot, empty
+  // unless the tutorial's "Attack!" bubble needs room: it opens up there, so the bubble covers no decision information (setHintSpace).
+  const hintSlot = h('div.region-card-hintslot', { 'aria-hidden': 'true' });
+  hintSlot.hidden = true;
+  // the same kind of room above the Scout row (in the body), for the Scout hint on a phone, where a bubble above the button would sit on the strength bar
+  const scoutSlot = h('div.region-card-hintslot', { 'aria-hidden': 'true', 'data-where': 'scout' });
+  scoutSlot.hidden = true;
+  const footerEl = h('div.region-card-footer', {}, hintSlot);
   let ownerSig = '';
 
   // The owner chip lives IN the header (name, owner, tier) so the card is one row shorter: the phone
@@ -64,6 +78,7 @@ export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, c
   const el = h('div.region-card.glass-panel', {},
     h('div.region-card-header', {}, nameEl, ownerChip, tierEl),
     bodyEl,
+    footerEl,
   );
 
   // --- shared pieces --------------------------------------------------------------------
@@ -101,11 +116,14 @@ export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, c
   const youNum = h('strong.nums', {}, '');
   const enemyNum = h('strong.nums', {}, '');
   // Weighted power against weighted strength, not troop counts (the scouted chips show those).
-  const enemyLabel = h('span.matchup-enemy-label', {}, 'Their strength ', enemyNum);
+  // The bar is the CHANCE of winning (DESIGN 5.3), said in words under it; the two numbers stay as small print
+  const chanceEl = h('p.matchup-chance', {}, '');
+  const enemyLabel = h('span.matchup-enemy-label', {}, 'Strength ', enemyNum);
   const matchupEl = h('div.region-card-matchup', {},
     h('div.matchup-chip-row', {}, diffChip),
     h('div.matchup-bar-track', {}, youFill, enemyFill),
-    h('div.matchup-labels', {}, h('span.matchup-you-label', {}, 'Your power ', youNum), enemyLabel),
+    chanceEl,
+    h('div.matchup-labels', {}, h('span.matchup-you-label', {}, 'Power ', youNum), enemyLabel),
   );
 
   // Frontier crowns: the three open medals and their rule on desktop; on a phone bottom sheet (CSS)
@@ -130,22 +148,34 @@ export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, c
     onClick: () => onSurrender?.(currentId),
   }, icon('flag', 16), 'Accept Surrender');
   surrenderBtn.hidden = true;
+  const blockedText = h('span', {}, 'No passable border: conquer a neighbour first');
+  const blockedEl = h('p.region-card-blocked', { role: 'note' }, icon('shield', 16), blockedText);
+  blockedEl.hidden = true;
 
   /** Mounts the children of one mode (only when the mode changes, never on a plain refresh). */
+  // Region Works (DESIGN 5.8): built ONCE like everything else in this card and patched in place; the demolish confirm is the panel's own step.
+  const worksPanel = createWorksPanel({
+    onBuild: (regionId, slot, type) => onBuildWork?.(regionId, slot, type),
+    onUpgrade: (regionId, slot) => onUpgradeWork?.(regionId, slot),
+    onDemolish: (regionId, slot) => onDemolishWork?.(regionId, slot),
+  });
+
   function setMode(next) {
     if (mode === next) return;
     mode = next;
     if (next === 'locked') bodyEl.replaceChildren(lockedEl);
-    else if (next === 'owned') bodyEl.replaceChildren(perkEl, ownedProsperity, ownedRewards, ownedCrowns);
-    else bodyEl.replaceChildren(perkEl, matchupEl, intelPanel.el, frontierCrowns, frontierRewards, attackBtn, surrenderBtn);
+    else if (next === 'owned') bodyEl.replaceChildren(perkEl, ownedProsperity, ownedRewards, ownedCrowns, worksPanel.el); // Works: the interactive part, last
+    else bodyEl.replaceChildren(perkEl, matchupEl, scoutSlot, intelPanel.el, frontierCrowns, frontierRewards, blockedEl);
+    footerEl.replaceChildren(hintSlot, ...(next === 'frontier' ? [attackBtn, surrenderBtn] : []));
+    footerEl.hidden = next !== 'frontier';
   }
 
   function patchOwner(owner) {
-    const sig = owner ? `${owner.color}|${owner.emblem}|${owner.name}` : '';
+    const sig = owner ? `${owner.color}|${owner.colorLight}|${owner.emblem}|${owner.name}` : '';
     if (sig === ownerSig) return;
     ownerSig = sig;
     if (!owner) { ownerChip.hidden = true; ownerChip.replaceChildren(); return; }
-    ownerChip.style.setProperty('--chip-color', owner.color || '#9a927f');
+    ownerChip.style.setProperty('--chip-color', owner.colorLight || owner.color || '#9a927f');
     ownerChip.replaceChildren(icon(owner.emblem || 'flag', 14), h('span', {}, owner.name || ''));
     ownerChip.hidden = false;
   }
@@ -173,12 +203,15 @@ export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, c
       if (crownRow.el.parentNode !== ownedCrowns) ownedCrowns.replaceChildren(crownRow.el);
       crownRow.update({ earned: data.crowns, parSec: data.parSec });
     }
+    if (data.works) worksPanel.update(data.works);
+    worksPanel.el.hidden = !data.works;
   }
 
   function patchFrontier(data) {
     const d = data.difficulty || { power: 0, strength: 0, ratio: 1, label: 'Fair', surrender: false };
     const total = Math.max(d.power + d.strength, 1e-6);
-    const youPct = Math.max(4, Math.min(96, (d.power / total) * 100));
+    const hasChance = typeof d.winChance === 'number' && Number.isFinite(d.winChance);
+    const youPct = Math.max(4, Math.min(96, (hasChance ? d.winChance : d.power / total) * 100));
     const ownerColor = (data.owner && data.owner.color) || '#9a927f';
 
     patchPerk(data.perk);
@@ -189,7 +222,9 @@ export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, c
     youFill.style.width = `${youPct}%`;
     enemyFill.style.width = `${100 - youPct}%`;
     enemyFill.style.background = ownerColor;
-    enemyLabel.style.color = ownerColor;
+    enemyLabel.style.color = (data.owner && data.owner.colorLight) || ownerColor; // text uses the LIGHT variant (contrast on the dark card)
+    setText(chanceEl, hasChance && data.chanceText ? `Chance to win: ${data.chanceText}` : '');
+    chanceEl.hidden = !(hasChance && data.chanceText);
     setText(youNum, shortNumber(d.power));
     setText(enemyNum, shortNumber(d.strength));
 
@@ -208,8 +243,12 @@ export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, c
     setText(frontierIncome.text, `Income +${formatRate(data.income)}/s forever`);
     setText(frontierBounty.text, `Bounty ${shortNumber(data.bounty || 0)} gold`);
 
-    attackBtn.hidden = !!d.surrender;
+    // a region walled off by mountains cannot be attacked: the card says why instead (a surrender, if one is on offer, still works: it needs no arena)
+    const blocked = !!data.attackBlock && !d.surrender;
+    setText(blockedText, data.attackBlock === 'unbuildable' ? 'This region cannot be attacked from here yet' : 'No passable border: conquer a neighbour first');
+    attackBtn.hidden = !!d.surrender || blocked;
     surrenderBtn.hidden = !d.surrender;
+    blockedEl.hidden = !blocked;
   }
 
   function update(data) {
@@ -233,5 +272,22 @@ export function createRegionCard({ onAttack, onSurrender, onScout, onSabotage, c
 
   function destroy() {}
 
-  return { el, update, destroy };
+  return {
+    el, update, destroy,
+    /** The Works panel of the owned card (for the tutorial coach: buildButton(), chooserRow(type), view). */
+    works: worksPanel,
+    /** Opens (px > 0) or closes (0) the empty room above the action buttons that the "Attack!" hint bubble sits in. */
+    setHintSpace(px, where = 'footer') {
+      const slot = where === 'scout' ? scoutSlot : hintSlot;
+      const other = where === 'scout' ? hintSlot : scoutSlot;
+      const v = Math.max(0, Math.round(px || 0));
+      if (other.dataset.px && other.dataset.px !== '0') { other.dataset.px = '0'; other.style.height = '0px'; other.hidden = true; } // one room at a time
+      if (slot.dataset.px === String(v)) return;
+      slot.dataset.px = String(v);
+      slot.style.height = `${v}px`;
+      slot.hidden = v === 0; // closed, it takes no room (not even the card's row gap)
+    },
+    /** The footer's buttons (for the placement monitor and the coach). */
+    footer: footerEl,
+  };
 }

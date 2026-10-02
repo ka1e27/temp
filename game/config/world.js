@@ -16,9 +16,9 @@ export const WORLD = Object.freeze({
 
 export const FACTIONS = Object.freeze([
   { id: 0, name: 'Your Realm', color: '#3d7ef0', colorDark: '#1f4fb0', colorLight: '#9cc0ff', emblem: 'star', personality: 'player' },
-  { id: 1, name: 'Free Folk', color: '#9a927f', colorDark: '#5f5847', colorLight: '#d8d0bb', emblem: 'wheat', personality: 'passive' },
-  { id: 2, name: 'Crimson Legion', color: '#d8433f', colorDark: '#8f1f1c', colorLight: '#ff9c93', emblem: 'sword', personality: 'aggressive' },
-  { id: 3, name: 'Violet Covenant', color: '#9b5de5', colorDark: '#5b2c99', colorLight: '#d3b5ff', emblem: 'eye', personality: 'defensive' },
+  { id: 1, name: 'Free Folk', color: '#a19c92', colorDark: '#5f5847', colorLight: '#d8d0bb', emblem: 'wheat', personality: 'passive' },
+  { id: 2, name: 'Crimson Legion', color: '#c63932', colorDark: '#8f1f1c', colorLight: '#ff9c93', emblem: 'sword', personality: 'aggressive' },
+  { id: 3, name: 'Violet Covenant', color: '#6d1b99', colorDark: '#3b1058', colorLight: '#d3b5ff', emblem: 'eye', personality: 'defensive' },
   { id: 4, name: 'Amber Horde', color: '#f29e38', colorDark: '#a85f10', colorLight: '#ffd29a', emblem: 'sun', personality: 'swarm' },
 ]);
 

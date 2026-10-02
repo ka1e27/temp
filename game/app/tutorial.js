@@ -1,74 +1,93 @@
-// Tutorial-step controller (PLAYFEEL §4). Event-driven: scenes call `notify`
-// at the moments the spec cares about and `update(dt)` every frame for the
-// two timeout-eligible steps; this file only touches `state.tutorial` and
-// `state.settings.hints`, never the DOM — scenes resolve each step's `anchor`
-// key to an actual screen point/element and feed `createCoach`.
+// The tutorial controller (DESIGN §6, PLAYFEEL §4). State is a SET of seen steps (`state.tutorial.seen`, id -> true), not a counter: a step shows
+// when it is unseen, its `after` steps are seen, its feature is on and its rule (game/app/tutorialRules.js) holds for the facts the scene passes
+// to `pick`; it is marked seen when the player does the thing (`notify`), dismisses it, or its timeout runs out while it is on screen.
+// One step is current at a time and it stays current until it is seen or its rule stops holding. This file touches only `state.tutorial` and
+// `state.settings.hints`, never the DOM: scenes turn the step's `anchor` into a target and feed the coach (game/ui/coach.js).
 import { TUTORIAL_STEPS } from '../scenes/timing.js';
-
-const EVENT_FOR_ADVANCE = {
-  timeoutOrTap: 'tap',
-  regionSelected: 'regionSelected',
-  battleStart: 'battleStart',
-  send: 'send',
-  captureOrTimeout: 'capture',
-  powerUsed: 'powerUsed',
-  councilOpened: 'councilOpened',
-};
+import { RULES } from './tutorialRules.js';
 
 /**
  * @param {{ getState: () => import('../meta/state.js').GameState }} deps
  */
 export function createTutorialController({ getState }) {
-  let sinceActivatedSec = 0;
-  let lastStepId = -1;
+  let current = null;
+  let sinceShownSec = 0;
 
-  function currentStepDef() {
+  const seenMap = () => {
     const state = getState();
-    if (!state || state.tutorial.done || !state.settings.hints) return null;
-    const def = TUTORIAL_STEPS.find((s) => s.id === state.tutorial.step);
-    if (def && def.id !== lastStepId) {
-      lastStepId = def.id;
-      sinceActivatedSec = 0;
-    }
-    return def || null;
+    if (!state.tutorial.seen || typeof state.tutorial.seen !== 'object') state.tutorial.seen = {};
+    return state.tutorial.seen;
+  };
+  const isSeen = (id) => !!seenMap()[id];
+  const enabled = () => {
+    const state = getState();
+    return !!state && !state.tutorial.done && state.settings.hints !== false;
+  };
+
+  function markSeen(id) {
+    seenMap()[id] = true;
+    if (current && current.id === id) { current = null; sinceShownSec = 0; }
   }
 
-  function advanceTo(nextId) {
-    const state = getState();
-    if (!state || state.tutorial.done) return;
-    if (nextId >= TUTORIAL_STEPS.length) {
-      state.tutorial.done = true;
-    } else {
-      state.tutorial.step = nextId;
-    }
-    sinceActivatedSec = 0;
-  }
-
-  /** @param {number} dtSec */
-  function update(dtSec) {
-    const def = currentStepDef();
-    if (!def || def.timeoutSec == null) return;
-    sinceActivatedSec += dtSec;
-    if (sinceActivatedSec >= def.timeoutSec) advanceTo(def.id + 1);
+  function eligible(def, facts) {
+    if (def.scene !== facts.scene) return false;
+    if (isSeen(def.id)) return false;
+    if (def.needs && !facts.features[def.needs]) return false;
+    if (def.after && !def.after.every(isSeen)) return false;
+    const rule = RULES[def.id];
+    return !!rule && !!rule(facts);
   }
 
   /**
-   * @param {'tap'|'regionSelected'|'battleStart'|'send'|'capture'|'powerUsed'|'councilOpened'} event
-   * @param {{power?: string}} [payload]
+   * The step to show now, or null. Call it every frame with the scene's facts (`scene` plus the fields the rules read).
+   * @param {Record<string, any>} facts
    */
-  function notify(event, payload) {
-    const def = currentStepDef();
-    if (!def) return;
-    if (EVENT_FOR_ADVANCE[def.advance] !== event) return;
-    if (def.advance === 'powerUsed' && payload?.power !== 'rally') return;
-    advanceTo(def.id + 1);
+  function pick(facts) {
+    if (!enabled()) { current = null; return null; }
+    const f = { features: {}, ...facts, seen: isSeen };
+    if (current && eligible(current, f)) return current;
+    const next = TUTORIAL_STEPS.find((def) => eligible(def, f)) || null;
+    if (next !== current) sinceShownSec = 0;
+    current = next;
+    return current;
   }
 
-  /** The coach's own dismiss (×) button: skip straight past this step. */
+  /** @param {number} dtSec  (counted while the hint is on screen; the shell only calls it then) */
+  function update(dtSec) {
+    if (!current || current.timeoutSec == null || !enabled()) return;
+    sinceShownSec += dtSec;
+    if (sinceShownSec >= current.timeoutSec) markSeen(current.id);
+  }
+
+  /**
+   * Something the player did. Every step that lists the event marks seen (they already know it), except `activeOnly` steps.
+   * @param {string} event
+   */
+  function notify(event) {
+    for (const def of TUTORIAL_STEPS) {
+      if (!def.seenOn.includes(event)) continue;
+      if (def.activeOnly && !(current && current.id === def.id)) continue;
+      if (!isSeen(def.id)) markSeen(def.id);
+    }
+  }
+
+  /** The coach's own × : skip this step. */
   function dismiss() {
-    const def = currentStepDef();
-    if (def) advanceTo(def.id + 1);
+    if (current) markSeen(current.id);
   }
 
-  return { currentStepDef, update, notify, dismiss };
+  /** "Replay tutorial" in Settings: every step is unseen again and hints are on. */
+  function replay() {
+    const state = getState();
+    state.tutorial = { seen: {}, done: false };
+    state.settings.hints = true;
+    current = null;
+    sinceShownSec = 0;
+  }
+
+  return {
+    pick, update, notify, dismiss, replay, isSeen, markSeen,
+    get current() { return current; },
+    currentStepDef: () => current,
+  };
 }

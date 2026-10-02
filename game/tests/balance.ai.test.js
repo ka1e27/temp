@@ -174,6 +174,9 @@ test('punishes over-extension: a player site that just emptied itself is hit fir
     { type: 'village', owner: ENEMY_FACTION, troops: 120, at: 7 },
     { type: 'keep', owner: ENEMY_FACTION, troops: 150, at: 9 },
   ]);
+  // Front lines (DESIGN §4.4) would hide village #1 behind village #2's land; this test is about target choice, so the
+  // land between them is open connector land here (tile.link) and both villages stay attackable.
+  for (const i of [3, 4, 5]) arena.tiles[i].link = true;
   const battle = createBattle(arena, player(), enemy({ graceSec: 0, thinkSec: 1, personality: 'defensive' }));
   runAi(battle, 1.1); // the AI sees both villages full: a defensive faction holds still
   battle.sites[1].troops = 3; // ...then the player sends the garrison of village #1 away

@@ -34,8 +34,8 @@ const band = (id) => PAR.bands.find((b) => b.id === id).parSec; // par values ar
 
 test('parFor: every band reads its par from PAR; a capital beats its tier', () => {
   const world = worldWith({ 1: { tier: 1 }, 2: { tier: 2 }, 4: { tier: 3 }, 5: { tier: 8, isCapital: false } });
-  assert.equal(parFor(world, 1), band('early'));            // tier 1
-  assert.equal(parFor(world, 2), band('early'));            // tier 2
+  assert.equal(parFor(world, 1), band('tier1'));            // tier 1
+  assert.equal(parFor(world, 2), band('tier2'));            // tier 2: its own par, not the tier-1 one
   assert.equal(parFor(world, 4), band('mid'));              // tier 3, first mid tier
   assert.equal(parFor(world, 5), band('deep'));             // tier 8
   assert.equal(parFor(world, 3), PAR.capitalSec);           // tier 2 capital: capital band wins over tier
@@ -43,7 +43,7 @@ test('parFor: every band reads its par from PAR; a capital beats its tier', () =
 
 test('parFor / parBandOf: band edges and capital override at any tier', () => {
   const world = worldWith({ 1: { tier: 5 }, 2: { tier: 6 }, 4: { tier: 2 }, 5: { tier: 7 } });
-  assert.equal(parBandOf(world, 4), 'early');
+  assert.equal(parBandOf(world, 4), 'tier2');
   assert.equal(parBandOf(world, 1), 'mid');                  // tier 5 = last mid tier
   assert.equal(parBandOf(world, 2), 'deep');                 // tier 6
   assert.equal(parBandOf(world, 5), 'capital');              // tier 7 capital
@@ -51,11 +51,24 @@ test('parFor / parBandOf: band edges and capital override at any tier', () => {
   assert.equal(parFor(world, 5), PAR.capitalSec);
 });
 
+test('PAR bands: tier 0-1, tier 2, mid and deep tile the tiers without gaps or overlap, tier 1 and tier 2 have separate pars', () => {
+  const bands = PAR.bands;
+  assert.deepEqual(bands.map((b) => b.id), ['tier1', 'tier2', 'mid', 'deep']);
+  assert.equal(bands[0].minTier, 0);
+  for (let i = 1; i < bands.length; i++) assert.equal(bands[i].minTier, bands[i - 1].maxTier + 1, `${bands[i].id} starts where ${bands[i - 1].id} ends`);
+  assert.equal(bands[bands.length - 1].maxTier, Infinity);
+  assert.ok(bands.every((b) => b.parSec > 0 && Number.isFinite(b.parSec)));
+  assert.ok(band('tier1') < band('tier2'), 'the next ring takes longer than the first');
+  const world = worldWith({ 1: { tier: 1 }, 2: { tier: 2 } });
+  assert.notEqual(parFor(world, 1), parFor(world, 2));
+  assert.equal(parBandOf(world, 0), 'tier1'); // tier 0 (the start region) shares the tier-1 band
+});
+
 test('parFor: dynasty level only moves par by PAR.perDynastySec (0 = not at all)', () => {
   const world = makeWorld();
   const state = makeGame(world, { dynasty: { level: 4 } });
-  assert.equal(parFor(world, 1, state), band('early') + PAR.perDynastySec * 3);
-  assert.equal(parFor(world, 1, undefined), band('early'));
+  assert.equal(parFor(world, 1, state), band('tier1') + PAR.perDynastySec * 3);
+  assert.equal(parFor(world, 1, undefined), band('tier1'));
 });
 
 // --- the tracker ---------------------------------------------------------------------
@@ -159,8 +172,8 @@ test('summarize: a running battle reports battle.t; no tracker end falls back to
 });
 
 test('crownsFor: Victory needs a win; Swift is <= par (inclusive); Unbroken needs zero losses', () => {
-  const world = makeWorld(); // region 1 = tier 1, the early band
-  const par = band('early');
+  const world = makeWorld(); // region 1 = tier 1, the tier-1 band
+  const par = band('tier1');
   const at = (won, durationSec, playerSitesLost) => crownsFor({ won, durationSec, playerSitesLost }, world, 1);
   assert.deepEqual(at(true, par / 2, 0), { victory: true, swift: true, unbroken: true });
   assert.deepEqual(at(true, par, 0), { victory: true, swift: true, unbroken: true }, 'exactly par counts');
@@ -200,7 +213,7 @@ test('duration comes from battle seconds, so battle speed cannot matter', () => 
     return crownsFor(summarize(tr, { t, result: 'win', stats: { durationSec: t } }), world, 1);
   };
   assert.deepEqual(run(1, 800), run(4, 200));
-  const par = band('early');
+  const par = band('tier1');
   assert.equal(run(1, 800).swift, par >= 40);                          // 40 s against the par
   assert.equal(run(1, Math.round((par + 5) / 0.05)).swift, false);     // 5 s over par is over, at any speed
 });

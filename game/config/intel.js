@@ -68,7 +68,11 @@ export const INTEL = Object.freeze({
     aggressive: 'Aggressive: attacks early and commits big',
     defensive: 'Defensive: strikes when you overextend',
     swarm: 'Swarm: many small, fast raids',
-    passive: 'Passive: never attacks, only reinforces',
+    passive: 'Passive: never attacks, only supports its own sites',
+  }),
+  // One plain line under the weak point (shown on touch too, where there is no hover): what the words mean.
+  glossary: Object.freeze({
+    weakPoint: 'The settlement that falls fastest: strike it first.',
   }),
   maxNotes: 2,
   notes: Object.freeze({
