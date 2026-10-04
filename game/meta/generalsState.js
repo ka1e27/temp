@@ -13,6 +13,7 @@ import { GENERALS, CHAMPION_OF_FACTION } from '../config/generals.js';
 import { hash32 } from '../core/rng.js';
 import { recordDeed, sanitizeDeeds } from './deeds.js'; // a leaf: the Deeds live inside this record (state.generals.deeds)
 import { sanitizeLegacy } from './legacy.js'; // a leaf: so does the Legacy (state.generals.legacy)
+import { sanitizeReliquary } from './boonsState.js'; // a leaf: and the Reliquary (state.generals.reliquary, PLAN-PHASE7)
 
 const KINDS = new Set(Object.keys(GENERALS.kinds));
 const STYLES = new Set(GENERALS.mercenaryStyles);
@@ -287,5 +288,6 @@ export function sanitizeGenerals(raw, seed = 0) {
   out.roster = roster.filter((g) => g.kind !== 'mercenary' || mercs.indexOf(g) < GENERALS.maxMercenaries);
   if (raw.deeds && typeof raw.deeds === 'object') out.deeds = sanitizeDeeds(raw.deeds); // the lifetime Deeds ride with the roster
   if (raw.legacy && typeof raw.legacy === 'object') out.legacy = sanitizeLegacy(raw.legacy); // and so does the Legacy (PLAN-PHASE5)
+  if (raw.reliquary && typeof raw.reliquary === 'object') out.reliquary = sanitizeReliquary(raw.reliquary); // and the Reliquary (PLAN-PHASE7)
   return out;
 }

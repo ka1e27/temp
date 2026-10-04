@@ -11,6 +11,9 @@ import { tileAt } from './runtime.js';
 import { checkShrines } from './features.js';
 import { damageDragon } from './dragon.js';
 import { onAssaultTrade, onClash } from './fallen.js';
+import {
+  boonsOf, squadStrengthMult, assaultStrengthMult, onCapture, secondWind, besiegedGrowthMult,
+} from './boons.js';
 
 function isTargetRegionKeep(battle, site) {
   if (site.type !== 'keep') return false;
@@ -73,8 +76,9 @@ export function resolveCombat(battle, dt, t) {
     }
     seen.add(squad.id);
     seen.add(foe.id);
-    const aPerTroop = squadPerTroopStrength(squad.owner, player, arena.enemyFaction, enemy, true) * (squad.power ?? 1);
-    const bPerTroop = squadPerTroopStrength(foe.owner, player, arena.enemyFaction, enemy, true) * (foe.power ?? 1);
+    // Boons (PLAN-PHASE7): Phalanx, Ambushers, Martyr's Crown on the player's side (1 without Boons)
+    const aPerTroop = squadPerTroopStrength(squad.owner, player, arena.enemyFaction, enemy, true) * (squad.power ?? 1) * squadStrengthMult(battle, squad, t, true);
+    const bPerTroop = squadPerTroopStrength(foe.owner, player, arena.enemyFaction, enemy, true) * (foe.power ?? 1) * squadStrengthMult(battle, foe, t, true);
     const beforeA = squad.count;
     const beforeB = foe.count;
     const traded = applyStrengthTrade({
@@ -108,10 +112,12 @@ export function resolveCombat(battle, dt, t) {
       continue;
     }
     const attackerOwner = site.assault.owner;
-    const atkPerTroop = squadPerTroopStrength(attackerOwner, player, arena.enemyFaction, enemy);
-    const defPerTroop = garrisonPerTroopStrength(site, site.owner, player, arena.enemyFaction, enemy, t);
     // Charge squads (DESIGN §10.11) count `power` x their troops; with none, power is 1 and this is the plain troop sum
     const atkTotal = squads.reduce((sum, s) => sum + s.count * (s.power ?? 1), 0);
+    const boons = boonsOf(battle); // PLAN-PHASE7: Phalanx / Martyr's Crown on the assault, Siegecraft on a Gate (1 without Boons)
+    const atkPerTroop = squadPerTroopStrength(attackerOwner, player, arena.enemyFaction, enemy) * assaultStrengthMult(battle, attackerOwner, atkTotal, t);
+    const gateCut = site.type === 'gate' && attackerOwner === PLAYER_OWNER && boons.gateDefMult ? boons.gateDefMult : 1;
+    const defPerTroop = garrisonPerTroopStrength(site, site.owner, player, arena.enemyFaction, enemy, t) * gateCut;
     const beforeDef = site.troops;
     const traded = applyStrengthTrade({
       atkTroops: atkTotal, atkPerTroop, defTroops: site.troops, defPerTroop, dt,
@@ -119,7 +125,7 @@ export function resolveCombat(battle, dt, t) {
     let loss = Math.max(0, atkTotal - traded.atkTroops);
     // a Dragon perched here takes the blows the assault lands (DESIGN §10.13)
     if (battle.dragon && battle.dragon.perch === site.id && attackerOwner === PLAYER_OWNER) {
-      if (damageDragon(battle, (beforeDef - Math.max(0, traded.defTroops)) * defPerTroop, t)) {
+      if (damageDragon(battle, (beforeDef - Math.max(0, traded.defTroops)) * defPerTroop * (boons.dragonDmgMult || 1), t)) { // Dragonbane
         battle.events.push({ type: 'surrender', sites: cascade(battle, PLAYER_OWNER) });
         endBattle(battle, 'win', t);
       }
@@ -133,12 +139,15 @@ export function resolveCombat(battle, dt, t) {
       if (isDead(s.count)) dead.add(s.id);
     }
     site.troops = Math.max(0, traded.defTroops);
+    if ((boons.turncoatShare || boons.ghostShare) && attackerOwner === PLAYER_OWNER) site.assault.lost = (site.assault.lost || 0) + (beforeDef - site.troops); // Turncoats
     // The Ashen Host (PLAN-PHASE6): The Fallen Rise, war-band growth, the Gravewarden's passive, the losses log
     const alive = squads.filter((s) => !dead.has(s.id));
     const atkLost = countBefore - squads.reduce((sum, s) => sum + Math.max(0, s.count), 0);
     onAssaultTrade(battle, site, attackerOwner, alive, atkLost, beforeDef - site.troops, isDead(site.troops), t);
 
-    if (isDead(site.troops)) {
+    if (isDead(site.troops) && secondWind(battle, site, t)) {
+      // Second Wind (PLAN-PHASE7): the player's settlement holds this once; the assault goes on
+    } else if (isDead(site.troops)) {
       const survivors = squads.filter((s) => !dead.has(s.id));
       const garrison = survivors.reduce((sum, s) => sum + s.count, 0);
       const fromOwner = site.owner;
@@ -148,11 +157,13 @@ export function resolveCombat(battle, dt, t) {
       site.cap = effectiveCap(site.type, site.owner, player, site.capMult, site.pCapMult);
       site.growth = effectiveGrowth(site.type, site.owner, player, arena.enemyFaction, enemy);
       site.bulwarkUntil = 0;
+      const defLost = site.assault.lost || 0;
       site.assault = null;
       for (const s of survivors) dead.add(s.id);
       if (attackerOwner === PLAYER_OWNER) battle.stats.captured += 1;
       const pos = tileAt(battle, site.tile);
       battle.events.push({ type: 'capture', site: site.id, from: fromOwner, to: attackerOwner, x: pos.x, y: pos.y });
+      onCapture(battle, site, defLost, t); // Turncoats, Hit and Run, Lightning War, Blood Price, Plunderers (PLAN-PHASE7)
       checkWin(battle, site, t);
     } else if (squads.every((s) => dead.has(s.id))) {
       site.assault = null;
@@ -174,9 +185,10 @@ export function applyGrowth(battle, dt) {
     // Defense battles: a garrison under assault does not regrow. A walled, Bulwarked keep with a strong player's attack and
     // defence regrows nearly BATTLE.fightRateMin of strength a second, so an assault on it could never finish (a stalemate
     // the siege timer would always win); attack battles keep their own tuned rule.
-    if (defense && site.assault && site.troops < site.cap) continue;
+    const rations = besiegedGrowthMult(battle, site); // Iron Rations (PLAN-PHASE7): a besieged settlement of yours keeps growing, faster
+    if (defense && site.assault && site.troops < site.cap && !rations) continue;
     if (site.troops < site.cap) {
-      site.troops = Math.min(site.cap, site.troops + site.growth * dt);
+      site.troops = Math.min(site.cap, site.troops + site.growth * dt * (rations || 1));
     } else if (site.troops > site.cap) {
       const excess = site.troops - site.cap;
       const bleed = Math.max(BATTLE.minBleed, BATTLE.overCapBleed * excess);

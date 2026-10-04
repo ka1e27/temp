@@ -113,7 +113,26 @@ behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away rep
 - **Phase 6 integration DONE (uncommitted):** Ashen colours #5c5b64 / #2c2b33 / #a9dfd6 (CIEDE2000 >= 20.4 under all visions), skull-crown
   emblem, 1.9x territory wash, battleAshen.js + ashenFx.js (rise wisps, ember burn, Rising ring, Raise the Fallen), card line, A1 hint,
   Gravewarden card. Final pass all green incl. new --only=phase6 (72). Gallery screenshots/phase6/. Gaps: no live check for Raise the
-  Fallen; burning ground is not restored after a reload. Rough edges: no leader lines for
+  Fallen; burning ground is not restored after a reload.
+- **2026-10-04 PHASE 7 "Boons and Relics" STARTED** (user: "continue working"). Spec: docs/PLAN-PHASE7.md. 1-of-3 Boon drafts after
+  battle conquests (24 Boons, 4 Duos, rarities, cursed; War Council kept), 4 Relics per continent (Ruins first) + a lasting Reliquary,
+  Phase 6 leftovers. Fresh sim/meta + integration engineers. The Phase 6 UI (9 files, uncommitted) is snapshotted in
+  scratchpad/p6snap: it PASSED the full CI gate (npm 1117, full check.mjs, --base=temp). Deploy on request: commit in the
+  snapshot worktree, push that commit to redesign + main, then git reset (mixed) the main tree onto it.
+- **Phase 6 visuals LIVE** (Pages run passed: verify, browser, deploy) as 8c46c94 (the snapshot commit) to redesign + main at the user's "deploy Phase 6"; the main tree
+  was reset onto it with the Phase 7 WIP kept as uncommitted diffs.
+- **Sim/meta Phase 7 DONE** (1138/1138): 24 Boons (Royal Hoard replaces War Chest), 4 Duos, boonMods = the one source, sim hooks in
+  game/battle/boons.js (boonTriggered), 8 Relics (4 per continent) + Reliquary + Reliquarian deed. UPGRADE_COST_MULT 1.2 -> 1.5:
+  D1 1.13 h / D2 1.39 h / D3 1.24 h, 0 waits > 40 m; no Boon trivialises battles (best win rate 82 %). Lead change in progress:
+  drafts only after Fair+ wins, typed regions and capitals (the bot owned 21 of 24 by the end of D1). Later: 8 more Boons.
+  Gating done (1139/1139): median 14 Boons at the end of D1; D1 1.27 h / D2 1.37 h / D3 1.26 h, 0 waits > 40 m.
+- **Integration Phase 7 playable** (uncommitted): post-battle draft (rarity frames, Champion's eye, Decide later + Boon chip), Duo
+  reveal, Boons strip + Reliquary in Realm, Relic glint/card line/claim moment, boonTriggered pops, K1/L1 hints, Raise the Fallen
+  check, burn ground restored after reload. Full check.mjs 1490 ok / 1 FAIL (flaky phase6 "Firestorm burns the dead"), base=temp
+  ok. Lead asked: make that step deterministic, queue recruit card vs draft, chest 1.5x, INTEGRATION-NOTES Phase 7, then re-run the gate.
+- **Phase 7 READY TO DEPLOY** (uncommitted): flake root-caused to check staging (phase6 7/7 green), post-battle moments queued
+  (conquest > Relic claim > recruit > Boon draft > map), chest 24-44 px; deploy gate passed (npm 1139, full check.mjs 1491 ok,
+  --base=temp 421 ok). Waiting on the user to deploy. Rough edges: no leader lines for
   Plague/Merchant; an event toast closed with x cannot be reopened; phase3 gallery not re-shot after the gate/toast/plague fixes.
   - TODO: swarm calibration pass: Fair fights vs Amber won 98%, ceiling temporarily 0.98-0.99: 50 of 51 failed 0.98 (game/tests/balance.labels.test.js).
 - **Integration Phase 2 polish + Phase 3 UI DONE** (report pending lead review): laurel everywhere Renown shows, ability banner, emblem on the

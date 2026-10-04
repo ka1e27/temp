@@ -143,7 +143,8 @@ export function processDragon(battle, t) {
     const target = breathTarget(battle);
     dr.nextBreathAt = t + D.breathSec;
     if (target) {
-      dr.breath = { at: t + D.telegraphSec, x: target.p.x, y: target.p.y, radius: D.breathRadius, target: target.target };
+      const tele = D.telegraphSec + ((battle.player && battle.player.boons && battle.player.boons.dragonTelegraphAdd) || 0); // Dragonbane (PLAN-PHASE7)
+      dr.breath = { at: t + tele, x: target.p.x, y: target.p.y, radius: D.breathRadius, target: target.target };
       battle.events.push({ type: 'dragonTelegraph', x: target.p.x, y: target.p.y, radius: D.breathRadius, at: dr.breath.at, target: target.target });
     }
   }

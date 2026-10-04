@@ -82,8 +82,8 @@ export function onAssaultTrade(battle, site, attackerOwner, squads, atkLoss, def
   else if (site.owner === PLAYER_OWNER) noteLoss(battle, t, defLoss);
   if (fell) return;
   // The Fallen Rise: the player's dead join an undying settlement's garrison, unless Firestorm burns them
-  if (attackerOwner === PLAYER_OWNER && site.owner === foe && atkLoss > 0 && isUndying(battle)) {
-    const risers = atkLoss * ASHEN.fallen.share;
+  if (attackerOwner === PLAYER_OWNER && site.owner === foe && atkLoss > 0 && isUndying(battle) && !lanternGuards(battle, site)) {
+    const risers = atkLoss * ASHEN.fallen.share * ((battle.player.boons && battle.player.boons.fallenMult) || 1); // Gravebreaker halves it (PLAN-PHASE7)
     if (isBurning(battle, site, t)) {
       gather(battle, site, 'burned', risers, (count) => ({ type: 'fallenBurned', site: site.id, count }));
     } else {
@@ -105,6 +105,16 @@ export function onAssaultTrade(battle, site, attackerOwner, squads, atkLoss, def
     site.troops += atkLoss * reclaim;
     gather(battle, site, 'rose', atkLoss * reclaim, (count) => ({ type: 'fallenRose', site: site.id, count, owner: PLAYER_OWNER, kind: 'gravewarden' }));
   }
+}
+
+/** The Gravewarden's Lantern Relic (PLAN-PHASE7): no Fallen rise at a settlement within lanternRadius hexes of the player's War Camp. */
+function lanternGuards(battle, site) {
+  const r = battle.player && battle.player.boons && battle.player.boons.lanternRadius;
+  if (!(r > 0)) return false;
+  const camp = battle.sites.find((s) => s.type === 'camp' && s.owner === PLAYER_OWNER) || battle.sites.find((s) => s.type === 'camp');
+  const a = camp ? tileAt(battle, camp.tile) : null;
+  const b = tileAt(battle, site.tile);
+  return !!a && !!b && worldDist(a, b) <= hexRadiusToWorld(r);
 }
 
 /** A squad-against-squad clash tick (resolve.js): logs the player's side of the losses. */

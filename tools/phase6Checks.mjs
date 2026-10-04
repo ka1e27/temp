@@ -170,28 +170,57 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     const cast = await q(async () => {
       const hd = window.__hd;
       const S = await import(new URL('game/battle/sim.js', document.baseURI).href);
+      const R = await import(new URL('game/battle/routing.js', document.baseURI).href);
+      const F = await import(new URL('game/battle/fallen.js', document.baseURI).href);
       const b = hd.battle;
-      const { camp, tgt } = window.__p6;
-      const site = b.sites[tgt];
-      if (!site || site.owner !== b.arena.enemyFaction) return 'the target fell';
+      const foe = b.arena.enemyFaction;
       b.player.powers = { ...(b.player.powers || {}), firestorm: Math.max(1, (b.player.powers || {}).firestorm || 0) };
       b.player.powersBlocked = undefined;
-      b.cooldowns.firestorm = 0;
-      site.troops = Math.min(Math.max(site.troops, 500), 1500);
       for (const s of b.sites) if (s.owner === 0) s.troops = Math.max(s.troops, 5000);
-      const tile = b.arena.tiles.find((x) => x.i === site.tile);
-      S.issue(b, { type: 'power', owner: 0, power: 'firestorm', target: { q: tile.q, r: tile.r } });
-      const c = b.sites[camp];
-      if (c && c.owner === 0) { c.troops = Math.max(c.troops, 6000); S.issue(b, { type: "send", owner: 0, from: camp, to: tgt, fraction: 0.02 }); }
+      // Deterministic staging. It used to be one small squad from the camp to the step-3 target, sent with the cast: on some runs that target was far
+      // away, the squad was caught on the road or arrived after the ground had cooled (8 s), and nothing burned. Now: the Ashen settlement NEAREST to a
+      // site of ours, a steady stream of small squads from that site, and the Firestorm cast (cooldown cleared) once a squad is two tiles out or
+      // already assaulting, again whenever the ground has cooled: the burn always overlaps an assault.
+      const tileOf = (s) => b.arena.tiles.find((x) => x.i === s.tile);
+      let best = null;
+      for (const t of b.sites.filter((s) => s.owner === foe && s.type !== 'keep')) {
+        const tp = tileOf(t);
+        for (const o of b.sites.filter((s) => s.owner === 0 && R.canRoute(b, 0, s.id, t.id))) {
+          const op = tileOf(o);
+          const d = Math.hypot(op.x - tp.x, op.y - tp.y);
+          if (!best || d < best.d) best = { site: t, from: o, d };
+        }
+      }
+      if (!best) return 'no reachable Ashen settlement';
+      const site = best.site;
+      site.troops = Math.min(Math.max(site.troops, 800), 1500);
+      const tile = tileOf(site);
+      window.__p6 = { ...(window.__p6 || {}), tgt: site.id };
+      clearInterval(window.__p6burn);
+      let castAt = -1e9;
+      window.__p6burn = setInterval(() => {
+        const bb = window.__hd.battle;
+        if (!bb || bb !== b || bb.result || site.owner !== foe) { clearInterval(window.__p6burn); return; }
+        site.troops = Math.max(site.troops, 600); // never taken while this step watches
+        // no enemy squads on the field while this step watches: their reinforcements used to catch the stream on the road for the whole window
+        if (bb.squads.some((q) => q.owner !== 0)) bb.squads = bb.squads.filter((q) => q.owner === 0);
+        const near = bb.squads.some((q) => q.owner === 0 && q.to === site.id && (q.state === 'assault' || (q.state === 'march' && q.seg >= q.path.length - 2)));
+        if (near && !F.isBurning(bb, site, bb.t) && bb.t - castAt > 1.5) { castAt = bb.t; bb.cooldowns.firestorm = 0; S.issue(bb, { type: 'power', owner: 0, power: 'firestorm', target: { q: tile.q, r: tile.r } }); }
+        const from = bb.sites[best.from.id];
+        if (from && from.owner === 0) { from.troops = Math.max(from.troops, 3000); S.issue(bb, { type: 'send', owner: 0, from: from.id, to: site.id, fraction: 0.03 }); }
+      }, 300);
       return 'ok';
     });
     ok(cast === 'ok', tag(`Firestorm cast on the settlement, then the assault (${cast})`));
-    ok(await t.waitFor((n) => (window.__hd.ashenInfo()?.burned || 0) > n, 20000, before.burned || 0), tag('Firestorm burns the dead (fallenBurned)'));
+    const burnedOk = await t.waitFor((n) => (window.__hd.ashenInfo()?.burned || 0) > n, 40000, before.burned || 0);
+    const bdiag = burnedOk ? '' : await q(() => { const b = window.__hd.battle; const { tgt } = window.__p6 || {}; const s = b && b.sites[tgt]; return JSON.stringify({ t: b && b.t, burns: b && b.fallen && b.fallen.burns, site: s && { owner: s.owner, troops: Math.round(s.troops), tile: s.tile }, pending: b && b.pendingPowers, squads: b && b.squads.map((x) => ({ o: x.owner, to: x.to, n: Math.round(x.count), st: x.state, seg: x.seg, len: x.path && x.path.length, foe: x.foe })), paused: window.__hd.battles.paused, phase: window.__hd.battlePhase, dlg: document.documentElement.hasAttribute("data-dialog"), info: window.__hd.ashenInfo(), cd: b && b.player.cooldowns }); });
+    ok(burnedOk, tag(`Firestorm burns the dead (fallenBurned)${bdiag ? ` ${bdiag}` : ''}`));
     await sleep(700); // the "N burned" pop gathers for about half a second
     await shot('06-ember-burn');
+    await q(() => clearInterval(window.__p6burn));
 
     // 6. win (dev hook): the Gravewarden joins
-    await q(() => { clearInterval(window.__p6keep); window.__hd.winBattle(); });
+    await q(() => { clearInterval(window.__p6keep); clearInterval(window.__p6burn); window.__hd.winBattle(); });
     ok(await t.waitFor(() => { const c = document.querySelector('.results-card'); return !!c && !c.hidden && c.dataset.result === 'victory'; }, 30000), tag('Victory over the Barrow Keep'));
     await sleep(1500);
     ok(await t.clickText('.results-action', 'Continue'), tag('Continue'));
@@ -202,6 +231,60 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     await sleep(500);
     await shot('07-gravewarden-card');
     await pressSel('.is-recruit button', 'Welcome');
+
+    // 7. (Phase 7 §7C) the Gravewarden's Raise the Fallen, live: it commands an attack, troops die, a real press on the ability raises them
+    ok(await t.waitFor(() => window.__hd.scene === 'world', 15000), tag('back on the map'));
+    await sleep(2500);
+    const gw = await q(async () => {
+      const hd = window.__hd;
+      const g = hd.state.generals.roster.find((x) => x.kind === 'gravewarden');
+      const { frontier, difficulty } = await import(new URL('game/meta/progression.js', document.baseURI).href);
+      // a region that FIGHTS: one that would surrender shows "Accept Surrender" instead of Attack (that was this step's flake)
+      const busy = new Set(hd.battles.list().map((r) => r.regionId));
+      const ids = frontier(hd.state, hd.world).filter((id) => !busy.has(id) && !difficulty(hd.state, hd.world, id).surrender);
+      const rid = ids.sort((a, b) => hd.world.regions[a].tier - hd.world.regions[b].tier || a - b)[0];
+      hd.selectRegion(rid);
+      return { g: g && g.id, rid };
+    });
+    ok(!!gw.g && gw.rid != null, tag(`the Gravewarden (${gw.g}) and a region to attack (${gw.rid})`));
+    await sleep(900);
+    const picked = await q((gid) => {
+      const sel = document.querySelector('.region-card-commander-select');
+      if (!sel || ![...sel.options].some((o) => o.value === gid)) return false;
+      sel.value = gid;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }, gw.g);
+    ok(picked, tag('the Gravewarden is chosen to command'));
+    await sleep(400);
+    ok(await pressSel('button.region-card-action', 'Attack'), tag('a real press on Attack'));
+    const gwLive = await t.waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live', 30000);
+    const gwDiag = gwLive ? '' : await q(() => JSON.stringify({ scene: window.__hd.scene, phase: window.__hd.battlePhase, card: [...document.querySelectorAll('.region-card-action')].map((b) => `${b.textContent}|${b.hidden}|${b.disabled}`), dialogs: [...document.querySelectorAll('[role=dialog]')].filter((d) => !d.closest('[hidden]') && d.getClientRects().length).map((d) => d.className), toasts: [...document.querySelectorAll('.toast')].map((x) => x.textContent).slice(0, 3) }));
+    ok(gwLive, tag(`the Gravewarden's battle is live${gwDiag ? ` ${gwDiag}` : ''}`));
+    if (!gwLive) throw new Error('no Gravewarden battle');
+    ok(await q(() => window.__hd.battle.player.ability && window.__hd.battle.player.ability.id === 'raiseFallen'), tag('its ability is Raise the Fallen'));
+    // troops sent to die at a strong garrison, so there are fallen to raise
+    await q(async () => {
+      const hd = window.__hd;
+      const S = await import(new URL('game/battle/sim.js', document.baseURI).href);
+      const R = await import(new URL('game/battle/routing.js', document.baseURI).href);
+      const b = hd.battle;
+      const camp = b.sites.find((s) => s.type === 'camp' && s.owner === 0);
+      const tgt = b.sites.filter((s) => s.owner !== 0 && R.canRoute(b, 0, camp.id, s.id)).sort((a, z) => z.troops - a.troops)[0];
+      tgt.troops = Math.max(tgt.troops, 400);
+      camp.troops = Math.max(camp.troops, 200);
+      S.issue(b, { type: 'send', owner: 0, from: camp.id, to: tgt.id, fraction: 0.5 });
+    });
+    ok(await t.waitFor(async () => {
+      const R = await import(new URL('game/battle/fallen.js', document.baseURI).href);
+      const b = window.__hd.battle;
+      return b && R.recentLosses(b, b.t, 15) >= 2;
+    }, 25000), tag('troops have fallen'));
+    const raisedBefore = (await info())?.raised || 0;
+    ok(await pressSel('.battle-ability'), tag('a real press on Raise the Fallen'));
+    ok(await t.waitFor((n) => (window.__hd.ashenInfo()?.raised || 0) > n, 4000, raisedBefore), tag('the fallen are raised (raiseFallen)'));
+    await sleep(500);
+    await shot('08-raise-the-fallen');
 
     const errs = t.unexpected();
     ok(errs.length === 0, tag(`no console errors${errs.length ? `: ${errs[0]}` : ''}`));

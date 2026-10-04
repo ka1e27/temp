@@ -306,7 +306,8 @@ export function buildDefenseArena(world, owners, regionId, opts = {}) {
     const v = typeof opts.vendetta === 'object' ? opts.vendetta : {};
     const cfg = GRUDGES.vendetta.champion;
     arena.vendetta = { faction: attacker, leader: typeof v.leader === 'string' ? v.leader : '' };
-    arena.champion = { troops: Math.max(1, Math.round(campTroops * cfg.share)), power: cfg.power, launchSec: cfg.launchSec };
+    // Oathkeeper (PLAN-PHASE7): opts.noChampion, the Vendetta comes without its Champion
+    if (!opts.noChampion) arena.champion = { troops: Math.max(1, Math.round(campTroops * cfg.share)), power: cfg.power, launchSec: cfg.launchSec };
   }
   return arena;
 }

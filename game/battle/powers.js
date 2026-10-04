@@ -14,6 +14,7 @@ import { sendFromSite } from './squads.js';
 import { canRoute } from './routing.js';
 import { powersBlocked, firestormMult } from './features.js';
 import { onFirestormLanded } from './fallen.js';
+import { boonsOf, onFirestorm, firestormBoonMult, powerCooldownBoonMult } from './boons.js';
 
 /** Only the player can act as a caster today (see file header). */
 function statsFor(battle, owner) {
@@ -90,16 +91,18 @@ export function applyPower(battle, command, t) {
       battle.events.push({ type: 'refused', reason: 'noRoute', owner, to: target });
       return;
     }
+    const horns = owner === PLAYER_OWNER ? boonsOf(battle).rallyPowerMult || 1 : 1; // Rally Horns (PLAN-PHASE7): Rally's squads hit harder
     for (const site of battle.sites) {
       if (site.owner !== owner || site.id === target) continue;
-      sendFromSite(battle, site.id, target, cfg.share);
+      const sq = sendFromSite(battle, site.id, target, cfg.share);
+      if (sq && horns !== 1) sq.power = (sq.power ?? 1) * horns;
     }
   } else if (power === 'firestorm') {
     const tile = resolveTargetTile(battle, target);
     if (!tile) return;
     pos = tile;
     appliedTarget = target;
-    const damage = (cfg.damage + cfg.damagePerLevel * (level - 1)) * firestormMult(battle); // Blizzard: +50%
+    const damage = (cfg.damage + cfg.damagePerLevel * (level - 1)) * firestormMult(battle) * firestormBoonMult(battle); // Blizzard +50%; the Ember Heart (PLAN-PHASE7)
     battle.pending.push({
       at: t + cfg.delay, x: tile.x, y: tile.y, owner, power: 'firestorm', damage, radius: cfg.radius,
     });
@@ -125,7 +128,7 @@ export function applyPower(battle, command, t) {
     return;
   }
 
-  battle.cooldowns[power] = t + cooldownSeconds(power, level, stats.cooldownMult);
+  battle.cooldowns[power] = t + cooldownSeconds(power, level, stats.cooldownMult) * powerCooldownBoonMult(battle, power); // the Horn of Ages (PLAN-PHASE7)
   battle.events.push({ type: 'power', owner, power, x: pos.x, y: pos.y, target: appliedTarget });
 }
 
@@ -159,6 +162,7 @@ export function processPending(battle, t) {
       }
       battle.events.push({ type: 'firestorm', x: p.x, y: p.y, radius: p.radius });
       onFirestormLanded(battle, p, t); // PLAN-PHASE6: the ground burns (no Fallen rise there) and a Barrow Keep's next Rising is cancelled
+      onFirestorm(battle, p, t); // Scorched Earth (PLAN-PHASE7): the burning ground also burns enemy squads
     }
   }
   battle.pending = remaining;

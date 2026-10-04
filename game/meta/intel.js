@@ -23,6 +23,7 @@ import {
   ensureIntel, intelOf, sabotageLevel, sabotagePercent,
 } from './intelState.js';
 import { worksScoutedFree } from './worksEffects.js'; // the leaf (no cycle): a Watchtower next door scouts for free
+import { boonMods } from './boonsState.js'; // the leaf (PLAN-PHASE7): the Seer's Lens
 import { monasteryScoutsFree } from './featuresState.js'; // a Monastery held within 2 scouts for free too (DESIGN §10.13)
 import { addGrudge } from './grudges.js'; // the leaf (PLAN-PHASE4 §4D): sabotage feeds the owner's Grudge
 
@@ -95,7 +96,8 @@ export function scoutCost(state, world, regionId) {
  * Exported so the map's garrison badges use the very same predicate as the card.
  */
 export function isScoutedOrFree(state, world, regionId) {
-  return intelOf(state, regionId).scouted || worksScoutedFree(state, world, regionId) || monasteryScoutsFree(state, world, regionId);
+  return intelOf(state, regionId).scouted || worksScoutedFree(state, world, regionId) || monasteryScoutsFree(state, world, regionId)
+    || boonMods(state).scoutAll; // the Seer's Lens Relic (PLAN-PHASE7)
 }
 
 /** Frontier region, not scouted yet, and the gold is there. */

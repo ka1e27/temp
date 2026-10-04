@@ -1,0 +1,282 @@
+/* Phase 7 (PLAN-PHASE7): the Boon draft (ui/boonDraft.js), the Duo reveal (ui/duoReveal.js), the HUD's "Boon pending" chip, the owned-Boons strip and
+   the Reliquary (ui/boonsPanel.js), the Relic claim card and the region card's Relic line. */
+
+:root {
+  /* rarity frames: [edge, deep, glow] */
+  --boon-common: #d19a5e;
+  --boon-common-deep: #7a4b22;
+  --boon-common-glow: rgba(209, 154, 94, 0.28);
+  --boon-rare: #b8d6f2;
+  --boon-rare-deep: #4d78a6;
+  --boon-rare-glow: rgba(140, 190, 240, 0.32);
+  --boon-legendary: #ffd86b;
+  --boon-legendary-deep: #b9811a;
+  --boon-legendary-glow: rgba(255, 210, 90, 0.42);
+  --boon-cursed: #e0466e;
+  --boon-cursed-deep: #6c2a9c;
+  --boon-cursed-glow: rgba(200, 60, 130, 0.38);
+  --boon-duo: #8fe3cf;
+  --boon-duo-deep: #2d8f86;
+  --relic-gold: #ffe08a;
+}
+
+/* ------------------------------------------------------------------ the draft */
+.boon-draft { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: var(--sp-3); }
+.boon-draft[hidden] { display: none; }
+.boon-draft-veil { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(8, 10, 16, 0.55), rgba(8, 10, 16, 0.82)); }
+.boon-draft-panel {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  box-shadow: var(--panel-shadow-lg);
+  border: 1px solid rgba(245, 196, 81, 0.28);
+}
+.boon-draft-head { display: flex; align-items: flex-start; gap: var(--sp-3); }
+.boon-draft-heading { flex: 1; min-width: 0; text-align: center; }
+.boon-draft-kicker { margin: 0; font-size: var(--fs-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); font-weight: 800; }
+.boon-draft-title { margin: 2px 0 0; font-family: var(--font-title); font-size: var(--fs-xl); color: var(--text); }
+.boon-draft-sub { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.boon-draft-close { flex: none; width: 36px; height: 36px; }
+.boon-draft-eye { flex: none; width: 36px; height: 36px; display: grid; place-items: center; color: #ffd0a0; }
+.boon-draft-note {
+  margin: 0; display: flex; align-items: center; gap: var(--sp-2); justify-content: center;
+  font-size: var(--fs-sm); color: var(--text-muted); background: rgba(255, 255, 255, 0.05); border-radius: var(--panel-radius-sm); padding: var(--sp-2) var(--sp-3);
+}
+.boon-draft-note[hidden], .boon-draft-hint[hidden] { display: none; }
+.boon-draft-hint {
+  margin: 0; display: flex; align-items: flex-start; gap: var(--sp-2); font-size: var(--fs-sm); color: #fff3c4; text-align: left;
+  background: rgba(245, 196, 81, 0.12); border: 1px solid rgba(245, 196, 81, 0.4); border-radius: var(--panel-radius-sm); padding: var(--sp-2) var(--sp-3);
+}
+.boon-draft-hint .icon { flex: none; color: var(--gold); margin-top: 2px; }
+
+.boon-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
+.boon-card {
+  --edge: var(--boon-common); --deep: var(--boon-common-deep); --glow: var(--boon-common-glow);
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+  min-height: 236px;
+  padding: var(--sp-4) var(--sp-3) var(--sp-3);
+  color: var(--text);
+  text-align: center;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 12px;
+  border: 2px solid var(--edge);
+  background:
+    radial-gradient(circle at 50% 30%, var(--glow), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.25)),
+    var(--panel-bg-solid);
+  box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.45), inset 0 0 0 4px color-mix(in srgb, var(--deep) 70%, transparent), 0 6px 18px rgba(0, 0, 0, 0.35);
+  transition: transform var(--dur-med) var(--ease-out), box-shadow var(--dur-med) var(--ease-out), opacity var(--dur-med);
+}
+.boon-card[data-rarity='rare'] { --edge: var(--boon-rare); --deep: var(--boon-rare-deep); --glow: var(--boon-rare-glow); }
+.boon-card[data-rarity='legendary'] { --edge: var(--boon-legendary); --deep: var(--boon-legendary-deep); --glow: var(--boon-legendary-glow); }
+.boon-card[data-rarity='cursed'] {
+  --edge: var(--boon-cursed); --deep: var(--boon-cursed-deep); --glow: var(--boon-cursed-glow);
+  border-color: transparent;
+  background:
+    radial-gradient(circle at 50% 30%, var(--glow), transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.3)) padding-box,
+    linear-gradient(var(--panel-bg-solid), var(--panel-bg-solid)) padding-box,
+    linear-gradient(160deg, var(--boon-cursed), var(--boon-cursed-deep)) border-box;
+}
+.boon-card[data-rarity='legendary']::before {
+  /* a slow shine across the gold frame */
+  content: ''; position: absolute; inset: -2px; border-radius: 12px; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 240, 190, 0.35) 50%, transparent 65%) border-box;
+  background-size: 260% 100%;
+  animation: boon-shine 3.2s linear infinite;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  border: 2px solid transparent;
+}
+@keyframes boon-shine { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+.boon-card:hover, .boon-card:focus-visible { transform: translateY(-4px); box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--edge), 0 10px 28px var(--glow); }
+.boon-card:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+.boon-card-top { display: flex; align-items: center; gap: 6px; min-height: 18px; }
+.boon-card-rarity { font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--edge); }
+.boon-card-warn {
+  position: relative; display: inline-grid; place-items: center; width: 18px; height: 18px;
+  color: #fff; font-size: 11px; font-weight: 900; line-height: 1; isolation: isolate;
+}
+.boon-card-warn::before { content: ''; position: absolute; inset: 2px; border-radius: 3px; transform: rotate(45deg); background: var(--boon-cursed); z-index: -1; box-shadow: 0 0 6px rgba(224, 70, 110, 0.6); }
+.boon-card-warn[hidden] { display: none; }
+.boon-card-icon {
+  display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%;
+  color: var(--edge);
+  background: radial-gradient(circle, color-mix(in srgb, var(--deep) 55%, transparent), rgba(0, 0, 0, 0.35));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--edge) 55%, transparent), 0 0 16px var(--glow);
+}
+.boon-card-icon .icon { display: block; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
+.boon-card-words { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.boon-card-name { font-family: var(--font-title); font-weight: 700; font-size: var(--fs-md); color: var(--text); }
+.boon-card-text { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.35; }
+.boon-card-duo { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: var(--fs-xs); font-weight: 800; color: var(--boon-duo); }
+.boon-card-duo[hidden] { display: none; }
+
+.boon-draft-actions { display: flex; gap: var(--sp-3); justify-content: center; }
+.boon-draft-actions .btn { min-height: 44px; }
+.boon-reroll { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.boon-reroll[hidden] { display: none; }
+.boon-reroll-price { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 99px; background: rgba(245, 196, 81, 0.14); color: var(--gold-bright); font-weight: 800; }
+
+/* dealing in, and the pick */
+.boon-draft.is-dealt .boon-card { animation: boon-deal 420ms var(--ease-punch) both; }
+.boon-draft.is-dealt .boon-card:nth-child(2) { animation-delay: 80ms; }
+.boon-draft.is-dealt .boon-card:nth-child(3) { animation-delay: 160ms; }
+@keyframes boon-deal { from { opacity: 0; transform: translateY(18px) scale(0.92); } to { opacity: 1; transform: none; } }
+.boon-card.is-picked { transform: translateY(-8px) scale(1.04); box-shadow: 0 0 0 2px var(--edge), 0 0 36px var(--glow); }
+.boon-card.is-passed { opacity: 0.25; transform: scale(0.94); }
+.boon-draft.is-chosen .boon-draft-actions, .boon-draft.is-chosen .boon-draft-close { visibility: hidden; }
+
+/* the Champion's eye: a crimson-and-gold double frame and the eye */
+.boon-draft.is-champion-eye .boon-draft-panel {
+  border: 2px solid #ffcf6e;
+  box-shadow: 0 0 0 4px rgba(150, 30, 40, 0.75), 0 0 0 5px rgba(255, 207, 110, 0.6), 0 0 48px rgba(255, 120, 80, 0.35), var(--panel-shadow-lg);
+}
+.boon-draft.is-champion-eye .boon-draft-kicker { color: #ffb08a; }
+.boon-draft-eye.is-off { visibility: hidden; } /* keeps the heading centred against the close button */
+
+html.reduce-motion .boon-card, html.reduce-motion .boon-draft.is-dealt .boon-card { animation: none; transition: none; }
+html.reduce-motion .boon-card[data-rarity='legendary']::before { animation: none; }
+@media (prefers-reduced-motion: reduce) { .boon-card[data-rarity='legendary']::before { animation: none; } }
+
+/* phones: the cards become rows (icon left, words right) so all three, Reroll and Later fit a 360 x 640 screen */
+@media (max-width: 600px) {
+  .boon-draft { padding: var(--sp-2); }
+  .boon-draft-panel { padding: var(--sp-4) var(--sp-3); gap: var(--sp-3); }
+  .boon-draft-title { font-size: var(--fs-lg); }
+  .boon-cards { grid-template-columns: 1fr; gap: var(--sp-2); }
+  .boon-card { min-height: 0; flex-direction: row; align-items: center; text-align: left; gap: var(--sp-3); padding: var(--sp-3); }
+  .boon-card-top { position: absolute; top: 6px; right: 10px; }
+  .boon-card-icon { flex: none; width: 52px; height: 52px; }
+  .boon-card-icon .icon { width: 32px; height: 32px; }
+  .boon-card-words { align-items: flex-start; padding-top: 10px; }
+  .boon-card:hover, .boon-card:focus-visible { transform: none; }
+  .boon-draft-actions .btn { flex: 1; }
+}
+
+/* ------------------------------------------------------------------ the Duo reveal */
+.duo-reveal { position: fixed; inset: 0; z-index: calc(var(--z-modal) + 2); display: grid; place-items: center; cursor: pointer; }
+.duo-reveal[hidden] { display: none; }
+.duo-veil { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(20, 60, 60, 0.45), rgba(6, 8, 12, 0.78)); }
+.duo-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-5); max-width: min(420px, calc(100vw - 32px)); text-align: center; }
+.duo-stage { position: relative; width: 200px; height: 96px; }
+.duo-part, .duo-mark, .duo-flash { position: absolute; left: 50%; top: 50%; display: grid; place-items: center; border-radius: 50%; }
+.duo-part { width: 60px; height: 60px; margin: -30px 0 0 -30px; color: var(--boon-duo); background: rgba(10, 30, 32, 0.9); box-shadow: 0 0 0 2px var(--boon-duo-deep), 0 0 18px rgba(143, 227, 207, 0.4); }
+.duo-mark { width: 92px; height: 92px; margin: -46px 0 0 -46px; color: #eafff8; background: radial-gradient(circle, rgba(60, 170, 155, 0.9), rgba(10, 40, 44, 0.95)); box-shadow: 0 0 0 3px var(--boon-duo), 0 0 0 6px rgba(255, 216, 107, 0.55), 0 0 44px rgba(143, 227, 207, 0.65); opacity: 0; }
+.duo-flash { width: 160px; height: 160px; margin: -80px 0 0 -80px; background: radial-gradient(circle, rgba(255, 255, 240, 0.95), rgba(143, 227, 207, 0.4) 40%, transparent 70%); opacity: 0; }
+.duo-words { display: flex; flex-direction: column; gap: 4px; opacity: 0; }
+.duo-kicker { font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--boon-duo); }
+.duo-name { font-family: var(--font-title); font-size: var(--fs-2xl); font-weight: 700; color: #fff4d0; text-shadow: 0 2px 16px rgba(143, 227, 207, 0.55); line-height: 1.1; }
+.duo-parts { font-size: var(--fs-sm); color: var(--text-muted); }
+.duo-text { font-size: var(--fs-md); color: var(--text); }
+.duo-reveal.is-playing .duo-part-left { animation: duo-left 620ms var(--ease-out) both; }
+.duo-reveal.is-playing .duo-part-right { animation: duo-right 620ms var(--ease-out) both; }
+.duo-reveal.is-playing .duo-flash { animation: duo-flash 560ms ease-out 560ms both; }
+.duo-reveal.is-playing .duo-mark { animation: duo-mark 520ms var(--ease-punch) 640ms both; }
+.duo-reveal.is-playing .duo-words { animation: duo-words 420ms var(--ease-out) 820ms both; }
+@keyframes duo-left { 0% { transform: translateX(-90px); opacity: 0; } 25% { opacity: 1; } 80% { transform: translateX(-12px); opacity: 1; } 100% { transform: translateX(0) scale(0.6); opacity: 0; } }
+@keyframes duo-right { 0% { transform: translateX(90px); opacity: 0; } 25% { opacity: 1; } 80% { transform: translateX(12px); opacity: 1; } 100% { transform: translateX(0) scale(0.6); opacity: 0; } }
+@keyframes duo-flash { 0% { transform: scale(0.2); opacity: 0; } 30% { opacity: 1; } 100% { transform: scale(1.3); opacity: 0; } }
+@keyframes duo-mark { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes duo-words { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* Reduce Motion: the final frame, still */
+.duo-reveal.is-still .duo-part, .duo-reveal.is-still .duo-flash { display: none; }
+.duo-reveal.is-still .duo-mark, .duo-reveal.is-still .duo-words { opacity: 1; animation: none !important; }
+
+/* ------------------------------------------------------------------ the HUD chip */
+.hud-boon-chip {
+  position: relative; display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px 0 8px;
+  border-radius: 99px; border: 1px solid rgba(245, 196, 81, 0.55); background: var(--panel-bg); color: var(--gold-bright);
+  font: inherit; font-weight: 800; font-size: var(--fs-sm); cursor: pointer; box-shadow: var(--panel-shadow);
+  animation: pip-call 1.8s ease-out infinite;
+}
+.hud-boon-chip[hidden] { display: none; }
+.hud-boon-chip .icon { display: block; }
+.hud-boon-chip:hover { border-color: var(--gold); color: #fff3c4; }
+.hud-boon-chip.is-champion-eye { border-color: #ffb08a; color: #ffd0b0; box-shadow: 0 0 0 2px rgba(150, 30, 40, 0.6), var(--panel-shadow); }
+html.reduce-motion .hud-boon-chip { animation: none; }
+@media (pointer: coarse) { .hud-boon-chip::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: 44px; transform: translate(-50%, -50%); } }
+
+/* ------------------------------------------------------------------ the owned-Boons strip (Realm panel) */
+.boon-strip { display: flex; flex-direction: column; gap: var(--sp-2); }
+.boon-strip .realm-section-title { display: flex; align-items: center; gap: var(--sp-2); }
+.boon-strip-pending { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 10px; font-size: var(--fs-xs); color: var(--gold-bright); border-color: rgba(245, 196, 81, 0.5); }
+.boon-strip-pending[hidden] { display: none; }
+.boon-strip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.boon-chip {
+  --edge: var(--boon-common);
+  position: relative; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 9px;
+  color: var(--edge); background: rgba(0, 0, 0, 0.35); border: 1.5px solid color-mix(in srgb, var(--edge) 75%, transparent); cursor: pointer;
+}
+.boon-chip .icon { display: block; }
+.boon-chip[data-rarity="rare"] { --edge: var(--boon-rare); }
+.boon-chip[data-rarity="legendary"] { --edge: var(--boon-legendary); box-shadow: 0 0 10px var(--boon-legendary-glow); }
+.boon-chip[data-rarity="cursed"] { --edge: var(--boon-cursed); background: linear-gradient(160deg, rgba(120, 20, 50, 0.5), rgba(60, 20, 90, 0.5)); }
+.boon-chip[data-rarity="relic"] { --edge: var(--relic-gold); border-radius: 50%; background: radial-gradient(circle, rgba(120, 80, 10, 0.6), rgba(0, 0, 0, 0.4)); }
+.boon-chip[data-rarity="duo"] { --edge: var(--boon-duo); border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 216, 107, 0.4); }
+.boon-chip.is-selected { outline: 2px solid var(--edge); outline-offset: 2px; }
+.boon-chip-count { position: absolute; right: -5px; bottom: -5px; padding: 0 3px; border-radius: 6px; background: var(--panel-bg-solid); color: var(--text); font-size: 10px; font-weight: 800; line-height: 14px; }
+@media (pointer: coarse) { .boon-chip::after { content: ""; position: absolute; inset: -5px; } }
+.boon-strip-empty, .boon-strip-detail, .reliquary-intro, .reliquary-detail { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.boon-strip-detail strong, .reliquary-detail strong { color: var(--text); }
+.boon-strip-empty[hidden], .boon-strip-detail[hidden], .reliquary-detail[hidden] { display: none; }
+
+/* ------------------------------------------------------------------ the Reliquary (Realm panel) */
+.reliquary { display: flex; flex-direction: column; gap: var(--sp-2); }
+.reliquary .realm-section-title small { margin-left: auto; }
+.reliquary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); }
+.reliquary-slot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 72px; padding: 6px 4px;
+  border-radius: 10px; border: 1px dashed rgba(255, 255, 255, 0.18); background: rgba(0, 0, 0, 0.25); color: var(--text-dim); font: inherit; cursor: pointer;
+}
+.reliquary-slot .icon { display: block; opacity: 0.4; }
+.reliquary-name { font-size: var(--fs-xs); font-weight: 700; line-height: 1.15; text-align: center; }
+.reliquary-slot.is-found { border: 1px solid rgba(255, 224, 138, 0.5); color: var(--relic-gold); background: radial-gradient(circle at 50% 35%, rgba(255, 210, 90, 0.18), rgba(0, 0, 0, 0.3)); }
+.reliquary-slot.is-found .icon { opacity: 1; filter: drop-shadow(0 0 6px rgba(255, 210, 90, 0.45)); }
+.reliquary-slot.is-found .reliquary-name { color: var(--text); }
+.reliquary-slot.is-owned { box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.45); }
+.reliquary-slot.is-selected { outline: 2px solid var(--relic-gold); outline-offset: 2px; }
+.reliquary-slot[hidden] { display: none; }
+@media (max-width: 380px) { .reliquary-grid { gap: 6px; } .reliquary-slot { min-height: 64px; } }
+
+/* ------------------------------------------------------------------ the region card's Relic line */
+.region-card-relic {
+  display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: 6px 10px; border-radius: var(--panel-radius-sm);
+  font-size: var(--fs-sm); color: var(--text); background: linear-gradient(90deg, rgba(255, 210, 90, 0.16), rgba(255, 210, 90, 0.04));
+  border: 1px solid rgba(255, 224, 138, 0.35);
+}
+.region-card-relic[hidden] { display: none; }
+.region-card-relic .icon { flex: none; color: var(--relic-gold); filter: drop-shadow(0 0 4px rgba(255, 210, 90, 0.5)); }
+.region-card-relic strong { color: var(--relic-gold); }
+
+/* ------------------------------------------------------------------ the Relic claim moment */
+.relic-claim { position: fixed; inset: 0; z-index: calc(var(--z-modal) + 1); display: grid; place-items: center; cursor: pointer; }
+.relic-claim[hidden] { display: none; }
+.relic-claim-veil { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(60, 40, 8, 0.4), rgba(6, 8, 12, 0.78)); }
+.relic-claim-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-5); max-width: min(400px, calc(100vw - 32px)); text-align: center; }
+.relic-claim-art { position: relative; width: 120px; height: 120px; display: grid; place-items: center; }
+.relic-claim-rays { position: absolute; inset: -30px; border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgba(255, 224, 138, 0.28) 0 8deg, transparent 8deg 22deg); -webkit-mask: radial-gradient(circle, #000 30%, transparent 70%); mask: radial-gradient(circle, #000 30%, transparent 70%); }
+.relic-claim-icon { position: relative; width: 96px; height: 96px; border-radius: 50%; display: grid; place-items: center; color: var(--relic-gold); background: radial-gradient(circle, rgba(120, 80, 10, 0.95), rgba(30, 20, 6, 0.95)); box-shadow: 0 0 0 3px var(--relic-gold), 0 0 40px rgba(255, 210, 90, 0.6); }
+.relic-claim-words { display: flex; flex-direction: column; gap: 4px; }
+.relic-claim-kicker { font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); }
+.relic-claim-name { font-family: var(--font-title); font-size: var(--fs-2xl); font-weight: 700; color: #fff4d0; line-height: 1.1; }
+.relic-claim-text { font-size: var(--fs-md); color: var(--text); }
+.relic-claim-note { font-size: var(--fs-sm); color: var(--text-muted); }
+.relic-claim.is-playing .relic-claim-rays { animation: relic-spin 9s linear infinite, relic-fade-in 500ms ease-out both; }
+.relic-claim.is-playing .relic-claim-icon { animation: duo-mark 560ms var(--ease-punch) 120ms both; }
+.relic-claim.is-playing .relic-claim-words { animation: duo-words 420ms var(--ease-out) 420ms both; }
+@keyframes relic-spin { to { transform: rotate(360deg); } }
+@keyframes relic-fade-in { from { opacity: 0; } to { opacity: 1; } }
+html.reduce-motion .relic-claim-rays, html.reduce-motion .relic-claim-icon, html.reduce-motion .relic-claim-words { animation: none !important; }
+
+/* Banner Bearer: the ability button flashes when it is ready again (battleBoons.js) */
+.battle-ability.is-boon-ready { animation: boon-ready 900ms ease-out 2; }
+@keyframes boon-ready { 0% { box-shadow: 0 0 0 0 rgba(255, 216, 107, 0.8); } 100% { box-shadow: 0 0 0 14px rgba(255, 216, 107, 0); } }
+html.reduce-motion .battle-ability.is-boon-ready { animation: none; }

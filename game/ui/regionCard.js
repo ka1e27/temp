@@ -136,13 +136,21 @@ export function createRegionCard({
   const grudgeMeter = createGrudgeMeter();
   const grudgeEl = h('div.region-card-grudge', {}, grudgeMeter.el);
   grudgeEl.hidden = true;
-  const featuresEl = h('div.region-card-features', {}, typeRow.el, twistRow.el, ashenRow.el, bossEl);
+  // a Relic waiting in this region (PLAN-PHASE7 §7B): shown before you commit, so it can steer the route
+  const relicName = h('strong', {}, '');
+  const relicText = h('span', {}, '');
+  const relicEl = h('p.region-card-relic', {}, icon('chest', 20), h('span', {}, relicName, ' ', relicText));
+  relicEl.hidden = true;
+  const featuresEl = h('div.region-card-features', {}, relicEl, typeRow.el, twistRow.el, ashenRow.el, bossEl);
   featuresEl.hidden = true;
   function patchFeatures(f) {
     const t = f && f.type;
     const w = f && f.twist;
     const a = f && f.ashen;
-    featuresEl.hidden = !t && !w && !a;
+    const r = f && f.relic;
+    featuresEl.hidden = !t && !w && !a && !r;
+    relicEl.hidden = !r;
+    if (r) { setText(relicName, `Relic: ${r.name}.`); setText(relicText, r.text); relicEl.dataset.relic = r.id; }
     ashenRow.el.hidden = !a;
     if (a) { paintGlyph(ashenRow.glyph, 'ashen', a.emblem || 'skullCrown'); setText(ashenRow.name, a.name); setText(ashenRow.text, a.text); }
     typeRow.el.hidden = !t;

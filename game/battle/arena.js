@@ -327,7 +327,9 @@ export function buildArena(world, owners, regionId, player, enemy, opts = {}) {
     const capMult = isNeutralHamlet ? ENEMY_SCALING.freeFolkCapMult : (enemy.capMult ?? 1);
     const site = {
       id: rest.length + 1, settlement: s.id, tile: s.tile, type: s.type, owner,
-      troops: BATTLE.enemyStart[s.type] * troopMult * (!isNeutralHamlet && (s.type === 'tower' || s.type === 'fort') ? (enemy.fortTroopMult ?? 1) : 1), capMult, // Merchant Princes (PLAN-PHASE5)
+      troops: BATTLE.enemyStart[s.type] * troopMult * (!isNeutralHamlet && (s.type === 'tower' || s.type === 'fort') ? (enemy.fortTroopMult ?? 1) : 1) // Merchant Princes (PLAN-PHASE5)
+        * (!isNeutralHamlet && s.type === 'keep' ? (enemy.keepTroopMult ?? 1) : 1), // Kingslayer (PLAN-PHASE7)
+      capMult,
     };
     if (captured && captured.wallsMult !== 1 && (s.type === 'keep' || s.type === 'fort')) site.defMult = captured.wallsMult;
     rest.push(site);

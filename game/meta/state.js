@@ -15,6 +15,8 @@ import { deedBonuses } from './deeds.js';
 import { earnRenown } from './renownState.js';
 import { edictMods, defaultEdict } from './edicts.js'; // the leaf (PLAN-PHASE5): Patronage and Old Roads at a dynasty's start
 import { PROSPERITY } from '../config/prosperity.js';
+import { defaultBoons2, defaultRelics } from './boonsState.js'; // Phase 7 (PLAN-PHASE7): Boons and Relics, per dynasty
+import { placeRelics } from './relics.js';
 
 /** Faction id that always identifies the player's own realm (see FACTIONS). */
 export const PLAYER_FACTION = 0;
@@ -156,6 +158,10 @@ export function resetRegions(state, world, now) {
   state.streak = defaultStreak();
   state.grudges = defaultGrudges();
   state.trophies = defaultTrophies();
+  // Phase 7 (PLAN-PHASE7): this continent's Boons and Relics start over (the lifetime Reliquary rides in `generals`); the Relics are placed
+  state.boons2 = defaultBoons2();
+  state.relics = defaultRelics();
+  placeRelics(state, world);
   return state;
 }
 

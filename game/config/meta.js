@@ -13,7 +13,10 @@
 // longest wait per seed, win rate, battle lengths, crown rates); the reasons sit on the lines.
 // PLAN-PHASE6 §6C: every upgrade cost x this. The campaign now reads the commander-credited card (what a person sees), which
 // opens fights earlier: D1's median fell to 1.11 h. A uniform nudge keeps every ratio between lines as tuned above.
-export const UPGRADE_COST_MULT = 1.2; // 1.06 left D1 at 1.10 h, 1.12 at 1.13 h (12 seeds): D1 is mostly battle- and frontier-bound
+// PLAN-PHASE7: Boons (a draft after every battle win) and Relics took D1's median from 1.24 h to 0.93 h at 1.2 (12 seeds); 1.5 brings it
+// back to 1.13 h (1.65: 1.16 h with two D2 waits over 40 min). The War Council stays the army's engine: the campaign still buys ~97% of
+// the upgrade levels it bought without Boons. A weak lever (D1 is battle- and frontier-bound), so the Boons were trimmed first.
+export const UPGRADE_COST_MULT = 1.5; // 1.06 left D1 at 1.10 h, 1.12 at 1.13 h (12 seeds, pre-Phase-7): D1 is mostly battle- and frontier-bound
 const UPGRADE_BASE = Object.freeze({ // the pre-Phase-6 prices; UPGRADE_TUNING below applies UPGRADE_COST_MULT
   recruitment: { baseCost: 33, growth: 1.4, magnitude: 0.0333 },  // DESIGN +10%/level; a third of it, see above
   steel: { baseCost: 33, growth: 1.4, magnitude: 0.027 },         // DESIGN +8%

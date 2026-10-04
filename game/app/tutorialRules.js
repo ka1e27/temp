@@ -59,4 +59,7 @@ export const RULES = Object.freeze({
   D2: (c) => c.panelsClosed && c.cardOpen && !!c.quickReady,
   // Phase 6: an Ashen region on the frontier (its label), while no card or panel is open
   A1: (c) => c.panelsClosed && !c.cardOpen && c.ashenRegion >= 0,
+  // Phase 7: K1 lives in the first Boon draft (never picked by a scene); L1 a Relic's region on the frontier, while no card or panel is open
+  K1: () => false,
+  L1: (c) => c.panelsClosed && !c.cardOpen && c.relicRegion >= 0,
 });

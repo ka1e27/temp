@@ -54,6 +54,11 @@ import { commanderFor as edictCommander, edictMods } from './meta/edicts.js';
 import { createQuickConquest } from './app/quickConquest.js';
 import { createCeremony } from './ui/ceremony.js';
 import { createQuickOverlay } from './ui/quickOverlay.js';
+import { createBoonDraft } from './ui/boonDraft.js';
+import { createDuoReveal } from './ui/duoReveal.js';
+import { createRelicClaim } from './ui/relicClaim.js';
+import { createBoons } from './app/boons.js';
+import { shortNumber } from './ui/format.js';
 import { dynastyStarText } from './app/perkInfo.js';
 import { FEATURES as MAP_FEATURES } from './config/features.js';
 import { FEATURES } from './app/features.js';
@@ -272,6 +277,7 @@ function boot() {
     if (battlesRef) battlesRef.reset(); // so were its running battles (state.battles): forget the old runtimes
     if (frontierRef) frontierRef.reset();
     if (services && services.goals) services.goals.reset();
+    if (services && services.boons) services.boons.reset();
   }
 
   const autosave = createAutosave({
@@ -348,6 +354,7 @@ function boot() {
       onGenerals: () => worldScene.onGeneralsOpen(),
       onSettings: () => openSettings(),
       onEventReopen: () => { services.events.reopen(); worldScene.updateHudNow?.(); },
+      onBoonReopen: () => { services.boons.openPending(); worldScene.updateHudNow?.(); },
     }),
     regionCard: createRegionCard({
       crownTexts: CROWN_TEXTS,
@@ -382,7 +389,16 @@ function boot() {
       onSaveMap: () => worldScene.onSaveMap(),
       onClose: () => worldScene.onRealmClose(),
       onBuyLegacy: (id) => worldScene.onBuyLegacy(id, 'realm'),
+      onOpenDraft: () => services.boons.openPending(),
     }),
+    // Phase 7 (PLAN-PHASE7): the Boon draft, the Duo reveal and the Relic claim moment (app/boons.js drives all three)
+    boonDraft: createBoonDraft({
+      onPick: (id) => services.boons.onPick(id),
+      onReroll: () => services.boons.onReroll(),
+      onLater: () => services.boons.onLater(),
+    }),
+    duoReveal: createDuoReveal({ onDone: () => services.boons.onDuoDone() }),
+    relicClaim: createRelicClaim({ onDone: () => services.boons.onClaimDone() }),
     // Phase 5 (PLAN-PHASE5): the founding ceremony that replaced the old confirm, and Quick Conquest's short overlay
     ceremony: createCeremony({
       onBuyLegacy: (id) => worldScene.onBuyLegacy(id, 'ceremony'),
@@ -692,7 +708,8 @@ function boot() {
       if (g && c.wounded) ui.toasts.update({ id: `wound-${c.id}`, type: 'warning', icon: 'shield', message: `${g.name} is wounded and rests for a while (Renown heals at once)`, duration: 5200 });
       if (c.levels > 0) tutorial.notify('generalLevelUp');
     }
-    if (out.result && out.result.recruited) showRecruit(out.result.recruited, out.regionId);
+    // Phase 7: after a watched win the post-battle moments go one at a time (app/boons.js: Relic claim -> recruit -> Boon draft); otherwise at once
+    if (out.result && out.result.recruited) { const rid = out.result.recruited; if (!services.boons || !services.boons.holdMoment((done) => showRecruit(rid, out.regionId, done))) showRecruit(rid, out.regionId); }
     // a varied map (DESIGN 10.13): the Dragon slain gives the realm Dragonscale; a Duel's end goes in the Chronicle
     if (out.result && out.result.dragonscale) {
       ui.toasts.update({ id: 'dragonscale', type: 'success', icon: 'shield', message: `The Dragon is slain! ${MAP_FEATURES.copy.dragonscale}`, duration: 7000 });
@@ -706,12 +723,21 @@ function boot() {
   }
   services.onDeeds = onDeeds;
   services.battles.on('finished', (id, out) => onDeeds(out)); // every finished battle, watched or not (surrenders call onDeeds themselves)
+  // Phase 7: Plunderers' gold and Fortune Favours' price, said once per battle (meta/boons.js boonBattleEnd, applied by the battle manager)
+  services.battles.on('finished', (id, out, snapshot) => {
+    const bb = snapshot && snapshot.boons;
+    if (!bb) return;
+    if (bb.plunder > 0) ui.toasts.update({ id: 'boon-plunder', type: 'success', icon: 'boonSack', message: `Plunderers: +${shortNumber(bb.plunder)} gold`, duration: 3600 });
+    if (bb.goldLost > 0) ui.toasts.update({ id: 'boon-fortune', type: 'warning', icon: 'boonDice', message: `Fortune Favours: the loss cost ${shortNumber(bb.goldLost)} gold`, duration: 5200 });
+  });
 
   /** "Gorran Redhand, the Crimson Champion, joins your cause": a short card with the champion's line, and a Chronicle entry. */
-  function showRecruit(id, regionId) {
+  function showRecruit(id, regionId, onClosed) {
     const { state, world } = cur();
     const g = generalById(state, id);
-    if (!g) return;
+    if (!g) { onClosed?.(); return; }
+    let closed = false;
+    const close = () => { modal.destroy(); if (!closed) { closed = true; onClosed?.(); } };
     const kind = GENERALS.kinds[g.kind] || {};
     const factionId = Number(String(id).split(':')[1]);
     const faction = world.factions[factionId];
@@ -729,8 +755,8 @@ function boot() {
         h('p.recruit-title', {}, `${g.name}, ${title}`),
         h('p.recruit-line', {}, `"${line}"`),
         h('p.recruit-what', {}, `${kind.title || 'Champion'} · ${GENERALS.copy.styleNames[g.style] || ''} · Ability: ${GENERALS.copy.abilityNames[(kind.ability) || ''] || ''}`)),
-      actions: [{ label: 'Welcome', variant: 'primary', onClick: () => modal.destroy() }],
-    }, { onDismiss: () => modal.destroy() });
+      actions: [{ label: 'Welcome', variant: 'primary', onClick: () => close() }],
+    }, { onDismiss: () => close() });
     modal.el.classList.add('is-recruit');
     document.body.appendChild(modal.el);
     sfx.play('victory', { volume: 0.5 });
@@ -783,6 +809,8 @@ function boot() {
   // Phase 5 (docs/PLAN-PHASE5.md): Edicts, Legacy, Challenges, Quick Conquest
   services.starText = dynastyStarText;
   services.dynasty = createDynasty({ getState: () => cur().state, getWorld: () => cur().world, container, ui, services });
+  services.boons = createBoons({ getState: () => cur().state, getWorld: () => cur().world, ui, services, sfx, tutorial });
+  services.onBoonsChanged = () => { if (sceneManager.name === 'world') { worldScene.updateHudNow?.(); worldScene.refreshRealmIfOpen?.(); } };
   services.quick = createQuickConquest({ getState: () => cur().state, getWorld: () => cur().world, ui, services });
   services.onQuickReady = () => { if (sceneManager.name === 'world') worldScene.devRefreshCard(); };
   services.sceneName = () => sceneManager.name;
@@ -864,6 +892,7 @@ function boot() {
       siteInfo: () => battleScene.siteInfo(),
       featureInfo: () => battleScene.featureInfo(),
       ashenInfo: () => battleScene.ashenInfo(), // Phase 6: rises, burns, Risings, wisps
+      boonFxInfo: () => battleScene.boonInfo(), // Phase 7: boonTriggered counts, pops, Scorched Earth ground
       afterFrame,
       tutorialArrow: () => battleScene.tutorialArrow(),
       dragInfo: () => battleScene.dragInfo(),
@@ -889,6 +918,11 @@ function boot() {
       /** Dev/checks (Phase 5): own every region at once (the founding button shows), then the world refreshes. */
       completeRealm: () => worldScene.devCompleteRealm(),
       get dynasty() { return services.dynasty; },
+      /** Dev/checks (Phase 7): app/boons.js; an offer now (`offerBoons(['engineers', ...])` or `offerBoons('champion')`), Boons owned at once, a Relic placed. */
+      get boons() { return services.boons; },
+      offerBoons: (choices, source) => services.boons.devOffer(choices, source),
+      grantBoons: (ids) => services.boons.devGrant(ids),
+      placeRelic: (regionId, relicId) => { const p = services.boons.devPlaceRelic(regionId, relicId); worldScene.markDirtyNow?.(); return p; },
       /** Dev/checks (Phase 5): grant Legacy points (for the Realm panel's tree). */
       grantLegacy: (n) => { const l = services.dynasty.devGrant(n); worldScene.onGoalsChanged?.(); return l; },
       get battlePhase() { return battleScene.phase; },
@@ -1078,6 +1112,7 @@ function boot() {
       services.frontier.tick(dt);
       services.events.tick(dt);
       if (sceneManager.name !== 'title' && sessionStarted) services.goals.tick(dt);
+      if (sceneManager.name !== 'title' && sessionStarted) services.boons.tick(sceneManager.name);
       sceneManager.frame(dt, tAccum, nowMs);
       updateTray();
       ui.coach.tick(); // the hint follows its target: placed against this frame's final camera

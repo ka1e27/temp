@@ -22,4 +22,5 @@
 @import url('./components/regions.css');
 @import url('./components/goals.css'); /* Phase 4: bounties, streak, deeds, trophies, grudges, vendettas */
 @import url('./components/dynasty.css'); /* Phase 5: the founding ceremony, Legacy, Edicts, Challenges, Quick Conquest */
+@import url('./components/boons.css'); /* Phase 7: the Boon draft, the Duo reveal, the owned-Boons strip, Relics and the Reliquary */
 @import url('./components/a11y.css'); /* last: it only ever RAISES sizes (touch targets), so it must win the cascade */

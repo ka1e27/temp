@@ -7,6 +7,7 @@ import { loadFrom } from '../meta/save.js';
 import { foundDynasty } from '../meta/progression.js';
 import { chronicleOnDynasty } from '../meta/chronicle.js';
 import { worldOptsFor } from '../meta/edicts.js';
+import { syncRelics } from '../meta/relics.js';
 
 function randomSeed() {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
@@ -45,6 +46,7 @@ export function createStateContainer({ storage, now }) {
         else if (!Array.isArray(state.conqueredAt) || state.conqueredAt.length !== world.regions.length) {
           state.conqueredAt = world.regions.map((r, i) => (state.owner[i] === 0 ? now() : null));
         }
+        try { syncRelics(state, world); } catch (err) { console.warn('[relics] sync skipped:', err); } // Phase 7: a save from before Relics gets its chests
         return { state, world, resumed: true };
       } catch {
         // A corrupt/foreign seed (or a worldgen regression) must never brick the boot:
@@ -129,6 +131,7 @@ export function createStateContainer({ storage, now }) {
       world = newWorld;
       state = newState;
       epoch += 1;
+      try { syncRelics(state, world); } catch (err) { console.warn('[relics] sync skipped:', err); }
       return true;
     } catch {
       return false;

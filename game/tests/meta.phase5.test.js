@@ -322,7 +322,7 @@ test('Legacy and Edict effects: Masons, Old Alliances, Veteran Camp, Swift Banne
   // Long Winter: +1 Renown for a Blizzard region; Age of Dragons: the Lair pays x2 Renown
   const lw = generateWorld(8, { edict: 'longWinter' });
   const ls = withEdict(createGame(8, lw, 0), 'longWinter');
-  const bl = lw.regions.find((x) => x.twist === 'blizzard' && !x.type);
+  const bl = lw.regions.find((x) => x.twist === 'blizzard' && !x.type && !ls.relics.placed[x.id]); // no Relic there (PLAN-PHASE7: its claim pays Renown too)
   assert.equal(conquer(ls, lw, bl.id, 0).renown, 1);
   const ad = generateWorld(8, { edict: 'ageOfDragons' });
   const as = withEdict(createGame(8, ad, 0), 'ageOfDragons');

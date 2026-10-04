@@ -18,7 +18,7 @@ const BIG_JUMP_RATIO = 0.05;
  *   `pulse` forces the big flash; `quiet` (idle drift) suppresses every pulse/flash and re-aims a
  *   running roll instead of restarting it.
  */
-export function createHud({ onCouncil, onRealm, onRegions, onSettings, onGenerals, onEventReopen } = {}) {
+export function createHud({ onCouncil, onRealm, onRegions, onSettings, onGenerals, onEventReopen, onBoonReopen } = {}) {
   let displayedGold = 0;
   let lastTargetGold = 0;
   let rafId = null;
@@ -79,7 +79,11 @@ export function createHud({ onCouncil, onRealm, onRegions, onSettings, onGeneral
   streakChip.hidden = true;
   const eventPip = h('button.hud-pip.hud-event-pip', { type: 'button', onClick: () => onEventReopen?.(), 'aria-label': 'Reopen the offer' }, icon('envelope', 18));
   eventPip.hidden = true;
-  const tabsEl = h('div.hud-tabs', {}, streakChip, eventPip);
+  // Phase 7: the "Boon pending" chip (a draft left for later, or offered after a battle nobody watched) reopens the draft
+  const boonChip = h('button.hud-boon-chip', { type: 'button', onClick: () => onBoonReopen?.(), 'aria-label': 'Boon pending: choose it' },
+    icon('boonCard', 16), h('span.hud-boon-chip-word', {}, 'Boon'));
+  boonChip.hidden = true;
+  const tabsEl = h('div.hud-tabs', {}, streakChip, eventPip, boonChip);
 
   const el = h('div.hud', {},
     goldBlockEl,
@@ -211,6 +215,14 @@ export function createHud({ onCouncil, onRealm, onRegions, onSettings, onGeneral
       const label = show ? data.eventPip.label || 'Reopen the offer' : 'Reopen the offer';
       if (eventPip.getAttribute('aria-label') !== label) { eventPip.setAttribute('aria-label', label); eventPip.title = label; }
     }
+    if (data.boonPending !== undefined) {
+      const show = !!data.boonPending;
+      if (boonChip.hidden === show) boonChip.hidden = !show;
+      const champ = !!(data.boonPending && data.boonPending.champion);
+      boonChip.classList.toggle('is-champion-eye', champ);
+      const label = champ ? "The Champion's eye: a Boon to choose" : 'Boon pending: choose it';
+      if (boonChip.getAttribute('aria-label') !== label) { boonChip.setAttribute('aria-label', label); boonChip.title = label; }
+    }
     if (data.boardNews !== undefined) {
       const on = !!data.boardNews;
       if (regionsDot.hidden === on) regionsDot.hidden = !on;
@@ -254,5 +266,5 @@ export function createHud({ onCouncil, onRealm, onRegions, onSettings, onGeneral
     clearTimeout(flashTimeout);
   }
 
-  return { el, update, destroy, tabsEl };
+  return { el, update, destroy, tabsEl, boonChip };
 }

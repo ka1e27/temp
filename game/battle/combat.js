@@ -6,6 +6,7 @@ import { worldDist, hexRadiusToWorld } from './geom.js';
 import { squadPosition } from './position.js';
 import { PLAYER_OWNER, FREE_FOLK_OWNER } from './owner.js';
 import { towerRangeMult } from './features.js';
+import { towerIntervalMult, towerIgnores, onArrow } from './boons.js';
 
 export { PLAYER_OWNER, FREE_FOLK_OWNER };
 
@@ -143,6 +144,7 @@ export function resolveTowerVolleys(battle, runtime, t) {
     let bestDist = Infinity;
     for (const squad of battle.squads) {
       if (squad.owner === site.owner || isDead(squad.count) || squad.noArrows) continue; // Raid squads with the skill ride through arrows
+      if (towerIgnores(battle, site, squad)) continue; // Night Raiders (PLAN-PHASE7)
       const pos = squadPosition(battle, squad);
       const d = worldDist(towerTile, pos);
       if (d <= rangeWorld && d < bestDist) {
@@ -150,10 +152,10 @@ export function resolveTowerVolleys(battle, runtime, t) {
         best = squad;
       }
     }
-    site.nextVolley = t + cfg.volleySec;
+    site.nextVolley = t + cfg.volleySec * towerIntervalMult(battle, site); // Engineers (PLAN-PHASE7): towers you hold, twice as fast
     if (!best) continue;
     const stats = ownerStats(site.owner, player, arena.enemyFaction, enemy);
-    const kills = cfg.volleyKills * stats.atk;
+    const kills = onArrow(battle, site, best, cfg.volleyKills * stats.atk, t); // Phalanx cuts it; Fire Arrows ignite (PLAN-PHASE7)
     best.count = Math.max(0, best.count - kills);
     const pos = squadPosition(battle, best);
     battle.events.push({

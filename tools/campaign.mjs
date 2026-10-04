@@ -150,6 +150,9 @@ import { edictChoices, worldOptsFor } from '../game/meta/edicts.js';
 import * as Quick from '../game/meta/quick.js';
 import { legacyPointsForFounding, legacyInfo, legacyTree } from '../game/meta/legacy.js';
 import { resetRegions } from '../game/meta/state.js';
+import * as Boons from '../game/meta/boons.js';
+import { relicAt } from '../game/meta/relics.js';
+import { BOON_LIST } from '../game/config/boons.js';
 
 // --- Tuning knobs for the VIRTUAL PLAYER (not game balance — see file header) -------------
 const CORE_ARMY = ['recruitment', 'steel', 'armour', 'muster'];
@@ -171,6 +174,8 @@ const INTEL_FINISHER_FACTOR = 6; // --intel=finisher: buy scout+sabotage only wh
 const NO_PROGRESS_STALL_LIMIT = 400;
 
 const TYPE_PREFERENCE = { goldmine: 1.6, monastery: 1.3, bandit: 1.1, ruins: 1.1, dragon: 1 }; // value score x this by region type
+const RELIC_PREFERENCE = 1.4; // a region holding a Relic (PLAN-PHASE7 §7B): the value score x this, the route choice a player makes
+const BOON_AHEAD_WINS = 5;   // the bot takes a Cursed Boon only when its last this-many battles were all won (PLAN-PHASE7: "unless ahead")
 const RETAKE_PREFERENCE = 3; // an occupied region's value score x this: the player wants its own land back first
 const FORT_THREAT = 0.9;     // a border region is fortified once its unattended odds read below this (or once it has been raided)
 const FORT_UPGRADE_SEC = 8;   // --forts=normal: a level-II fortification only when it costs at most this many seconds of income
@@ -359,6 +364,36 @@ function buyingPass(state, world, conquestCount, flags, goldSpent) {
 let raidCtx = null; // { state, mode: 'idle'|'playing', log } while a campaign with raids runs
 let genCtx = null;  // { busy: generalId|null, noSpend, log } while a campaign with Generals runs
 let quickCtx = null; // { n, won } while a campaign that may Quick-Conquer runs
+let boonCtx = null;  // { recent: [won...], picks: [{ id, at }], force } while a campaign with Boons runs (off with --boons=off)
+
+const RARITY_RANK = { legendary: 3, rare: 2, common: 1 };
+/**
+ * The Boon policy (PLAN-PHASE7 contract): the highest rarity on offer; a Cursed Boon only when the bot is ahead (its last
+ * BOON_AHEAD_WINS battles all won); ties broken by a seeded hash so every Boon gets picked somewhere. --boonForce=id: always that
+ * Boon when it is offered (and it is granted at the start of each dynasty, see runCampaign). Never rerolls.
+ */
+function botPickBoon(state, nowSec) {
+  const p = state.boons2 && state.boons2.pending;
+  if (!boonCtx || !p) return null;
+  const ahead = boonCtx.recent.length >= BOON_AHEAD_WINS && boonCtx.recent.slice(-BOON_AHEAD_WINS).every(Boolean);
+  const infos = p.choices.map((id) => Boons.boonInfo(id)).filter(Boolean);
+  const ok = infos.filter((b) => ahead || !b.cursed);
+  const pool = ok.length ? ok : infos;
+  pool.sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || hash32(state.seed, 'botBoon', a.id) - hash32(state.seed, 'botBoon', b.id));
+  const r = Boons.pickBoon(state, pool[0].id);
+  if (r.ok) boonCtx.picks.push({ id: pool[0].id, at: nowSec, duo: r.duo ? r.duo.id : null });
+  return r;
+}
+
+/** Notes a finished battle for the Cursed rule and settles the Boons' end-of-battle gold (Plunderers, Fortune Favours). */
+function boonsAfterBattle(state, world, battle, result) {
+  const g = Boons.boonBattleEnd(state, world, battle, result); // also with --boons=off: a --boonForce Boon still pays / costs
+  if (!boonCtx) return;
+  boonCtx.recent.push(result === 'win');
+  if (boonCtx.recent.length > 20) boonCtx.recent.shift();
+  boonCtx.plunder += g.plunder;
+  boonCtx.goldLost += g.goldLost;
+}
 const QUICK_SEC = 2; // a Quick Conquest's overlay: the player's time it takes
 
 /** The General commanding a new battle in the campaign, or null for the Militia Captain (see the header). */
@@ -430,7 +465,9 @@ function fightRaid(state, world, raid, nowMs, inPerson, log) {
   }
   const won = b.result === 'win';
   // defenseReward settles every defense (a lost Vendetta resets its Grudge), then a loss is occupied
-  Frontier.defenseReward(state, world, run, won ? 'win' : 'lose', nowMs);
+  const reward = Frontier.defenseReward(state, world, run, won ? 'win' : 'lose', nowMs);
+  boonsAfterBattle(state, world, b, won ? 'win' : 'lose');
+  if (reward && reward.boonOffer) { botPickBoon(state, nowMs / 1000); if (boonCtx) boonCtx.champEye += 1; } // the Champion's eye
   if (!won) Frontier.occupy(state, world, run.regionId, run.attackerFaction, nowMs);
   bountyBattle(state, world, run, b, tracker, nowMs);
   if (run.vendetta) { log.vendettas.n += 1; if (won) log.vendettas.won += 1; if (b.champion && b.champion.fellAt != null) log.vendettas.championFell += 1; }
@@ -657,6 +694,7 @@ function rankTargets(candidates, state, world) {
     if (!perkCounts[region.perk]) score *= PERK_PREFERENCE_MULT;
     if (Frontier.occupationOf(state, c.regionId)) score *= RETAKE_PREFERENCE;
     if (region.type) score *= TYPE_PREFERENCE[region.type] ?? 1; // Gold Mines and Monasteries make route choice matter (DESIGN §10.13)
+    if (relicAt(state, c.regionId)) score *= RELIC_PREFERENCE;
     return { ...c, score };
   });
   scored.sort((a, b) => b.score - a.score || a.regionId - b.regionId);
@@ -691,6 +729,7 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
     advanceClock(state, world, wallSecRef, QUICK_SEC);
     const out = Quick.finishQuickConquest(state, world, job, wallSecRef.sec * 1000);
     quickCtx.n += 1; if (out.won) quickCtx.won += 1;
+    if (boonCtx) boonCtx.recent.push(out.won);
     if (out.won) {
       return { won: true, surrendered: false, quick: true, battleSec: QUICK_SEC, bounty: out.conquerResult.bounty, crowns: out.crowns,
         crownBonus: out.crownAward.bonusGold, diffAtAttack, region, timedOut: false, personality: world.factions[region.faction].personality };
@@ -734,12 +773,15 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
     band: bandFor(region), sec: battleSec, timedOut, won: battle.result === 'win',
     ratio: diffAtAttack.ratio, label: diffAtAttack.label, tier: region.tier, personality: enemy.personality,
     capital: region.isCapital, sites: region.settlements.length, regionId,
+    boons: state.boons2 ? state.boons2.owned.slice() : [], dynasty: state.dynasty.level, // PLAN-PHASE7: the per-Boon report
   });
 
   const attackRun = { kind: 'attack', regionId, commander: general ? general.id : null, labelAtAttack: diffAtAttack.label };
   if (!timedOut && battle.result === 'win') {
     const wasOccupied = !!Frontier.occupationOf(state, regionId);
-    const conq = conquer(state, world, regionId, wallSecRef.sec * 1000);
+    const conq = conquer(state, world, regionId, wallSecRef.sec * 1000, { viaBattle: !!boonCtx, labelAtAttack: diffAtAttack.label }); // PLAN-PHASE7: a battle win drafts Boons (Fair or harder, typed, capitals)
+    boonsAfterBattle(state, world, battle, 'win');
+    if (conq.boonOffer) botPickBoon(state, wallSecRef.sec);
     const { bounty } = conq;
     if (bountyCtx) {
       bountyBattle(state, world, attackRun, battle, tracker, wallSecRef.sec * 1000);
@@ -755,6 +797,7 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
     };
   }
   onStreakBroken(state, timedOut ? 'retreat' : 'lost'); // a lost attack (or a retreat) ends the Conquest Streak (PLAN-PHASE4 §4B)
+  boonsAfterBattle(state, world, battle, timedOut ? 'retreat' : 'lose');
   bountyBattle(state, world, attackRun, battle, tracker, wallSecRef.sec * 1000);
   return {
     won: false, surrendered: false, battleSec, diffAtAttack, region, timedOut,
@@ -831,6 +874,11 @@ export function runCampaign(seed, flags = {}, carry = null) {
   if (genCtx) Generals.ensureGenerals(state);
   const quickLog = { n: 0, won: 0 };
   quickCtx = flags.quick === 'off' ? null : quickLog;
+  // PLAN-PHASE7: Boons (--boons=off: never drafted). --boonForce=id grants that Boon at the start of the dynasty (the per-Boon sweep)
+  const boonLog = { recent: [], picks: [], plunder: 0, goldLost: 0, champEye: 0 };
+  boonCtx = flags.boons === 'off' ? null : boonLog;
+  if (flags.relics === 'off' && state.relics) { state.relics.placed = {}; state.relics.seed = world.seed >>> 0; } // --relics=off: the pre-Phase-7 baseline
+  if (flags.boonForce && state.boons2 && !state.boons2.owned.includes(flags.boonForce) && BOON_LIST.some((b) => b.id === flags.boonForce)) state.boons2.owned.push(flags.boonForce);
 
   for (let iter = 0; iter < MAX_LOOP_ITERATIONS && (conquestCount = netOwned()) < totalToConquer; iter++) {
     if (wallSecRef.sec > (flags.checkinHours ? 90 * MAX_WALL_SEC : MAX_WALL_SEC)) {
@@ -989,6 +1037,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
   raidCtx = null;
   bountyCtx = null;
   quickCtx = null;
+  boonCtx = null;
   const goals = {
     bounties: bountyLog,
     bestStreak: state.streak ? state.streak.best : 0,
@@ -1012,6 +1061,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
     generals: genSummary,
     goals,
     quick: quickLog,
+    boons: { ...boonLog, recent: undefined, owned: state.boons2 ? state.boons2.owned.slice() : [], relics: state.relics ? state.relics.owned.slice() : [], reliquary: state.generals && state.generals.reliquary ? state.generals.reliquary.found.length : 0 },
     lairTaken: lairId >= 0 && state.owner[lairId] === PLAYER_FACTION,
     raids: flags.raids === 'off' ? null : { ...raidLog, stats: { ...(state.frontier ? state.frontier.stats : {}) }, activeSec: state.frontier ? state.frontier.activeSec : 0 },
   };
@@ -1400,6 +1450,40 @@ function printOffline(results, flags) {
 }
 
 /** --dynasties=N: per-seed whole-continent time of each dynasty, longest waits, and the ratios to dynasty 1. */
+const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+const pct = (rs, fn) => { const bs = rs.flatMap((r) => r.battleDurations); return bs.length ? `${Math.round((100 * bs.filter(fn).length) / bs.length)}%` : '-'; };
+
+/**
+ * PLAN-PHASE7 pacing guard: win rate and battle time per Boon. Every attack battle the campaigns fought is tagged with the Boons owned
+ * at the time; for each Boon, the battles with it are compared with the battles WITHOUT it in the same dynasty level (the progression
+ * confound is the same on both sides only roughly: later battles carry more Boons, so read the deltas, not the absolutes).
+ */
+export function boonTable(all) {
+  const battles = all.flat().flatMap((r) => r.battleDurations.filter((b) => Array.isArray(b.boons)));
+  const rows = [];
+  for (const boon of BOON_LIST) {
+    const w = battles.filter((b) => b.boons.includes(boon.id));
+    if (!w.length) { rows.push({ id: boon.id, n: 0 }); continue; }
+    const levels = new Set(w.map((b) => b.dynasty));
+    const wo = battles.filter((b) => !b.boons.includes(boon.id) && levels.has(b.dynasty));
+    const stat = (xs) => ({ n: xs.length, win: xs.filter((b) => b.won).length / Math.max(1, xs.length), sec: mean(xs.map((b) => b.sec)) });
+    rows.push({ id: boon.id, rarity: boon.rarity, cursed: boon.cursed, with: stat(w), without: stat(wo) });
+  }
+  return rows;
+}
+
+function printBoonTable(all) {
+  const rows = boonTable(all).filter((r) => r.n !== 0).sort((a, b) => (a.with.sec - a.without.sec) - (b.with.sec - b.without.sec));
+  console.log('\n=== per-Boon battles (with vs without, same dynasty levels) ===');
+  console.log('  boon             rarity     n   win%   sec  |  w/o n  win%   sec  | Δwin  Δsec');
+  for (const r of rows) {
+    const d = (r.with.win - r.without.win) * 100;
+    console.log(`  ${r.id.padEnd(16)} ${(r.rarity + (r.cursed ? '*' : '')).padEnd(10)} ${String(r.with.n).padStart(3)}  ${(r.with.win * 100).toFixed(0).padStart(4)}  ${r.with.sec.toFixed(0).padStart(4)}  |  ${String(r.without.n).padStart(4)}  ${(r.without.win * 100).toFixed(0).padStart(4)}  ${r.without.sec.toFixed(0).padStart(4)}  | ${d >= 0 ? '+' : ''}${d.toFixed(0).padStart(3)}  ${(r.with.sec - r.without.sec).toFixed(0).padStart(4)}`);
+  }
+  const never = boonTable(all).filter((r) => r.n === 0).map((r) => r.id);
+  if (never.length) console.log('  never owned in a battle: ' + never.join(', '));
+}
+
 function printDynasties(seeds, flags) {
   const n = Number(flags.dynasties);
   const all = seeds.map((seed) => runDynasties(seed, n, flags));
@@ -1424,8 +1508,10 @@ function printDynasties(seeds, flags) {
     const q = rs.reduce((acc, r) => ({ n: acc.n + (r.quick ? r.quick.n : 0), won: acc.won + (r.quick ? r.quick.won : 0) }), { n: 0, won: 0 });
     const edicts = d > 0 ? all.map((a) => (a[d - 1] && a[d - 1].founding ? a[d - 1].founding.edict || '-' : '-')) : [];
     if (d > 0) console.log(`      phase 5: Edicts ${edicts.join(' ')}; Legacy bought ${all[0][d - 1] && all[0][d - 1].founding ? all[0][d - 1].founding.legacyBuys.join('+') || '-' : '-'} (seed ${seeds[0]}); Quick Conquests ${q.won}/${q.n}`);
+    if (rs[0] && rs[0].boons) console.log(`      phase 7: Boons owned ${med((r) => r.boons.owned.length)} per seed (picks ${med((r) => r.boons.picks.length)}, duos ${rs.reduce((a, r) => a + r.boons.picks.filter((p) => p.duo).length, 0)}, champion's eye ${rs.reduce((a, r) => a + r.boons.champEye, 0)}), Relics ${med((r) => r.boons.relics.length)} per seed, Reliquary ${med((r) => r.boons.reliquary)}; plunder ${Math.round(med((r) => r.boons.plunder))}g, Fortune lost ${Math.round(med((r) => r.boons.goldLost))}g; battles won ${pct(rs, (b) => b.won)}, mean battle ${Math.round(mean(rs.flatMap((r) => r.battleDurations.map((b) => b.sec))))} s`);
     console.log(`      goals: contracts ${med((r) => r.goals.bounties.completed)} per seed (${Math.round(med((r) => r.goals.bounties.gold))}g), best streak ${med((r) => r.goals.bestStreak)}, vendettas ${v.n} (won ${v.won}, champion fell ${v.fell}), trophies ${med((r) => r.goals.trophies)}, deed tiers ${med((r) => r.goals.deedTiers)}; by kind ${Object.entries(kinds).map(([k, n]) => k + ' ' + n).join(', ')}`);
   }
+  return all;
 }
 
 async function main() {
@@ -1433,7 +1519,7 @@ async function main() {
   const flags = parseArgs(process.argv.slice(2));
   const seeds = (flags.seeds ? String(flags.seeds).split(',') : ['1', '2', '3', '4', '5']).map(Number);
 
-  if (Number(flags.dynasties) > 1) { printDynasties(seeds, flags); return; }
+  if (Number(flags.dynasties) > 1) { const all = printDynasties(seeds, flags); if (flags.boonReport) printBoonTable(all); return; }
   const results = seeds.map((seed) => runCampaign(seed, flags));
 
   if (flags.json) {

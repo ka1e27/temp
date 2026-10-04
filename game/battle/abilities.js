@@ -14,6 +14,7 @@ import { PLAYER_OWNER } from './owner.js';
 import { tileAt } from './runtime.js';
 import { routeFor, canRoute } from './routing.js';
 import { recentLosses } from './fallen.js';
+import { abilityExtraUses } from './boons.js';
 
 
 /** `{ id, ready, used }` for the HUD button, or null when nobody with an ability commands. */
@@ -28,7 +29,8 @@ export function abilityState(battle) {
 /** Uses per battle: 1, or `ability.uses` (the Warrior Kings Edict, PLAN-PHASE5). */
 function abilityUses(battle) {
   const u = battle.player && battle.player.ability ? battle.player.ability.uses : 1;
-  return Number.isInteger(u) && u > 1 ? u : 1;
+  const base = Number.isInteger(u) && u > 1 ? u : 1;
+  return base + abilityExtraUses(battle, base, usedCount(battle)); // Banner Bearer (PLAN-PHASE7): one recharge, abilityRechargeSec after use
 }
 
 /** Uses spent: `battle.abilityCount`, or 1 for a battle saved before it existed that has `abilityUsed`. */

@@ -164,12 +164,18 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       await q((id) => window.__hd.startBattle(id), cap);
       ok(await t.waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live', 30000), `generals ${name}: the capital battle is live`);
       await sleep(500);
-      await winAndContinue('the capital');
+      // Phase 7: the post-battle moments go one at a time BEFORE the scene leaves (Relic claim -> recruit card -> Boon draft), so the recruit card
+      // now opens over the arena and the map follows its Welcome
+      await q(() => window.__hd.winBattle());
+      ok(await t.waitFor(() => { const c = document.querySelector('.results-card'); return !!c && !c.hidden && c.dataset.result === 'victory'; }, 30000), `generals ${name}: the capital: Victory`);
+      await sleep(1500);
+      ok(await t.clickText('.results-action', 'Continue'), `generals ${name}: the capital: Continue`);
       ok(await t.waitFor(() => { const m = document.querySelector('.modal-backdrop.is-recruit, .is-recruit'); return !!m && /joins your cause/.test(m.textContent); }, 6000), `generals ${name}: the recruitment card says the champion joins your cause`);
       ok(await q((n) => window.__hd.state.generals.roster.length === n + 1 && window.__hd.state.generals.roster.some((g) => g.id.startsWith('champion:')), before2), `generals ${name}: the champion is on the roster`);
       ok(await q(() => window.__hd.state.chronicle.entries.some((e) => e.kind === 'recruit')), `generals ${name}: and in the Chronicle`);
       await t.clickText('.modal-actions button', 'Welcome');
-      await sleep(500);
+      ok(await t.waitFor(() => window.__hd.scene === 'world', 15000), `generals ${name}: the capital: back on the map`);
+      await sleep(800);
     }
 
     // 7. Found a Dynasty: the Generals persist, Renown resets

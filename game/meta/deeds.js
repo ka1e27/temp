@@ -126,7 +126,7 @@ export function drainDeedNews(state) {
 
 const NEUTRAL = Object.freeze({
   incomeMult: 1, defenceMult: 1, bountyMult: 1, attackVs: Object.freeze({}), renownAtDynastyStart: 0, freeRerolls: 0,
-  streakWindowSec: 0, festivalDiscount: 0, xpMult: 1, fortCostMult: 1, renownPerDuel: 0, vsVendetta: 1,
+  streakWindowSec: 0, festivalDiscount: 0, xpMult: 1, fortCostMult: 1, renownPerDuel: 0, vsVendetta: 1, renownPerRelic: 0,
 });
 
 const clampCap = (stat, v) => {
@@ -169,6 +169,7 @@ export function deedBonuses(state) {
     fortCostMult: 1 + v('fortCostMult'),
     renownPerDuel: Math.floor(v('renownPerDuel')),
     vsVendetta: 1 + v('vsVendetta'),
+    renownPerRelic: Math.floor(v('renownPerRelic')), // the Reliquarian (PLAN-PHASE7): relics.claimRelic pays it
   };
 }
 

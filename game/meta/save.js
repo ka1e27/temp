@@ -21,6 +21,7 @@ import { sanitizeGrudges, sanitizeTrophies } from './grudges.js';
 import { sanitizeEdict } from './edicts.js';
 import { sanitizeRivals } from './rivals.js';
 import { sanitizeLegacy } from './legacy.js';
+import { sanitizeBoons2, sanitizeRelics } from './boonsState.js';
 import { UPGRADES } from './upgrades.js';
 import { FACTIONS } from '../config/world.js';
 
@@ -236,6 +237,10 @@ function withDefaults(raw) {
     // inside `generals` (below)
     edict: sanitizeEdict(src.edict),
     rivals: sanitizeRivals(src.rivals), // PLAN-PHASE6: a save from before rotation keeps the classic three
+    // Phase 7 (PLAN-PHASE7): this dynasty's Boons and Relics (an old save: none owned; relics.syncRelics places the Relics on load).
+    // The lifetime Reliquary rides inside `generals` (sanitizeGenerals)
+    boons2: sanitizeBoons2(src.boons2),
+    relics: sanitizeRelics(src.relics),
   };
 }
 

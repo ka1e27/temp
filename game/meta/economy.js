@@ -10,6 +10,7 @@ import { worksIncomeMult } from './worksEffects.js'; // the leaf (DESIGN §5.8):
 import { typeIncomeMult } from './featuresState.js'; // the leaf (DESIGN §10.13): a Gold Mine pays more
 import { deedBonuses } from './deeds.js'; // the leaf (PLAN-PHASE4 §4C): the Conqueror and Crowned deeds
 import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Age of Iron -15% income
+import { boonMods } from './boonsState.js'; // the leaf (PLAN-PHASE7): the Royal Hoard
 
 /**
  * Gold/s a single region pays, before taxes/perks/dynasty stars.
@@ -39,7 +40,18 @@ export function incomePerSec(state, world) {
   const taxMult = 1 + levelOf(state, 'taxes') * UPGRADES.taxes.magnitude;
   const perks = perkMultipliers(state, world);
   const starMult = 1 + state.dynasty.stars * DYNASTY.incomePerStar;
-  return sum * taxMult * perks.income * starMult * deedBonuses(state).incomeMult * edictMods(state).incomeMult;
+  const base = sum * taxMult * perks.income * starMult * deedBonuses(state).incomeMult * edictMods(state).incomeMult;
+  return base * (1 + hoardBonus(state, base)); // the Royal Hoard Boon (PLAN-PHASE7)
+}
+
+/**
+ * The Royal Hoard Boon (PLAN-PHASE7): +hoardStep income for every hoardStepSec seconds of income (`baseIncome`, before the Hoard)
+ * held unspent, up to hoardMax. 0 without the Boon.
+ */
+export function hoardBonus(state, baseIncome) {
+  const m = boonMods(state);
+  if (!(m.hoardStepSec > 0) || !(baseIncome > 0) || !(state.gold > 0)) return 0;
+  return Math.min(m.hoardMax, m.hoardStep * Math.floor(state.gold / (m.hoardStepSec * baseIncome)));
 }
 
 /**

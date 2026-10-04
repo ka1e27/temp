@@ -16,6 +16,7 @@ import { generalById, commanderStyle, settleCommander } from './generals.js';
 import { onBattleEnd, onConquest, claimCompleted } from './bounties.js';
 import { onStreakBroken } from './streak.js';
 import { edictMods, commanderFor } from './edicts.js';
+import { boonBattleEnd } from './boons.js';
 
 function busyHas(busy, regionId) {
   if (!busy) return false;
@@ -117,6 +118,7 @@ export function finishQuickConquest(state, world, job, nowMs) {
   } else {
     onStreakBroken(state, b.result === 'retreat' ? 'retreat' : 'lost');
   }
+  out.boons = boonBattleEnd(state, world, b, b.result); // PLAN-PHASE7: Plunderers, Fortune Favours (a Quick Conquest drafts no Boons)
   out.commander = settleCommander(state, run, won ? 'win' : 'lose', nowMs);
   pay(onBattleEnd(state, world, run, b.result, summary));
   if (won) pay(onConquest(state, world, regionId, out.conquerResult));

@@ -30,7 +30,14 @@ import { DRAG_ARROW, NO_ROUTE_TEXT } from '../game/scenes/timing.js';
 if (!process.env.CHROME_PATH && process.platform === 'win32') {
   process.env.CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 }
-const { launch } = await import('./cdp.js');
+const { launch: rawLaunch } = await import('./cdp.js');
+// Phase 7: the Relic claim moment and the Boon draft that follow a win would stand in front of every older check's "Continue -> back on the map"; under
+// these tools an offer waits on the HUD chip instead (app/boons.js reads this flag in ?dev=1 only). tools/phase7Checks.mjs turns the moments back on.
+const launch = async (opts) => {
+  const page = await rawLaunch(opts);
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true;' });
+  return page;
+};
 const { robustChecks } = await import('./robustChecks.mjs');
 const { keepsakeChecks } = await import('./keepsakeChecks.mjs');
 const { playtestChecks } = await import('./playtestChecks.mjs');
@@ -40,6 +47,7 @@ const { varietyChecks } = await import('./varietyChecks.mjs');
 const { goalsChecks } = await import('./goalsChecks.mjs');
 const { phase5Checks } = await import('./phase5Checks.mjs');
 const { phase6Checks } = await import('./phase6Checks.mjs');
+const { phase7Checks } = await import('./phase7Checks.mjs');
 
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
   const [k, ...v] = a.slice(2).split('=');
@@ -1056,7 +1064,7 @@ const watchdog = setTimeout(() => {
   process.exit(1);
 }, (SUBPATH ? 20 : 32) * 60 * 1000); // the main flow grew (supply lines, Works, front lines, robustness, keepsakes); a loaded machine needs the room
 
-// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
+// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|phase7|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
 // plain mode only: they do not depend on the deployed shape, so --base=... runs the two variants and the deploy checks.
 const only = flags.only;
 const wants = (name) => !only || only === name;
@@ -1071,6 +1079,7 @@ if (!SUBPATH && wants('variety')) await varietyChecks({ launch, BASE, ok, sleep,
 if (!SUBPATH && wants('goals')) await goalsChecks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('phase5')) await phase5Checks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('phase6')) await phase6Checks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('phase7')) await phase7Checks({ launch, BASE, ok, sleep, allErrors });
 if (SUBPATH && wants('deploy')) await deployChecks();
 clearTimeout(watchdog);
 stopServer();

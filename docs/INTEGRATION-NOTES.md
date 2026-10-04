@@ -886,6 +886,49 @@ Under Reduce Motion there are fewer wisps and no tails. Wisps are capped per sit
 - `tools/phase6Checks.mjs` runs as `check.mjs --only=phase6`.
 - Dev hooks: `__hd.ashenInfo()` and `__hd.hintFacts()`.
 
-**Known gaps**
-- No live check exercises Raise the Fallen.
-- The burning ground isn't restored after a save and reload.
+**Known gaps** (both closed in Phase 7, §7C)
+- ~~No live check exercises Raise the Fallen.~~ `phase6Checks` step 7: the Gravewarden commands an attack, troops fall, a real press on the ability raises them.
+- ~~The burning ground isn't restored after a save and reload.~~ `battleAshen.js` now draws it from the sim's own `battle.fallen.burns`.
+
+## Phase 7: Boons and Relics (2026-10-04)
+Spec: `docs/PLAN-PHASE7.md`. Pure API: `docs/briefs/phase7-hookup.md`.
+
+**Glue:** `app/boons.js createBoons(...)` (as `services.boons`) owns no rules. It maps every Boon, Duo and Relic id to its own icon in `ui/icons.js`
+(`BOON_ICONS`, `RELIC_ICONS`; config icon names are only keys, unknown ids fall back to `boonCard` / `chest`; `ui.phase7.test.js` holds the mapping),
+builds the plain data (`hudData` -> the chip, `realmData` -> the strip and the Reliquary, `relicCard` -> the card line, `relicMarks` -> the chests), and
+drives the three moments (`ui.boonDraft`, `ui.duoReveal`, `ui.relicClaim`, all mounted in main.js's `ui`).
+
+**The manager (`app/battles.js`):** attack wins call `conquer(..., { viaBattle: true, labelAtAttack: run.labelAtAttack })` (only Fair-or-harder, typed
+or capital wins draft); every finished attack or defense calls `boonBattleEnd` (the result rides on the `'finished'` snapshot as `boons`; main.js toasts
+Plunderers / Fortune Favours); `pausedCooldownTick` runs while paused or gated (the Sundial). `stateContainer` calls `syncRelics` on load and import.
+
+**After a watched win (`battle.js onResultsContinue`):** Continue applies the win AT ONCE (`manager.finish`, so the offer exists), then
+`boons.afterBattle({ before, regionName }, go)` plays the post-battle moments **one at a time, in this order**: the Relic claim (if the region held one)
+-> held moments (a capital's recruit card: `battle.js` calls `boons.beginSequence()` before `finish`, and main.js `onDeeds` routes `showRecruit` through
+`boons.holdMoment(fn(done))`) -> the Boon draft (if this battle made a new offer: `offerSig` before/after) -> `go()` (the fade and the map's conquest
+choreography). Nothing is ever stacked. Off screen (a surrender, a Quick Conquest, a battle nobody watched) `boons.tick(scene)` gives a new offer one
+toast and the chip, and plays a new Relic's claim on the map once no dialog is open.
+
+**The draft (`ui/boonDraft.js`):** built once and patched; frames by `data-rarity` = common | rare | legendary | cursed (cursed wins over rarity, the
+word says both); `.is-champion-eye` frame; Reroll shows its Renown price; "Decide later" / × / Escape leave it pending (the HUD's `.hud-boon-chip`
+reopens it, so does the strip's "Choose your Boon"); a replaced offer shows `BOONS.copy.missed`. On a phone the cards become rows. A pick plays
+`celebrate` (~0.6 s, instant under Reduce Motion), then the Duo reveal when `pickBoon` returns `duo`.
+
+**The strip and the Reliquary (`ui/boonsPanel.js`, Realm panel):** the strip sits under the Edict line (the War Council on a 360 px phone has no room);
+Boons, active Duos (round teal) and held Relics (round gold); a tap/hover/focus shows the line under it. The Reliquary: 8 slots, found ones lit, the
+ones held this dynasty ringed, unknown ones a dim chest.
+
+**Map and card:** `render/relicMarks.js` draws a chest by the keep of every revealed region holding a Relic (24-44 px, gold halo, a steady spark
+and a flash every ~2.6 s; still under Reduce Motion); `relicMarkPos` gives its screen point. The region card's features hold a `.region-card-relic`
+line ("Relic: Sundial. ...") on the frontier.
+
+**Battle:** `scenes/battleBoons.js` turns `boonTriggered` into small icon pops (at most 6, merged per place, 1.5 s) and draws Scorched Earth's ground
+from `battle.boonFx.scorch` (so it survives a reload); Banner Bearer pulses the ability button.
+
+**Tutorial:** K1 is a static line inside the first draft (rule always false, seen on `boonPicked`); L1 (R1 was taken by the Festival) points at the
+lowest-tier frontier region holding a Relic, after M1, `afterDone`, 12 s, seen on `relicCardOpened`.
+
+**Checks:** `check.mjs --only=phase7` (`tools/phase7Checks.mjs`, desktop and phone); gallery `screenshots/phase7/`. Under `check.mjs` and `hints.mjs`
+(`?dev=1` only) `window.__HD_TEST_NO_BOON_MOMENTS` makes the claim and the post-battle draft wait on the chip, so the older flows' "Continue -> map"
+still holds; phase7Checks turns it off. Dev hooks: `__hd.boons`, `offerBoons(ids | 'champion', source)`, `grantBoons(ids)`, `placeRelic(regionId,
+relicId)`, `boonFxInfo()`.

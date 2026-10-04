@@ -175,13 +175,19 @@ export function createBattleAshen(deps) {
     if (!battle) return;
     const still = reduceMotion();
     const bt = battle.t;
-    if (burns.length) {
-      burns = burns.filter((b) => bt <= b.until);
-      for (const b of burns) {
-        if (bt < b.from) continue;
-        const s = camera.worldToScreen(b.x, b.y);
-        drawBurnGround(ctx, s.x, s.y, b.r * camera.zoom, (b.until - bt) / (b.until - b.from), t, still);
-      }
+    // §7C (PLAN-PHASE7): the burning ground is read from the SIM's own record (battle.fallen.burns: { x, y, r, until }, saved with the battle), so a
+    // reload mid-burn draws it again; the local list only covers a Firestorm whose landing the sim has not recorded yet (its delay)
+    const simBurns = undying() && battle.fallen && Array.isArray(battle.fallen.burns) ? battle.fallen.burns : [];
+    if (burns.length) burns = burns.filter((b) => bt <= b.until && !simBurns.some((z) => Math.abs(z.x - b.x) < 0.05 && Math.abs(z.y - b.y) < 0.05));
+    for (const z of simBurns) {
+      if (bt > z.until) continue;
+      const s = camera.worldToScreen(z.x, z.y);
+      drawBurnGround(ctx, s.x, s.y, z.r * camera.zoom, Math.min(1, (z.until - bt) / ASHEN.fallen.burnSec), t, still);
+    }
+    for (const b of burns) {
+      if (bt < b.from) continue;
+      const s = camera.worldToScreen(b.x, b.y);
+      drawBurnGround(ctx, s.x, s.y, b.r * camera.zoom, (b.until - bt) / (b.until - b.from), t, still);
     }
     if (telegraph) {
       const c = pos(telegraph.site);
@@ -225,7 +231,8 @@ export function createBattleAshen(deps) {
   }
 
   function info() {
-    return { ...(stats || {}), wisps: wisps.length, telegraph: telegraph ? { site: telegraph.site, at: telegraph.at } : null, burns: burns.length, undying: undying() };
+    const simBurns = battle && battle.fallen && Array.isArray(battle.fallen.burns) ? battle.fallen.burns.filter((z) => battle.t <= z.until).length : 0;
+    return { ...(stats || {}), wisps: wisps.length, telegraph: telegraph ? { site: telegraph.site, at: telegraph.at } : null, burns: burns.length + (undying() ? simBurns : 0), simBurns, undying: undying() };
   }
 
   return { reset, onEvent, drawGround, drawAir, info };

@@ -26,6 +26,8 @@ import { stewardDecide as defaultSteward } from '../battle/steward.js';
 import { defenseReward, occupy, busyFromState } from '../meta/frontier.js';
 import { generalById, commanderStyle, settleCommander } from '../meta/generals.js';
 import { duelReward } from '../meta/events.js';
+import { boonBattleEnd } from '../meta/boons.js';
+import { pausedCooldownTick } from '../battle/boons.js';
 
 /** At most this many battles at once (DESIGN 10.5; FRONTIER.maxBattles when config/frontier.js lands). */
 export const MAX_BATTLES = MAX_SAVED_BATTLES;
@@ -173,7 +175,10 @@ export function createBattleManager({ getState, getWorld, services = {} }) {
     for (const run of runs().slice()) {
       const r = runtime(run);
       const b = run.battle;
-      const held = !!b.result || paused || dialogHold || (r.gate && r.gate());
+      const gated = !!(r.gate && r.gate());
+      const held = !!b.result || paused || dialogHold || gated;
+      // the Sundial Relic (PLAN-PHASE7 §7B): power cooldowns tick through the player's pause and the battle-entry flight (a no-op without it)
+      if (!b.result && !dialogHold && (paused || gated)) { try { pausedCooldownTick(b, dtSec * speed); } catch (err) { /* never stop the loop */ } }
       const events = [];
       r.alpha = r.stepper.advance(dtSec, held ? 0 : speed, () => { if (!b.result) stepRun(run, r, events); });
       if (events.length) emit('events', run.id, events);
@@ -256,7 +261,7 @@ export function createBattleManager({ getState, getWorld, services = {} }) {
       const frontierBefore = frontier(state, world);
       const oldOwner = b.arena.enemyFaction;
       const crownResult = opts.crownResult !== undefined ? opts.crownResult : evaluateBattle(trackerOf(b), b, world, regionId, state);
-      const result = conquer(state, world, regionId, Date.now());
+      const result = conquer(state, world, regionId, Date.now(), { viaBattle: true, labelAtAttack: run.labelAtAttack }); // won in battle: drafts Boons once unlocked, for a win that counts (PLAN-PHASE7)
       clearRegionIntel(state, regionId); // scouted / sabotaged only until the region is ours
       // Crowns pay their bonus on top of the base bounty (never repaying it); retries only count the winning battle.
       const crownAward = crownResult ? awardCrowns(state, world, regionId, crownResult.crowns, result.bounty) : { bonusGold: 0, count: 0 };
@@ -297,7 +302,13 @@ export function createBattleManager({ getState, getWorld, services = {} }) {
       if (out) out.commander = cmd; else if (cmd) out = { kind: run.kind, regionId: run.regionId, commander: cmd };
       if (cmd) emit('commanderSettled', id, cmd);
     }
-    const snapshot = { kind: run.kind, regionId: run.regionId, result: b.result, attackerFaction: run.attackerFaction ?? null, commander: run.commander ?? null };
+    // Phase 7: the Boons' end-of-battle bookkeeping for every attack or defense that ends (Plunderers' gold, Fortune Favours' loss); a Duel is not a battle of the realm
+    let boons = null;
+    if (b.result && run.kind !== 'duel') {
+      try { boons = boonBattleEnd(state, world, b, b.result); } catch (err) { console.warn('[battles] boonBattleEnd failed:', err); }
+      if (out && boons) out.boons = boons;
+    }
+    const snapshot = { kind: run.kind, regionId: run.regionId, result: b.result, attackerFaction: run.attackerFaction ?? null, commander: run.commander ?? null, boons };
     // what the Bounty Board's onBattleEnd needs (crowns.js battleSummaryFor reads the saved tracker); a Duel counts for nothing there
     if (b.result && run.kind !== 'duel') { try { snapshot.summary = battleSummaryFor(trackerOf(b), b, run, world, state); } catch (err) { console.warn('[battles] battleSummaryFor failed:', err); } }
     remove(id);

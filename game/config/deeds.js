@@ -24,6 +24,7 @@ export const DEED_KEYS = Object.freeze({
   streak: 'max',               // the best conquest streak
   prosperity: 'max',           // the highest prosperity level a held region reached
   generalLevel: 'max',         // the highest level a General reached
+  relics: 'max',               // Relics in the lifetime Reliquary (PLAN-PHASE7 §7B: each new find is a step)
 });
 
 /**
@@ -43,6 +44,8 @@ export const DEEDS = Object.freeze([
   { id: 'mentor', name: 'Mentor', icon: 'laurel', key: 'generalLevel', tiers: [5, 10], stat: 'xpMult', per: 0.05, text: '+{v}% General XP' },
   { id: 'builder', name: 'Builder', icon: 'tower', key: 'fortLevels', tiers: [10, 40], stat: 'fortCostMult', per: -0.03, text: 'Fortifications {v}% cheaper' },
   { id: 'duellist', name: 'Duellist', icon: 'swords', key: 'duel', tiers: [1, 5], stat: 'renownPerDuel', per: 1, text: '+{v} Renown per Duel won' },
+  // PLAN-PHASE7 §7B: the Reliquarian. A convenience reward (Renown), outside the +10% power budget
+  { id: 'reliquarian', name: 'Reliquarian', icon: 'chest', key: 'relics', tiers: [1, 4, 8], stat: 'renownPerRelic', per: 1, text: '+{v} Renown for each Relic claimed' },
   { id: 'nemesis', name: 'Nemesis', icon: 'skull', key: 'vendetta', tiers: [1, 3], stat: 'vsVendetta', per: 0.05, text: '+{v}% strength against Vendetta war bands' },
 ].map((d) => Object.freeze({ ...d, tiers: Object.freeze(d.tiers) })));
 
@@ -60,6 +63,7 @@ export const DEED_CAPS = Object.freeze({
   fortCostMult: -0.06,
   renownPerDuel: 2,
   vsVendetta: 0.1,
+  renownPerRelic: 3,
 });
 
 export const DEED_COPY = Object.freeze({

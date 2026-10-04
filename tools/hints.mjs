@@ -11,7 +11,14 @@
 import { mkdir } from 'node:fs/promises';
 
 if (!process.env.CHROME_PATH && process.platform === 'win32') process.env.CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const { launch } = await import('./cdp.js');
+const { launch: rawLaunch } = await import('./cdp.js');
+// Phase 7: the Relic claim moment and the Boon draft that follow a win would stand in front of every older check's "Continue -> back on the map"; under
+// these tools an offer waits on the HUD chip instead (app/boons.js reads this flag in ?dev=1 only). tools/phase7Checks.mjs turns the moments back on.
+const launch = async (opts) => {
+  const page = await rawLaunch(opts);
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true;' });
+  return page;
+};
 
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
   const [k, ...v] = a.slice(2).split('=');

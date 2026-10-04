@@ -124,6 +124,13 @@ export function installHintMonitor() {
       const p = id >= 0 ? hd.regionScreenPos(id) : null;
       return box && p ? [{ box, probe: p }] : null;
     }
+    // Phase 7 (L1): the frontier region holding a Relic
+    if (/a relic lies in this region/i.test(text)) {
+      const id = hd.hintOutline ? hd.hintOutline() : -1;
+      const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
+      const p = id >= 0 ? hd.regionScreenPos(id) : null;
+      return box && p ? [{ box, probe: p }] : null;
+    }
     // The Ashen Host (A1): the Ashen frontier region
     if (/the fallen rise/i.test(text)) {
       const id = hd.hintOutline ? hd.hintOutline() : -1;

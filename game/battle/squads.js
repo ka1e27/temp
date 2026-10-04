@@ -2,6 +2,7 @@
 // `send` command and powers.js's Rally (which fans a send out from every owned site).
 import { routeFor } from './routing.js';
 import { PLAYER_OWNER } from './owner.js';
+import { onPlayerSend } from './boons.js';
 
 
 /**
@@ -46,6 +47,7 @@ export function sendFromSite(battle, fromSiteId, toSiteId, fraction, opts = null
   }
   battle.squads.push(squad);
   if (squad.owner === PLAYER_OWNER) battle.stats.sent += count;
+  onPlayerSend(battle, squad); // Warlord's Mark (PLAN-PHASE7): every Nth squad doubled
   const event = {
     type: 'send', owner: squad.owner, from: fromSiteId, to: toSiteId, count, squad: squad.id,
   };

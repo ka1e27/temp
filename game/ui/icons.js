@@ -463,6 +463,258 @@ const ICONS = {
     rect(6, 2.6, 2, 19, { rx: 0.7 }), circle(7, 2.8, 1.5),
     path('M8 4.4h11l-2.8 3.6L19 11.6H8Z'),
   ],
+
+  // --- Boons (PLAN-PHASE7 §7A): one mark per Boon, bold silhouettes like the rest -------------------------------------------------------------
+  // a Boon in general (the HUD's "Boon pending" chip): a drawn card with a four-point spark
+  boonCard: () => [
+    rect(5, 2.6, 14, 18.8, { rx: 2.2 }),
+    rect(6.8, 4.4, 10.4, 15.2, { rx: 1.4, fill: '#000', 'fill-opacity': 0.3 }),
+    polygon(starPoints(12, 12, 5.6, 1.6, 4)),
+  ],
+  // Scorched Earth: a flame on burning ground
+  boonScorched: () => [
+    path('M12 2.4c2.6 3 5.4 5.6 5.4 9.2a5.4 5.4 0 0 1-10.8 0c0-1.9.9-3.3 2-4.6.2 1.5.9 2.5 1.9 2.9-.3-2.6.4-5 1.5-7.5Z'),
+    path('M12 10.4c1.1 1.4 2.2 2.4 2.2 3.8a2.2 2.2 0 0 1-4.4 0c0-1.3 1-2.3 2.2-3.8Z', { fill: '#000', 'fill-opacity': 0.35 }),
+    rect(2.6, 18.4, 18.8, 2.4, { rx: 1.2 }),
+    path('M5 18.2l1.2-2.2M18.8 18.2l-1.1-2.2', { stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round' }),
+  ],
+  // Turncoats: a shield split in two colours, with a turning arrow
+  boonTurncoat: () => [
+    path('M12 2.4 19.6 5v6.2c0 5-3.3 8.6-7.6 10.4-4.3-1.8-7.6-5.4-7.6-10.4V5Z', { 'fill-opacity': 0.3 }),
+    path('M12 2.4V21.6c-4.3-1.8-7.6-5.4-7.6-10.4V5Z'),
+    path('M15.8 8.6a4.6 4.6 0 0 1-.6 6.4', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round' }),
+    polygon([[13.2, 13.4], [16.6, 16.2], [12.8, 17]]),
+  ],
+  // Hit and Run: a boot with speed lines
+  boonHitRun: () => [
+    path('M10.2 3.2h5.4v9.2l4.6 2.2c1 .5 1.6 1.4 1.6 2.5V19H8.2l-.8-2.2V13l2.8-1.4Z'),
+    rect(8.2, 19, 13.6, 2, { rx: 0.6, 'fill-opacity': 0.6 }),
+    path('M2 9h5M1.4 12.6h5M2.6 16.2h4', { stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' }),
+  ],
+  // Engineers: a hammer crossed with a wrench
+  boonEngineers: () => [
+    group([rect(-1, -2, 2, 13, { rx: 0.6 }), rect(-4.4, -6.4, 8.8, 4.6, { rx: 1 })], { transform: 'translate(12 12) rotate(-45) translate(0 -1)' }),
+    group([rect(-1, -4, 2, 14, { rx: 0.6 }), path('M-3.4-10.4a3.6 3.6 0 1 0 6.8 0L1.6-8.2h-3.2Z')], { transform: 'translate(12 12) rotate(45) translate(0 0.6)' }),
+  ],
+  // War Chest: a stack of coins
+  boonWarChest: () => [
+    ellipse(12, 18.6, 7.4, 2.6), rect(4.6, 15, 14.8, 3.6),
+    ellipse(12, 15, 7.4, 2.6, { 'fill-opacity': 0.75 }),
+    ellipse(12, 12.2, 7.4, 2.6), rect(4.6, 8.6, 14.8, 3.6),
+    ellipse(12, 8.6, 7.4, 2.6, { 'fill-opacity': 0.75 }),
+    ellipse(12, 8.6, 3.6, 1.1, { fill: '#000', 'fill-opacity': 0.3 }),
+    path('M4.6 15c0 1.4 3.3 2.6 7.4 2.6s7.4-1.2 7.4-2.6M4.6 12.2c0 1.4 3.3 2.6 7.4 2.6s7.4-1.2 7.4-2.6', { fill: 'none', stroke: '#000', 'stroke-opacity': 0.35, 'stroke-width': 1 }),
+  ],
+  // Blood Price: a drop of blood behind a sword
+  boonBlood: () => [
+    path('M12 2.6c3 4 6.4 7.6 6.4 11.4a6.4 6.4 0 0 1-12.8 0c0-3.8 3.4-7.4 6.4-11.4Z', { 'fill-opacity': 0.55 }),
+    rect(11, 5.6, 2, 11.6, { rx: 0.6 }),
+    rect(8.2, 16.4, 7.6, 1.8, { rx: 0.6 }),
+    rect(11.1, 18.2, 1.8, 3.4, { rx: 0.5 }),
+  ],
+  // Iron Rations: a loaf of bread inside a ring of iron
+  boonRations: () => [
+    circle(12, 12, 9.6, { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8 }),
+    path('M5.6 14.2c0-3.6 2.9-6.2 6.4-6.2s6.4 2.6 6.4 6.2c0 1-.7 1.6-1.6 1.6H7.2c-.9 0-1.6-.6-1.6-1.6Z'),
+    path('M9 10.4l1.2 2.4M12 9.8v2.6M15 10.4l-1.2 2.4', { stroke: '#000', 'stroke-opacity': 0.4, 'stroke-width': 1.2, 'stroke-linecap': 'round' }),
+  ],
+  // Ambushers: eyes in the bushes
+  boonAmbush: () => [
+    path('M3 19.6c-.6-3.4 1.4-6 4-6.2.4-3.2 3-5.4 5.8-5 2.6-1.6 6.2.2 6.6 3.4 2 .8 3 2.8 2.4 5l-.6 2.8Z'),
+    ellipse(9.2, 15.4, 1.6, 1, { fill: '#000', 'fill-opacity': 0.6 }),
+    ellipse(14.4, 15.4, 1.6, 1, { fill: '#000', 'fill-opacity': 0.6 }),
+    rect(2, 19.6, 20, 1.8, { rx: 0.9 }),
+  ],
+  // Night Raiders: a crescent moon over a dagger
+  boonNight: () => [
+    path('M14.4 2.6a8 8 0 1 0 6.8 11.8 6.6 6.6 0 1 1-6.8-11.8Z'),
+    group([rect(-0.9, -5.6, 1.8, 7.4, { rx: 0.5 }), polygon([[-0.9, -5.6], [0.9, -5.6], [0, -7.6]]), rect(-2.6, 1.8, 5.2, 1.3, { rx: 0.5 }), rect(-0.7, 3.1, 1.4, 2.8, { rx: 0.4 })], { transform: 'translate(15.6 15.4) rotate(28)' }),
+  ],
+  // Siegecraft: a battering ram on wheels
+  boonSiege: () => [
+    path('M4 8.4 12 4l8 4.4v2H4Z', { 'fill-opacity': 0.55 }),
+    rect(1.8, 11, 18, 3.2, { rx: 1 }),
+    path('M19.8 10.2h2.2v4.8h-2.2Z'),
+    circle(7, 18, 2.6), circle(15, 18, 2.6),
+    circle(7, 18, 0.9, { fill: '#000', 'fill-opacity': 0.45 }), circle(15, 18, 0.9, { fill: '#000', 'fill-opacity': 0.45 }),
+  ],
+  // Dragonbane: a spear driven through a dragon's wing
+  boonDragonbane: () => [
+    path('M2.6 18.6c2-5.4 4.8-9.8 9-12.2-.6 2 .2 3.4 1.4 4.2 1.4-1.6 3.6-2.4 5.6-2-1.4 1-2 2.4-2 3.8 1.6-.4 3 0 4.2 1-3.8.6-7.2 2.4-10.2 5.2Z', { 'fill-opacity': 0.7 }),
+    group([rect(-0.9, -8, 1.8, 18, { rx: 0.5 }), polygon([[-2.4, -8], [2.4, -8], [0, -12.4]])], { transform: 'translate(12 12) rotate(40)' }),
+  ],
+  // Gravebreaker: a skull split by a crack
+  boonGravebreaker: () => [
+    path('M12 2.8c-4.9 0-8.4 3.4-8.4 7.9 0 2.6 1.2 4.5 3 5.6v3.1c0 .9.7 1.6 1.6 1.6h7.6c.9 0 1.6-.7 1.6-1.6v-3.1c1.8-1.1 3-3 3-5.6 0-4.5-3.5-7.9-8.4-7.9Z'),
+    circle(8.6, 11.4, 2, { fill: '#000', 'fill-opacity': 0.6 }),
+    circle(15.4, 11.4, 2, { fill: '#000', 'fill-opacity': 0.6 }),
+    path('M12.6 2.8 10.8 6.4l2.4 1.8-1.8 3.6 1.4 2', { fill: 'none', stroke: '#000', 'stroke-opacity': 0.65, 'stroke-width': 1.5, 'stroke-linejoin': 'round' }),
+  ],
+  // Tithe: an offering bowl with a laurel leaf rising from it
+  boonTithe: () => [
+    path('M3.4 12.4h17.2c0 4.2-3.6 7.6-8.6 7.6s-8.6-3.4-8.6-7.6Z'),
+    rect(8.6, 19.6, 6.8, 1.8, { rx: 0.6 }),
+    path('M12 11c-3-1-4.4-3.6-3.6-7.6 3 .8 4.4 3.4 3.6 7.6Z', { 'fill-opacity': 0.75 }),
+    path('M12.6 11c.4-3 2.6-4.6 5.6-4.4-.6 2.8-2.6 4.4-5.6 4.4Z', { 'fill-opacity': 0.75 }),
+    path('M5.4 14.4h13.2', { stroke: '#000', 'stroke-opacity': 0.3, 'stroke-width': 1.1 }),
+  ],
+  // Fortune Favours: a pair of dice
+  boonDice: () => [
+    rect(2.6, 8.4, 10.4, 10.4, { rx: 2, transform: 'rotate(-12 7.8 13.6)' }),
+    rect(11.4, 4.6, 10, 10, { rx: 2, transform: 'rotate(14 16.4 9.6)', 'fill-opacity': 0.7 }),
+    circle(5.6, 11.6, 1, { fill: '#000', 'fill-opacity': 0.55 }), circle(8, 13.8, 1, { fill: '#000', 'fill-opacity': 0.55 }), circle(10.2, 16, 1, { fill: '#000', 'fill-opacity': 0.55 }),
+    circle(14.8, 7.6, 1, { fill: '#000', 'fill-opacity': 0.55 }), circle(18.2, 11.6, 1, { fill: '#000', 'fill-opacity': 0.55 }),
+  ],
+  // Banner Bearer: a banner with a turning arrow (the ability comes back)
+  boonBannerBearer: () => [
+    rect(4.2, 2.6, 1.9, 19, { rx: 0.7 }), circle(5.15, 2.8, 1.5),
+    path('M6.1 4.4h9.8v9.4l-4.9-2.2-4.9 2.2Z'),
+    path('M19.6 13.4a4 4 0 1 1-4.4-3.4', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.7, 'stroke-linecap': 'round' }),
+    polygon([[14.2, 8], [17.2, 10.2], [14.2, 12.2]]),
+  ],
+  // Second Wind: a heart with a gust curling through it
+  boonSecondWind: () => [
+    path('M12 20.6C6.4 16.4 3 13.2 3 9.2 3 6.4 5.1 4.4 7.7 4.4c1.8 0 3.3 1 4.3 2.4 1-1.4 2.5-2.4 4.3-2.4 2.6 0 4.7 2 4.7 4.8 0 4-3.4 7.2-9 11.4Z'),
+    path('M5.6 11.6h8.6a2 2 0 1 0-2-2M7.2 14.6h5.4a1.6 1.6 0 1 1-1.6 1.6', { fill: 'none', stroke: '#000', 'stroke-opacity': 0.45, 'stroke-width': 1.5, 'stroke-linecap': 'round' }),
+  ],
+  // Pathfinder: a compass rose
+  boonCompass: () => [
+    circle(12, 12, 9.8, { 'fill-opacity': 0.28 }),
+    circle(12, 12, 9.8, { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }),
+    polygon([[12, 3.6], [14.2, 12], [12, 20.4], [9.8, 12]]),
+    polygon([[3.6, 12], [12, 9.8], [20.4, 12], [12, 14.2]], { 'fill-opacity': 0.6 }),
+    polygon([[12, 3.6], [14.2, 12], [9.8, 12]], { fill: '#fff', 'fill-opacity': 0.35 }),
+  ],
+  // Plunderers: a tied sack of loot with a coin spilling out
+  boonSack: () => [
+    path('M9 6.4h6l-1 2.2c3.6 1.6 6.2 5 6.2 8.6 0 2.6-2.2 4.4-5 4.4H8.8c-2.8 0-5-1.8-5-4.4 0-3.6 2.6-7 6.2-8.6Z'),
+    path('M8.4 3.2c1.4.8 2.4.8 3.6 0 1.2.8 2.2.8 3.6 0L15 6.4H9Z', { 'fill-opacity': 0.7 }),
+    rect(8.6, 7.6, 6.8, 1.4, { rx: 0.6, fill: '#000', 'fill-opacity': 0.35 }),
+    circle(12, 15.4, 2.6, { fill: '#000', 'fill-opacity': 0.3 }),
+  ],
+  // Warlord's Mark: two chevrons stacked (every fourth squad doubled)
+  boonWarlord: () => [
+    path('M3.6 10.4 12 4l8.4 6.4v3.4L12 7.4l-8.4 6.4Z'),
+    path('M3.6 17 12 10.6 20.4 17v3.4L12 14l-8.4 6.4Z', { 'fill-opacity': 0.7 }),
+  ],
+  // Phalanx: three overlapping shields in a line
+  boonPhalanx: () => [
+    path('M5.4 6.2 9.6 7.6v4.6c0 3-2 5.2-4.2 6.2-2.2-1-4.2-3.2-4.2-6.2V7.6Z', { 'fill-opacity': 0.6 }),
+    path('M18.6 6.2 22.8 7.6v4.6c0 3-2 5.2-4.2 6.2-2.2-1-4.2-3.2-4.2-6.2V7.6Z', { 'fill-opacity': 0.6 }),
+    path('M12 4.4 17.2 6.2v5.6c0 3.8-2.4 6.6-5.2 7.8-2.8-1.2-5.2-4-5.2-7.8V6.2Z'),
+    path('M12 7.4v8.6M9 10.6h6', { stroke: '#000', 'stroke-opacity': 0.35, 'stroke-width': 1.3, 'stroke-linecap': 'round' }),
+  ],
+  // Kingslayer: a crown pierced by a dagger
+  boonKingslayer: () => [
+    path('M3.4 17.4 2.6 8l4.6 3.6L12 5.4l4.8 6.2L21.4 8l-.8 9.4Z', { 'fill-opacity': 0.7 }),
+    rect(3.4, 18.4, 17.2, 2.2, { rx: 0.7, 'fill-opacity': 0.7 }),
+    group([rect(-1, -9.6, 2, 13, { rx: 0.5 }), polygon([[-1, -9.6], [1, -9.6], [0, -12]]), rect(-3.4, 3.2, 6.8, 1.6, { rx: 0.5 }), rect(-0.8, 4.8, 1.6, 3.6, { rx: 0.5 })], { transform: 'translate(12 12) rotate(-28)' }),
+  ],
+  // Oathkeeper: a sword laid through a ring (an oath sworn on steel)
+  boonOath: () => [
+    circle(12, 12, 6.8, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.4 }),
+    group([rect(-1.1, -9.6, 2.2, 13.4, { rx: 0.6 }), polygon([[-1.1, -9.6], [1.1, -9.6], [0, -12]]), rect(-3.8, 3.6, 7.6, 1.8, { rx: 0.5 }), rect(-0.9, 5.4, 1.8, 3.6, { rx: 0.5 })], { transform: 'translate(12 11.6)' }),
+  ],
+  // Martyr's Crown: a crown of thorns
+  boonMartyr: () => [
+    ellipse(12, 14, 9, 4.4, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.6 }),
+    path('M5 10.4 3.6 6.6l3.4 2.6M10.4 9.6 10 4.6l2.2 4.4M15.6 9.8l1.8-4.6.2 5M20 12l2.2-3.6-.4 4.6M4.6 17.4 2.4 20.2M12 18.4v3.4M19.4 17.4l2.2 2.8', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+  ],
+  // --- Duo Boons: a shared link (two rings) for the reveal, and one mark per Duo
+  duoLink: () => [
+    circle(8.6, 12, 5.6, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.4 }),
+    circle(15.4, 12, 5.6, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.4, 'stroke-opacity': 0.75 }),
+    polygon(starPoints(12, 12, 2.6, 0.9, 4)),
+  ],
+  // Fire Arrows: a flaming arrow
+  boonFireArrows: () => [
+    group([rect(-0.8, -6, 1.6, 15, { rx: 0.5 }), polygon([[-2.6, -6], [2.6, -6], [0, -10.6]]), path('M-0.8 9-3 11.6V8.4l2.2-2Zm1.6 0L3 11.6V8.4L0.8 6.4Z', { 'fill-opacity': 0.7 })], { transform: 'translate(10.4 13.6) rotate(45)' }),
+    path('M17.4 2.6c1.6 1.8 3.4 3.4 3.4 5.6a3.4 3.4 0 0 1-6.8 0c0-1.2.6-2.1 1.3-2.9.1 1 .6 1.6 1.2 1.8-.2-1.6.2-3 .9-4.5Z'),
+  ],
+  // Ghost Legion: a hooded wraith
+  boonGhost: () => [
+    path('M12 2.6c-4.2 0-7 3.2-7 7.4v11l2.4-2 2.2 2 2.4-2 2.4 2 2.2-2 2.4 2V10c0-4.2-2.8-7.4-7-7.4Z'),
+    ellipse(9.4, 10.4, 1.4, 1.9, { fill: '#000', 'fill-opacity': 0.6 }),
+    ellipse(14.6, 10.4, 1.4, 1.9, { fill: '#000', 'fill-opacity': 0.6 }),
+  ],
+  // Lightning War: a lightning bolt
+  boonLightning: () => [
+    path('M14 1.8 5.2 13.6h5.6L9 22.2l9.8-12.6h-5.8Z'),
+    path('M12.6 4.6 8.4 11.8', { stroke: '#fff', 'stroke-opacity': 0.4, 'stroke-width': 1.1, 'stroke-linecap': 'round' }),
+  ],
+  // Gilded Banners: a banner bearing a coin
+  boonGilded: () => [
+    rect(4, 3, 16, 2, { rx: 1 }), circle(4, 4, 1.5), circle(20, 4, 1.5),
+    path('M6.5 5h11v15l-5.5-3.4L6.5 20Z'),
+    circle(12, 10.8, 3.2, { fill: '#000', 'fill-opacity': 0.35 }),
+    circle(12, 10.8, 1.5, { fill: '#fff', 'fill-opacity': 0.35 }),
+  ],
+
+  // --- Relics (PLAN-PHASE7 §7B) ----------------------------------------------------------------------------------------------------------------
+  // the chest a region holding a Relic shows (map glint, card line, claim); also an unknown Reliquary slot's shape
+  chest: () => [
+    path('M3 10.4c0-3.2 2.4-5.6 5.4-5.6h7.2c3 0 5.4 2.4 5.4 5.6Z', { 'fill-opacity': 0.75 }),
+    rect(3, 10.4, 18, 9.6, { rx: 1.2 }),
+    rect(3, 10, 18, 1.8, { fill: '#000', 'fill-opacity': 0.35 }),
+    rect(10.2, 9.2, 3.6, 4.6, { rx: 0.8, fill: '#000', 'fill-opacity': 0.45 }),
+    circle(12, 11.4, 0.9, { fill: '#fff', 'fill-opacity': 0.6 }),
+    path('M6.4 4.9v15M17.6 4.9v15', { stroke: '#000', 'stroke-opacity': 0.25, 'stroke-width': 1.2 }),
+  ],
+  // Dragon Banner: a banner bearing a dragon's head
+  relicDragonBanner: () => [
+    rect(4.2, 2.4, 1.9, 19.4, { rx: 0.7 }), circle(5.15, 2.6, 1.5),
+    path('M6.1 4h13.6v10.8l-2.6-1.6-2.4 2.2-2.2-2.2-2.4 2-2.2-1.8-1.8 1.4Z'),
+    path('M8.6 10.6c.8-2 2.6-3.4 5-3.6l1.4-2 .5 2.1 1.8-1.4-.3 2.3c1 .6 1.6 1.4 2 2.4l-2.2.2-2 2.2-1-1.8Z', { fill: '#000', 'fill-opacity': 0.4 }),
+  ],
+  // Crown of the Reeve: a plain circlet with a single gem (a reeve, not a king)
+  relicReeve: () => [
+    path('M3.4 9.6c2.6 1.8 5.4 2.6 8.6 2.6s6-.8 8.6-2.6v6.6c-2.6 1.8-5.4 2.6-8.6 2.6s-6-.8-8.6-2.6Z'),
+    polygon([[12, 4.4], [14.6, 8.6], [12, 12.8], [9.4, 8.6]], { 'fill-opacity': 0.8 }),
+    path('M4.4 13.4c2.4 1.4 4.9 2 7.6 2s5.2-.6 7.6-2', { fill: 'none', stroke: '#000', 'stroke-opacity': 0.35, 'stroke-width': 1.1 }),
+  ],
+  // Sundial: a dial with its gnomon's shadow
+  relicSundial: () => [
+    ellipse(12, 15.6, 9.6, 5, { 'fill-opacity': 0.4 }),
+    ellipse(12, 14.6, 9.6, 5),
+    path('M12 14.6 12 4.4l4.8 10.2Z', { fill: '#fff', 'fill-opacity': 0.55 }),
+    path('M12 14.6 5.4 17.2', { stroke: '#000', 'stroke-opacity': 0.5, 'stroke-width': 1.6, 'stroke-linecap': 'round' }),
+    path('M4.8 13.4h1.6M17.6 13.4h1.6M12 18.2v1.4', { stroke: '#000', 'stroke-opacity': 0.4, 'stroke-width': 1.2, 'stroke-linecap': 'round' }),
+  ],
+  // Horn of Ages: a great curled horn with bands
+  relicHorn: () => [
+    path('M3.4 6.4c.6 6.6 5.4 11.4 12 12.2l1.4-3.4c-4.6-.6-8.2-4-9-8.8Z'),
+    ellipse(18.6, 17.2, 3.2, 4.6, { transform: 'rotate(30 18.6 17.2)' }),
+    ellipse(18.6, 17.2, 1.6, 2.6, { transform: 'rotate(30 18.6 17.2)', fill: '#000', 'fill-opacity': 0.45 }),
+    path('M6.4 10.2l2.8-1.4M9 13.6l2.4-2M12.4 16l1.6-2.6', { stroke: '#000', 'stroke-opacity': 0.4, 'stroke-width': 1.3, 'stroke-linecap': 'round' }),
+    circle(3.4, 5.6, 1.4),
+  ],
+  // Seer's Lens: a round lens on a handle, a spark in the glass
+  relicLens: () => [
+    circle(10, 10, 7.2, { 'fill-opacity': 0.3 }),
+    circle(10, 10, 7.2, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2 }),
+    rect(14.6, 13.8, 3, 8.4, { rx: 1.2, transform: 'rotate(-45 16.1 18)' }),
+    polygon(starPoints(10, 10, 3.6, 1.1, 4)),
+  ],
+  // Black Pennant: a long swallow-tailed pennant (drawn dark by the slot)
+  relicPennant: () => [
+    rect(4.2, 2.4, 1.9, 19.4, { rx: 0.7 }), circle(5.15, 2.6, 1.5),
+    path('M6.1 4h15.4l-4.4 3.6 4.4 3.6H6.1Z'),
+    path('M6.1 11.2h9.2l-2.4 3H6.1Z', { 'fill-opacity': 0.6 }),
+  ],
+  // Ember Heart: a heart of fire with a glowing core
+  relicEmber: () => [
+    path('M12 21C6.4 16.8 3 13.6 3 9.6 3 6.8 5.1 4.8 7.7 4.8c1.8 0 3.3 1 4.3 2.4 1-1.4 2.5-2.4 4.3-2.4 2.6 0 4.7 2 4.7 4.8 0 4-3.4 7.2-9 11.4Z'),
+    path('M12 9.6c1.6 1.8 3 3.2 3 5a3 3 0 0 1-6 0c0-1 .5-1.8 1.1-2.5.1.8.5 1.4 1 1.6-.2-1.4.2-2.6.9-4.1Z', { fill: '#000', 'fill-opacity': 0.4 }),
+  ],
+  // Gravewarden's Lantern: a hanging lantern with a cold flame
+  relicLantern: () => [
+    path('M10 2.4h4M12 2.4v2', { stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' }),
+    path('M8.4 6.4h7.2l-1 1.6H9.4Z'),
+    rect(7.4, 8, 9.2, 10.4, { rx: 1.6, 'fill-opacity': 0.35 }),
+    rect(7.4, 8, 9.2, 10.4, { rx: 1.6, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }),
+    path('M12 9.8c1.3 1.6 2.4 2.8 2.4 4.4a2.4 2.4 0 0 1-4.8 0c0-1.6 1.1-2.8 2.4-4.4Z'),
+    path('M8.4 18.4h7.2l-1 2H9.4Z'),
+  ],
 };
 
 // the names config/edicts.js gives (keys only: app/dynasty.js maps each Edict and Challenge to its own crest or mark; these keep a raw config name drawable)

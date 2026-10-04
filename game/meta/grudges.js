@@ -9,6 +9,7 @@
 //     News = { kind: 'warn', faction, value }   the `grudge` voice trigger (drainGrudgeNews)
 //   state.trophies = { v:1, [faction]: n }      PER DYNASTY; each Trophy is +GRUDGES.vendetta.trophyAtk attack against that faction
 import { GRUDGES } from '../config/grudges.js';
+import { boonMods } from './boonsState.js'; // the leaf (PLAN-PHASE7): Oathkeeper
 import { PLAYER_FACTION } from './state.js';
 
 const FREE_FOLK = 1;
@@ -187,7 +188,7 @@ export function trophyCount(state, faction) {
 
 /** The attack multiplier the Trophies give against `faction`'s regions (1 with none). playerBattleStats folds it in. */
 export function trophyBonus(state, faction) {
-  return 1 + GRUDGES.vendetta.trophyAtk * trophyCount(state, faction);
+  return 1 + GRUDGES.vendetta.trophyAtk * trophyCount(state, faction) * boonMods(state).trophyMult; // Oathkeeper doubles it (PLAN-PHASE7)
 }
 
 /** A save's `grudges`, made valid. Never throws. */

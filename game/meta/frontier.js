@@ -38,6 +38,8 @@ import {
 import { tickStreak, onStreakDefenseWon } from './streak.js';
 import { recordDeed, deedBonuses } from './deeds.js';
 import { leaderFor } from './leaders.js';
+import { boonMods } from './boonsState.js'; // the leaf (PLAN-PHASE7): Oathkeeper, the Black Pennant
+import { offerChampionEye } from './boons.js';
 import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Iron Frontier, Peace of the Crowns, Overrun
 
 export * from './frontierState.js';
@@ -176,6 +178,7 @@ export function raidEnemyStats(state, world, raid) {
     * (1 + FRONTIER.warBand.perFortLevel * fortLevels(state, raid.toRegionId)) // siege preparation: a fortified target draws a bigger band
     * (raid.vendetta ? GRUDGES.vendetta.warBandMult : 1) // a Vendetta (PLAN-PHASE4 §4D): the leader comes in person, x1.5
     * edictMods(state).raidTroopMult // the Overrun Challenge (PLAN-PHASE5): war bands x1.4 too
+    * boonMods(state).raidTroopMult // the Black Pennant Relic (PLAN-PHASE7): x0.75
     * (Number.isFinite(raid.mult) ? raid.mult : 1); // tools and tests only: a stronger or weaker war band
   const done = Math.max(0, ((state.dynasty && state.dynasty.level) || 1) - 1);
   const dynastyMult = done === 0 ? 1 : DYNASTY.enemyMultFirst * Math.pow(DYNASTY.enemyMultPerDynasty, done - 1);
@@ -418,6 +421,7 @@ export function defenseRunFor(state, world, raid, stats, opts = {}) {
     towerKillScale: militiaScale(state, world, to),
     busy: opts.busy ? normalizeBusy(opts.busy) : busyFromState(state, world),
     vendetta: raid.vendetta || null,
+    noChampion: boonMods(state).noChampion, // Oathkeeper (PLAN-PHASE7)
   });
   const battle = createBattle(arena, player, enemy, { mode: 'defense', siegeSec: arena.siegeSec });
   const f = ensureFrontier(state);
@@ -468,6 +472,9 @@ export function defenseReward(state, world, run, result, nowMs) {
     renown += earnRenown(state, GRUDGES.vendetta.renown, 'vendetta');
     out.renown = renown;
     recordDeed(state, 'vendetta', 1);
+    // the Champion's eye (PLAN-PHASE7 §7A): once per dynasty, a Vendetta win drafts a Rare-or-better Boon
+    const eye = offerChampionEye(state, world);
+    if (eye) out.boonOffer = eye;
   } else if (run.attackerFaction > FREE_FOLK) {
     const g = addGrudge(state, run.attackerFaction, 'raidBeaten', nowMs); // beating their raid feeds the leader's Grudge
     if (g) out.grudge = { faction: run.attackerFaction, value: g.value, crossed: g.crossed };
@@ -531,6 +538,7 @@ export function estimateDefense(state, world, regionId, raid, opts = {}) {
       towerKillScale: militiaScale(state, world, regionId),
       busy: opts.busy ? normalizeBusy(opts.busy) : null,
       vendetta: r.vendetta || null, // the Champion counts in the odds
+      noChampion: boonMods(state).noChampion, // Oathkeeper (PLAN-PHASE7)
     });
   } catch {
     return fallback;

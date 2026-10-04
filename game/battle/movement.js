@@ -6,13 +6,15 @@ import { getRuntime } from './runtime.js';
 import { PLAYER_OWNER } from './owner.js';
 import { marchSpeedMult } from './features.js';
 import { squadPosition } from './position.js';
+import { moveCost, marchBoonMult } from './boons.js';
 
 function squadSpeed(battle, squad, t) {
   const stats = ownerStats(squad.owner, battle.player, battle.arena.enemyFaction, battle.enemy);
   const marchActive = squad.owner === PLAYER_OWNER && t < battle.effects.marchUntil;
   // Charge squads march faster; Foresight slows every enemy squad for a while (DESIGN §10.11, battle/abilities.js)
   const slowed = squad.owner !== PLAYER_OWNER && t < (battle.effects.slowUntil ?? 0) ? 1 - (battle.effects.slow ?? 0) : 1;
-  return BATTLE.baseSpeed * stats.speed * (marchActive ? POWERS.march.mult : 1) * (squad.speedMult ?? 1) * slowed * marchSpeedMult(battle);
+  return BATTLE.baseSpeed * stats.speed * (marchActive ? POWERS.march.mult : 1) * (squad.speedMult ?? 1) * slowed * marchSpeedMult(battle)
+    * marchBoonMult(battle, squad, t); // Hit and Run (PLAN-PHASE7)
 }
 
 /** A squad arriving at a site owned by someone else starts or joins an assault; arriving
@@ -68,7 +70,7 @@ export function advanceMovement(battle, dt, t, blocked) {
     let remaining = squadSpeed(battle, squad, t) * dt;
     while (remaining > 0 && squad.seg < squad.path.length) {
       const tile = runtime.byIndex.get(squad.path[squad.seg]);
-      const cost = tile.cost;
+      const cost = moveCost(battle, squad, tile); // Pathfinder (PLAN-PHASE7): forest and marsh at open-ground cost
       const need = (1 - squad.prog) * cost;
       if (remaining >= need) {
         remaining -= need;

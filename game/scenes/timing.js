@@ -180,6 +180,10 @@ export const TUTORIAL_STEPS = Object.freeze([
   // The Ashen Host (PLAN-PHASE6 §6B): the first time one of its regions is on the frontier (Dynasty 2 on, so `afterDone`). Last in the list and after M1:
   // every earlier step that is due goes first; it steps aside after 12 s and is seen once its card is opened.
   { id: 'A1', scene: 'world', anchor: 'ashenRegion', after: ['M1'], seenOn: ['ashenCardOpened'], timeoutSec: 12, afterDone: true, text: ASHEN.copy.hint },
+  // Phase 7 (PLAN-PHASE7): K1 lives inside the first Boon draft (a static line: the coach layer sits under dialogs, like D1); L1 is the first Relic on
+  // the frontier (its label and chest), last in the list and after M1 like A1, so every earlier step that is due goes first; it steps aside after 12 s
+  { id: 'K1', scene: 'world', anchor: 'boonDraft', seenOn: ['boonPicked'], text: 'Your first Boon: pick the card that suits how you fight. It lasts the dynasty.' },
+  { id: 'L1', scene: 'world', anchor: 'relicRegion', after: ['M1'], seenOn: ['relicCardOpened'], timeoutSec: 12, afterDone: true, text: 'A Relic lies in this region: conquer it to claim it for your dynasty. Click it to see what it does.', textTouch: 'A Relic lies in this region: conquer it to claim it for your dynasty. Tap it to see what it does.' },
 ]);
 
 /** The live send arrow: saturated green when the send would capture, red when it would not (gold otherwise), grey when there is no route (front lines). Read by battle.js and tools/check.mjs. */

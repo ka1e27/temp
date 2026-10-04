@@ -57,6 +57,7 @@ import { FEATURES } from '../app/features.js';
 import { createArenaOwnership } from './arenaOwnership.js';
 import { createBattleFeatures } from './battleFeatures.js';
 import { createBattleAshen } from './battleAshen.js';
+import { createBattleBoons } from './battleBoons.js';
 import { championTitle } from '../meta/leaders.js';
 import { computeThreats } from './battleThreat.js';
 import {
@@ -125,6 +126,7 @@ export function createBattleScene(services) {
   let defeatAtMs = 0;
   let leaving = null;
   let resultsShown = false;
+  let continuing = false; // Continue pressed on a win: the Relic moment / Boon draft play before the scene leaves
   let lastResult = null;
   let crownResult = null; // { summary, crowns, parSec } once a win is decided
   let lastOwnerSnapshot = null; // per-site owner just before the tick that just ran
@@ -250,11 +252,14 @@ export function createBattleScene(services) {
 
   // The Ashen Host (PLAN-PHASE6 §6B): The Fallen Rise's wisps, Firestorm burning the dead, the Barrow Keep's Rising (scenes/battleAshen.js)
   const ashen = createBattleAshen({ ctx, camera, renderer, sfx, ui, reduceMotion, siteWorldPos });
+  // Phase 7: boonTriggered pops and Scorched Earth's ground (scenes/battleBoons.js)
+  const boonFx = createBattleBoons({ ctx, camera, ui, sfx, reduceMotion });
 
   // --- fx / sfx event routing (INTEGRATION-NOTES event mapping) ---------------------
   function handleEvent(ev, nowMs) {
     const fx = renderer.fx;
     if (ashen.onEvent(ev, nowMs)) return;
+    if (boonFx.onEvent(ev, nowMs)) return;
     if (feat.onEvent(ev, nowMs)) return;
     switch (ev.type) {
       case 'send': {
@@ -408,6 +413,7 @@ export function createBattleScene(services) {
     phase = 'defeat'; // the same short pause before the card as a lost attack
     defeatAtMs = nowMs;
     resultsShown = false;
+    continuing = false;
     services.autosave.save();
   }
 
@@ -436,6 +442,7 @@ export function createBattleScene(services) {
       defeatAtMs = nowMs;
     }
     resultsShown = false;
+    continuing = false;
     services.autosave.save();
   }
 
@@ -580,20 +587,31 @@ export function createBattleScene(services) {
 
   function onResultsContinue() {
     if (lastResult !== 'win') { onBackToMap(); return; }
+    if (leaving || continuing) return;
     const id = run.id;
+    continuing = true;
+    ui.results.el.hidden = true;
+    const regionName = world.regions[regionId] ? world.regions[regionId].name : '';
+    // Phase 7: the win is applied NOW (conquer / defenseReward, which may claim a Relic and make a Boon offer), so the result card can hand over to the
+    // Relic's moment and the Boon draft before the scene leaves (app/boons.js afterBattle); the map then plays the conquest as before
+    const before = services.boons ? services.boons.snapshot() : '';
+    services.boons?.beginSequence(); // a recruit card raised by the win waits its turn (Relic claim -> recruit -> draft)
     if (isDefense()) {
-      leave(() => {
-        const out = manager.finish(id); // defenseReward: the gold, the militia drain, the region's cooldown (a Duel: duelReward's Renown)
+      const out = manager.finish(id); // defenseReward: the gold, the militia drain, the region's cooldown (a Duel: duelReward's Renown); the Champion's eye
+      const go = () => leave(() => {
+        continuing = false;
         goto.world({ cameFromBattle: true });
         if (out && out.kind === 'duel') { if (out.renown > 0) ui.toasts.update({ type: 'success', icon: 'laurel', message: `Duel won at ${world.regions[out.regionId].name}: +${out.renown} Renown` }); services.autosave.save(); return; }
         if (out && out.reward && out.reward.gold > 0) ui.toasts.update({ type: 'success', icon: 'coin', message: `${world.regions[out.regionId].name} held: +${Math.round(out.reward.gold)} gold` });
         services.autosave.save();
       });
+      if (services.boons) services.boons.afterBattle({ before, regionName }, go); else go();
       return;
     }
-    leave(() => {
-      // conquer + crowns + chronicle: the manager applies a won attack (ARCHITECTURE 10.1), with the crowns this view already evaluated
-      const out = manager.finish(id, { crownResult });
+    // conquer + crowns + chronicle: the manager applies a won attack (ARCHITECTURE 10.1), with the crowns this view already evaluated
+    const out = manager.finish(id, { crownResult });
+    const go = () => leave(() => {
+      continuing = false;
       if (!out) { goto.world({ cameFromBattle: true }); return; }
       goto.world({
         cameFromBattle: true,
@@ -603,6 +621,7 @@ export function createBattleScene(services) {
       });
       services.autosave.save();
     });
+    if (services.boons) services.boons.afterBattle({ before, regionName }, go); else go();
   }
 
   function onRetry() {
@@ -1868,6 +1887,7 @@ export function createBattleScene(services) {
     if (phase !== 'entering') drawSupplyLines(t);
     if (phase !== 'entering') renderer.units.drawIntent(ctx, camera, battle, t);
     ashen.drawGround(t, nowMs); // Firestorm's burning ground, the Barrow Keep's ash ring
+    boonFx.drawGround(t); // Scorched Earth's burning ground (Phase 7)
     feat.drawGround(t, nowMs); // high water, Night's tower reach, the Shrine rings, the Dragon's warning
     const chips = drawSites(t, nowMs);
     renderer.units.draw(ctx, camera, battle, alpha, t, { still: reduceMotion(), championColor: run && run.vendetta ? factionColor(run.vendetta.faction) : undefined });
@@ -1875,6 +1895,7 @@ export function createBattleScene(services) {
     fx.draw(ctx, camera);
     feat.drawAir(t, nowMs); // the Dragon, its health and its breath
     ashen.drawAir(t, nowMs); // The Fallen Rise's wisps and "+N risen" pops
+    boonFx.drawAir(t, nowMs); // the Boons' small icon pops (Phase 7)
     drawSiteBadges(t); // over the squads AND the dust a busy camp kicks up: the number is always readable
     feat.drawTags(); // Siege: the Gate's tag, the padlock on the keep it shuts
     renderer.sites.drawThreatChips(ctx, chips, t); // last, so nothing covers the readout
@@ -1932,6 +1953,7 @@ export function createBattleScene(services) {
     own = createArenaOwnership(world, battle, regionId, state.owner);
     feat.reset(battle, world, regionId);
     ashen.reset(battle);
+    boonFx.reset(battle);
     const holeTiles = new Map();
     for (const t of battle.arena.tiles) holeTiles.set(t.i, world.tiles[t.i]);
     for (const t of own.regionTiles) holeTiles.set(t.i, t);
@@ -1951,6 +1973,7 @@ export function createBattleScene(services) {
     victory = null;
     leaving = null;
     resultsShown = false;
+    continuing = false;
     lastResult = null;
     crownResult = null;
     hitStopUntilMs = 0;
@@ -2164,6 +2187,7 @@ export function createBattleScene(services) {
     },
     /** Dev/automation: what the Ashen layer has shown this battle (PLAN-PHASE6): rises, burns, Risings, wisps in the air. */
     ashenInfo() { return battle ? ashen.info() : null; },
+    boonInfo() { return battle ? boonFx.info() : null; },
     /** Dev/automation: every site with its owner, troops and screen position. */
     siteInfo() {
       if (!battle) return [];

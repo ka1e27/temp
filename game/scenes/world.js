@@ -57,6 +57,7 @@ import { fallenLine, ashenOnFrontier } from '../meta/rivals.js';
 import { MAX_BATTLES } from '../app/battles.js';
 import { fortsPanelData, buildFort, upgradeFort, demolishFort, fortName, fortsToast, fortsMarksData } from '../meta/forts.js';
 import { drawFortMarks } from '../render/fortMarks.js';
+import { drawRelicMarks, relicMarkPos } from '../render/relicMarks.js';
 import {
   createSiteDrawer, pickLandTile, regionLabelAnchors, realmFraming, frameInRect, freeRect, openCameraLimits, unionBounds, HEX_MARGIN,
 } from './worldLayers.js';
@@ -167,6 +168,8 @@ export function createWorldScene(services) {
       labels.push(datum);
     }
     derived.labels = labels;
+    // Phase 7: the glinting chests of regions holding a Relic (revealed ones only)
+    derived.relicMarks = services.boons ? services.boons.relicMarks().filter((id) => derived.revealed[id] || services.devRevealAll) : [];
 
     // Scout reports are cached per (region, ownership, sabotage, stats) in meta/intel.js, so this is cheap.
     // A Watchtower next door scouts for free (DESIGN 5.7, 5.8): the very predicate the card uses decides who wears garrison badges.
@@ -194,6 +197,12 @@ export function createWorldScene(services) {
   }
 
   // --- view-model builders -----------------------------------------------------
+  /** Phase 7: the Relic waiting in a frontier region joins the card's feature rows (before you commit). */
+  function withRelic(rows, regionId) {
+    const relic = services.boons ? services.boons.relicCard(regionId) : null;
+    return relic ? { ...(rows || {}), relic } : rows;
+  }
+
   function regionCardData(regionId) {
     const { state, world } = container.get();
     const region = world.regions[regionId];
@@ -228,7 +237,7 @@ export function createWorldScene(services) {
       owned: false,
       owner,
       perk,
-      features: withFallen(featureRows(region, false), state, world, regionId),
+      features: withRelic(withFallen(featureRows(region, false), state, world, regionId), regionId),
       income: effectiveRegionIncome(state, world, region),
       bounty: conquestBounty(state, world, regionId), // what winning pays: the conquest bounty, or a retake's share (the payout's own function)
       crownsPayable: crownsPayable(state, regionId),
@@ -490,6 +499,7 @@ export function createWorldScene(services) {
       pendingPicks: roster.reduce((n, g) => n + pendingPicks(g), 0),
       eventPip: services.events ? services.events.closedOffer() : null, // a closed world-event offer can be reopened while it is open (PLAN-PHASE4 §4E)
       ...(services.goals ? services.goals.hudData() : {}), // the Conquest Streak's flame chip (PLAN-PHASE4 §4B)
+      ...(services.boons ? services.boons.hudData() : {}), // the "Boon pending" chip (PLAN-PHASE7)
     });
   }
 
@@ -543,6 +553,7 @@ export function createWorldScene(services) {
       save: saveWords(),
       ...(services.goals ? services.goals.realmData() : {}), // Deeds and the Trophy wall (PLAN-PHASE4 §4C, §4D)
       ...(services.dynasty ? services.dynasty.realmData() : {}), // the Edict, its Challenge laurels and the Legacy tree (PLAN-PHASE5)
+      ...(services.boons ? services.boons.realmData() : {}), // the owned-Boons strip and the Reliquary (PLAN-PHASE7)
     });
   }
 
@@ -571,6 +582,7 @@ export function createWorldScene(services) {
     tutorial.notify('regionSelected');
     if (data && data.features && (data.features.type || data.features.twist)) tutorial.notify('featureCardOpened'); // a typed or twisted region's card (tutorial V1)
     if (data && data.features && data.features.ashen) tutorial.notify('ashenCardOpened'); // an Ashen region's card (tutorial A1)
+    if (data && data.features && data.features.relic) tutorial.notify('relicCardOpened'); // a Relic's region card (tutorial L1)
     // A region that would surrender: its leader offers, once per region (selection only, not the card's 1 s refresh).
     if (data && data.difficulty && data.difficulty.surrender) {
       services.speak('surrenderOffer', container.get().state.owner[id], id, id);
@@ -1360,6 +1372,7 @@ export function createWorldScene(services) {
       vendettaToast: !!vendettaGoButton(), // Q2
       quickReady: cardOpen && !!quickBtnReady(), // D2
       ashenRegion: ashenTutorialRegion(), // A1
+      relicRegion: relicTutorialRegion(), // L1
       features: FEATURES,
     };
   }
@@ -1396,6 +1409,19 @@ export function createWorldScene(services) {
     for (const id of derived.frontier) {
       const f = world.factions[state.owner[id]];
       if (!f || f.personality !== 'undying' || !anchors[id]) continue;
+      if (best < 0 || world.regions[id].tier < world.regions[best].tier) best = id;
+    }
+    return best;
+  }
+
+  /** Tutorial L1: the lowest-tier frontier region holding a Relic (with its chest on screen), or -1. */
+  function relicTutorialRegion() {
+    const marks = derived.relicMarks || [];
+    if (!marks.length) return -1;
+    const { world } = container.get();
+    let best = -1;
+    for (const id of derived.frontier) {
+      if (!marks.includes(id) || !anchors[id]) continue;
       if (best < 0 || world.regions[id].tier < world.regions[best].tier) best = id;
     }
     return best;
@@ -1500,6 +1526,11 @@ export function createWorldScene(services) {
         const id = featureTutorialRegion();
         if (id < 0 || !anchors[id]) return null;
         return { target: regionTarget(id), key: `feature${id}`, outline: id, noRing: true };
+      }
+      case 'relicRegion': {
+        const id = relicTutorialRegion();
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `relic${id}`, outline: id, noRing: true };
       }
       case 'ashenRegion': {
         const id = ashenTutorialRegion();
@@ -1695,6 +1726,7 @@ export function createWorldScene(services) {
         skip: (m) => !derived.revealed[m.regionId] && !services.devRevealAll,
       });
     }
+    drawRelicMarks(ctx, camera, world, derived.relicMarks || [], { t: state.settings.reduceMotion ? undefined : t, alpha: fogAlpha, skip: (id) => !isVisibleRegion(id) && !services.devRevealAll });
     drawIntelMarks(ctx, state, t);
     ambient.drawAir(ctx, camera, vb);
     celebrateProspering(nowMs);
@@ -1908,8 +1940,10 @@ export function createWorldScene(services) {
     },
     /** Re-pushes the open card's data (what the 1 s refresh and every gold-dependent change does). */
     devRefreshCard() { refreshRegionCard(); },
+    markDirtyNow() { markDirty(); },
     /** Pushes the HUD now (a pip pressed, a streak changed). */
     updateHudNow() { updateHud(performance.now(), { force: true }); },
+    refreshRealmIfOpen() { if (!ui.realm.el.hidden) updateRealm(); },
     /** Something Phase 4 shows changed (a deed, a contract, a streak): refresh what is open. */
     onGoalsChanged(opts = {}) {
       updateHud(performance.now(), { force: true, pulse: !!opts.pulse });

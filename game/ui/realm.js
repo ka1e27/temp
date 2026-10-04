@@ -8,6 +8,7 @@ import { createChroniclePanel } from './chroniclePanel.js';
 import { createSaveMapButton } from './saveMapButton.js';
 import { createDeedsSection, createTrophySection } from './deedsPanel.js';
 import { createEdictSection, createLegacySection } from './dynastyPanel.js';
+import { createBoonStrip, createReliquary } from './boonsPanel.js';
 
 const STAT_ROWS = [
   ['battlesWon', 'trophy', 'Battles won'],
@@ -35,7 +36,7 @@ const STAT_ROWS = [
 /**
  * @param {{ onFoundDynasty?: () => void, onSaveMap?: () => void, onClose?: () => void }} [callbacks]
  */
-export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy } = {}) {
+export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy, onOpenDraft } = {}) {
   const statEls = new Map();
   const statsGrid = h('div.realm-stats-grid', {},
     ...STAT_ROWS.map(([key, iconName, label]) => {
@@ -103,9 +104,12 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy } 
   // Phase 5 (PLAN-PHASE5): this dynasty's Edict and Challenge laurels (top: they are the rules you play by), and the Legacy tree (spend any time)
   const edictSection = createEdictSection();
   const legacySection = createLegacySection({ onBuy: (id) => onBuyLegacy?.(id) });
+  // Phase 7 (PLAN-PHASE7): the Boons held this dynasty, a compact strip under the Edict line; the Reliquary (kept forever) beside the Deeds
+  const boonStrip = createBoonStrip({ onOpenDraft: () => onOpenDraft?.() });
+  const reliquary = createReliquary();
   // Order (lead decision 2026-10-04): [Dynasty, when the continent is won] · the Edict and Challenges (one compact line) · the Chronicle (on a 390x844 phone it
   // starts on the first screen) · Deeds · Trophies · the stats · the Legacy tree; the Dynasty section sits last until the continent is won.
-  const bodyEl = h('div.realm-body.scroll-y', {}, edictSection.el, boonEl, chronicle.el, saveMap.el, saveMap.statusEl, deeds.el, trophies.el, statsSection, legacySection.el, dynastyEl);
+  const bodyEl = h('div.realm-body.scroll-y', {}, edictSection.el, boonStrip.el, boonEl, chronicle.el, saveMap.el, saveMap.statusEl, deeds.el, reliquary.el, trophies.el, statsSection, legacySection.el, dynastyEl);
   const el = h('div.realm.glass-panel', {},
     h('div.realm-header', {},
       h('h2.realm-title', {}, 'Realm'),
@@ -144,6 +148,8 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy } 
       if (boonText.textContent !== text) boonText.textContent = text;
     }
     if (data.dynastyRules !== undefined) edictSection.update(data.dynastyRules);
+    if (data.boonStrip !== undefined) boonStrip.update(data.boonStrip);
+    if (data.reliquary !== undefined) reliquary.update(data.reliquary);
     if (data.legacy !== undefined) legacySection.update(data.legacy);
     if (data.deeds !== undefined) deeds.update(data.deeds);
     if (data.trophies !== undefined) trophies.update(data.trophies);

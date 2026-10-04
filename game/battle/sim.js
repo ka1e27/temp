@@ -18,6 +18,7 @@ import { marchSpeedMult } from './features.js';
 import { processDragon, initialDragon } from './dragon.js';
 import { initialChampion, championSquadRef, processChampion } from './champion.js';
 import { processRising } from './fallen.js';
+import { processBoons } from './boons.js';
 import { FEATURES } from '../config/features.js';
 import { sendFromSite } from './squads.js';
 import { advanceMovement, mergeSquads } from './movement.js';
@@ -249,6 +250,7 @@ export function step(battle, dt) {
   processRising(battle, t); // a Barrow Keep (PLAN-PHASE6): its dead rise every 20 s, telegraphed
   resolveCombat(battle, dt, t);
   resolveTowerVolleys(battle, getRuntime(battle), t);
+  processBoons(battle, dt, t); // Boons and Relics (PLAN-PHASE7, battle/boons.js): scorched ground, fire arrows, Martyr's Crown
   applyGrowth(battle, dt);
   checkEndConditions(battle, t);
   if (battle.champion) processChampion(battle, t, champion); // launches it on time; its fall cuts the war band's attack

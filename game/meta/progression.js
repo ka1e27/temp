@@ -31,6 +31,9 @@ import { defaultBounties } from './bountiesState.js';
 import { edictMods, defaultEdict, isEdictId } from './edicts.js'; // the leaf (PLAN-PHASE5): Edicts, Challenges and Legacy, one modifier source
 import { ensureLegacy, legacyPointsForFounding, cleanChallenges, buyLegacy } from './legacy.js';
 import { CHALLENGES } from '../config/edicts.js';
+import { boonMods, boonSimStats, defaultBoons2, defaultRelics } from './boonsState.js'; // the leaf (PLAN-PHASE7): Boons and Relics, one modifier source
+import { offerBoons, boonsUnlocked, titheOnConquest, winDrafts } from './boons.js';
+import { claimRelic, syncRelics } from './relics.js';
 
 /** The roster for a new dynasty: every General keeps level, XP and skills; where they last fought is forgotten. */
 function carryGenerals(state) {
@@ -71,12 +74,13 @@ export function playerBattleStats(state, world, targetRegionId, opts = {}) {
   if (ability && em.noAbility) ability = null;
   else if (ability && em.abilityUses > 1) ability = { ...ability, uses: em.abilityUses }; // Warrior Kings: twice per battle
 
+  const bm = boonMods(state); // PLAN-PHASE7: Boons and Relics (Blood Price's attack, the Dragon Banner's and Martyr's Crown's camp)
   const out = {
-    atk: PLAYER_BASE.atk * mult('steel') * perks.atk * starAtkDef * vsFoe * em.atkMult * dragonscale,
+    atk: PLAYER_BASE.atk * mult('steel') * perks.atk * starAtkDef * vsFoe * em.atkMult * dragonscale * bm.atkMult,
     def: PLAYER_BASE.def * mult('armour') * perks.def * starAtkDef,
     growth: PLAYER_BASE.growth * mult('recruitment') * perks.growth,
     speed: PLAYER_BASE.speed * mult('logistics') * perks.speed * works.speedMult * cmd.speedMult * em.speedMult, // Swift Banners
-    campTroops: (PLAYER_BASE.campTroops + levelOf(state, 'muster') * UPGRADES.muster.magnitude + works.campTroops) * cmd.campTroopsMult * em.campTroopsMult, // Veteran Camp
+    campTroops: (PLAYER_BASE.campTroops + levelOf(state, 'muster') * UPGRADES.muster.magnitude + works.campTroops) * cmd.campTroopsMult * em.campTroopsMult * bm.campTroopsMult, // Veteran Camp; the Dragon Banner x2
     garrisonShare: PLAYER_BASE.garrisonShare,
     capBonus: PLAYER_BASE.capBonus,
     cooldownMult: perks.cooldownMult * works.cooldownMult * cmd.cooldownMult * em.powerCooldownMult, // Warrior Kings +50%, Warlord -15%
@@ -93,6 +97,8 @@ export function playerBattleStats(state, world, targetRegionId, opts = {}) {
     powers,
   };
   if (em.noPowers) out.powersBlocked = 'ironWill'; // Iron Will: battle/powers.js refuses every power
+  const sim = boonSimStats(state); // PLAN-PHASE7: the Boons and Relics that change how the sim plays (battle/boons.js); absent with none
+  if (sim) out.boons = sim;
   return out;
 }
 
@@ -249,6 +255,7 @@ export function enemyBattleStats(world, state, regionId) {
     fortTroopMult: em.enemyFortTroopMult,
     gateTroopMult: region.isCapital ? em.capitalGateTroopMult : 1,
     dragonHpMult: em.dragonHpMult,
+    keepTroopMult: boonMods(state).enemyKeepTroopMult, // Kingslayer (PLAN-PHASE7): the keep's starting garrison (arena.js)
   };
 }
 
@@ -322,7 +329,8 @@ export function conquestBounty(state, world, regionId) {
   // PLAN-PHASE5: Merchant Princes x2 (not a retake: that was already the player's), Age of Dragons' Lair rewards x2
   const em = edictMods(state);
   const region = world.regions[regionId];
-  const edict = occupied ? 1 : em.bountyMult * (region && region.type === 'dragon' ? em.dragonRewardMult : 1);
+  const edict = occupied ? 1 : em.bountyMult * (region && region.type === 'dragon' ? em.dragonRewardMult : 1)
+    * boonMods(state).bountyMult; // Fortune Favours x1.5 (PLAN-PHASE7)
   return bounty(state, world, regionId) * (occupied ? FRONTIER.reward.retakeBountyShare : typeBountyMult(region))
     * projectedStreakMultiplier(state) * edict;
 }
@@ -353,6 +361,13 @@ export function conquer(state, world, regionId, now, opts = {}) {
   const share = opts && Number.isFinite(opts.bountyShare) ? Math.max(0, opts.bountyShare) : 1; // Quick Conquest pays part (PLAN-PHASE5 §5D)
   const gold = conquestBounty(state, world, regionId) * share; // a retake pays its share (DESIGN §10.2)
   const loser = state.owner[regionId];
+  // PLAN-PHASE7: a conquest won IN BATTLE (opts.viaBattle; not a surrender, not Quick Conquest) drafts Boons once they are unlocked
+  // (asked before the region flips: the tutorial win never drafts). An old save's Relics are placed before this region is taken.
+  // ... and only when the win counts (meta/boons.js winDrafts: Fair or harder at attack time, typed regions, capitals). `opts.labelAtAttack`
+  // is the card's label when the attack began (BattleRun.labelAtAttack); without it, the card's label now (before the region flips).
+  const draftBoons = !!(opts && opts.viaBattle) && boonsUnlocked(state)
+    && winDrafts(region, opts.labelAtAttack || difficulty(state, world, regionId).label);
+  syncRelics(state, world);
 
   state.owner[regionId] = PLAYER_FACTION;
   state.conqueredAt[regionId] = now;
@@ -399,6 +414,23 @@ export function conquer(state, world, regionId, now, opts = {}) {
     const back = retake(state, world, regionId, now); // restores prosperity, fortifications, Works and a thin militia
     result.retaken = true;
     result.renown = (result.renown || 0) + (back ? back.renown : 0);
+  }
+  // Phase 7 (PLAN-PHASE7): the Relic in this region is claimed; Tithe counts the conquest; a battle win drafts Boons
+  const relic = claimRelic(state, regionId);
+  if (relic) {
+    result.relic = relic; // { id, name, icon, text, newFind, renown, deeds }
+    if (relic.renown) result.renown = (result.renown || 0) + relic.renown;
+  }
+  if (!occupied) {
+    const tithe = titheOnConquest(state);
+    if (tithe) { result.tithe = tithe; result.renown = (result.renown || 0) + tithe; }
+  }
+  if (draftBoons) {
+    const choices = offerBoons(state, world, 'battle');
+    if (choices) {
+      result.boonOffer = choices; // boon ids; the pending offer is state.boons2.pending (meta/boons.js pendingBoons)
+      if (state.boons2.pending.missed) result.boonMissed = true; // a pending offer was replaced: "you missed a pick"
+    }
   }
   return result;
 }
@@ -508,7 +540,8 @@ function estimateStrength(world, region, enemy, captured = null, scouted = false
     const unit = neutral ? 1 : enemy.atk * enemy.def;
     const growth = cfg.growth * (neutral ? BATTLE.freeFolkGrowthMult : enemy.growth);
     const cap = cfg.cap * (neutral ? ENEMY_SCALING.freeFolkCapMult : (enemy.capMult ?? 1));
-    const fortMult = !neutral && (type === 'tower' || type === 'fort') ? (enemy.fortTroopMult ?? 1) : 1; // Merchant Princes
+    const fortMult = !neutral && (type === 'tower' || type === 'fort') ? (enemy.fortTroopMult ?? 1)
+      : !neutral && type === 'keep' ? (enemy.keepTroopMult ?? 1) : 1; // Merchant Princes; Kingslayer (PLAN-PHASE7)
     const start = Math.min((BATTLE.enemyStart[type] ?? 0) * mult * fortMult, DIFFICULTY.overCapCredit * cap);
     return (start + growth * DIFFICULTY.horizonSec) * cfg.def * defMult * unit;
   };
@@ -598,13 +631,16 @@ export function difficulty(state, world, regionId, opts = {}) {
   const approach = approachTiles(world, state.owner, regionId) || 0;
   const occ = occupationOf(state, regionId);
   const captured = occ && occ.forts && occ.forts.length ? fortEffects(occ.forts) : null;
-  const strength = estimateStrength(world, region, enemy, captured, isScouted(state, regionId)) * (1 + DIFFICULTY.approachPerTile * approach);
+  const scouted = isScouted(state, regionId) || boonMods(state).scoutAll; // the Seer's Lens (PLAN-PHASE7)
+  const strength = estimateStrength(world, region, enemy, captured, scouted) * (1 + DIFFICULTY.approachPerTile * approach);
   const ratio = strength > 0 ? power / strength : Infinity;
 
   // Surrender is a reward for a proven army: never offered before the first battle is won, so the
   // tutorial fight always happens (DESIGN §5.3).
   // Old Alliances (PLAN-PHASE5 Legacy): Free Folk regions surrender at a lower ratio
-  const ff = edictMods(state).freeFolkSurrender;
+  // ... and the Crown of the Reeve Relic (PLAN-PHASE7): the lowest ratio that is set wins
+  const ffs = [edictMods(state).freeFolkSurrender, boonMods(state).freeFolkSurrender].filter((x) => x > 0);
+  const ff = ffs.length ? Math.min(...ffs) : 0;
   const surrenderAt = ff > 0 && enemy.personality === 'passive' ? Math.min(ff, ECONOMY.surrenderRatio) : ECONOMY.surrenderRatio;
   const surrender = ratio >= surrenderAt && state.stats.battlesWon > 0;
 
@@ -697,6 +733,9 @@ export function foundDynasty(state, newSeed, world, currentWorld, choice = {}) {
     streak: defaultStreak(),
     grudges: defaultGrudges(),
     trophies: defaultTrophies(),
+    // Phase 7 (PLAN-PHASE7): Boons and Relics belong to the dynasty (resetRegions places the new continent's Relics); the Reliquary is kept
+    boons2: defaultBoons2(),
+    relics: defaultRelics(),
   };
   // Phase 5: this dynasty's Edict and Challenges; the lifetime Legacy (inside `generals`) gains the points founding pays
   next.edict = { ...defaultEdict(), id: edictId, challenges };
