@@ -2,6 +2,10 @@
 // spec). Keeping them here means a designer pass is a one-file diff. Browser
 // scene code only (no purity constraint) but this file itself touches
 // nothing browser-specific, so it's safe to import from tests too.
+import { FEATURES as MAP_FEATURES } from '../config/features.js';
+import { ASHEN } from '../config/ashen.js';
+
+const SHRINE_HOLD_SEC = MAP_FEATURES.shrine.holdSec; // tutorial V3's words
 
 export const BOOT = Object.freeze({
   fadeMs: 600,
@@ -82,7 +86,8 @@ export const DEFEAT = Object.freeze({
  * @property {string[]} seenOn      the events that mark it seen (whether or not it is on screen: the player already knows it)
  * @property {number} [timeoutSec]  seen after this long ON SCREEN (never blocks the player)
  * @property {boolean} [activeOnly]  its events only mark it seen while it is the step on screen (B3: a capture before it showed should still show it)
- * @property {string} [needs]       a feature flag that must be on (supply lines, works): the step stays silent until that feature lands
+ * @property {string} [needs]       a feature flag that must be on (supply lines, works, frontier): the step stays silent until that feature lands
+ * @property {boolean} [afterDone] it may show after the first tutorial is done (founding a dynasty sets `tutorial.done`): Phase 5 features of later dynasties
  */
 
 /** @type {TutorialStep[]} */
@@ -130,6 +135,51 @@ export const TUTORIAL_STEPS = Object.freeze([
   { id: 'M2', scene: 'world', text: 'Scout a region to see its garrisons and weak point.', anchor: 'scout', after: ['M1'], seenOn: ['scouted'] },
   { id: 'M3', scene: 'world', text: 'Build Works in your regions: Barracks and Stables help the battles next to them.', anchor: 'worksRegion', after: ['M1'], seenOn: ['workBuilt'], needs: 'works' },
   { id: 'M4', scene: 'world', text: 'Found a Dynasty: start again, stronger, on a new continent.', anchor: 'realm', seenOn: ['realmOpened'] },
+  // the Living Frontier (DESIGN 10.1, 10.3, 10.5): a war band is coming (on the map, or while you fight elsewhere); two battles at once; fortify the border
+  {
+    id: 'F1', scene: 'world', anchor: 'raidGo', seenOn: ['raidGo', 'defenseStarted'], needs: 'frontier',
+    text: 'A war band is coming! Press Go to defend it yourself, or let your Captain hold it.',
+  },
+  {
+    id: 'F2', scene: 'battle', anchor: 'raidGo', seenOn: ['raidGo', 'defenseStarted'], needs: 'frontier',
+    text: 'A war band is coming! Press Go to defend it yourself, or let your Captain hold it.',
+  },
+  {
+    id: 'F3', scene: 'battle', anchor: 'tray', seenOn: ['battleSwitched'],
+    text: 'Two battles at once: press Tab or pick one in the tray to switch. The other keeps going.',
+    textTouch: 'Two battles at once: tap one in the tray to switch. The other keeps going.',
+  },
+  {
+    id: 'F4', scene: 'world', anchor: 'fortRegion', seenOn: ['fortBuilt'], needs: 'frontier',
+    text: 'Fortify your border: Arrow Towers and Walls defend a region when it is attacked.',
+  },
+  // Generals and Renown (DESIGN 10.11, 10.12)
+  {
+    // after the second battle's own lessons (supply lines, pause and speed), and it steps aside after 12 s on screen: it must never crowd them out
+    id: 'G1', scene: 'battle', anchor: 'ability', after: ['C3'], seenOn: ['abilityUsed'], needs: 'frontier', timeoutSec: 12,
+    text: 'Your Marshal commands here: press G or tap the ability once per battle.',
+    textTouch: 'Your Marshal commands here: tap the ability once per battle.',
+  },
+  { id: 'G2', scene: 'world', anchor: 'generalsBtn', seenOn: ['generalsOpened', 'skillPicked'], needs: 'frontier', timeoutSec: 12, text: 'A General grew stronger: open Generals to choose a skill.' },
+  { id: 'R1', scene: 'world', anchor: 'festivalRegion', after: ['M1'], seenOn: ['festival'], needs: 'frontier', timeoutSec: 12, text: 'You have the Renown for a Festival: it raises a region’s prosperity at once.' },
+  // A varied map (DESIGN 10.13; phase3-hookup §5): the first typed or twisted region on the frontier, the first Siege, the first Raid, the Dragon's
+  // first warning and the first world event. Each steps aside after a few seconds on screen.
+  { id: 'V1', scene: 'world', anchor: 'featureRegion', after: ['M1'], seenOn: ['featureCardOpened'], needs: 'frontier', timeoutSec: 10, text: 'Some regions hold a treasure or a twist: the icon by the name says which. Open one to see.' },
+  { id: 'V2', scene: 'battle', anchor: 'gate', seenOn: ['gateTaken'], needs: 'frontier', timeoutSec: 10, text: 'Take the Gate to open the keep.' },
+  { id: 'V3', scene: 'battle', anchor: 'shrine', seenOn: ['shrinesHeld'], needs: 'frontier', timeoutSec: 10, text: `Hold all three Shrines for ${SHRINE_HOLD_SEC} s to win.` },
+  { id: 'V4', scene: 'battle', anchor: 'telegraph', seenOn: ['bulwark'], needs: 'frontier', timeoutSec: 6, text: 'Bulwark the target!' },
+  { id: 'V5', scene: 'world', anchor: 'eventToast', seenOn: ['eventAnswered'], needs: 'frontier', timeoutSec: 12, text: 'A world event: answer it before its time runs out.' },
+  // Goals and Rivals (PLAN-PHASE4): the Bounty Board the moment it opens (after M1, so it never crowds the first lessons), and the first Vendetta's warning.
+  // Last in the list: an earlier step that is due always goes first.
+  { id: 'Q1', scene: 'world', anchor: 'regionsBtn', after: ['M1'], seenOn: ['boardOpened'], needs: 'frontier', timeoutSec: 12, text: 'New: the Bounty Board. Open Regions for three contracts that pay extra.' },
+  { id: 'Q2', scene: 'world', anchor: 'vendettaGo', seenOn: ['vendettaGo', 'defenseStarted'], needs: 'frontier', timeoutSec: 12, text: 'A Vendetta! Their leader comes in person with a Champion. Beat it for a Trophy: press Go.' },
+  // Dynasties that change the rules (PLAN-PHASE5): D1 is drawn INSIDE the founding ceremony (ui/ceremony.js setEdictHint; its rule is always false, so the coach never
+  // picks it), the first time it opens; D2 points at Quick Conquest the first time an open card offers it (after M1, last in the list: never crowds earlier steps).
+  { id: 'D1', scene: 'world', anchor: 'edicts', seenOn: ['edictPicked'], text: 'Your first Edict: pick the card that suits how you like to play. It lasts until the next founding, and the Realm panel always shows it.' },
+  { id: 'D2', scene: 'world', anchor: 'quickBtn', after: ['M1'], seenOn: ['quickConquest'], timeoutSec: 12, afterDone: true, text: 'New: Quick Conquest. Your commander takes this Easy region at once, for the Victory crown.' },
+  // The Ashen Host (PLAN-PHASE6 §6B): the first time one of its regions is on the frontier (Dynasty 2 on, so `afterDone`). Last in the list and after M1:
+  // every earlier step that is due goes first; it steps aside after 12 s and is seen once its card is opened.
+  { id: 'A1', scene: 'world', anchor: 'ashenRegion', after: ['M1'], seenOn: ['ashenCardOpened'], timeoutSec: 12, afterDone: true, text: ASHEN.copy.hint },
 ]);
 
 /** The live send arrow: saturated green when the send would capture, red when it would not (gold otherwise), grey when there is no route (front lines). Read by battle.js and tools/check.mjs. */

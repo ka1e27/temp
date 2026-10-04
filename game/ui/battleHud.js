@@ -58,7 +58,7 @@ const HOTKEYS = ['Q', 'W', 'E', 'R', 'T'];
  * @param {{ onSendFraction?: (f: number) => void, onPower?: (id: string) => void,
  *   onPauseToggle?: () => void, onSpeed?: (next: number) => void, onRetreat?: () => void, onAuto?: () => void }} [callbacks]
  */
-export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpeed, onRetreat, onAuto } = {}) {
+export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpeed, onRetreat, onAuto, onMap, onAbility } = {}) {
   let lastSpeed = 1;
   let slow = false; // Settings > Slow battles: 0.5x joins the cycle
   let lastPaused = false;
@@ -72,10 +72,18 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
   const swiftEl = h('span.battle-swift', {}, '');
   swiftEl.hidden = true;
   const timerEl = h('div.battle-timer.nums', {}, icon('clock', 14), h('span.battle-clock', {}, '0:00'), swiftEl);
+  // A varied map (DESIGN 10.13): the fight's twist or boss in one line under the timer: "Hold all 3 Shrines" with its progress, the Dragon's
+  // health, "Take the Gate first", or the twist's name. A bar shows progress (shrines held, then the hold; the Dragon's health).
+  const featureText = h('span.battle-feature-text', {}, '');
+  const featureFill = h('span.battle-feature-fill', {});
+  const featureBar = h('span.battle-feature-bar', { 'aria-hidden': 'true' }, featureFill);
+  const featureEl = h('div.battle-feature', { role: 'status' }, featureText, featureBar);
+  featureEl.hidden = true;
   const topEl = h('div.battle-top', {},
     regionNameEl,
     h('div.territory-bar', { role: 'img', 'aria-label': 'Territory' }, youBar, enemyBar),
     timerEl,
+    featureEl,
   );
   topEl.setAttribute('role', 'group');
   topEl.setAttribute('aria-label', 'Battle status');
@@ -95,7 +103,10 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
   }, icon('speed', 16), speedLabel);
   const retreatBtn = h('button.btn.btn-danger.battle-retreat', { onClick: () => confirmRetreat(), 'aria-label': 'Retreat' },
     icon('flag', 16), h('span.battle-retreat-label', {}, 'Retreat'));
-  const topRightEl = h('div.battle-topright', {}, pauseBtn, speedBtn, retreatBtn);
+  // Back to the map WITHOUT ending the fight (DESIGN 10.5): the battle keeps running under its commander; the tray brings you back. Shown when the shell allows it.
+  const mapBtn = h('button.btn-icon.battle-map', { onClick: () => onMap?.(), 'aria-label': 'Map: leave this battle running and go to the map', title: 'Map (the battle keeps going)' }, icon('map', 18));
+  mapBtn.hidden = true;
+  const topRightEl = h('div.battle-topright', {}, mapBtn, pauseBtn, speedBtn, retreatBtn);
 
   // --- bottom: send-fraction selector + powers ------------------------------
   const fractionButtons = new Map();
@@ -114,23 +125,59 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
   const autoBtn = h('button.battle-auto', {
     onClick: () => onAuto?.(), 'aria-pressed': 'false', 'aria-label': 'Auto supply lines', title: 'Auto supply lines (S): sends become supply lines',
   }, h('span.battle-auto-icon', {}, icon('supply', 22)), h('span.battle-auto-text', {}, h('span.battle-auto-name', {}, 'Auto'), autoState));
-  const sendRowEl = h('div.battle-sendrow', {}, autoBtn, fractionEl);
+  // the commander's ability (DESIGN 10.11): once per battle, key G; a Raid then waits for its target (armed). Hidden under the Militia Captain.
+  const abilityLabel = h('span.battle-ability-label', {}, '');
+  const abilityIcon = h('span.battle-ability-icon', { 'aria-hidden': 'true' }, icon('star', 16));
+  let abilityKind = null;
+  const abilityBtn = h('button.btn.btn-primary.battle-ability', { type: 'button', onClick: () => onAbility?.(), 'aria-keyshortcuts': 'G' },
+    abilityIcon, abilityLabel, h('span.battle-ability-key', { 'aria-hidden': 'true' }, 'G'));
+  abilityBtn.hidden = true;
+  const sendRowEl = h('div.battle-sendrow', {}, abilityBtn, autoBtn, fractionEl);
   // DOM order matches "stack bottom-up": fraction row first (renders above,
   // in normal column flow), powers row second (renders last => closest to
   // the pinned bottom edge) — see .battle-bottom's flex-direction: column.
   const powersEl = h('div.power-buttons', {});
   const bottomEl = h('div.battle-bottom', {}, sendRowEl, powersEl);
 
-  const el = h('div.battle-hud', {}, topEl, topRightEl, pausedTag, bottomEl);
+  // the name of an ability just used, under the battle header (DESIGN 10.11): a banner, not world text a settlement badge could cover
+  const abilityBanner = h('div.battle-ability-banner', { 'aria-hidden': 'true' }, '');
+  abilityBanner.hidden = true;
+  let bannerTimer = 0;
+  function showAbilityBanner(text, iconEl) {
+    clearTimeout(bannerTimer);
+    abilityBanner.replaceChildren(...(iconEl ? [iconEl] : []), h('span', {}, text));
+    abilityBanner.hidden = false;
+    abilityBanner.classList.remove('is-in');
+    void abilityBanner.offsetWidth;
+    abilityBanner.classList.add('is-in');
+    bannerTimer = setTimeout(() => { abilityBanner.hidden = true; abilityBanner.classList.remove('is-in'); }, 1600);
+  }
+  // "{Leader}'s champion has fallen!" (PLAN-PHASE4 §4D): a bigger, rarer banner than the ability's, ~2.6 s
+  const championBanner = h('div.battle-champion-banner', { 'aria-hidden': 'true' }, '');
+  championBanner.hidden = true;
+  let championTimer = 0;
+  function showChampionBanner(text, iconEl) {
+    clearTimeout(championTimer);
+    championBanner.replaceChildren(...(iconEl ? [iconEl] : []), h('span', {}, text));
+    championBanner.hidden = false;
+    championBanner.classList.remove('is-in');
+    void championBanner.offsetWidth;
+    championBanner.classList.add('is-in');
+    championTimer = setTimeout(() => { championBanner.hidden = true; championBanner.classList.remove('is-in'); }, 2600);
+  }
+  const el = h('div.battle-hud', {}, topEl, topRightEl, pausedTag, abilityBanner, championBanner, bottomEl);
 
   // --- retreat confirm (composes modal.js) ----------------------------------
+  // The words of the confirmation: an attack's (the default), or a defense's, which gives the region up (DESIGN 10.1: a retreat from a defense is a loss)
+  let retreatCopy = null; // { title, body, action } from update({ retreat })
   function confirmRetreat() {
+    const c = retreatCopy || { title: 'Retreat?', body: 'Your War Camp falls back. Squads already in the field will be lost.', action: 'Retreat' };
     const modal = createModal({
-      title: 'Retreat?',
-      body: 'Your War Camp falls back. Squads already in the field will be lost.',
+      title: c.title,
+      body: c.body,
       actions: [
         { label: 'Keep fighting', variant: 'secondary', onClick: () => modal.destroy() },
-        { label: 'Retreat', variant: 'danger', onClick: () => { modal.destroy(); onRetreat?.(); } },
+        { label: c.action, variant: 'danger', onClick: () => { modal.destroy(); onRetreat?.(); } },
       ],
     }, { onDismiss: () => modal.destroy() });
     document.body.appendChild(modal.el);
@@ -147,6 +194,7 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
     if (document.documentElement.hasAttribute('data-dialog')) return;
     if (e.code === 'KeyS') { onAuto?.(); return; }
+    if (e.code === 'KeyG') { if (!abilityBtn.hidden && !abilityBtn.disabled) onAbility?.(); return; }
     let fi = DIGIT_CODES.indexOf(e.code);
     if (fi === -1) fi = NUMPAD_CODES.indexOf(e.code);
     if (fi === -1) fi = ['1', '2', '3', '4'].indexOf(e.key);
@@ -188,6 +236,38 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
     if (!data) return;
 
     if (data.regionName != null) setText(regionNameEl, data.regionName);
+    if (data.canLeave != null && mapBtn.hidden === !!data.canLeave) mapBtn.hidden = !data.canLeave;
+    if (data.ability !== undefined) {
+      const a = data.ability;
+      if (abilityBtn.hidden !== !a) abilityBtn.hidden = !a;
+      if (a) {
+        // the commanding General's emblem (a shield for the Marshal, an eye for the Oracle...), so the button says WHO acts, even icon-only on a phone
+        if (a.emblem && a.kind !== abilityKind) { abilityKind = a.kind; abilityIcon.replaceChildren(a.emblem()); }
+        // Warrior Kings (PLAN-PHASE5 §5A): two uses a battle; the label counts what is left ("Shield Wall · 2")
+        const multi = (a.uses || 1) > 1;
+        const spent = multi ? a.left <= 0 : a.used;
+        setText(abilityLabel, spent ? `${a.name} used` : a.armed ? `${a.name}: pick a target` : multi ? `${a.name} · ${a.left}` : a.name);
+        const dis = !a.ready && !a.armed;
+        if (abilityBtn.disabled !== dis) abilityBtn.disabled = dis;
+        abilityBtn.classList.toggle('is-used', !!spent);
+        abilityBtn.classList.toggle('is-armed', !!a.armed);
+        setAttr(abilityBtn, 'aria-label', spent ? `${a.name}: used this battle` : multi ? `${a.name} (G), ${a.left} of ${a.uses} uses left: ${a.desc || ''}${a.armed ? '. Pick a target, or press again to cancel' : ''}` : `${a.name} (G): ${a.desc || ''}${a.armed ? '. Pick a target, or press again to cancel' : ''}`);
+        setAttr(abilityBtn, 'title', a.desc || a.name);
+      }
+    }
+    if (data.retreat !== undefined) retreatCopy = data.retreat;
+    if (data.feature !== undefined) {
+      const f = data.feature;
+      if (featureEl.hidden !== !f) featureEl.hidden = !f;
+      if (f) {
+        setText(featureText, f.text);
+        const kind = `battle-feature is-${f.kind}${f.tone ? ` is-${f.tone}` : ''}`;
+        if (featureEl.className !== kind) featureEl.className = kind;
+        const hasBar = typeof f.frac === 'number';
+        if (featureBar.hidden !== !hasBar) featureBar.hidden = !hasBar;
+        if (hasBar) featureFill.style.width = `${Math.round(Math.max(0, Math.min(1, f.frac)) * 100)}%`;
+      }
+    }
 
     if (data.territory) {
       const total = Math.max(data.territory.you + data.territory.enemy, 1e-6);
@@ -201,7 +281,14 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
 
     if (typeof data.timeSec === 'number') setText(timerEl.querySelector('.battle-clock'), formatClock(data.timeSec));
     // "0:31 · Swift 0:43": the time left to win with the Swift crown; dimmed, and said in words, once it is missed (DESIGN 4.8)
-    if (typeof data.swiftSec === 'number') {
+    // a DEFENSE counts down its siege instead: "0:31 · Hold 1:12" (hold the keep until it runs out, DESIGN 10.1)
+    if (typeof data.holdSec === 'number') {
+      swiftEl.hidden = false;
+      setText(swiftEl, `· Hold ${formatClock(Math.max(0, data.holdSec))}`);
+      swiftEl.classList.remove('is-missed');
+      swiftEl.classList.add('is-hold');
+    } else if (typeof data.swiftSec === 'number') {
+      swiftEl.classList.remove('is-hold');
       const missed = data.swiftSec <= 0;
       swiftEl.hidden = false;
       setText(swiftEl, missed ? '· Swift missed' : `· Swift ${formatClock(data.swiftSec)}`);
@@ -249,20 +336,24 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
 
         // a locked power stays focusable ("Rally, level 0, locked") and says so; pressing it explains how to unlock it (the scene's toast)
         setAttr(entry.btn, 'aria-disabled', p.locked ? 'true' : 'false');
-        const state = p.locked ? 'locked' : cooling && p.cooldownSec != null ? `recharging ${Math.max(1, Math.ceil(p.cooldownSec))} s` : cooling ? 'recharging' : 'ready';
+        const lockWhy = p.blocked || (p.holy ? 'cannot be used on Holy Ground' : null); // Holy Ground, or a Challenge (Iron Will) that forbids powers
+        const state = lockWhy ? lockWhy : p.locked ? 'locked' : cooling && p.cooldownSec != null ? `recharging ${Math.max(1, Math.ceil(p.cooldownSec))} s` : cooling ? 'recharging' : 'ready';
         setAttr(entry.btn, 'aria-label', `${p.name || p.id}, level ${p.level}, ${state}`);
         if (p.armed) setAttr(entry.btn, 'aria-pressed', 'true'); else if (entry.btn.hasAttribute('aria-pressed')) entry.btn.removeAttribute('aria-pressed'); // pressed only while armed
         entry.btn.classList.toggle('is-locked', !!p.locked);
-        entry.btn.classList.toggle('is-ready', ready);
+        entry.btn.classList.toggle('is-holy', !!lockWhy); // Holy Ground (DESIGN 10.13): every power greyed, a halo lock
+        entry.btn.classList.toggle('is-boosted', !!p.boost); // Blizzard: the stronger Firestorm
+        entry.btn.classList.toggle('is-ready', ready && !lockWhy);
         entry.btn.classList.toggle('is-armed', !!p.armed);
         entry.btn.classList.toggle('is-cooling', cooling);
         entry.btn.style.setProperty('--cd', String(Math.max(0, Math.min(1, p.cooldownFrac))));
 
-        setIcon(entry.iconSlot, p.locked ? 'lock' : p.icon, 28);
+        setIcon(entry.iconSlot, p.locked || lockWhy ? 'lock' : p.icon, 28);
 
         setText(entry.cdNumEl, cooling && p.cooldownSec != null ? String(Math.max(1, Math.ceil(p.cooldownSec))) : '');
 
-        setText(entry.pip, p.level > 0 ? String(p.level) : '');
+        setText(entry.pip, p.boost && p.level > 0 ? `${p.level} ${p.boost}` : p.level > 0 ? String(p.level) : '');
+        if (p.boost) setAttr(entry.btn, 'aria-label', `${p.name || p.id}, level ${p.level}, ${state}, ${p.boost} in the Blizzard`);
         entry.pip.hidden = p.level <= 0 || p.locked;
 
         const fullName = p.name || p.id;
@@ -271,7 +362,7 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
         if (entry.nameEl.lastChild.textContent !== shortName) entry.nameEl.lastChild.textContent = shortName;
         entry.nameEl.classList.toggle('is-locked', !!p.locked);
 
-        if (ready && !entry.lastReady) popReady(entry.btn);
+        if (ready && !lockWhy && !entry.lastReady) popReady(entry.btn);
         entry.lastReady = ready;
         entry.lastLocked = p.locked;
       });
@@ -307,5 +398,5 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
     window.removeEventListener('keydown', onKeydown);
   }
 
-  return { el, update, destroy, refuse };
+  return { el, update, destroy, refuse, showAbilityBanner, showChampionBanner, abilityButton: () => (abilityBtn.hidden ? null : abilityBtn) };
 }

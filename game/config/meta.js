@@ -132,5 +132,5 @@ export const DIFFICULTY = Object.freeze({
   // reads it harder (2.27 x the Free Folk factor 0.585 x the scale) so the first ring shows Easy-but-not-trivial
   // and stays under the surrender ratio on every seed.
   tierFactor: [1, 1.5, 1.094], // tier 1: the first ring reads Easy on 28 of 30 seeds (the tutorial pick on 10 of 12) and stays under the surrender ratio (card ratio 1.3-2.7); tier 2 was 0.948 before the ladder cliff was smoothed
-  personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.48 }), // Free Folk never attack; rival AIs punish a 3-second-cadence player
+  personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.4, undying: 1.8 }), // undying (PLAN-PHASE6): measured with The Fallen Rise live, see below; Free Folk never attack; rival AIs punish a 3-second-cadence player (swarm 2.48 -> 2.4 with Generals and a varied map: its campaign Fair fights were won 93%; 2.3 broke the synthetic ladder)
 });

@@ -6,6 +6,7 @@ import { createGame, resetRegions } from '../meta/state.js';
 import { loadFrom } from '../meta/save.js';
 import { foundDynasty } from '../meta/progression.js';
 import { chronicleOnDynasty } from '../meta/chronicle.js';
+import { worldOptsFor } from '../meta/edicts.js';
 
 function randomSeed() {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
@@ -36,7 +37,7 @@ export function createStateContainer({ storage, now }) {
     }
     if (loaded) {
       try {
-        world = generateWorld(loaded.seed >>> 0, { dynasty: loaded.dynasty?.level });
+        world = generateWorld(loaded.seed >>> 0, worldOptsFor(loaded)); // the Edict shapes the continent (Long Winter, Age of Dragons, Open Roads)
         state = loaded;
         epoch += 1;
         // A hand-edited / older save whose owner table doesn't fit this world is repaired, not trusted.
@@ -55,7 +56,7 @@ export function createStateContainer({ storage, now }) {
   }
 
   /** @param {number} [seed] omit for a random one (Date.now()/crypto, DESIGN §8). */
-  function newRealm(seed) {
+  function newRealm(seed, { keepGenerals = true } = {}) {
     const s = (seed ?? randomSeed()) >>> 0;
     world = generateWorld(s);
     epoch += 1;
@@ -63,7 +64,14 @@ export function createStateContainer({ storage, now }) {
     state = createGame(s, world, now());
     // the player's SETTINGS are not part of a realm: sound, Reduce Motion, hints... survive a new realm, a reset and a reseed
     if (prev && prev.settings) state.settings = { ...prev.settings };
+    // the Generals are lifetime progress (DESIGN 10.11): a new realm keeps the roster, freed (Settings > Reset passes keepGenerals: false)
+    if (keepGenerals) carryRoster(prev);
     return { state, world };
+  }
+
+  function carryRoster(prev) {
+    if (!prev || !prev.generals || !Array.isArray(prev.generals.roster)) return;
+    state.generals = { ...prev.generals, roster: prev.generals.roster.map((g) => ({ ...g, regionId: null })) };
   }
 
   /** A fresh game on the CURRENT world (title "New Realm" when nothing was saved yet, so the
@@ -73,6 +81,7 @@ export function createStateContainer({ storage, now }) {
     const prev = state;
     state = createGame(world.seed, world, now());
     if (prev && prev.settings) state.settings = { ...prev.settings }; // settings outlive the realm
+    carryRoster(prev); // and so do the Generals
     return { state, world };
   }
 
@@ -82,18 +91,30 @@ export function createStateContainer({ storage, now }) {
   }
 
   /** DESIGN §5.4: keeps stars/lifetime stats/settings, resets onto a new continent with tougher enemies (its region count is whatever the generator makes of the request; never promise it is larger). */
-  function tryFoundDynasty() {
+  /**
+   * @param {{ seed?: number, edict?: string|null, challenges?: string[] }} [choice] the founding ceremony's picks (PLAN-PHASE5): the seed it drew the Edicts
+   *   for, the Edict and the Challenges
+   */
+  function tryFoundDynasty(choice = {}) {
     if (!state) return false;
-    const seed = randomSeed();
-    const next = foundDynasty(state, seed);
+    const seed = (choice.seed ?? randomSeed()) >>> 0;
+    // the continent being left (its Dragon's Lair may stand: it is optional); the Edict and Challenges are applied by foundDynasty
+    const buys = Array.isArray(choice.legacyBuys) ? choice.legacyBuys : [];
+    const next = foundDynasty(state, seed, undefined, world, { edict: choice.edict ?? null, challenges: choice.challenges || [], legacyBuys: buys });
     if (!next) return false;
-    world = generateWorld(seed, { dynasty: next.dynasty.level });
+    // the Legacy bought during the ceremony (on a preview) is applied by foundDynasty (`legacyBuys`, before the dynasty-start effects); its report rides on
+    // the non-saved `next.founding` ({ legacyEarned, bought, refused }), handed back to the scene
+    const founding = next.founding || null;
+    world = generateWorld(seed, worldOptsFor(next));
     const t = now();
     state = resetRegions(next, world, t);
     try { chronicleOnDynasty(state, world, { t }); } catch (err) { console.warn('[chronicle] dynasty line skipped:', err); } // closes the old chapter, opens the next (Keepsakes); never blocks founding
     epoch += 1;
-    return { state, world };
+    return { state, world, founding };
   }
+
+  /** A seed for the next founding (the ceremony draws its Edicts for it, then founds on it). */
+  function nextSeed() { return randomSeed(); }
 
   function get() {
     return { state, world };
@@ -104,7 +125,7 @@ export function createStateContainer({ storage, now }) {
    *  seed's world fails to generate, so a bad/foreign code can never brick play. */
   function replaceState(newState) {
     try {
-      const newWorld = generateWorld(newState.seed >>> 0, { dynasty: newState.dynasty?.level });
+      const newWorld = generateWorld(newState.seed >>> 0, worldOptsFor(newState));
       world = newWorld;
       state = newState;
       epoch += 1;
@@ -115,7 +136,7 @@ export function createStateContainer({ storage, now }) {
   }
 
   return {
-    boot, newRealm, restart, reseed, tryFoundDynasty, get, replaceState,
+    boot, newRealm, restart, reseed, tryFoundDynasty, nextSeed, get, replaceState,
     get epoch() { return epoch; },
   };
 }

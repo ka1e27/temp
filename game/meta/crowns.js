@@ -12,8 +12,11 @@
 // in-progress battle, so a reload mid-fight keeps an unbroken run unbroken.
 
 import { CROWN_KEYS, PAR, BOUNTY_FRACTION_PER_CROWN, SURRENDER_CROWNS } from '../config/crowns.js';
+import { earnRenown } from './renownState.js';
+import { RENOWN } from '../config/renown.js';
 import { PLAYER_FACTION } from './state.js';
 import { bounty } from './economy.js';
+import { recordDeed } from './deeds.js';
 
 /**
  * @typedef {import('./state.js').RegionCrowns} RegionCrowns
@@ -26,6 +29,10 @@ import { bounty } from './economy.js';
  * @property {'win'|'lose'|'retreat'|null} result  from the `end` event, null while running
  * @property {number|null} endT        battle seconds when `end` was seen
  * @property {number} lastT            battle seconds at the most recent trackEvents call
+ * @property {number} powersUsed       powers the player cast (Phase 4: the Bounty Board's noPowers contract)
+ * @property {Object<string, number>} capturesByType  sites the player captured, by site type ('fort', 'tower', 'keep', ...)
+ * @property {boolean} abilityUsed     the commander's ability was used
+ * @property {string[]|null} types     site type per arena site id at the start (to name a capture's type); null on old trackers
  *
  * @typedef {Object} BattleSummary
  * @property {boolean} won
@@ -85,7 +92,19 @@ export function createCrownTracker(battle) {
   const held = battle && Array.isArray(battle.sites)
     ? battle.sites.filter((s) => s.owner === PLAYER_FACTION).map((s) => s.id)
     : null;
-  return { v: 1, playerSitesLost: 0, result: null, endT: null, lastT: 0, held };
+  const types = battle && Array.isArray(battle.sites) ? battle.sites.map((s) => s.type) : null;
+  return {
+    v: 1, playerSitesLost: 0, result: null, endT: null, lastT: 0, held, powersUsed: 0, capturesByType: {}, abilityUsed: false, types,
+  };
+}
+
+/** Adds the Phase 4 fields to a tracker saved before they existed (in place). */
+function upgradeTracker(tracker, battle) {
+  if (!Number.isFinite(tracker.powersUsed)) tracker.powersUsed = 0;
+  if (!tracker.capturesByType || typeof tracker.capturesByType !== 'object') tracker.capturesByType = {};
+  if (typeof tracker.abilityUsed !== 'boolean') tracker.abilityUsed = !!(battle && battle.abilityUsed);
+  if (tracker.types === undefined) tracker.types = battle && Array.isArray(battle.sites) ? battle.sites.map((s) => s.type) : null;
+  return tracker;
 }
 
 /**
@@ -96,7 +115,7 @@ export function createCrownTracker(battle) {
  */
 export function trackerOf(battle) {
   if (!battle.crownTracker || battle.crownTracker.v !== 1) battle.crownTracker = createCrownTracker(battle);
-  return battle.crownTracker;
+  return upgradeTracker(battle.crownTracker, battle);
 }
 
 /**
@@ -109,13 +128,23 @@ export function trackerOf(battle) {
  * @param {number} t  battle.t after the step
  * @returns {CrownTracker} the same tracker
  */
-export function trackEvents(tracker, events, t) {
+export function trackEvents(tracker, events, t, battle) {
   if (!tracker) return tracker;
   if (Number.isFinite(t)) tracker.lastT = t;
   for (const ev of events || []) {
     if (ev.type === 'capture') {
       if (ev.from === PLAYER_FACTION && ev.to !== PLAYER_FACTION
         && (!Array.isArray(tracker.held) || tracker.held.includes(ev.site))) tracker.playerSitesLost += 1;
+      if (ev.to === PLAYER_FACTION) {
+        // Phase 4: what the player took, by site type (the Bounty Board's `forts` contract)
+        const type = (Array.isArray(tracker.types) && tracker.types[ev.site]) || (battle && battle.sites && battle.sites[ev.site] && battle.sites[ev.site].type) || 'site';
+        if (!tracker.capturesByType || typeof tracker.capturesByType !== 'object') tracker.capturesByType = {};
+        tracker.capturesByType[type] = (tracker.capturesByType[type] || 0) + 1;
+      }
+    } else if (ev.type === 'power') {
+      if (ev.owner === PLAYER_FACTION) tracker.powersUsed = (tracker.powersUsed || 0) + 1;
+    } else if (ev.type === 'ability') {
+      if (ev.owner == null || ev.owner === PLAYER_FACTION) tracker.abilityUsed = true;
     } else if (ev.type === 'end') {
       tracker.result = ev.result;
       tracker.endT = Number.isFinite(t) ? t : tracker.lastT;
@@ -126,7 +155,42 @@ export function trackEvents(tracker, events, t) {
 
 /** `trackEvents(tracker, battle.events, battle.t)` for callers that hold the battle. */
 export function trackBattle(tracker, battle) {
-  return trackEvents(tracker, battle.events, battle.t);
+  return trackEvents(tracker, battle.events, battle.t, battle);
+}
+
+/**
+ * Everything the Bounty Board's onBattleEnd needs about a finished battle (PLAN-PHASE4 §4A), from the crown tracker (fed after
+ * every step, saved with the battle, so a reload mid-battle keeps it) and the run.
+ * @param {CrownTracker} tracker  trackerOf(run.battle)
+ * @param {object} battle         run.battle
+ * @param {object} run            the BattleRun: kind, regionId, commander, labelAtAttack (set it at attack start: difficulty().label)
+ * @param {import('../world/generate.js').World} world
+ * @param {import('./state.js').GameState} state
+ * @returns {{ kind:string, won:boolean, regionId:number|null, powersUsed:number, capturesByType:Object<string,number>,
+ *   twist:string|null, labelAtAttack:string|null, commander:string|null, abilityUsed:boolean, crowns:RegionCrowns,
+ *   playerSitesLost:number, durationSec:number, vendetta:boolean }}
+ */
+export function battleSummaryFor(tracker, battle, run, world, state) {
+  const t = tracker ? upgradeTracker(tracker, battle) : createCrownTracker(battle);
+  const summary = summarize(t, battle);
+  const kind = (run && run.kind) || (battle && battle.mode === 'defense' ? 'defense' : 'attack');
+  const regionId = run && Number.isInteger(run.regionId) ? run.regionId : (battle && battle.arena ? battle.arena.regionId : null);
+  const crowns = kind === 'attack' && summary.won && regionId != null && world ? crownsFor(summary, world, regionId, state) : emptyCrowns();
+  return {
+    kind,
+    won: summary.won,
+    regionId,
+    powersUsed: t.powersUsed || 0,
+    capturesByType: { ...(t.capturesByType || {}) },
+    twist: (battle && battle.arena && battle.arena.twist) || null,
+    labelAtAttack: (run && run.labelAtAttack) || t.labelAtAttack || null,
+    commander: (run && run.commander) || (battle && battle.player && battle.player.commander) || null,
+    abilityUsed: !!(t.abilityUsed || (battle && battle.abilityUsed)),
+    crowns,
+    playerSitesLost: summary.playerSitesLost,
+    durationSec: summary.durationSec,
+    vendetta: !!(run && run.vendetta),
+  };
 }
 
 /**
@@ -244,7 +308,7 @@ export function getCrowns(state, regionId) {
  * @returns {{ bonusGold: number, count: number }}
  */
 export function awardCrowns(state, world, regionId, crowns, baseBounty) {
-  if (!crowns || !crowns.victory || getCrowns(state, regionId)) return { bonusGold: 0, count: 0 };
+  if (!crowns || !crowns.victory || getCrowns(state, regionId)) return { bonusGold: 0, count: 0, renown: 0 };
   const stored = { victory: !!crowns.victory, swift: !!crowns.swift, unbroken: !!crowns.unbroken };
   const count = crownCount(stored);
   const bonusGold = crownBonus(state, world, regionId, stored, baseBounty);
@@ -256,7 +320,9 @@ export function awardCrowns(state, world, regionId, crowns, baseBounty) {
   state.gold += bonusGold;
   state.stats.goldEarned += bonusGold;
   state.stats.crownsEarned = (state.stats.crownsEarned || 0) + count;
-  return { bonusGold, count };
+  const renown = earnRenown(state, count * RENOWN.earn.crown, 'crown'); // each crown pays Renown (DESIGN §10.12)
+  recordDeed(state, 'crowns', count); // the Crowned deed (PLAN-PHASE4 §4C)
+  return { bonusGold, count, renown };
 }
 
 /**

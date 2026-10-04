@@ -3,10 +3,11 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { shortNumber, formatClock, formatDurationWords } from './format.js';
-import { createModal } from './modal.js';
 import { watchDialog } from './dialogs.js';
 import { createChroniclePanel } from './chroniclePanel.js';
 import { createSaveMapButton } from './saveMapButton.js';
+import { createDeedsSection, createTrophySection } from './deedsPanel.js';
+import { createEdictSection, createLegacySection } from './dynastyPanel.js';
 
 const STAT_ROWS = [
   ['battlesWon', 'trophy', 'Battles won'],
@@ -25,6 +26,8 @@ const STAT_ROWS = [
  * @property {{ level: number, stars: number, starText?: string }} dynasty  `starText`: what one star adds, e.g. "+20% income, ..."
  * @property {boolean} canFoundDynasty
  * @property {{ earned: number, possible: number }} [crowns]  this dynasty's crowns, e.g. 38 / 78
+ * @property {import('./deedsPanel.js').DeedCell[]} [deeds]  Phase 4: the Deeds grid
+ * @property {{ show: boolean, trophies: import('./deedsPanel.js').TrophyCell[] }} [trophies]  Phase 4: the Trophy wall
  * @property {object} [chronicle]  meta/chronicle.js chroniclePanelData(): the realm's story, newest first
  * @property {{ label: string, busyLabel: string, busy: boolean, hint: string }} [save]  the "Save the map" words and state (meta/keepsake.js saveText)
  */
@@ -32,7 +35,7 @@ const STAT_ROWS = [
 /**
  * @param {{ onFoundDynasty?: () => void, onSaveMap?: () => void, onClose?: () => void }} [callbacks]
  */
-export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
+export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy } = {}) {
   const statEls = new Map();
   const statsGrid = h('div.realm-stats-grid', {},
     ...STAT_ROWS.map(([key, iconName, label]) => {
@@ -40,11 +43,6 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
       statEls.set(key, valueEl);
       return h('div.realm-stat', {}, icon(iconName, 16), h('span.realm-stat-label', {}, label), valueEl);
     }),
-    (() => {
-      const valueEl = h('span.realm-stat-value.nums', {}, '0 / 0');
-      statEls.set('crownsDynasty', valueEl);
-      return h('div.realm-stat', {}, icon('crown', 16), h('span.realm-stat-label', {}, 'Dynasty crowns'), valueEl);
-    })(),
     (() => {
       const valueEl = h('span.realm-stat-value.nums', {}, '0:00');
       statEls.set('bestBattleSec', valueEl);
@@ -57,13 +55,30 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
     })(),
   );
 
-  const DYNASTY_INTRO = 'Conquer the whole continent to found a new dynasty: keep your stars and lifetime stats, and start over: a new continent awaits, with tougher enemies.';
+  // This dynasty's numbers, apart from the lifetime records (every stat in `state.stats` is lifetime: foundDynasty keeps them all), so neither is misread
+  const dynastyGrid = h('div.realm-stats-grid', {},
+    (() => {
+      const valueEl = h('span.realm-stat-value.nums', {}, '0 / 0');
+      statEls.set('crownsDynasty', valueEl);
+      return h('div.realm-stat', {}, icon('crown', 16), h('span.realm-stat-label', {}, 'Crowns'), valueEl);
+    })(),
+    (() => {
+      const valueEl = h('span.realm-stat-value.nums', {}, '0 / 0');
+      statEls.set('regionsHeld', valueEl);
+      return h('div.realm-stat', {}, icon('flag', 16), h('span.realm-stat-label', {}, 'Regions held'), valueEl);
+    })(),
+  );
+  const statsSection = h('section.realm-stats-groups', {},
+    h('h3.realm-section-title', {}, icon('star', 16), 'This dynasty'), dynastyGrid,
+    h('h3.realm-section-title', {}, icon('trophy', 16), 'All time', h('small', {}, 'kept across every dynasty')), statsGrid);
+
+  const DYNASTY_INTRO = 'Conquer the whole continent to found a new dynasty: keep your stars, Legacy and lifetime stats, and start over. A new continent awaits, with tougher enemies.';
   // The per-star numbers arrive as `dynasty.starText` (built from game/config/meta.js by the scene), never typed here.
   const dynastyDescEl = h('p.dynasty-desc', {}, DYNASTY_INTRO);
   const dynastyLevelEl = h('span.dynasty-level', {}, 'Dynasty I');
   const dynastyStarsEl = h('span.dynasty-stars', {}, icon('star', 16), h('span.nums', {}, '0'));
   const foundBtn = h('button.btn.btn-primary.btn-block.dynasty-found-btn', {
-    onClick: () => confirmFound(), disabled: true,
+    onClick: () => onFoundDynasty?.(), disabled: true, // opens the founding ceremony (ui/ceremony.js), which replaced the old confirm
   }, icon('crown', 16), 'Found a Dynasty');
 
   // Keepsakes (DESIGN 5.9): the realm's story, and a picture of the map to keep. Every live "Save the map" button (the panel's, plus the confirmation's while it is open) is kept in step.
@@ -78,7 +93,17 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
     dynastyDescEl,
     foundBtn,
   );
-  const bodyEl = h('div.realm-body.scroll-y', {}, statsGrid, chronicle.el, saveMap.el, saveMap.statusEl, dynastyEl);
+  // Boons of this dynasty (DESIGN 10.13): Dragonscale, once the Dragon of a Lair has fallen. The words come from config/features.js via the scene.
+  const boonText = h('span', {}, '');
+  const boonEl = h('p.realm-boon', { role: 'note' }, icon('shield', 16), boonText);
+  boonEl.hidden = true;
+  // Phase 4 (PLAN-PHASE4 §4C, §4D): the Trophy wall (this dynasty's Vendetta banners) and the Deeds grid (kept forever)
+  const trophies = createTrophySection();
+  const deeds = createDeedsSection();
+  // Phase 5 (PLAN-PHASE5): this dynasty's Edict and Challenge laurels (top: they are the rules you play by), and the Legacy tree (spend any time)
+  const edictSection = createEdictSection();
+  const legacySection = createLegacySection({ onBuy: (id) => onBuyLegacy?.(id) });
+  const bodyEl = h('div.realm-body.scroll-y', {}, edictSection.el, boonEl, statsSection, legacySection.el, trophies.el, deeds.el, chronicle.el, saveMap.el, saveMap.statusEl, dynastyEl);
   const el = h('div.realm.glass-panel', {},
     h('div.realm-header', {},
       h('h2.realm-title', {}, 'Realm'),
@@ -89,26 +114,6 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
 
   watchDialog(el, { onEscape: () => onClose?.() });
 
-  // The last chance to keep a picture of the old continent: the same Save button sits in the confirmation, above the two choices (the safe one stays first).
-  // Saving does not close it; the picture is of the realm as it is now (the new continent does not exist until "Found it").
-  function confirmFound() {
-    const confirmSave = createSaveMapButton({ onSave: () => onSaveMap?.() });
-    savers.add(confirmSave);
-    if (saveData) confirmSave.update(saveData);
-    const close = () => { savers.delete(confirmSave); modal.destroy(); };
-    const modal = createModal({
-      title: 'Found a new dynasty?',
-      body: h('div.keepsake-modal-body', {},
-        h('p', { style: { margin: 0 } }, 'Gold, upgrades and the map reset. A new continent awaits, with tougher enemies. Dynasty stars and your lifetime records carry over forever.'),
-        h('div.keepsake-save-box', {}, h('p.keepsake-save-note', {}, saveData ? saveData.hint : ''), confirmSave.el, confirmSave.statusEl)),
-      actions: [
-        { label: 'Not yet', variant: 'secondary', onClick: close },
-        { label: 'Found it', variant: 'primary', onClick: () => { close(); onFoundDynasty?.(); } },
-      ],
-    }, { onDismiss: close });
-    document.body.appendChild(modal.el);
-  }
-
   /** @param {RealmData} data */
   function update(data) {
     if (!data) return;
@@ -117,6 +122,7 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
         if (key === 'bestBattleSec') el2.textContent = data.stats.bestBattleSec != null ? formatClock(data.stats.bestBattleSec) : '—';
         else if (key === 'playSec') el2.textContent = formatDurationWords(data.stats.playSec || 0);
         else if (key === 'crownsDynasty') el2.textContent = data.crowns ? `${data.crowns.earned} / ${data.crowns.possible}` : '0 / 0';
+        else if (key === 'regionsHeld') el2.textContent = data.held ? `${data.held.owned} / ${data.held.total}` : '—';
         else el2.textContent = shortNumber(data.stats[key] || 0);
       }
     }
@@ -125,6 +131,16 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
       dynastyStarsEl.lastChild.textContent = shortNumber(data.dynasty.stars);
       dynastyDescEl.textContent = data.dynasty.starText ? `${DYNASTY_INTRO} Each star: ${data.dynasty.starText}.` : DYNASTY_INTRO;
     }
+    if (data.boons !== undefined) {
+      const list = Array.isArray(data.boons) ? data.boons : [];
+      boonEl.hidden = !list.length;
+      const text = list.join(' · ');
+      if (boonText.textContent !== text) boonText.textContent = text;
+    }
+    if (data.dynastyRules !== undefined) edictSection.update(data.dynastyRules);
+    if (data.legacy !== undefined) legacySection.update(data.legacy);
+    if (data.deeds !== undefined) deeds.update(data.deeds);
+    if (data.trophies !== undefined) trophies.update(data.trophies);
     if (data.chronicle) chronicle.update(data.chronicle);
     if (data.save) { saveData = data.save; for (const b of savers) b.update(data.save); }
     if (data.canFoundDynasty != null) {
@@ -132,7 +148,7 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
       if (data.canFoundDynasty && bodyEl.firstChild !== dynastyEl) { bodyEl.prepend(dynastyEl); el.classList.add('is-dynasty-ready'); }
       else if (!data.canFoundDynasty && bodyEl.lastChild !== dynastyEl) { bodyEl.append(dynastyEl); el.classList.remove('is-dynasty-ready'); }
       foundBtn.disabled = !data.canFoundDynasty;
-      foundBtn.title = data.canFoundDynasty ? '' : 'Conquer every region first';
+      foundBtn.title = data.canFoundDynasty ? '' : "Conquer every region first (the Dragon's Lair is optional)";
     }
   }
 
@@ -155,5 +171,5 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose } = {}) {
 
   /** Says how a save went beside every live "Save the map" button (the panel's and the confirmation's): never a toast over the dialog. */
   const setSaveStatus = (message, kind) => { for (const b of savers) b.setStatus(message, kind); };
-  return { el, update, destroy, chronicle, saveMap, setSaveStatus };
+  return { el, update, destroy, chronicle, saveMap, setSaveStatus, legacyTree: legacySection.tree };
 }

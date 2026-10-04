@@ -9,6 +9,8 @@
 @import url('./components/regioncard.css');
 @import url('./components/intel.css');
 @import url('./components/works.css');
+@import url('./components/battletray.css');
+@import url('./components/generals.css');
 @import url('./components/council.css');
 @import url('./components/battlehud.css');
 @import url('./components/results.css');
@@ -18,4 +20,6 @@
 @import url('./components/leaderbanner.css');
 @import url('./components/chronicle.css');
 @import url('./components/regions.css');
+@import url('./components/goals.css'); /* Phase 4: bounties, streak, deeds, trophies, grudges, vendettas */
+@import url('./components/dynasty.css'); /* Phase 5: the founding ceremony, Legacy, Edicts, Challenges, Quick Conquest */
 @import url('./components/a11y.css'); /* last: it only ever RAISES sizes (touch targets), so it must win the cascade */

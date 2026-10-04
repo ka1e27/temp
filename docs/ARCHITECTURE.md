@@ -367,3 +367,147 @@ Events (`battle.events`, consumed by render/fx/audio/UI each frame; positions in
 - Battles step at a fixed 0.05 s timestep × speed, with an interpolation alpha for rendering.
 - Events are drained once per frame after stepping and fanned out to fx, audio and UI.
 - Autosave every 5 s and on `visibilitychange`/`pagehide`.
+
+## 10. Concurrent battles and the Living Frontier (contract, round 4)
+
+Design: DESIGN.md §10. This is the contract both the sim side and the integration side build
+against. Names are binding unless the lead agrees a change.
+
+### 10.1 Battles move out of the scene
+Today `game/scenes/battle.js` owns the sim loop for one battle in `state.battle`. From now on:
+- **`game/app/battles.js`** owns every running battle. It is created once in `main.js`:
+  `createBattleManager({ getState, getWorld, services }) → manager`.
+
+  | Method | Behaviour |
+  |---|---|
+  | `list()` | every running `BattleRun` |
+  | `get(id)` | one `BattleRun` |
+  | `focused()` | the `BattleRun` being watched, or null |
+  | `focus(id)` | sets the watched battle; null means the map |
+  | `start(run)` | adds a `BattleRun`; refuses beyond `FRONTIER.maxBattles` (3) or on a busy region |
+  | `tick(dtSec)` | fixed-steps EVERY running battle at the global speed (see below) |
+  | `retreat(id)` | retreats that battle |
+  | `setAuto(id, bool)` | hands that battle to its steward, or takes it back |
+  | `setSpeed(s)`, `setPaused(b)` | global; apply to all battles |
+  | `busy()` | `{ regions: Set, sites: Set<"regionId:settlementIdx"> }` of everything engaged |
+  | `on(event, fn)` | subscribe to manager events |
+
+  Manager events:
+
+  | Event | Payload |
+  |---|---|
+  | `'events'` | `(runId, battleEvents)`, every step |
+  | `'ended'` | `(runId, result)` |
+  | `'started'` | `(runId)` |
+  | `'focus'` | `(runId)` |
+
+- **Per tick, for each run:**
+  - `think()` for the enemy side.
+  - For the player side: if the run is focused and not on auto, the player's own input (via
+    the scene); otherwise `stewardDecide()`.
+  - `step()` at `TICK_SEC`.
+  - Drain events: fx and sfx only for the focused run; toasts and the tray for all runs.
+- **On `'ended'`:**
+  - attack won → `conquer` + crowns + chronicle (as today)
+  - attack lost or retreated → nothing
+  - defense won → `defenseReward`
+  - defense lost → `occupy`
+  - Then the run is removed and its General freed (or wounded, in Phase 2).
+- **The battle scene becomes a view** of `manager.focused()`: render, input and HUD. Switching
+  is `manager.focus(id)` plus a camera flight. The world scene stays usable while battles run.
+  Battles keep running when no battle is focused.
+- **Speed and pause** are manager-global. Idle income stays on wall-clock time.
+
+### 10.2 State (plain JSON; `save.js` sanitises everything, `resetRegions` resets per-dynasty fields)
+
+`state.battles: BattleRun[]` replaces `state.battle`. A legacy `state.battle` migrates into a
+one-element list.
+
+`BattleRun` fields:
+
+| Field | Meaning |
+|---|---|
+| `id` | from `state.frontier.seq++` |
+| `kind` | `'attack'` or `'defense'` |
+| `regionId` | the region fought over |
+| `fromRegionId` | defense only: the attacking region |
+| `attackerFaction` | defense only |
+| `battle` | the sim state (as today, including `crownTracker`) |
+| `commander` | generalId or null |
+| `auto` | boolean |
+| `startedAt` | wall ms |
+
+`state.frontier` fields:
+
+| Field | Meaning |
+|---|---|
+| `seq` | id counter |
+| `rng` | a seeded counter |
+| `activeSec` | active-play seconds this dynasty |
+| `nextCheckAt` | when the raid scheduler next looks |
+| `cooldown` | `{ [regionId]: untilActiveSec }` |
+| `incoming` | `[{ id, faction, fromRegionId, toRegionId, arriveAt, strength }]` |
+| `lastAwayReport` | the most recent away report |
+
+The other new state:
+- `state.occupation`: `{ [regionId]: { by, at, prosperity, forts, works, militia } }`. While
+  occupied, `state.owner[regionId]` is the occupier's faction id.
+- `state.forts`: `{ [regionId]: [{ type, level }] }`, the fortifications.
+- `state.militia`: `{ [regionId]: { fill: 0..1, at: ms } }`, refilled lazily from the time.
+
+### 10.3 Sim (pure, `game/battle/*`, owned by the sim engineer)
+- `buildDefenseArena(world, owners, regionId, opts) → arena`, with `arena.mode = 'defense'`.
+  - `opts` = `{ attackerFaction, fromRegionId, player, enemy, forts, militia, busy }`.
+  - **Player sites:** the region's settlements with their militia garrisons, plus fortification
+    sites (Arrow Towers as tower sites; Walls multiply keep and fort defence; Militia Hall
+    raises garrisons; Beacon adds speed).
+  - **Enemy:** a war-band camp on their border tile nearest your keep, plus partial garrisons
+    of adjacent enemy settlements.
+  - Front lines and `busy` exclusion apply.
+- `createBattle(arena, player, enemy, { mode, siegeSec })`, with `mode: 'defense'`:
+  - `result 'win'` when `battle.t ≥ siegeSec` with your keep held, or when the attackers have
+    no sites or squads left in the arena
+  - `'lose'` when the enemy captures your keep; the surrender cascade goes to the enemy
+- `stewardDecide(battle, t, memo, style) → commands` (`game/battle/steward.js`): the
+  player-side defensive policy of DESIGN §10.6. Styles are `'captain'`, `'stalwart'`,
+  `'bold'`, `'cunning'` and `'swift'`; Phase 1 needs `'captain'` plus one good default.
+- `buildArena(...)` (attack) gains `opts.busy`, so busy sites and regions are excluded from
+  the halo.
+- `estimateDefense(state, world, regionId, raid) → { winChance, label, theirs, yours }` for UI
+  labels.
+
+### 10.4 Meta (pure, `game/meta/*`, owned by the sim engineer)
+**`frontier.js`:**
+- `tickFrontier(state, world, nowMs, activeDt) → { announced: [raid], arrived: [raid] }`. It is
+  seeded and deterministic, and respects grace, rates, caps and cooldowns (DESIGN §10.1).
+- `defenseRunFor(state, world, raid, stats) → BattleRun`.
+- `defenseReward(state, world, run, result) → { gold, renown }`. Renown lands in Phase 2;
+  return 0 until then.
+- `occupy(state, world, regionId, faction, nowMs)`: freezes prosperity, moves forts and works
+  into `occupation`, and sets the owner.
+- `retake(state, world, regionId, nowMs)`: restores everything; called from `conquer` when the
+  region is in `occupation`.
+- `resolveAway(state, world, awayMs, nowMs) → report`: the abstract, gentle away rules of
+  DESIGN §10.10. It is called after `offlineEarnings`.
+
+**`forts.js`:** slots, costs, `build`, `upgrade`, `demolish` and effects, following the
+`works.js` pattern with a `fortsEffects.js` leaf.
+
+**`militia.js`:** `militiaGarrisons(state, world, regionId, nowMs) → number[]` per settlement,
+and `drainMilitia(state, regionId, lost, nowMs)` after a defense.
+
+### 10.5 UI and app (owned by the integration engineer)
+- The manager, the scene refactor, and the **battle tray**: chips, Tab to cycle, pulses.
+- World battle markers, marching war bands, incoming toasts with Go, and the region-card
+  "Under attack" state.
+- **Occupied regions:** the card says "Occupied by X: Retake", the map tint is theirs with a
+  hatched overlay, and the label carries a badge.
+- **A Fortifications panel** on the owned card, built with the same patterns as the Works
+  panel.
+- The away report on the welcome card.
+- Save migration and sanitising.
+- Tutorial: the first defense is weak and scripted to be forgiving, with hints for Go/defend,
+  switching (Tab) and Fortify.
+- Checks: real-input switching between two battles, the steward holding while unfocused, a
+  defense win and a defense loss leading to occupation and retake, and saving and resuming
+  with 2 running battles.

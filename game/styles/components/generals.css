@@ -1,0 +1,139 @@
+/* Generals and Renown (DESIGN 10.11, 10.12): the roster panel, the emblem, the HUD laurel, the commander picker, the ability button. */
+.generals { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: var(--z-modal); width: min(460px, calc(100vw - 24px));
+  max-height: calc(100vh - 64px); display: flex; flex-direction: column; box-shadow: var(--panel-shadow-lg); }
+.generals-header { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4) var(--sp-4) 0; }
+.generals-title { font-size: var(--fs-lg); flex: 1; }
+.generals-renown-wrap { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; color: var(--gold-bright); }
+.generals-body { padding: var(--sp-3) var(--sp-4) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); overflow-y: auto; min-height: 0; }
+.generals-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+.general-card { display: flex; flex-direction: column; gap: 6px; padding: var(--sp-3); border-radius: 12px; border: 1px solid var(--panel-border); background: rgba(255, 255, 255, 0.04); }
+.general-card.has-pick { border-color: var(--gold); }
+.general-card.is-wounded { opacity: 0.85; }
+.general-head { display: flex; gap: var(--sp-3); align-items: center; }
+.general-who { display: flex; flex-direction: column; min-width: 0; }
+.general-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.general-name { font-size: var(--fs-md, 1rem); }
+.general-title { font-size: var(--fs-sm); color: var(--text-muted); }
+.general-level, .general-style { font-size: 0.7rem; white-space: nowrap; }
+.general-xp-row { display: flex; align-items: center; gap: var(--sp-2); }
+.general-xp { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.general-xp-fill { display: block; height: 100%; background: var(--gold); }
+.general-xp-text { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; white-space: nowrap; }
+.general-line { margin: 0; font-size: var(--fs-sm); color: var(--text); line-height: 1.35; }
+.general-line.is-active { color: var(--gold-bright); }
+.general-status { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); font-weight: 700; color: var(--text-muted); }
+.general-status-text { flex: 1; }
+.general-watch { min-height: 36px; padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+.general-skills { display: flex; flex-direction: column; gap: 4px; }
+.general-skill { margin: 0; display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-sm); line-height: 1.3; }
+.general-skill.is-picked svg { color: var(--gold); flex-shrink: 0; margin-top: 2px; }
+.general-skill.is-later { color: var(--text-dim); }
+.general-skill-head { margin: 4px 0 0; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--gold-bright); }
+.general-skill-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.general-skill-option { min-height: var(--touch-target); white-space: normal; text-align: left; font-size: var(--fs-sm); line-height: 1.25; padding: 6px 10px; }
+.general-skill-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-sm); font-weight: 700; }
+.general-skill-confirm-text { flex: 1 1 100%; }
+.general-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.general-actions .btn { min-height: var(--touch-target); font-size: var(--fs-sm); padding: 0 var(--sp-3); }
+.generals-reason { margin: 0; font-size: 0.75rem; color: var(--text-muted); }
+.generals-hire-row { display: flex; flex-direction: column; gap: 4px; }
+.generals-hire { min-height: var(--touch-target); }
+/* the emblem: a round badge in the kind's colour */
+.general-emblem { --emblem-size: 24px; width: var(--emblem-size); height: var(--emblem-size); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: var(--emblem-bg, #4b5563); color: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), inset 0 0 0 2px rgba(255, 255, 255, 0.25); }
+.general-emblem[data-kind="marshal"] { --emblem-bg: #3d7ef0; }
+.general-emblem[data-kind="crimson"] { --emblem-bg: #c63932; }
+.general-emblem[data-kind="violet"] { --emblem-bg: #6d1b99; }
+.general-emblem[data-kind="amber"] { --emblem-bg: #f29e38; color: #2a1d05; }
+.general-emblem[data-kind="gravewarden"] { --emblem-bg: #5c5b64; color: #e6dcc4; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), inset 0 0 0 2px rgba(169, 223, 214, 0.55), 0 0 8px rgba(169, 223, 214, 0.45); }
+.general-emblem[data-kind="mercenary"] { --emblem-bg: #7a6a4a; }
+.general-emblem[data-kind="captain"] { --emblem-bg: #5b6472; }
+/* HUD: the Renown laurel beside the gold */
+.hud-renown { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; color: var(--gold-bright); }
+.hud-renown[hidden] { display: none; }
+.hud-renown-value { font-size: var(--fs-md, 1rem); }
+/* region card: commander picker, Festival and Muster */
+.region-card-commander { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); font-weight: 700; color: var(--text-muted); }
+.region-card-commander[hidden] { display: none; }
+.region-card-commander select { flex: 1; min-height: 36px; background: var(--btn-secondary-bg); color: var(--text); border: 1px solid var(--btn-secondary-border); border-radius: 8px; padding: 0 8px; font: inherit; font-weight: 800; }
+@media (pointer: coarse) { .region-card-commander select { min-height: var(--touch-target); } }
+.region-card-renown-btn { min-height: 32px; padding: 0 10px; font-size: 0.8rem; margin-left: auto; white-space: nowrap; }
+@media (pointer: coarse) { .region-card-renown-btn { min-height: var(--touch-target); } }
+.region-card-renown-row { display: flex; align-items: center; gap: var(--sp-2); }
+.region-card-renown-row[hidden] { display: none; }
+/* the battle HUD's ability button */
+.battle-ability { min-height: var(--touch-target); display: inline-flex; align-items: center; gap: 6px; padding: 0 var(--sp-3); border-radius: 999px; font-weight: 800; font-size: var(--fs-sm); }
+.battle-ability[hidden] { display: none; }
+.battle-ability.is-armed { box-shadow: 0 0 0 2px #fff, 0 0 14px rgba(255, 255, 255, 0.5); }
+.battle-ability.is-used { opacity: 0.5; }
+.battle-ability-key { font-size: 0.65rem; padding: 0 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.35); }
+@media (max-width: 640px) { .battle-ability-key { display: none; } .battle-ability-label { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+/* tray: the commander of each battle */
+.tray-commander { min-width: var(--touch-target); min-height: var(--touch-target); max-width: 120px; background: var(--panel-bg); color: var(--text); border: 1px solid var(--panel-border); border-radius: 12px; font: inherit; font-size: 0.7rem; font-weight: 800; padding: 0 4px; }
+@media (max-width: 640px) {
+  .generals { top: 84px; transform: translateX(-50%); max-height: calc(100dvh - 96px); }
+  .general-skill-choice { grid-template-columns: 1fr; }
+  .tray-commander { max-width: 64px; }
+}
+.hud-generals { position: relative; }
+.hud-dot { position: absolute; top: 4px; right: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
+.hud-dot[hidden] { display: none; }
+/* the recruitment card (a champion joins when a capital falls) */
+.recruit-card { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); text-align: center; }
+.recruit-title { margin: 0; font-weight: 800; font-size: var(--fs-md, 1rem); color: var(--text); }
+.recruit-line { margin: 0; font-style: italic; color: var(--gold-bright); }
+.recruit-what { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+/* the laurel sits on the gold's second line, beside the income */
+.hud-subline { display: flex; align-items: center; gap: 8px; }
+.hud-renown { font-size: 0.8rem; gap: 3px; }
+.hud-renown .hud-renown-value { font-size: 0.8rem; }
+.hud-renown svg { width: 13px; height: 13px; }
+@media (max-width: 640px) {
+  /* phone tray: one battle per row (chip, commander, Captain), so a row keeps its region name */
+  .battle-tray-list { flex-direction: column; overflow: visible; }
+  .tray-row { min-width: 0; }
+  .tray-commander { max-width: 96px; }
+  #ui:has(.battle-hud:not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 240px; }
+  #ui:has(.hud:not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 190px; }
+  /* the ability button: its icon only (its name is in its accessible name and title) */
+  .battle-ability .battle-ability-label { display: none; }
+  .battle-ability { padding: 0; width: var(--touch-target); min-width: var(--touch-target); flex-shrink: 0; justify-content: center; }
+}
+@media (max-width: 640px) {
+  /* with the ability button in the row, the send sizes give back a little padding so the row fits a 390 px phone */
+  .battle-sendrow:has(.battle-ability:not([hidden])) { gap: 6px; }
+  .battle-sendrow:has(.battle-ability:not([hidden])) .send-fraction-btn { padding: 0 7px; }
+  .battle-sendrow:has(.battle-ability:not([hidden])) .send-fraction-selector { gap: 2px; }
+}
+/* the ability banner under the battle header: the Swift line's family (gold, bold, small caps feel), shown ~1.6 s */
+.battle-ability-banner { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); z-index: 2; display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 16px; border-radius: 999px; background: var(--panel-bg); border: 1px solid rgba(245, 196, 81, 0.6); box-shadow: var(--panel-shadow);
+  color: var(--gold-bright); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; font-size: var(--fs-sm); pointer-events: none; }
+.battle-ability-banner[hidden] { display: none; }
+@keyframes ability-banner { 0% { opacity: 0; transform: translate(-50%, 8px); } 15% { opacity: 1; transform: translate(-50%, 0); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+.battle-ability-banner.is-in { animation: ability-banner 1.6s ease-out forwards; }
+@keyframes ability-banner-still { 0% { opacity: 0; } 15% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+html.reduce-motion .battle-ability-banner.is-in { animation-name: ability-banner-still; }
+@media (max-width: 840px) { .battle-ability-banner { top: 118px; } }
+@media (max-width: 640px) { #ui:has(.battle-tray:not([hidden])) .battle-ability-banner { top: 236px; } }
+/* both skill choices the same height, whatever the length of their words */
+.general-skill-choice { align-items: stretch; }
+.general-skill-option { height: 100%; display: flex; align-items: center; }
+/* the owned card's militia row reads like the Income and Prosperity rows */
+.region-card-renown-row { font-size: var(--fs-sm); font-weight: 700; color: var(--text-muted); gap: 6px; }
+.region-card-renown-row > .icon { color: var(--gold); }
+.region-card-renown-row span { font-size: inherit; font-weight: inherit; }
+.renown-cost-label + .icon-laurel { margin-left: 4px; }
+
+/* The Merchant's deals (a world event, DESIGN 10.13): two sections, Renown and a fortification (region + type pickers, the price, Buy). */
+.merchant-body { display: flex; flex-direction: column; gap: var(--sp-3); }
+.merchant-intro { margin: 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.merchant-deal { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--panel-border-light); }
+.merchant-deal h3 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-md); }
+.merchant-deal h3 .icon { color: var(--gold); }
+.merchant-deal p { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.merchant-fort-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.merchant-fort-row select { flex: 1 1 130px; min-height: var(--touch-target); border-radius: 10px; background: rgba(10, 12, 18, 0.6); color: var(--text); border: 1px solid var(--panel-border-light); padding: 0 var(--sp-2); font: inherit; font-size: var(--fs-sm); }
+.merchant-price { font-weight: 800; color: var(--gold-bright); font-size: var(--fs-sm); }
+.merchant-status { margin: 0; min-height: 1.2em; font-size: var(--fs-sm); color: var(--bad); }
+.merchant-buy-renown, .merchant-buy-fort { min-height: var(--touch-target); }

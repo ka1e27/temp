@@ -35,6 +35,7 @@ const THRONE_STAT_BY_PERSONALITY = Object.freeze({
   aggressive: 'atk',
   defensive: 'def',
   swarm: 'growth',
+  undying: 'growth', // the Ashen Host (PLAN-PHASE6): its dead keep rising
 });
 
 const THRONE_INCOME_PCT = 0.25;

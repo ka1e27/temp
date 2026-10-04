@@ -31,4 +31,32 @@ export const RULES = Object.freeze({
   // after the third conquest, while no Work has ever been built, and only while some owned region has a free slot and a hostile border to point at
   M3: (c) => c.panelsClosed && c.conquests >= 3 && c.ownedFrontierCount > 0 && c.worksDue && c.worksRegion >= 0,
   M4: (c) => c.panelsClosed && c.realmComplete,
+  // a war band on its way and its toast's Go on screen (F1 on the map, F2 in a battle elsewhere)
+  F1: (c) => c.incoming > 0 && c.raidToast,
+  F2: (c) => c.live && c.incoming > 0 && c.raidToast,
+  // the first time two battles run at once, while the one you are not watching is in the tray
+  F3: (c) => c.live && c.runs >= 2,
+  // after the first raid, on a region of yours that borders a rival and still has a free fortification slot
+  F4: (c) => c.panelsClosed && c.raids >= 1 && c.fortRegion >= 0 && c.incoming === 0,
+  // the commander's ability, in the first battle where it can be used (not the tutorial fight's first seconds)
+  G1: (c) => c.live && c.battlesBefore >= 1 && c.abilityReady && c.t >= 4,
+  // a skill to choose (after the first level-up)
+  G2: (c) => c.panelsClosed && c.pendingPicks > 0,
+  // the first time Renown pays for a Festival somewhere
+  R1: (c) => c.panelsClosed && c.festivalRegion >= 0,
+  // a varied map (DESIGN 10.13): a typed or twisted region on the frontier; the first Siege while its Gate stands; the first Raid; the Dragon's
+  // warning while it is on the ground (and the Bulwark is unlocked); a world event's offer on screen
+  V1: (c) => c.panelsClosed && !c.cardOpen && c.featureRegion >= 0,
+  V2: (c) => c.live && c.gateStanding,
+  V3: (c) => c.live && c.raid,
+  V4: (c) => c.live && c.telegraph && c.bulwarkUnlocked,
+  V5: (c) => c.eventToast,
+  // Goals and Rivals (PLAN-PHASE4): the board has opened (after the first conquest beyond home); a Vendetta's banner with its Go on screen
+  Q1: (c) => c.panelsClosed && !c.cardOpen && !!c.boardUnlocked,
+  Q2: (c) => !!c.vendettaToast,
+  // Phase 5: D1 lives in the ceremony (never picked by a scene); D2 while an open card shows a Quick Conquest button that can go
+  D1: () => false,
+  D2: (c) => c.panelsClosed && c.cardOpen && !!c.quickReady,
+  // Phase 6: an Ashen region on the frontier (its label), while no card or panel is open
+  A1: (c) => c.panelsClosed && !c.cardOpen && c.ashenRegion >= 0,
 });

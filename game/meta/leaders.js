@@ -97,7 +97,7 @@ export function leaderFor(seed, dynasty, faction) {
   const level = Math.max(1, Math.floor(dynasty) || 1);
   const previous = level > 1 ? seededName(cfg, seed, level - 1, faction, null) : null;
   const name = seededName(cfg, seed, level, faction, previous);
-  return { faction, title: cfg.title, name, fullName: `${cfg.title} ${name}` };
+  return { faction, title: cfg.title, name, fullName: cfg.epithet ? `${cfg.title} ${name} ${cfg.epithet}` : `${cfg.title} ${name}` }; // the Margrave: '... the Pale'
 }
 
 // --- Lines ----------------------------------------------------------------------------
@@ -341,3 +341,9 @@ export function seedContacts(state, world) {
 }
 
 export { LEADER_TRIGGERS, LEADER_FACTIONS };
+
+/** The name of a rival leader's Vendetta Champion for the banner (PLAN-PHASE6: the Ashen's is a Barrow Knight). */
+export function championTitle(faction) {
+  const t = LEADERS[faction] && LEADERS[faction].champion;
+  return t || 'Champion';
+}

@@ -78,7 +78,7 @@ export function drawSettlement(ctx, type, cx, cy, s, faction, opts = {}) {
   const f = resolveFaction(faction);
   const bs = s * SETTLEMENT_SCALE;
   const baseY = cy + bs * 0.16;
-  const footprint = type === 'keep' ? bs * 1.05 : type === 'fort' ? bs * 1.1 : bs * 0.85;
+  const footprint = type === 'gate' ? bs * 1.3 : type === 'keep' ? bs * 1.05 : type === 'fort' ? bs * 1.1 : bs * 0.85;
 
   ctx.save();
   if (opts.dim) ctx.globalAlpha *= 0.42;
@@ -126,6 +126,10 @@ export const BANNER_ANCHOR = Object.freeze({
   tower: { dx: 0, dy: -1.8 },
   keep: { dx: 0.72, dy: -1.32 },
   camp: { dx: 0, dy: -0.66 },
+  bandit: { dx: 0.62, dy: -0.5 },
+  gate: { dx: 0.7, dy: -1.5 },
+  shrine: { dx: 0.62, dy: -1.0 },
+  ancientTower: { dx: 0, dy: -2.0 },
 });
 
 // ------------------------------------------------------------------ emblems
@@ -236,7 +240,39 @@ function emblemSun(ctx) {
   }
 }
 
+// The Ashen Host (Phase 6): a skull under a five-pointed crown, the same silhouette as the `skullCrown` UI icon (the 24-grid mapped to -0.5..0.5).
+const SK = (v) => (v - 12) / 21;
+const SKY = (v) => (v - 12.2) / 21;
+function emblemSkullCrown(ctx, color) {
+  ctx.beginPath();
+  // crown
+  ctx.moveTo(SK(5.4), SKY(9.6)); ctx.lineTo(SK(4.6), SKY(3.4)); ctx.lineTo(SK(8.3), SKY(6.1)); ctx.lineTo(SK(12), SKY(2));
+  ctx.lineTo(SK(15.7), SKY(6.1)); ctx.lineTo(SK(19.4), SKY(3.4)); ctx.lineTo(SK(18.6), SKY(9.6)); ctx.closePath();
+  // skull: a round cranium over a squared jaw
+  ctx.moveTo(SK(19.1), SKY(14.9));
+  ctx.ellipse(0, SKY(14.9), 7.1 / 21, 6.5 / 21, 0, 0, Math.PI, true);
+  ctx.lineTo(SK(4.9), SKY(15.4)); ctx.lineTo(SK(7.3), SKY(19.3)); ctx.lineTo(SK(7.3), SKY(22.4)); ctx.lineTo(SK(16.7), SKY(22.4));
+  ctx.lineTo(SK(16.7), SKY(19.3)); ctx.lineTo(SK(19.1), SKY(15.4)); ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 0.1;
+  ctx.strokeStyle = 'rgba(20,16,10,0.8)';
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fill();
+  // eye sockets and the nose: dark holes, so the skull reads at 10 px
+  ctx.fillStyle = 'rgba(20,16,10,0.82)';
+  ctx.beginPath();
+  ctx.arc(SK(9.2), SKY(14.6), 2 / 21, 0, Math.PI * 2);
+  ctx.moveTo(SK(14.8) + 2 / 21, SKY(14.6));
+  ctx.arc(SK(14.8), SKY(14.6), 2 / 21, 0, Math.PI * 2);
+  ctx.moveTo(0, SKY(16.6)); ctx.lineTo(SK(10.9), SKY(18.5)); ctx.lineTo(SK(13.1), SKY(18.5)); ctx.closePath();
+  ctx.fill();
+  // the crown's band
+  ctx.fillRect(SK(5.4), SKY(8.4), 13.2 / 21, 1.3 / 21);
+}
+
 const EMBLEMS = { star: emblemStar, wheat: emblemWheat, sword: emblemSword, sun: emblemSun };
+const CUSTOM_EMBLEMS = { eye: emblemEye, skullCrown: emblemSkullCrown, 'skull-crown': emblemSkullCrown, crownSkull: emblemSkullCrown };
 
 /**
  * A single-colour, colour-blind-safe emblem glyph, centred at (x, y).
@@ -252,8 +288,8 @@ export function drawEmblem(ctx, emblem, x, y, size, color) {
   ctx.translate(x, y);
   ctx.scale(size, size);
   ctx.lineJoin = 'round';
-  if (emblem === 'eye') {
-    emblemEye(ctx, color);
+  if (CUSTOM_EMBLEMS[emblem]) {
+    CUSTOM_EMBLEMS[emblem](ctx, color);
   } else {
     const fn = EMBLEMS[emblem] || emblemStar;
     fn(ctx);
@@ -359,7 +395,7 @@ function shortNum(n) {
  */
 export function drawTroopBadge(ctx, x, y, count, faction, s, opts = {}) {
   const f = resolveFaction(faction);
-  const label = shortNum(count);
+  const label = typeof count === 'string' ? count : shortNum(count); // a string is drawn as is (Night's '?' for a hidden garrison)
   const h = Math.max(10, s * 0.62);
   const phase = typeof opts.pulse === 'number' ? opts.pulse : (opts.pulse ? now() / 1000 : null);
   const pulse = phase != null ? 1 + Math.sin(phase * 6) * 0.07 : 1;

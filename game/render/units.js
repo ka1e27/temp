@@ -10,6 +10,75 @@ import { factionColor, rgba } from './palette.js';
 
 const SQUAD_SIZE_FACTOR = 0.8; // × camera.zoom, matching the settlement/tile scale
 
+/**
+ * A Vendetta's Champion (PLAN-PHASE4 §4D): drawn UNDER and OVER its squad. A gold ring on the ground round the squad, and a tall lance with the leader's
+ * swallow-tailed pennant in their colour (a gold crown pip at its tip), so the leader's own champion is told apart from every other squad at a glance.
+ * `still` (Reduce Motion) stops the pennant's flutter and the ring's pulse.
+ */
+export function drawChampionMark(ctx, x, y, s, color, t, { still = false, layer = 'over' } = {}) {
+  ctx.save();
+  if (layer === 'under') {
+    const pulse = still ? 0.5 : 0.5 + 0.5 * Math.sin((t || 0) * 3);
+    ctx.globalAlpha = 0.55 + 0.25 * pulse;
+    ctx.strokeStyle = '#f5c451';
+    ctx.lineWidth = Math.max(1.5, s * 0.07);
+    ctx.beginPath();
+    ctx.ellipse(x, y + s * 0.12, s * 0.95, s * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.18 + 0.1 * pulse;
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+  s *= 1.3; // the lance and pennant stand taller than any squad banner
+  const px = x - s * 0.5;
+  const top = y - s * 1.5;
+  const base = y + s * 0.1;
+  // the lance
+  ctx.strokeStyle = 'rgba(20,14,8,0.9)';
+  ctx.lineWidth = Math.max(2.2, s * 0.09);
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, top); ctx.stroke();
+  ctx.strokeStyle = '#d9b36a';
+  ctx.lineWidth = Math.max(1.2, s * 0.045);
+  ctx.beginPath(); ctx.moveTo(px, base); ctx.lineTo(px, top); ctx.stroke();
+  // the swallow-tailed pennant, fluttering
+  const w = s * 0.95;
+  const hgt = s * 0.42;
+  const wave = still ? 0 : Math.sin((t || 0) * 5.2) * s * 0.06;
+  ctx.beginPath();
+  ctx.moveTo(px, top + s * 0.04);
+  ctx.quadraticCurveTo(px + w * 0.5, top + s * 0.04 + wave, px + w, top + s * 0.02 - wave * 0.6);
+  ctx.lineTo(px + w * 0.74, top + hgt * 0.5 + wave * 0.3);
+  ctx.lineTo(px + w, top + hgt - wave * 0.6);
+  ctx.quadraticCurveTo(px + w * 0.5, top + hgt + wave, px, top + hgt);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = Math.max(2, s * 0.08);
+  ctx.stroke();
+  ctx.strokeStyle = '#f5c451'; // a gold hem: a leader's banner
+  ctx.lineWidth = Math.max(1, s * 0.035);
+  ctx.stroke();
+  // a gold stripe and the gold tip: a leader's banner, not a soldier's
+  ctx.strokeStyle = 'rgba(245,196,81,0.9)';
+  ctx.lineWidth = Math.max(1, s * 0.04);
+  ctx.beginPath(); ctx.moveTo(px + s * 0.05, top + hgt * 0.5); ctx.quadraticCurveTo(px + w * 0.35, top + hgt * 0.5 + wave * 0.5, px + w * 0.62, top + hgt * 0.5 + wave * 0.2); ctx.stroke();
+  ctx.fillStyle = '#f5c451';
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(px, top - s * 0.22);
+  ctx.lineTo(px + s * 0.09, top - s * 0.02);
+  ctx.lineTo(px - s * 0.09, top - s * 0.02);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Elevation lift (world units) and facing of a squad's current segment. */
 function segmentInfo(battle, squad) {
   const path = squad.path || [];
@@ -81,14 +150,18 @@ export function createUnitLayer() {
    * @param {number} alpha fixed-step interpolation alpha (0..1)
    * @param {number} t seconds, for the marching bob / banner flutter
    */
-  function draw(ctx, camera, battle, alpha, t) {
+  function draw(ctx, camera, battle, alpha, t, opts = {}) {
     // Back to front so nearer squads overlap farther ones.
     const list = battle.squads.map((sq) => ({ sq, p: interpolated(battle, sq, alpha) }));
     list.sort((a, b) => a.p.y - b.p.y);
     const s = camera.zoom * SQUAD_SIZE_FACTOR;
     for (const { sq, p } of list) {
       const screen = camera.worldToScreen(p.x, p.y - p.lift);
+      // a Vendetta's Champion (PLAN-PHASE4 §4D) wears its leader's pennant and a gold ring
+      const champ = sq.champion ? (opts.championColor || factionColor(sq.owner)) : null;
+      if (champ) drawChampionMark(ctx, screen.x, screen.y, s, champ, t, { still: !!opts.still, layer: 'under' });
       drawSquad(ctx, screen.x, screen.y, sq.count, sq.owner, s, t, p.dx, p.dy, { phase: sq.id * 1.7 });
+      if (champ) drawChampionMark(ctx, screen.x, screen.y, s, champ, t, { still: !!opts.still });
     }
   }
 
@@ -105,7 +178,9 @@ export function createUnitLayer() {
     const dash = Math.max(5, camera.zoom * 0.2);
     ctx.setLineDash([dash, dash * 0.9]);
     for (const sq of battle.squads) {
-      if (!intentWorthDrawing(battle, sq)) continue;
+      // Foresight (a General's ability, DESIGN 10.11): every enemy march is revealed while it lasts, reinforcements too
+      const revealed = sq.owner !== PLAYER_OWNER && battle.effects && battle.t < (battle.effects.revealUntil || 0);
+      if (!revealed && !intentWorthDrawing(battle, sq)) continue;
       const path = sq.path || [];
       if (path.length === 0 || sq.seg >= path.length) continue;
       const color = factionColor(sq.owner);

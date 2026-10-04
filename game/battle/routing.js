@@ -13,6 +13,7 @@ import { getRuntime } from './runtime.js';
 import { findPath } from './geom.js';
 import { PLAYER_OWNER } from './owner.js';
 import { computeTerritory } from './territory.js';
+import { gateBlocks } from './features.js';
 
 const KEY_SPAN = 4096;
 
@@ -90,6 +91,7 @@ export function routeFor(battle, owner, fromSiteId, toSiteId) {
   const from = battle.sites[fromSiteId];
   const to = battle.sites[toSiteId];
   if (!from || !to || fromSiteId === toSiteId) return null;
+  if (gateBlocks(battle, owner, toSiteId)) return null; // Siege: the Gate first (DESIGN §10.13)
   const terr = computeTerritory(battle);
   const key = keyOf(owner, fromSiteId, toSiteId);
   if (terr.routes.has(key)) return terr.routes.get(key);
@@ -113,6 +115,7 @@ export function legalRouteFor(battle, owner, fromSiteId, toSiteId) {
   const from = battle.sites[fromSiteId];
   const to = battle.sites[toSiteId];
   if (!from || !to || fromSiteId === toSiteId) return null;
+  if (gateBlocks(battle, owner, toSiteId)) return null;
   return strictRoute(battle, computeTerritory(battle), owner, fromSiteId, toSiteId);
 }
 

@@ -12,13 +12,13 @@ const SETTLEMENT_SCALE = 1.2;
 function footprintOf(type, s) {
   const bs = s * SETTLEMENT_SCALE;
   const baseY = bs * 0.16;
-  const footprint = type === 'keep' ? bs * 1.05 : type === 'fort' ? bs * 1.1 : bs * 0.85;
+  const footprint = type === 'gate' ? bs * 1.3 : type === 'keep' ? bs * 1.05 : type === 'fort' ? bs * 1.1 : bs * 0.85;
   return { bs, baseY, footprint };
 }
 
 // Generous upward tap-target extension (world-unit-ish, × zoom) per type —
 // covers the banner pole + flag + tall building silhouettes (tower/keep/fort).
-const HIT_EXTEND_UP = { hamlet: 1.3, village: 1.4, town: 2.0, fort: 2.1, tower: 2.9, keep: 2.3, camp: 1.5 };
+const HIT_EXTEND_UP = { hamlet: 1.3, village: 1.4, town: 2.0, fort: 2.1, tower: 2.9, keep: 2.3, camp: 1.5, bandit: 1.5, gate: 2.3, shrine: 2.0, ancientTower: 3.1 };
 
 function makeCanvas(size) {
   if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(size, size);
@@ -103,6 +103,8 @@ export function createSiteSpriteCache() {
    *   flash 1..0 draws a fading red ring on the badge. (Threat chips: drawThreatChips.)
    */
   function drawSite(ctx, screenX, screenY, s, type, factionId, troops, t, opts = {}) {
+    // `badgeOnly`: just the troop badge (and its flash), drawn in a second pass OVER the squads so a crowd at the gate never hides the number
+    if (opts.badgeOnly) { drawBadgePart(ctx, screenX, screenY, s, troops, factionId, t, opts); return; }
     const sprite = getSprite(type, factionId, s);
     const scale = s / sprite.bucket;
     const { bs, baseY, footprint } = footprintOf(type, s);
@@ -151,7 +153,11 @@ export function createSiteSpriteCache() {
       ctx.restore();
     }
 
-    if (!opts.hideBadge) {
+    if (!opts.hideBadge) drawBadgePart(ctx, screenX, screenY, s, troops, factionId, t, opts);
+  }
+
+  function drawBadgePart(ctx, screenX, screenY, s, troops, factionId, t, opts) {
+    {
       const badgeS = s * 0.95;
       const badgeY = screenY - s * 0.05;
       drawTroopBadge(ctx, screenX, badgeY, troops, factionId, badgeS, {

@@ -6,7 +6,7 @@ import { hexDistance } from '../core/hex.js';
 import { drawHexTint, elevOffset } from '../render/tiles.js';
 import { ACCENTS, factionColor } from '../render/palette.js';
 import {
-  frontier, revealed, difficulty, conquer, canFoundDynasty, attackable, attackBlocker,
+  frontier, revealed, difficulty, conquer, canFoundDynasty, attackable, attackBlocker, conquestBounty, crownsPayable
 } from '../meta/progression.js';
 import { incomePerSec, bounty } from '../meta/economy.js';
 import {
@@ -25,12 +25,19 @@ import {
 } from '../meta/works.js';
 import { drawWorksMarks } from '../render/worksMarks.js';
 import { drawScoutedGarrisons, drawWeakPointMarker } from '../render/intelMarks.js';
-import { prosperityInfo } from '../meta/prosperity.js';
+import { prosperityInfo, updateProsperity } from '../meta/prosperity.js';
+import { generalsPanelData, passiveText, bestFreeGeneral, freeGenerals, generalById, pickSkill, pendingPicks, ensureGenerals } from '../meta/generals.js';
+import { renownSpends, festival, train, heal, respec, hireMercenary, muster, renownPoints } from '../meta/renown.js';
+import { militiaFill } from '../meta/militia.js';
+import { commanderFor as edictCommander, edictMods } from '../meta/edicts.js';
+import { plagueMult } from '../meta/eventsState.js';
+import { GENERALS } from '../config/generals.js';
 import { chronicleOnConquest, chroniclePanelData } from '../meta/chronicle.js';
 import { saveText } from '../meta/keepsake.js';
 import { chanceWords } from '../app/chanceWords.js';
 import { regionsListData } from '../app/regionsList.js';
 import { announce } from '../ui/live.js';
+import { createModal } from '../ui/modal.js';
 import { saveTapestry } from './worldImage.js';
 import { CROWN_BONUS_PCT } from '../app/crownCopy.js';
 import { shortNumber } from '../ui/format.js';
@@ -38,9 +45,18 @@ import { perkDisplay, dynastyStarText } from '../app/perkInfo.js';
 import { bestValueUpgrade } from '../app/bestValue.js';
 import { effectiveRegionIncome } from '../app/income.js';
 import { drawRegionLabels } from '../render/labels.js';
-import { WORLD_SCENE, VICTORY } from './timing.js';
+import { drawBattleMarkers } from '../render/battleMarkers.js';
+import { drawWarBands } from '../render/warBands.js';
+import { createOccupationLayer } from '../render/occupation.js';
+import { WORLD_SCENE, VICTORY, TUTORIAL_STEPS } from './timing.js';
 import { regionHintBox } from '../app/hintTargets.js';
 import { FEATURES } from '../app/features.js';
+import { FEATURES as MAP_FEATURES } from '../config/features.js';
+import { ASHEN } from '../config/ashen.js';
+import { fallenLine, ashenOnFrontier } from '../meta/rivals.js';
+import { MAX_BATTLES } from '../app/battles.js';
+import { fortsPanelData, buildFort, upgradeFort, demolishFort, fortName, fortsToast, fortsMarksData } from '../meta/forts.js';
+import { drawFortMarks } from '../render/fortMarks.js';
 import {
   createSiteDrawer, pickLandTile, regionLabelAnchors, realmFraming, frameInRect, freeRect, openCameraLimits, unionBounds, HEX_MARGIN,
 } from './worldLayers.js';
@@ -75,6 +91,7 @@ export function createWorldScene(services) {
   let lastCouncilMs = -1e9;
   let lastRealmMs = -1e9;
   let lastRegionsMs = -1e9;
+  let lastGeneralsMs = -1e9;
   let cursorId = -1; // the map's keyboard cursor: a region (arrow keys move it, Enter opens its card)
   let keyboardCursor = false; // the cursor has been moved from the keyboard (so Enter and Space mean "open it")
   let contactCheckAtMs = 0;
@@ -138,6 +155,14 @@ export function createWorldScene(services) {
       // Earned crowns show as pips under the name (owned regions only; the home region has none).
       if (owned) datum.crowns = crownCount(getCrowns(state, region.id));
       else datum.sabotage = intelOf(state, region.id).sabotage; // a torch by the name of a sabotaged region
+      const occ = !owned && state.occupation && state.occupation[region.id];
+      if (occ) { const f = world.factions[state.owner[region.id]]; datum.occupied = f ? f.color : '#eb5757'; } // the hatched "occupied" badge (DESIGN 10.2)
+      // a varied map (DESIGN 10.13): the type's icon beside the name, the twist's glyph on the frontier chip
+      if (region.type) datum.type = region.type;
+      if (region.twist && !owned) datum.twist = region.twist;
+      // a plagued rival's region (DESIGN 10.13): the plague mark beside its name while the Plague lasts
+      const pl = state.worldEvents && state.worldEvents.plague;
+      if (pl && pl.faction === state.owner[region.id] && plagueMult(state, pl.faction) < 1) datum.plague = true;
       datum.priority = datum.kind;
       labels.push(datum);
     }
@@ -181,7 +206,7 @@ export function createWorldScene(services) {
     const perk = perkDisplay(region.perk, world, region);
     if (ownerFactionId === PLAYER_FACTION) {
       return {
-        id: regionId, name: region.name, tier: region.tier, owned: true, owner, perk,
+        id: regionId, name: region.name, tier: region.tier, owned: true, owner, perk, features: featureRows(region, true),
         income: effectiveRegionIncome(state, world, region),
         crowns: region.tier === 0 ? undefined : getCrowns(state, regionId),
         parSec: parFor(world, regionId, state),
@@ -191,6 +216,9 @@ export function createWorldScene(services) {
           return { level: p.level, label: p.label, nextInMs: p.nextInMs, bonusPct: Math.round(p.incomeBonus * 100) };
         })(),
         works: worksPanelData(state, world, regionId, Date.now()),
+        forts: FEATURES.frontier ? fortsPanelData(state, world, regionId, Date.now()) : undefined, // Fortifications (DESIGN 10.3)
+        threat: threatInfo(regionId), // "Under attack" (DESIGN 10.1)
+        ...ownedRenownData(regionId), // Festival and Muster (DESIGN 10.12)
       };
     }
     return {
@@ -200,17 +228,230 @@ export function createWorldScene(services) {
       owned: false,
       owner,
       perk,
+      features: withFallen(featureRows(region, false), state, world, regionId),
       income: effectiveRegionIncome(state, world, region),
-      bounty: bounty(state, world, regionId),
-      difficulty: difficulty(state, world, regionId),
-      chanceText: chanceWords(difficulty(state, world, regionId).winChance), // "about 1 in 5": the bar shows the chance of winning (DESIGN 5.3)
+      bounty: conquestBounty(state, world, regionId), // what winning pays: the conquest bounty, or a retake's share (the payout's own function)
+      crownsPayable: crownsPayable(state, regionId),
+      // the label and the chance with the card's commander credited (DESIGN 10.11; phase3-hookup §6), so they match the fight Attack starts
+      difficulty: difficulty(state, world, regionId, { commander: commanderFor(regionId) }),
+      chanceText: chanceWords(difficulty(state, world, regionId, { commander: commanderFor(regionId) }).winChance), // "about 1 in 5" (DESIGN 5.3)
       attackBlock: (() => { const r = attackBlocker(state, world, regionId); return r === 'no-passable-border' || r === 'unbuildable' ? r : null; })(), // no arena can be built: the card says why
       intel: intelPanelData(state, world, regionId),
       parSec: parFor(world, regionId, state),
       crownBonusPct: CROWN_BONUS_PCT,
+      battleRunning: services.battles.list().some((r) => r.regionId === regionId),
+      occupied: occupiedInfo(regionId),
+      commander: commanderData(regionId), // "Commander: [name]" (DESIGN 10.11)
+      grudge: services.goals && edictMods(state).raids !== false ? services.goals.grudgeFor(regionId) : null, // the owner's Grudge (PLAN-PHASE4 §4D); none in a Peace of the Crowns
+      quick: services.quick ? services.quick.cardData(regionId, commanderFor(regionId)) : null, // Quick Conquest (PLAN-PHASE5 §5D)
     };
   }
 
+  // --- A varied map (DESIGN 10.13) ----------------------------------------------------------------------------------------
+  // What an owned region's type still does (the one-off rewards were paid on conquest); the frontier rows use the config's own lines.
+  const OWNED_TYPE_TEXT = Object.freeze({
+    goldmine: `+${Math.round(MAP_FEATURES.rewards.goldmine.income * 100)}% income while held`, monastery: `Scouts regions within ${MAP_FEATURES.rewards.monastery.scoutHops}`, bandit: 'Its bounty and Renown are yours',
+    ruins: 'Its Renown is yours', dragon: 'The Dragon is slain: Dragonscale is yours',
+  });
+  /** The card's type / twist / boss rows: null when the region has neither. A twist only matters to an attack (frontier cards). */
+  function featureRows(region, owned) {
+    const c = MAP_FEATURES.copy;
+    const out = {};
+    if (region.type && c.typeNames[region.type]) {
+      out.type = { id: region.type, name: c.typeNames[region.type], text: owned ? OWNED_TYPE_TEXT[region.type] || '' : c.typeText[region.type] };
+      if (region.type === 'dragon' && !owned) out.boss = true;
+    }
+    if (region.twist && !owned && c.twistNames[region.twist]) out.twist = { id: region.twist, name: c.twistNames[region.twist], text: c.twistText[region.twist] };
+    return out.type || out.twist ? out : undefined;
+  }
+  /** The Ashen Host's card row (PLAN-PHASE6 §6B): The Fallen Rise, from the config's own line (rivals.js fallenLine), plus its counterplay. */
+  function withFallen(rows, state, world, regionId) {
+    const line = fallenLine(state, world, regionId);
+    if (!line) return rows;
+    const parts = line.replace(/^The Fallen Rise:\s*/, '').split('. '); // a capital adds "The Barrow Keep: its dead rise every N s"
+    parts[0] += '; Firestorm burns the dead';
+    return { ...(rows || {}), ashen: { name: 'The Fallen Rise', text: parts.join('. '), emblem: world.factions[ASHEN.factionId]?.emblem || 'skullCrown' } };
+  }
+
+  // --- Generals and Renown (DESIGN 10.11, 10.12) ------------------------------------------------------------------------
+  const commanderPick = new Map(); // regionId -> the General chosen on its card ('' = the Militia Captain)
+
+  /** The card's commander picker: the free Generals and the Militia Captain; the player's pick if still free, else the best free General. */
+  function commanderData(regionId) {
+    const { state, world } = container.get();
+    const now = Date.now();
+    const free = edictMods(state).forceCaptain ? [] : freeGenerals(state, now); // Lone Banner: the Militia Captain commands every battle (the picker holds only them)
+    const options = free.map((g) => ({ id: g.id, label: `${g.name} (Lv ${g.level})` }));
+    options.push({ id: '', label: GENERALS.copy.captainName });
+    return { options, selected: commanderFor(regionId) || '' };
+  }
+  /** The commander an attack on this region gets: the card's pick if that General is still free, else the best free one, else null (the Militia Captain). */
+  function commanderFor(regionId) {
+    const { state } = container.get();
+    return edictCommander(state, pickCommander(regionId)); // null under Lone Banner (meta/edicts.js commanderFor)
+  }
+  function pickCommander(regionId) {
+    const { state, world } = container.get();
+    const now = Date.now();
+    const free = freeGenerals(state, now);
+    if (commanderPick.has(regionId)) {
+      const want = commanderPick.get(regionId);
+      if (want === '') return null;
+      if (free.some((g) => g.id === want)) return want;
+    }
+    const best = bestFreeGeneral(state, world, regionId, 'attack', now);
+    return best ? best.id : null;
+  }
+  function onCommander(regionId, id) {
+    commanderPick.set(regionId, id || '');
+    tutorial.notify('commanderPicked');
+  }
+
+  /** Festival and Muster for an owned region (null fields when the feature is off). */
+  function ownedRenownData(regionId) {
+    if (!FEATURES.frontier) return {};
+    const { state, world } = container.get();
+    const sp = renownSpends(state, world, regionId, Date.now());
+    if (!sp.region) return {};
+    return { festival: sp.region.festival, muster: { ...sp.region.muster, fill: militiaFill(state, regionId, Date.now()) } };
+  }
+
+  function onFestival(regionId) {
+    const { state, world } = container.get();
+    const res = festival(state, world, regionId, Date.now());
+    if (!res) { refused('Not enough Renown for a Festival.'); return; }
+    const festUps = updateProsperity(state, world, Date.now()); // the level is credited at once (no second celebration)
+    services.goals?.onProsperity([{ regionId, level: res.level, from: res.from ?? res.level - 1 }, ...(festUps || [])]); // the Bounty Board (PLAN-PHASE4 §4A)
+    const keep = world.tiles[world.settlements[world.regions[regionId].keep].tile];
+    renderer.fx.spawn('floatText', keep.x, keep.y - 1.4, { text: 'Festival!', color: ACCENTS.gold, size: 0.5 });
+    renderer.fx.spawn('confetti', keep.x, keep.y - 0.5, {});
+    sfx.play('upgrade', { pitch: 1.2 });
+    ui.toasts.update({ type: 'success', icon: 'star', message: `A Festival at ${world.regions[regionId].name}: Prosperity ${['', 'I', 'II', 'III'][res.level] || res.level}` });
+    markDirty();
+    refreshRegionCard();
+    updateHud(performance.now(), { force: true });
+    services.autosave.save();
+    tutorial.notify('festival');
+  }
+
+  function onMuster(regionId) {
+    const { state, world } = container.get();
+    const res = muster(state, world, regionId, Date.now());
+    if (!res) { refused('That militia cannot be mustered now.'); return; }
+    sfx.play('rally', { volume: 0.5 });
+    ui.toasts.update({ type: 'success', icon: 'shield', message: `${world.regions[regionId].name}'s militia stands ready` });
+    refreshRegionCard();
+    updateHud(performance.now(), { force: true });
+    services.autosave.save();
+  }
+
+  /** The roster panel's data: generalsPanelData + the spend refusals in words + the region each busy General commands. */
+  function updateGenerals() {
+    const { state, world } = container.get();
+    const now = Date.now();
+    const data = generalsPanelData(state, world, now);
+    const spends = renownSpends(state, world, null, now);
+    for (const g of data.generals) {
+      const sp = spends.generals.find((x) => x.id === g.id);
+      if (sp) { g.train = { ...g.train, reason: sp.train.reason }; g.heal = { ...g.heal, reason: sp.heal.reason }; g.respec = { ...g.respec, reason: sp.respec.reason }; }
+      g.commandingName = g.commandingRegion != null && world.regions[g.commandingRegion] ? world.regions[g.commandingRegion].name : null;
+      // a skill that only says "Passive +3%" states its real effect: the passive it would give ("Passive +3% · settlements +21% defence")
+      const real = generalById(state, g.id);
+      for (const [tier, t] of g.skills.entries()) {
+        if (!t.open || !real) continue;
+        t.options = t.options.map((o, c) => {
+          if (!/^passive\b/i.test(o.text)) return o;
+          const trial = { ...real, skills: [...real.skills.slice(0, tier), c] };
+          const after = passiveText(trial).replace(/^Your\s+/i, '');
+          return { ...o, text: `${o.text} · ${after.charAt(0).toLowerCase()}${after.slice(1)}` };
+        });
+      }
+    }
+    ui.generals.update(data);
+  }
+  function onGeneralsOpen() {
+    setSelected(null);
+    ui.council.el.hidden = true;
+    ui.realm.el.hidden = true;
+    ui.regions.el.hidden = true;
+    updateGenerals();
+    ui.generals.el.hidden = false;
+    tutorial.notify('generalsOpened');
+  }
+  function onGeneralsClose() { ui.generals.el.hidden = true; }
+  const afterRenown = () => { updateGenerals(); updateHud(performance.now(), { force: true }); services.autosave.save(); };
+  function onTrain(id) {
+    const { state } = container.get();
+    const res = train(state, id);
+    if (!res) { refused('Not enough Renown to train.'); return; }
+    sfx.play('upgrade');
+    ui.generals.setStatus?.(`${generalById(state, id).name} reaches level ${res.level}`);
+    announce(`${generalById(state, id).name} reaches level ${res.level}`);
+    afterRenown();
+  }
+  function onHeal(id) {
+    const { state } = container.get();
+    if (!heal(state, id, Date.now())) { refused('That General cannot be healed now.'); return; }
+    sfx.play('upgrade', { volume: 0.6 });
+    announce(`${generalById(state, id).name} is fit to command again`);
+    afterRenown();
+  }
+  function onRespec(id) {
+    const { state } = container.get();
+    if (!respec(state, id)) { refused('Not enough Renown to respec.'); return; }
+    sfx.play('click');
+    announce(`${generalById(state, id).name} can choose their skills again`);
+    afterRenown();
+  }
+  function onPickSkill(id, choice) {
+    const { state } = container.get();
+    const g = generalById(state, id);
+    if (!g || !pickSkill(g, choice)) { refused('That skill cannot be chosen now.'); return; }
+    sfx.play('upgrade', { pitch: 1.1 });
+    announce(`${g.name} learns a new skill`);
+    tutorial.notify('skillPicked');
+    afterRenown();
+  }
+  function onHire() {
+    const { state } = container.get();
+    const g = hireMercenary(state);
+    if (!g) { refused('No mercenary can be hired now.'); return; }
+    sfx.play('coin');
+    announce(`${g.name} joins your cause`);
+    afterRenown();
+  }
+  function onWatchGeneral(id) {
+    const run = services.battles.list().find((r) => r.commander === id);
+    if (!run) return;
+    ui.generals.el.hidden = true;
+    services.switchToBattle(run.id);
+  }
+
+  /** An owned region under threat (DESIGN 10.1): a defense being fought there, or a war band on its way (the countdown and the odds), or null. */
+  function threatInfo(regionId) {
+    const run = services.battles.list().find((r) => r.regionId === regionId && r.kind === 'defense');
+    if (run) return { text: 'Under attack: your Captain holds it.', button: 'Watch', buttonLabel: 'Watch the defense' };
+    const inc = services.frontier ? services.frontier.incomingOn(regionId) : null;
+    if (!inc) return null;
+    const odds = inc.estimate && inc.estimate.label ? ` (${inc.estimate.label} to hold)` : '';
+    return { text: `${inc.byName.charAt(0).toUpperCase()}${inc.byName.slice(1)} arrive in ${inc.secondsLeft} s${odds}.`, button: 'Go', buttonLabel: 'Go: be taken to this defense when it starts' };
+  }
+
+  /** An occupied region of yours (DESIGN 10.2; state.occupation, ARCHITECTURE 10.2), as the card and the map show it, or null. */
+  function occupiedInfo(regionId) {
+    const { state, world } = container.get();
+    const occ = state.occupation && state.occupation[regionId];
+    if (!occ || state.owner[regionId] === PLAYER_FACTION) return null;
+    const by = world.factions[Number.isInteger(occ.by) ? occ.by : state.owner[regionId]] || world.factions[state.owner[regionId]];
+    const lvl = Number.isInteger(occ.prosperity) ? occ.prosperity : 0;
+    const count = (x) => (Array.isArray(x) ? x.filter(Boolean).length : x && typeof x === 'object' ? Object.values(x).flat().filter(Boolean).length : 0);
+    return { byName: by ? (/^the /i.test(by.name) ? by.name : `the ${by.name}`) : 'the enemy', color: by ? by.color : '#eb5757', prosperityLabel: ['', 'I', 'II', 'III'][Math.max(0, Math.min(3, lvl))], buildings: count(occ.forts) + count(occ.works) };
+  }
+
+  const occupationLayer = createOccupationLayer();
+  let fortMarks = [];
+  let fortMarksAtMs = -1e9;
+  let inWorld = false; // this scene is the one on screen (a battle nobody watches may end meanwhile)
   let hintOutlineRegion = -1; // the region the open hint points at: it gets a bright pulsing outline
   let hintSlotPx = 84; // the room the card opens above Attack for the "Attack!" bubble (grows to the bubble's real height)
   let cardOffersSurrender = false; // the open card shows Accept Surrender instead of Attack
@@ -242,7 +483,14 @@ export function createWorldScene(services) {
       pulse = true;
     }
     const shown = state.gold - (creditHold ? creditHold.amount : 0);
-    ui.hud.update({ gold: shown, incomePerSec: incomePerSec(state, world), dynastyStars: state.dynasty.stars, pulse, quiet: !pulse });
+    const roster = ensureGenerals(state).roster;
+    ui.hud.update({
+      gold: shown, incomePerSec: incomePerSec(state, world), dynastyStars: state.dynasty.stars, pulse, quiet: !pulse,
+      renown: renownPoints(state), showRenown: FEATURES.frontier && (renownPoints(state) > 0 || (state.renown && state.renown.earned > 0) || state.stats.battlesWon > 0),
+      pendingPicks: roster.reduce((n, g) => n + pendingPicks(g), 0),
+      eventPip: services.events ? services.events.closedOffer() : null, // a closed world-event offer can be reopened while it is open (PLAN-PHASE4 §4E)
+      ...(services.goals ? services.goals.hudData() : {}), // the Conquest Streak's flame chip (PLAN-PHASE4 §4B)
+    });
   }
 
   // "Best value": the one Army upgrade that raises Army Power the most per gold (game/app/bestValue.js). Recomputed on purchase and, while the council
@@ -287,10 +535,14 @@ export function createWorldScene(services) {
     const { state } = container.get();
     const { world } = container.get();
     ui.realm.update({
-      stats: state.stats, dynasty: { ...state.dynasty, starText: dynastyStarText() }, canFoundDynasty: canFoundDynasty(state),
+      stats: state.stats, dynasty: { ...state.dynasty, starText: dynastyStarText() }, canFoundDynasty: canFoundDynasty(state, world), // the Dragon's Lair is optional (DESIGN 10.13)
       crowns: crownTotals(state, world),
+      held: { owned: state.owner.filter((o) => o === PLAYER_FACTION).length, total: world.regions.length }, // this dynasty, beside the lifetime records
+      boons: state.boons && state.boons.dragonscale ? [MAP_FEATURES.copy.dragonscale] : [], // Dragonscale (DESIGN 10.13)
       chronicle: chroniclePanelData(state, world, Date.now()),
       save: saveWords(),
+      ...(services.goals ? services.goals.realmData() : {}), // Deeds and the Trophy wall (PLAN-PHASE4 §4C, §4D)
+      ...(services.dynasty ? services.dynasty.realmData() : {}), // the Edict, its Challenge laurels and the Legacy tree (PLAN-PHASE5)
     });
   }
 
@@ -298,13 +550,15 @@ export function createWorldScene(services) {
     if (savingMap) return;
     savingMap = true;
     updateRealm();
+    refreshCeremony();
     const { state, world } = container.get();
     const res = await saveTapestry(state, world, Date.now());
     savingMap = false;
     updateRealm();
     // pressed inside the Realm panel (or the Found a Dynasty confirmation): the result is said there, beside the button
     const message = res.ok ? saveText('done', { file: res.file }) : saveText('failed');
-    if (ui.realm.setSaveStatus && !ui.realm.el.hidden) ui.realm.setSaveStatus(message, res.ok ? 'success' : 'warning');
+    if (!ui.ceremony.el.hidden) { refreshCeremony(); ui.ceremony.setSaveStatus(message, res.ok ? 'success' : 'warning'); }
+    else if (ui.realm.setSaveStatus && !ui.realm.el.hidden) ui.realm.setSaveStatus(message, res.ok ? 'success' : 'warning');
     else ui.toasts.update({ type: res.ok ? 'success' : 'warning', icon: 'map', message });
   }
 
@@ -315,6 +569,8 @@ export function createWorldScene(services) {
     if (id == null) return;
     const data = refreshRegionCard();
     tutorial.notify('regionSelected');
+    if (data && data.features && (data.features.type || data.features.twist)) tutorial.notify('featureCardOpened'); // a typed or twisted region's card (tutorial V1)
+    if (data && data.features && data.features.ashen) tutorial.notify('ashenCardOpened'); // an Ashen region's card (tutorial A1)
     // A region that would surrender: its leader offers, once per region (selection only, not the card's 1 s refresh).
     if (data && data.difficulty && data.difficulty.surrender) {
       services.speak('surrenderOffer', container.get().state.owner[id], id, id);
@@ -453,7 +709,16 @@ export function createWorldScene(services) {
       ui.toasts.update({ type: 'warning', icon: 'flame', message: 'No passable border: conquer a neighbour first.' });
       return;
     }
-    goto.battle({ regionId });
+    // several battles at once (DESIGN 10.5): a region already being fought over opens that battle; a fourth battle waits
+    const runs = services.battles.list();
+    const running = runs.find((r) => r.regionId === regionId);
+    if (running) { services.switchToBattle(running.id); return; }
+    if (runs.length >= MAX_BATTLES) {
+      sfx.play('error');
+      ui.toasts.update({ id: 'battles-full', type: 'warning', icon: 'sword', message: `${MAX_BATTLES} battles are already running: finish one first.` });
+      return;
+    }
+    goto.battle({ regionId, commander: commanderFor(regionId) }); // the card's commander (DESIGN 10.11)
   }
 
   function onSurrender(regionId) {
@@ -468,11 +733,65 @@ export function createWorldScene(services) {
     state.stats.surrenders += 1;
     try { chronicleOnConquest(state, world, regionId, { surrender: true, decapitated: !!result.decapitated }); } catch (err) { console.warn('[chronicle] surrender line skipped:', err); } // the story never blocks a conquest
     const gained = result.bounty + crownAward.bonusGold;
+    services.onDeeds?.({ kind: 'attack', regionId, result, crownAward }); // Renown and a recruited champion (DESIGN 10.11, 10.12)
     applyConquestVisuals(regionId, beforeRevealed, gained, { oldOwner });
     if (result.decapitated) services.speak('decapitation', oldOwner, regionId); // before the toast: the leader shows first on a phone
     ui.toasts.update({ type: 'success', icon: 'flag', message: `${world.regions[regionId].name} surrendered! +${shortNumber(gained)} gold` });
     setSelected(null);
     services.autosave.save();
+  }
+
+  // --- Quick Conquest (PLAN-PHASE5 §5D): the card's commander takes an Easy region at once; meta/quick.js does the bookkeeping -------------------------
+  function onQuickConquest(regionId) {
+    const { state, world } = container.get();
+    const commander = commanderFor(regionId);
+    const g = commander ? generalById(state, commander) : null;
+    const before = { beforeRevealed: revealed(state, world), frontierBefore: derived.frontier.slice(), oldOwner: state.owner[regionId] };
+    const res = services.quick.start(regionId, commander, {
+      commanderName: g ? g.name : GENERALS.copy.captainName,
+      onDone: (out, ctx) => quickDone(out, ctx, before),
+    });
+    if (!res || !res.ok) { refused(res && res.reason ? res.reason : 'Quick Conquest cannot go now.'); return; }
+    sfx.play('march', { volume: 0.6 });
+    tutorial.notify('quickConquest');
+    setSelected(null);
+  }
+  function quickDone(out, ctx, before) {
+    const { state, world } = container.get();
+    const name = ctx.region;
+    if (!out) { refused('Quick Conquest could not finish.'); return; }
+    if (out.won) {
+      const result = out.conquerResult || { bounty: 0 };
+      const crownAward = out.crownAward || { bonusGold: 0, count: 0 };
+      clearRegionIntel(state, ctx.regionId); // a conquered region forgets what was scouted and sabotaged
+      try { chronicleOnConquest(state, world, ctx.regionId, { crowns: out.crowns, battleSec: out.summary && out.summary.durationSec, decapitated: !!result.decapitated }); } catch (err) { console.warn('[chronicle] quick conquest line skipped:', err); }
+      services.onDeeds?.({ kind: 'attack', quick: true, regionId: ctx.regionId, result, crownAward, commander: out.commander }); // Renown, level-ups, a recruit
+      const gained = (result.bounty || 0) + (crownAward.bonusGold || 0);
+      if (inWorld) applyConquestVisuals(ctx.regionId, before.beforeRevealed, gained, { oldOwner: before.oldOwner, frontierBefore: before.frontierBefore });
+      else markDirty();
+      if (result.decapitated) services.speak('decapitation', before.oldOwner, ctx.regionId);
+      ui.toasts.update({ id: `quick-${ctx.regionId}`, type: 'success', icon: 'crown', message: `${name} is yours: Victory crown, +${shortNumber(gained)} gold`, duration: 5200 });
+      services.goals?.celebrateClaims?.(out.bounties); // contracts the conquest fulfilled (claimed inside meta)
+    } else {
+      services.goals?.onStreakEnded?.(out.streakEnded);
+      showQuickLoss(ctx.regionId, name);
+    }
+    updateHud(performance.now(), { force: true, pulse: !!out.won });
+    services.autosave.save();
+  }
+  /** A Quick Conquest lost: a short card that says so and offers to fight it by hand. */
+  function showQuickLoss(regionId, name) {
+    sfx.play('defeat', { volume: 0.6 });
+    const modal = createModal({
+      title: `The march on ${name} failed`,
+      body: 'Your commander was beaten back. Nothing else is lost: attack it yourself, or come back stronger.',
+      actions: [
+        { label: 'Back to the map', variant: 'secondary', onClick: () => modal.destroy() },
+        { label: 'Attack it', variant: 'primary', onClick: () => { modal.destroy(); onAttack(regionId); } },
+      ],
+    }, { onDismiss: () => modal.destroy() });
+    modal.el.classList.add('is-quick-loss');
+    document.body.appendChild(modal.el);
   }
 
   // --- Scout / Sabotage (DESIGN 5.7) ---------------------------------------------------------
@@ -491,6 +810,7 @@ export function createWorldScene(services) {
     if (!res) { refused('Not enough gold to scout that region.'); return; }
     sfx.play('click');
     tutorial.notify('scouted');
+    services.goals?.onScout(regionId); // a `scout` contract remembers the region
     // The leader first, then the toast: on a phone the toast waits until the banner has gone.
     services.speak('scouted', state.owner[regionId], regionId, regionId); // the leader notices; the gate does the rest
     ui.toasts.update({ type: 'info', icon: 'eye', message: intelToast('scouted', { region: world.regions[regionId].name }) });
@@ -513,6 +833,7 @@ export function createWorldScene(services) {
   // --- Region Works (DESIGN 5.8) ------------------------------------------------------------------
   function afterWorksChange() {
     markDirty(); // rebuilds derived.worksMarks and, through difficulty(), every frontier chip
+    fortMarksAtMs = -1e9; // the fortification marks too
     refreshRegionCard(); // the panel shows the new level and price at once
     updateHud(performance.now(), { force: true }); // gold changed
     services.autosave.save();
@@ -534,6 +855,35 @@ export function createWorldScene(services) {
     if (!res) { refused('Not enough gold to upgrade that.'); return; }
     sfx.play('upgrade', { pitch: 1 + 0.12 * (res.level - 1) }); // a little higher at level III
     ui.toasts.update({ type: 'success', icon: 'star', message: worksToast('upgraded', { work: workName(res.type), region: world.regions[regionId].name, level: res.level }) });
+    afterWorksChange();
+  }
+
+  // --- Fortifications (DESIGN 10.3; meta/forts.js): the same flow as the Works ---------------------------
+  function onBuildFort(regionId, slot, type) {
+    const { state, world } = container.get();
+    const res = buildFort(state, world, regionId, type);
+    if (!res) { refused('Not enough gold to build that.'); return; }
+    sfx.play('upgrade');
+    ui.toasts.update({ type: 'success', icon: 'tower', message: fortsToast('built', { fort: fortName(type), region: world.regions[regionId].name }) });
+    services.goals?.onFortBuilt(regionId, type);
+    afterWorksChange();
+    tutorial.notify('fortBuilt');
+  }
+  function onUpgradeFort(regionId, slot) {
+    const { state, world } = container.get();
+    const res = upgradeFort(state, world, regionId, slot);
+    if (!res) { refused('Not enough gold to upgrade that.'); return; }
+    sfx.play('upgrade', { pitch: 1 + 0.12 * ((res.level || 1) - 1) });
+    ui.toasts.update({ type: 'success', icon: 'star', message: fortsToast('upgraded', { fort: fortName(res.type), region: world.regions[regionId].name, level: res.level }) });
+    services.goals?.onFortBuilt(regionId, res.type);
+    afterWorksChange();
+  }
+  function onDemolishFort(regionId, slot) {
+    const { state, world } = container.get();
+    const res = demolishFort(state, world, regionId, slot);
+    if (!res) { refused('That could not be demolished.'); return; }
+    sfx.play('coin', { volume: 0.5 });
+    ui.toasts.update({ icon: 'coin', message: fortsToast('demolished', { fort: fortName(res.type), region: world.regions[regionId].name, refund: res.refund }) });
     afterWorksChange();
   }
 
@@ -583,12 +933,52 @@ export function createWorldScene(services) {
     ui.toasts.update({ id: 'refused', type: 'warning', icon: 'flame', message, duration: 2400 });
   }
 
+  // --- the founding ceremony (PLAN-PHASE5): Found a Dynasty opens a five-page stepper over the finished map -------------------------------------------
+  let ceremonySeed = null;
   function onFoundDynasty() {
-    const res = container.tryFoundDynasty();
+    const { state, world } = container.get();
+    if (!canFoundDynasty(state, world)) return;
+    ceremonySeed = container.nextSeed(); // the Edicts are drawn for this seed, and the new continent is made from it
+    services.dynasty.beginSession(ceremonySeed);
+    setSelected(null);
+    ui.realm.el.hidden = true;
+    ui.council.el.hidden = true;
+    ui.regions.el.hidden = true;
+    ui.ceremony.open(services.dynasty.ceremonyData(ceremonySeed, saveWords()));
+    // tutorial D1, the first time the ceremony opens: a hint over the Edict cards (drawn inside the dialog)
+    const st = container.get().state;
+    const d1 = TUTORIAL_STEPS.find((x) => x.id === 'D1');
+    ui.ceremony.setEdictHint(st.settings.hints !== false && !tutorial.isSeen('D1') ? d1.text : null);
+    sfx.play('upgrade', { pitch: 0.8, volume: 0.6 });
+  }
+  const refreshCeremony = () => { if (!ui.ceremony.el.hidden && ceremonySeed != null) ui.ceremony.update(services.dynasty.ceremonyData(ceremonySeed, saveWords())); };
+  function onCeremonyClose() {
+    ui.ceremony.close();
+    services.dynasty.endSession(); // Legacy bought on the preview is not spent until a founding happens
+    ceremonySeed = null;
+  }
+  function onCeremonyPage(pageId) {
+    if (pageId === 'edict') tutorial.notify('ceremonyEdicts');
+  }
+  function onBuyLegacy(id, where) {
+    const res = services.dynasty.buy(id, where);
+    if (where === 'ceremony') refreshCeremony(); else updateRealm();
+    return res;
+  }
+  function onCeremonyFound(choice) {
+    const session = services.dynasty.session;
+    const house = services.dynasty.houseName(); // named before the old continent is left
+    const res = container.tryFoundDynasty({ seed: ceremonySeed, edict: choice.edict, challenges: choice.challenges, legacyBuys: session ? session.bought.slice() : [] });
+    ui.ceremony.close();
+    services.dynasty.endSession();
+    ceremonySeed = null;
     if (!res) return;
     services.applyWorld();
     sfx.play('victory');
-    ui.toasts.update({ type: 'success', icon: 'crown', message: 'A new dynasty begins. A new continent awaits, with tougher enemies.' });
+    const info = choice.edict ? services.dynasty.realmData().dynastyRules.edict : null;
+    const refused = res.founding && Array.isArray(res.founding.refused) ? res.founding.refused : [];
+    if (refused.length) ui.toasts.update({ id: 'legacy-refused', type: 'warning', icon: 'tree', message: `${refused.length === 1 ? 'One Legacy node' : `${refused.length} Legacy nodes`} could not be bought; the points are still yours to spend in the Realm panel.`, duration: 6000 });
+    ui.toasts.update({ type: 'success', icon: 'crown', message: `The House of ${house} rises on a new continent${info ? `, under the Edict of ${info.name}` : ''}.`, duration: 6000 });
     enter({ freshRealm: true, newWorld: true });
     services.autosave.save();
   }
@@ -613,7 +1003,7 @@ export function createWorldScene(services) {
   // --- the Regions list: every region you can see, as buttons (a way round the map for a keyboard, a screen reader and a thumb) ----------------------------------
   function updateRegions() {
     const { state, world } = container.get();
-    ui.regions.update({ rows: regionsListData(state, world, { revealAll: services.devRevealAll }) });
+    ui.regions.update({ rows: regionsListData(state, world, { revealAll: services.devRevealAll }), ...(services.goals ? services.goals.regionsData() : {}) });
   }
 
   function onRegionsOpen() {
@@ -621,7 +1011,11 @@ export function createWorldScene(services) {
     ui.council.el.hidden = true;
     ui.realm.el.hidden = true;
     updateRegions();
+    ui.regions.setBoardStatus?.('');
     ui.regions.el.hidden = false;
+    services.goals?.markBoardSeen(); // the Regions button's dot goes out (PLAN-PHASE4 §4A)
+    updateHud(performance.now(), { force: true });
+    tutorial.notify('boardOpened');
   }
 
   function onRegionsClose() {
@@ -670,8 +1064,10 @@ export function createWorldScene(services) {
     if (!ui.settings.el.hidden) { services.closeSettings(); return true; }
     if (!ui.welcome.el.hidden) { ui.welcome.el.hidden = true; return true; }
     if (!ui.council.el.hidden) { ui.council.el.hidden = true; return true; }
+    if (!ui.ceremony.el.hidden) { onCeremonyClose(); return true; }
     if (!ui.realm.el.hidden) { ui.realm.el.hidden = true; return true; }
     if (!ui.regions.el.hidden) { ui.regions.el.hidden = true; return true; }
+    if (!ui.generals.el.hidden) { ui.generals.el.hidden = true; return true; }
     if (selectedRegionId != null) {
       const focusWasInCard = ui.regionCard.dock.contains(document.activeElement);
       setSelected(null);
@@ -832,7 +1228,7 @@ export function createWorldScene(services) {
   // --- scene lifecycle ------------------------------------------------------------
   function enter(payload = {}) {
     const { state, world } = container.get();
-    if (state.battle && !payload.skipResume && !payload.cameFromBattle) {
+    if (state.battles && state.battles.length && !payload.skipResume && !payload.cameFromBattle) {
       goto.battle({ resume: true });
       return;
     }
@@ -848,6 +1244,7 @@ export function createWorldScene(services) {
     requestAnimationFrame(() => { const a = document.activeElement; if (!a || a === document.body || !a.getClientRects().length) renderer.canvas.focus({ preventScroll: true }); });
     services.hideAllPanels();
     ui.hud.el.hidden = false;
+    inWorld = true;
     enteredAtMs = performance.now();
     services.pendingIdlePop = null;
     // Starting neighbours are not a "first contact": mark them met silently (new realm, new dynasty, or a
@@ -893,7 +1290,9 @@ export function createWorldScene(services) {
   }
 
   function exit() {
+    inWorld = false;
     ui.hud.el.hidden = true;
+    ui.generals.el.hidden = true;
     ui.regionCard.dock.hidden = true;
     ui.council.el.hidden = true;
     ui.realm.el.hidden = true;
@@ -936,20 +1335,104 @@ export function createWorldScene(services) {
     return {
       scene: 'world',
       // nothing modal in the way, and the scene has had a moment (the hint waits for the mists and the first framing)
-      panelsClosed: ui.welcome.el.hidden && ui.settings.el.hidden && ui.council.el.hidden && ui.realm.el.hidden && ui.regions.el.hidden && nowMs - enteredAtMs > 900,
+      panelsClosed: ui.ceremony.el.hidden && ui.welcome.el.hidden && ui.settings.el.hidden && ui.council.el.hidden && ui.realm.el.hidden && ui.regions.el.hidden && nowMs - enteredAtMs > 900,
       cardOpen,
       cardAttackable: isUp(action),
       cardUnscouted: isUp(scout) && !scout.disabled,
       frontierCount: derived.frontier.length,
       battlesWon: state.stats.battlesWon,
       conquests: Math.max(0, owned - 1),
-      realmComplete: canFoundDynasty(state),
+      realmComplete: canFoundDynasty(state, world),
       ownedFrontierCount: world.regions.filter((r) => state.owner[r.id] === PLAYER_FACTION && r.neighbors.some((n) => state.owner[n] !== PLAYER_FACTION)).length,
       // M3 (PLAYFEEL §4): after the third conquest, while no Work has been built; it points at the owned region that borders the most enemy land
       worksDue: FEATURES.works && owned - 1 >= 3 && worksTutorialDue(state),
       worksRegion: FEATURES.works && owned - 1 >= 3 ? worksTutorialRegion(state, world) : -1,
+      // the Living Frontier's steps (F1, F4)
+      incoming: (state.frontier && state.frontier.incoming || []).length,
+      raidToast: !!raidGoButton(),
+      raids: state.frontier && state.frontier.stats ? state.frontier.stats.raids : 0,
+      fortRegion: FEATURES.frontier ? fortTutorialRegion() : -1,
+      pendingPicks: ensureGenerals(state).roster.reduce((n, g) => n + pendingPicks(g), 0),
+      festivalRegion: FEATURES.frontier ? festivalTutorialRegion() : -1,
+      featureRegion: FEATURES.frontier ? featureTutorialRegion() : -1, // V1
+      eventToast: !!eventToastEl(), // V5
+      boardUnlocked: !!(state.bounties && state.bounties.unlocked), // Q1
+      vendettaToast: !!vendettaGoButton(), // Q2
+      quickReady: cardOpen && !!quickBtnReady(), // D2
+      ashenRegion: ashenTutorialRegion(), // A1
       features: FEATURES,
     };
+  }
+
+  /** Tutorial D2: the card's Quick Conquest button while it can go, or null. */
+  function quickBtnReady() {
+    const b = ui.regionCard.quickButton && ui.regionCard.quickButton();
+    return b && b.getAttribute('aria-disabled') !== 'true' && isUp(b) ? b : null;
+  }
+
+  /** Tutorial Q2: the Go button of a Vendetta's banner (a raid toast with the class is-vendetta), or null. */
+  function vendettaGoButton() {
+    const btns = [...document.querySelectorAll('.toasts > .toast.is-vendetta:not(.is-out) .toast-action')].filter((b) => b.getClientRects().length);
+    return btns.length ? btns[btns.length - 1] : null;
+  }
+
+  /** Tutorial V1: a frontier region with a type or a twist (the one nearest the realm's start), or -1. */
+  function featureTutorialRegion() {
+    const { world } = container.get();
+    let best = -1;
+    for (const id of derived.frontier) {
+      const r = world.regions[id];
+      if (!(r.type || r.twist) || !anchors[id]) continue;
+      if (best < 0 || r.tier < world.regions[best].tier) best = id;
+    }
+    return best;
+  }
+
+  /** Tutorial A1 (PLAN-PHASE6): the lowest-tier frontier region held by an 'undying' faction with a label on screen, or -1. */
+  function ashenTutorialRegion() {
+    const { state, world } = container.get();
+    if (ashenOnFrontier(state, world) == null) return -1;
+    let best = -1;
+    for (const id of derived.frontier) {
+      const f = world.factions[state.owner[id]];
+      if (!f || f.personality !== 'undying' || !anchors[id]) continue;
+      if (best < 0 || world.regions[id].tier < world.regions[best].tier) best = id;
+    }
+    return best;
+  }
+
+  /** Tutorial V5: the open world event's toast (its first button), or null. */
+  function eventToastEl() {
+    const t = [...document.querySelectorAll('.toasts > .toast:not(.is-out)')].find((n) => n.dataset.id === 'world-event' && n.getClientRects().length);
+    return t ? t.querySelector('.toast-action:not(.toast-secondary)') || t : null;
+  }
+
+  /** The Go button of the newest incoming raid's toast (tutorial F1), or null. */
+  function raidGoButton() {
+    const btns = [...document.querySelectorAll('.toasts > .toast:not(.is-out) .toast-action')].filter((b) => b.getClientRects().length);
+    const raid = btns.filter((b) => /^raid-/.test(b.closest('.toast').dataset.id || ''));
+    return raid.length ? raid[raid.length - 1] : null;
+  }
+
+  /** Tutorial R1: an owned region whose Festival Renown can pay for now (the selected one if it qualifies), or -1. */
+  function festivalTutorialRegion() {
+    const { state, world } = container.get();
+    if (renownPoints(state) <= 0) return -1;
+    const ok = (id) => { try { const sp = renownSpends(state, world, id, Date.now()); return !!(sp.region && sp.region.festival.can); } catch { return false; } };
+    if (selectedRegionId != null && state.owner[selectedRegionId] === PLAYER_FACTION && ok(selectedRegionId)) return selectedRegionId;
+    const r = world.regions.find((x) => state.owner[x.id] === PLAYER_FACTION && ok(x.id));
+    return r ? r.id : -1;
+  }
+
+  /** Tutorial F4: the owned region to fortify: the one raided last if it still has a free slot, else a border region facing a rival with one; -1 if none. */
+  function fortTutorialRegion() {
+    const { state, world } = container.get();
+    const hasFree = (id) => { try { const d = fortsPanelData(state, world, id); return d.owned && d.freeSlot >= 0; } catch { return false; } };
+    const report = state.frontier || {};
+    const lastRaided = Object.keys(report.cooldown || {}).map(Number).filter((id) => state.owner[id] === PLAYER_FACTION && hasFree(id));
+    if (lastRaided.length) return lastRaided[lastRaided.length - 1];
+    const border = world.regions.find((r) => state.owner[r.id] === PLAYER_FACTION && r.neighbors.some((n) => state.owner[n] >= 2) && hasFree(r.id));
+    return border ? border.id : -1;
   }
 
   /** A region as a hint target: the box is its whole on-screen extent (hintTargets.regionHintBox), the label is the point that tells whether it is covered by a panel. */
@@ -1004,6 +1487,46 @@ export function createWorldScene(services) {
         const id = worksTutorialRegion(state, world);
         if (id < 0 || !anchors[id]) return null;
         return { target: regionTarget(id), key: `works${id}`, outline: id, noRing: true };
+      }
+      case 'raidGo': {
+        const btn = raidGoButton();
+        return btn ? { target: { find: () => raidGoButton() }, prefer: 'below', key: 'raidGo' } : null;
+      }
+      case 'generalsBtn': return { target: { find: () => ui.hud.el.querySelector('.hud-generals') } };
+      case 'regionsBtn': return { target: { find: () => ui.hud.el.querySelector('.hud-regions') }, key: 'regionsBtn' };
+      case 'quickBtn': return quickBtnReady() ? { target: { find: () => quickBtnReady() }, prefer: phone ? 'above' : 'left', key: 'quickBtn' } : null;
+      case 'vendettaGo': return vendettaGoButton() ? { target: { find: () => vendettaGoButton() }, prefer: 'below', key: 'vendettaGo' } : null;
+      case 'featureRegion': {
+        const id = featureTutorialRegion();
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `feature${id}`, outline: id, noRing: true };
+      }
+      case 'ashenRegion': {
+        const id = ashenTutorialRegion();
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `ashen${id}`, outline: id, noRing: true };
+      }
+      case 'eventToast': return eventToastEl() ? { target: { find: () => eventToastEl() }, prefer: 'below', key: 'eventToast' } : null;
+      case 'festivalRegion': {
+        // the region's label; with its owned card open, the Festival button
+        const btn = ui.regionCard.festivalButton && ui.regionCard.festivalButton();
+        if (btn && !btn.disabled && !ui.regionCard.dock.hidden) return { target: { find: () => ui.regionCard.festivalButton() }, prefer: phone ? 'above' : 'left', key: 'festivalBtn', text: services.isTouch() ? 'Tap Festival: this region prospers at once.' : 'Click Festival: this region prospers at once.' };
+        const id = festivalTutorialRegion();
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `fest${id}`, outline: id, noRing: true };
+      }
+      case 'fortRegion': {
+        // like M3: the region's label; with its owned card open, the Fortifications "Build..." button; with the chooser open, the Arrow Tower
+        const { state } = container.get();
+        const forts = ui.regionCard.forts;
+        const ownedCard = !ui.regionCard.dock.hidden && selectedRegionId != null && state.owner[selectedRegionId] === PLAYER_FACTION;
+        if (ownedCard) {
+          if (forts.view === 'choose') return { target: { find: () => forts.chooserRow('tower') }, prefer: phone ? 'above' : 'left', key: 'fortPick', text: 'An Arrow Tower shoots every war band that comes near.' };
+          return { target: { find: () => forts.buildButton() }, prefer: phone ? 'above' : 'left', key: 'fortBuild', text: services.isTouch() ? 'Tap Build to fortify this region.' : 'Click Build to fortify this region.' };
+        }
+        const id = fortTutorialRegion();
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `fort${id}`, outline: id, noRing: true };
       }
       default: return null;
     }
@@ -1110,6 +1633,24 @@ export function createWorldScene(services) {
     renderer.beginFrame(camera, fx.shakeOffset());
     renderer.terrain.draw(ctx, camera, visualOwners, visualLevels);
     renderer.terrain.drawGlints(ctx, camera, tm);
+    // occupied regions of yours: hatched in the occupier's colour (DESIGN 10.2)
+    if (state.occupation) {
+      const occ = [];
+      for (const id of Object.keys(state.occupation)) {
+        const r = Number(id);
+        if (state.owner[r] === PLAYER_FACTION || !(derived.revealed[r] || services.devRevealAll)) continue;
+        const f = world.factions[state.owner[r]];
+        if (f) occ.push({ regionId: r, color: f.color });
+      }
+      occupationLayer.draw(ctx, camera, world, occ);
+    }
+    // a plagued rival (DESIGN 10.13): a sickly green wash over its revealed regions while the Plague lasts
+    const plague = state.worldEvents && state.worldEvents.plague;
+    if (plague && plagueMult(state, plague.faction) < 1) {
+      const ids = [];
+      for (let r = 0; r < state.owner.length; r++) if (state.owner[r] === plague.faction && (derived.revealed[r] || services.devRevealAll)) ids.push(r);
+      occupationLayer.tint(ctx, camera, world, ids, '#c9dc3c', 0.3 + (state.settings.reduceMotion ? 0 : 0.04 * Math.sin(tm * 1.6)));
+    }
     if (hoveredRegionId != null && hoveredRegionId !== selectedRegionId) renderer.overlays.drawHover(ctx, camera, hoveredRegionId);
     let boosts = null;
     if (newFrontier.size) {
@@ -1146,6 +1687,14 @@ export function createWorldScene(services) {
       alpha: fogAlpha,
       skip: (m) => !derived.revealed[m.regionId] && !services.devRevealAll, // never draw into fog
     });
+    // fortifications as real structures on the map (DESIGN 10.3), yours or an occupier's (10.2)
+    if (FEATURES.frontier) {
+      if (nowMs - fortMarksAtMs > 1000) { fortMarksAtMs = nowMs; fortMarks = fortsMarksData(state, world); }
+      drawFortMarks(ctx, camera, world, fortMarks, {
+        colorOf: (f) => factionColor(f == null ? PLAYER_FACTION : f), t: state.settings.reduceMotion ? undefined : t, alpha: fogAlpha,
+        skip: (m) => !derived.revealed[m.regionId] && !services.devRevealAll,
+      });
+    }
     drawIntelMarks(ctx, state, t);
     ambient.drawAir(ctx, camera, vb);
     celebrateProspering(nowMs);
@@ -1165,8 +1714,27 @@ export function createWorldScene(services) {
 
     renderer.clouds.draw(ctx, camera, services.devRevealAll ? [] : derived.hidden, tm, nowMs, fogAlpha);
     for (const d of derived.labels) d.priority = d.regionId === selectedRegionId ? 0 : d.kind;
-    drawRegionLabels(ctx, camera, derived.labels, {
+    const labelBoxes = drawRegionLabels(ctx, camera, derived.labels, {
       fade: Math.min(1, fogAlpha * 1.5), time: state.settings.reduceMotion ? undefined : t,
+    });
+    // incoming war bands, marching keep to keep (DESIGN 10.1)
+    if (state.frontier && state.frontier.incoming && state.frontier.incoming.length) {
+      const f = state.frontier;
+      const keepAt = (rid) => { const r = world.regions[rid]; const t = r && world.tiles[world.settlements[r.keep].tile]; return t ? { x: t.x, y: t.y - elevOffset(t, 1) } : null; };
+      const bands = [];
+      for (const raid of f.incoming) {
+        const from = keepAt(raid.fromRegionId);
+        const to = keepAt(raid.toRegionId);
+        const fac = world.factions[raid.faction];
+        if (!from || !to || !fac) continue;
+        const span = Math.max(1, raid.arriveAt - raid.announcedAt);
+        bands.push({ from, to, progress: (f.activeSec - raid.announcedAt) / span, color: fac.color, strength: raid.strength });
+      }
+      drawWarBands(ctx, camera, bands, { time: state.settings.reduceMotion ? undefined : t, avoid: labelBoxes || [] });
+    }
+    // crossed swords over every region being fought over (DESIGN 10.5), above its name
+    drawBattleMarkers(ctx, camera, services.battles.list().filter((r) => anchors[r.regionId]).map((r) => ({ x: anchors[r.regionId].x, y: anchors[r.regionId].y, kind: r.kind })), {
+      time: state.settings.reduceMotion ? undefined : t,
     });
 
     updateHud(nowMs);
@@ -1174,6 +1742,7 @@ export function createWorldScene(services) {
     if (!ui.council.el.hidden && nowMs - lastCouncilMs > 250) { lastCouncilMs = nowMs; updateCouncil(); }
     if (!ui.realm.el.hidden && nowMs - lastRealmMs > 1000) { lastRealmMs = nowMs; updateRealm(); }
     if (!ui.regions.el.hidden && nowMs - lastRegionsMs > 1000) { lastRegionsMs = nowMs; updateRegions(); }
+    if (!ui.generals.el.hidden && nowMs - lastGeneralsMs > 1000) { lastGeneralsMs = nowMs; updateGenerals(); } // wound timers, busy Generals
     if (selectedRegionId != null) refreshRegionCardThrottled(nowMs);
     updateCoach(nowMs);
   }
@@ -1236,10 +1805,12 @@ export function createWorldScene(services) {
   }
 
   // --- dev hooks --------------------------------------------------------------------
-  function devConquerRegion(id) {
+  /** Dev: takes a region at once. `{ hooks: true }` also tells the Bounty Board (as a real conquest does), for the Phase 4 checks. */
+  function devConquerRegion(id, opts = {}) {
     const { state, world } = container.get();
     if (state.owner[id] === PLAYER_FACTION) return false;
-    conquer(state, world, id, Date.now());
+    const result = conquer(state, world, id, Date.now());
+    if (opts.hooks) services.goals?.onConquest(id, result);
     markDirty();
     return true;
   }
@@ -1256,6 +1827,17 @@ export function createWorldScene(services) {
       done++;
     }
     return done;
+  }
+
+  /** Dev (Phase 5): every region is yours now (conqueredAt = now), so Found a Dynasty opens. */
+  function devCompleteRealm() {
+    const { state } = container.get();
+    const now = Date.now();
+    state.owner.forEach((o, id) => { if (o !== PLAYER_FACTION) { state.owner[id] = PLAYER_FACTION; state.conqueredAt[id] = now; state.stats.regionsConquered += 1; } }); // counted as conquer() would
+    if (state.occupation) state.occupation = {};
+    markDirty();
+    if (!ui.realm.el.hidden) updateRealm();
+    return true;
   }
 
   function devFlyToRegion(id, zoom, ms = 600) {
@@ -1277,8 +1859,10 @@ export function createWorldScene(services) {
     onRegionsOpen,
     onRegionsClose,
     onRegionsSelect,
+    onReroll(slot) { if (services.goals) { services.goals.reroll(slot); updateRegions(); updateHud(performance.now(), { force: true }); } },
     onAttack,
     onSurrender,
+    onQuickConquest,
     onScout,
     onSabotage,
     onBuildWork,
@@ -1286,7 +1870,8 @@ export function createWorldScene(services) {
     onDemolishWork,
     onBuy,
     onBuyMax,
-    onFoundDynasty,
+    onEdictPicked() { tutorial.notify('edictPicked'); },
+    onFoundDynasty, onCeremonyFound, onCeremonyClose, onCeremonyPage, onBuyLegacy,
     onSaveMap,
     onWelcomeCollect,
     showWelcome,
@@ -1307,10 +1892,30 @@ export function createWorldScene(services) {
     },
     devConquer,
     devConquerRegion,
+    devCompleteRealm,
     devSurrender(id) { onSurrender(id); },
     devFlyToRegion,
+    onCommander, onFestival, onMuster, onGeneralsOpen, onGeneralsClose, onTrain, onHeal, onRespec, onPickSkill, onHire, onWatchGeneral, updateGenerals,
+    onBuildFort,
+    onUpgradeFort,
+    onDemolishFort,
+    /** A battle nobody was watching was won (app/battles.js finished it): the map plays the conquest where it is, without moving the camera. */
+    onRemoteConquest(out) {
+      if (!out) return;
+      if (inWorld) applyConquestVisuals(out.regionId, out.beforeRevealed, out.result.bounty + out.crownAward.bonusGold, { oldOwner: out.oldOwner, frontierBefore: out.frontierBefore, keepCamera: true });
+      else markDirty();
+    },
     /** Re-pushes the open card's data (what the 1 s refresh and every gold-dependent change does). */
     devRefreshCard() { refreshRegionCard(); },
+    /** Pushes the HUD now (a pip pressed, a streak changed). */
+    updateHudNow() { updateHud(performance.now(), { force: true }); },
+    /** Something Phase 4 shows changed (a deed, a contract, a streak): refresh what is open. */
+    onGoalsChanged(opts = {}) {
+      updateHud(performance.now(), { force: true, pulse: !!opts.pulse });
+      if (selectedRegionId != null) refreshRegionCard();
+      if (!ui.realm.el.hidden) updateRealm();
+      if (!ui.regions.el.hidden) updateRegions();
+    },
   };
 
   function sceneIsActive() { return !ui.hud.el.hidden; }

@@ -81,7 +81,7 @@ test('every pair of faction colours is at least 15 CIEDE2000 apart under deutera
       }
     }
   }
-  assert.equal(rows.length, 40);
+  assert.equal(rows.length, (FACTIONS.length * (FACTIONS.length - 1)) / 2 * 4); // every faction pair, under 4 kinds of vision
 });
 
 test('every faction has its own emblem (colour is never the only cue), and the dark and light variants stay in the family', () => {

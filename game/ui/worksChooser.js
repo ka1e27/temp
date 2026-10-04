@@ -37,17 +37,17 @@ const setAttr = (node, key, value) => { if (node.getAttribute(key) !== value) no
 /**
  * @param {{ onPick?: (type: string) => void }} [callbacks]
  */
-export function createWorksChooser({ onPick } = {}) {
+export function createWorksChooser({ onPick, iconFor = worksIcon, listLabel = 'Works you can build' } = {}) {
   /** @type {Map<string, object>} one persistent row per Work type */
   const rows = new Map();
   let order = '';
 
   const introEl = h('p.works-chooser-intro', {}, '');
-  const listEl = h('div.works-chooser-list', { role: 'list', 'aria-label': 'Works you can build' });
+  const listEl = h('div.works-chooser-list', { role: 'list', 'aria-label': listLabel });
   const el = h('div.works-chooser', {}, introEl, listEl);
 
   function makeRow(type) {
-    const iconHolder = h('span.works-chip', { dataset: { type } }, worksIcon(type, 20));
+    const iconHolder = h('span.works-chip', { dataset: { type } }, iconFor(type, 20));
     const nameEl = h('strong.works-choice-name', {}, '');
     const scopeEl = h('span.works-scope', {}, '');
     const effectEl = h('span.works-choice-effect', {}, '');
@@ -93,7 +93,7 @@ export function createWorksChooser({ onPick } = {}) {
       const row = rows.get(c.type);
       setText(row.nameEl, c.name);
       // Only the exception is tagged: "here" (the Market). Everything else is "next door", said once by the intro.
-      setText(row.scopeEl, c.scope);
+      setText(row.scopeEl, c.scope || '');
       setData(row.scopeEl, 'scope', c.scope === 'here' ? 'here' : 'near');
       if (row.scopeEl.hidden !== (c.scope !== 'here')) row.scopeEl.hidden = c.scope !== 'here';
       setText(row.effectEl, c.effect);
@@ -106,7 +106,7 @@ export function createWorksChooser({ onPick } = {}) {
       patchCost(row, c.cost, c.affordable, missing);
       const tip = c.affordable ? `Build ${c.name}: ${c.effect}` : `${c.name}: ${c.reason || 'unavailable'}`;
       if (row.btn.title !== tip) row.btn.title = tip;
-      setAttr(row.btn, 'aria-label', `${c.name}, ${c.effect}, ${c.scope}. ${c.affordable ? `Costs ${shortNumber(c.cost)} gold` : c.reason || 'Unavailable'}`);
+      setAttr(row.btn, 'aria-label', `${c.name}, ${c.effect}${c.scope ? `, ${c.scope}` : ''}. ${c.affordable ? `Costs ${shortNumber(c.cost)} gold` : c.reason || 'Unavailable'}`);
     }
   }
 

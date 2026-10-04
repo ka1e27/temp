@@ -176,7 +176,7 @@ test('tutorial controller: a set of seen steps, the right step for the facts, ev
   assert.equal(tut.pick(world).id, 'W0');
   state.tutorial.done = true;
   assert.equal(tut.pick(world), null, 'done switches every hint off');
-  assert.equal(TUTORIAL_STEPS.map((x) => x.id).join(' '), 'W0 W1 W2 W3 B1 B2 B3 B4 B5 C1 C2 C3 P1 P2 M1 M2 M3 M4');
+  assert.equal(TUTORIAL_STEPS.map((x) => x.id).join(' '), 'W0 W1 W2 W3 B1 B2 B3 B4 B5 C1 C2 C3 P1 P2 M1 M2 M3 M4 F1 F2 F3 F4 G1 G2 R1 V1 V2 V3 V4 V5 Q1 Q2 D1 D2 A1');
 });
 
 test('pickLandTile resolves tile centres (and mountain faces) to the tile drawn there', () => {
@@ -266,4 +266,27 @@ test('the income the region cards show adds up to what the game pays, Markets in
   assert.ok(worksIncomeMult(state, owned[1].id) > 1, 'a Market raises its region');
   assert.ok(Math.abs(sum() - incomePerSec(state, world)) < 1e-9, 'with a Market: the cards still sum to incomePerSec');
   assert.ok(effectiveRegionIncome(state, world, owned[1]) > before, 'and the Market region shows its raise');
+});
+
+test('the Living Frontier steps (F1-F4): a raid toast with Go on the map or in a battle, two battles at once, then fortify', async () => {
+  const { createTutorialController } = await import('../app/tutorial.js');
+  const seen = {};
+  const st = { tutorial: { seen, done: false }, settings: { hints: true } };
+  const tut = createTutorialController({ getState: () => st });
+  const all = (ids) => ids.forEach((id) => { seen[id] = true; });
+  all(['W0', 'W1', 'W2', 'W3', 'B1', 'B2', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'P1', 'P2', 'M1', 'M2', 'M3', 'M4']);
+  const world = { scene: 'world', panelsClosed: true, cardOpen: false, frontierCount: 3, battlesWon: 3, conquests: 4, incoming: 0, raidToast: false, raids: 0, fortRegion: 5, features: { frontier: true, works: true, supply: true } };
+  assert.equal(tut.pick(world), null, 'nothing before the first raid');
+  assert.equal(tut.pick({ ...world, incoming: 1, raidToast: true }).id, 'F1', 'a war band is coming: Go or the Captain');
+  assert.equal(tut.pick({ ...world, incoming: 1, raidToast: true, features: {} }), null, 'silent while the frontier is off');
+  const battle = { scene: 'battle', live: true, t: 20, battlesBefore: 3, ownSites: 2, enemySites: 3, captured: 1, incoming: 1, raidToast: true, runs: 1, features: { frontier: true, supply: true } };
+  assert.equal(tut.pick(battle).id, 'F2', 'in a battle elsewhere too');
+  tut.notify('raidGo');
+  assert.ok(seen.F1 && seen.F2, 'Go marks both seen');
+  assert.equal(tut.pick({ ...battle, incoming: 0, runs: 2 }).id, 'F3', 'two battles at once: switch');
+  tut.notify('battleSwitched');
+  assert.equal(tut.pick({ ...world, raids: 1, fortRegion: -1 }), null, 'no region to fortify, no hint');
+  assert.equal(tut.pick({ ...world, raids: 1 }).id, 'F4', 'after the first raid: fortify');
+  tut.notify('fortBuilt');
+  assert.equal(tut.pick({ ...world, raids: 1 }), null);
 });

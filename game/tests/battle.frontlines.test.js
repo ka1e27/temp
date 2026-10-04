@@ -579,6 +579,8 @@ test('arenas: no border march is longer than the cap, and a march rarely hugs th
         longest = Math.max(longest, march.tiles.length);
         assert.ok(march.tiles.length <= BATTLE.corridorMaxTiles, `seed ${seed} ${region.name}: a border march of ${march.tiles.length} tiles (cap ${BATTLE.corridorMaxTiles})`);
         const tiles = march.tiles.map((i) => arena.tiles.find((t) => t.i === i));
+        // a Siege's Gate stands next to the keep by design (DESIGN §10.13)
+        if (arena.twist === 'siege') continue; // its Gate reshapes the land at the keep, so every march there is counted out
         if (tiles.some((t) => keeps.some((k) => hexDistance(t, k) <= 1))) hugging += 1;
       }
     }

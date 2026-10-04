@@ -138,7 +138,7 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
           hud: !!document.querySelector('.hud') && document.querySelector('.hud').getClientRects().length > 0,
           battleHud: !!document.querySelector('.battle-hud') && !document.querySelector('.battle-hud').hidden && document.querySelector('.battle-hud').getClientRects().length > 0,
           toast: [...document.querySelectorAll('.toast')].map((e) => e.textContent).join(' | '),
-          battle: !!window.__hd.battle && window.__hd.battlePhase !== undefined && window.__hd.state.battle != null,
+          battle: !!window.__hd.battle && window.__hd.battlePhase !== undefined && (window.__hd.state.battles || []).length > 0,
         }));
         ok(st.scene === 'world' && st.hud && !st.battleHud, `robust 1: a battle that throws on entry puts the player back on the map (scene ${st.scene}; the world HUD is up, the battle HUD is gone)`);
         ok(/couldn.t start that battle/i.test(st.toast), `robust 1: and a toast says so ("${st.toast.slice(0, 60)}")`);
@@ -274,11 +274,12 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
       ok(await t.waitFor(() => window.__hd.scene === 'world', 12000), 'robust 4: a session starts');
       await t.page.eval(() => { const id = window.__hd.world.regions.find((r) => r.tier === 1).id; window.__hd.startBattle(id); });
       ok(await t.waitFor(() => window.__hd.scene === 'battle', 12000), 'robust 4: a battle starts');
-      ok(await t.waitFor(() => { try { const s = JSON.parse(localStorage.getItem('hexdominion.v2')); return !!s.battle && s.battle.version === 1; } catch { return false; } }, 15000), 'robust 4: the battle is in the save');
+      ok(await t.waitFor(() => { try { const s = JSON.parse(localStorage.getItem('hexdominion.v2')); return Array.isArray(s.battles) && !!s.battles[0] && s.battles[0].battle.version === 1; } catch { return false; } }, 15000), 'robust 4: the battle is in the save');
       const good = await t.page.eval(() => localStorage.getItem('hexdominion.v2'));
       // leave the game page (its pagehide autosave would overwrite what the next steps write), then edit the save
       const variants = [
         ['control (an untouched battle)', () => {}, 'resumes'],
+        ['a save from before the battle manager (a single state.battle)', 'legacy', 'resumes'],
         ['arena missing', (b) => { delete b.arena; }, 'dropped'],
         ['empty object', () => ({}), 'dropped'],
         ['plausible shape, broken inside (arena tiles)', (b) => { b.arena.tiles = [1]; }, 'reverted'],
@@ -288,8 +289,11 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
         await t.page.goto(`${BASE}/package.json`);
         await sleep(400);
         const save = JSON.parse(good);
-        const r = edit(save.battle);
-        if (r !== undefined) save.battle = r;
+        if (edit === 'legacy') { save.battle = save.battles[0].battle; delete save.battles; } // ARCHITECTURE 10.2: migrates into a one-element state.battles
+        else {
+          const r = edit(save.battles[0].battle);
+          if (r !== undefined) save.battles[0].battle = r;
+        }
         await t.page.eval((s) => localStorage.setItem('hexdominion.v2', s), JSON.stringify(save));
         await t.page.goto(`${URL0}`);
         ok(await t.atTitle(), `robust 4 [${name}]: the title shows (the save loads)`);
@@ -298,7 +302,7 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
         await sleep(2800);
         const st = await t.page.eval(() => ({
           scene: window.__hd.scene,
-          hasBattleState: !!window.__hd.state.battle,
+          hasBattleState: (window.__hd.state.battles || []).length > 0,
           worldHud: !!document.querySelector('.hud') && document.querySelector('.hud').getClientRects().length > 0,
           toast: [...document.querySelectorAll('.toast')].map((e) => e.textContent).join(' | '),
         }));
@@ -312,16 +316,16 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
       await t.page.goto(`${BASE}/package.json`);
       await sleep(400);
       const owned = JSON.parse(good);
-      owned.owner[owned.battle.arena.regionId] = 0;
+      owned.owner[owned.battles[0].battle.arena.regionId] = 0;
       await t.page.eval((s) => localStorage.setItem('hexdominion.v2', s), JSON.stringify(owned));
       await t.page.goto(`${URL0}`);
       ok(await t.atTitle(), 'robust 4 [region already owned]: the title shows');
       ok(await t.clickText('button', 'Continue'), 'robust 4 [region already owned]: Continue clicked');
       await sleep(2500);
-      ok(await t.page.eval(() => window.__hd.scene === 'world' && !window.__hd.state.battle), 'robust 4 [region already owned]: lands on the map with no ghost battle');
+      ok(await t.page.eval(() => window.__hd.scene === 'world' && !(window.__hd.state.battles || []).length), 'robust 4 [region already owned]: lands on the map with no ghost battle');
       // and the autosave does not write the dead battle back
       await sleep(6500);
-      const stored = await t.page.eval(() => { const s = JSON.parse(localStorage.getItem('hexdominion.v2')); return !!s.battle; });
+      const stored = await t.page.eval(() => { const s = JSON.parse(localStorage.getItem('hexdominion.v2')); return !!s.battle || (Array.isArray(s.battles) && s.battles.length > 0); });
       ok(!stored, 'robust 4: the save no longer carries an unresumable battle after the next autosave');
     } catch (err) {
       ok(false, `robust 4: unexpected error: ${err && err.message}`);

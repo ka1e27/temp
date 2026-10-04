@@ -85,6 +85,7 @@ export function computeThreats(battle) {
       if (sq.count > top.count) top = { count: sq.count, owner: sq.owner };
     }
     const garrison = projectGarrison(site, firstEta);
+    // per troop: site defence x Walls (combat.js siteDefence(site), site.defMult) x Bulwark: a walled keep holds more
     const defPer = garrisonPerTroopStrength(
       site, PLAYER_OWNER, battle.player, battle.arena.enemyFaction, battle.enemy, battle.t + firstEta,
     );

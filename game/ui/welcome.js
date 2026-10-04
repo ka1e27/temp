@@ -21,6 +21,9 @@ export function createWelcome({ onCollect } = {}) {
 
   // "Winterthorpe and 2 other regions prospered while you were away." (one line, not one celebration per region)
   const prosperedEl = h('p.welcome-prospered', {}, '');
+  // the away report (DESIGN 10.10): "While you were away: 4 attacks repelled at Fenwall and Lowshire. Brindle was occupied by the Amber Horde: retake it."
+  const awayEl = h('p.welcome-away', { role: 'note' }, '');
+  awayEl.hidden = true;
   prosperedEl.hidden = true;
   // "Your treasury pays for up to 2 h away. Treasury upgrades raise it.": only when the absence ran past the cap (hours arrive as data)
   const capEl = h('p.welcome-cap', {}, '');
@@ -37,6 +40,7 @@ export function createWelcome({ onCollect } = {}) {
     summaryEl,
     h('div.welcome-gold-row', {}, icon('coin', 24), goldEl, h('span.visually-hidden', {}, ' gold'), capNoteEl, burstEl),
     prosperedEl,
+    awayEl,
     capEl,
     collectBtn,
   );
@@ -73,6 +77,9 @@ export function createWelcome({ onCollect } = {}) {
     summaryEl.textContent = `You were away for ${timeEl.textContent}. Your realm earned ${goldEl.textContent} gold${capped ? ` (${capText})` : ''}.`;
     capEl.hidden = !capped;
     if (!capEl.hidden) capEl.textContent = `Your treasury pays for up to ${Number(data.capHours.toFixed(1))} h away. Treasury upgrades raise it.`;
+    awayEl.hidden = !data.away;
+    awayEl.textContent = data.away || '';
+    awayEl.classList.toggle('is-loss', !!data.awayLoss);
     if (data.prospered) {
       const list = data.prospered;
       const n = list.length;

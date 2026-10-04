@@ -9,6 +9,7 @@
 // the meta readout applies are not included.
 import { SITE_TYPES } from '../config/battle.js';
 import { DIFFICULTY } from '../config/meta.js';
+import { FEATURES } from '../config/features.js';
 import { ownerStats, PLAYER_OWNER } from './combat.js';
 
 const POWER_IDS = ['rally', 'firestorm', 'bulwark', 'march', 'levy'];
@@ -42,10 +43,13 @@ export function estimateDifficulty(arena, player, enemy) {
     const stats = ownerStats(site.owner, player, arena.enemyFaction, enemy);
     const growth = cfg.growth * stats.growth;
     const start = Math.min(site.troops, DIFFICULTY.overCapCredit * cfg.cap * (site.capMult ?? 1));
-    strength += (start + growth * DIFFICULTY.horizonSec) * cfg.def * stats.atk * stats.def;
+    strength += (start + growth * DIFFICULTY.horizonSec) * cfg.def * (site.defMult ?? 1) * stats.atk * stats.def;
   }
+  // A varied map (DESIGN §10.13): the Dragon's health, and the measured factor of the arena's type and twist
+  if (arena.dragon) strength += arena.dragon.hp * FEATURES.difficulty.dragonHpWeight;
+  strength *= (arena.twist ? FEATURES.difficulty[arena.twist] ?? 1 : 1) * (arena.type ? FEATURES.difficulty[arena.type] ?? 1 : 1);
   const power = troops * player.atk * player.def * Math.pow(player.growth, DIFFICULTY.growthExp)
-    * (1 + DIFFICULTY.powerBonusPerUnlocked * powerUnits(player));
+    * (1 + DIFFICULTY.powerBonusPerUnlocked * (arena.twist === 'holy' ? 0 : powerUnits(player))); // Holy Ground: no powers
   const strip = (arena.marches || []).filter((m) => m.approach).reduce((n, m) => n + m.tiles.length, 0);
   strength *= DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1) * (1 + DIFFICULTY.approachPerTile * strip);
   const ratio = strength > 0 ? power / strength : (power > 0 ? Infinity : 1);

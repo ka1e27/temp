@@ -305,7 +305,7 @@ Winning a region's battle awards up to three crowns:
 ## 5. The idle meta
 
 ### 5.1 Gold
-- One currency. Earned per second from every region you own (also while the tab is closed,
+- Gold is the main currency (Renown, §10.7, is the second). Gold is earned per second from every region you own (also while the tab is closed,
   up to an offline cap), plus a one-time **bounty** for each conquest.
 - Region income rises gently with depth; capitals pay extra. Exact numbers live in
   `game/config/meta.js`.
@@ -640,3 +640,300 @@ The map is the progress bar: you should *see* your empire grow and work.
 Multiplayer, accounts, servers, monetisation, energy timers, random loot. Multiple troop
 types (the v1 lesson: one troop type plus settlements, terrain, towers, interception and
 powers gives more real decisions than eight unit types did).
+
+## 10. The Living Frontier (round 4, 2026-10-02): your land must be held
+
+The user's direction: rivals counterattack the regions you hold, you fortify them, fortifications
+change hands when a region falls, several battles can run at once and you switch between them,
+Generals command the fronts, and a second currency (Renown) speeds up prosperity. This section
+supersedes the earlier "conquered regions are permanent" and "one currency" rules.
+
+### 10.1 Counterattacks (while you play)
+- **Who attacks:** a rival faction (never the Free Folk) with a region bordering yours.
+  - It marches on one of your border regions.
+  - It is **telegraphed**: a war band marches visibly across the map, a leader line plays,
+    and a toast reads "The Crimson Legion marches on Fenwall: arrives in 45 s [Go]".
+- **Pace** (starting values, tuned by balance):
+  - about one attack per bordering rival every ~10 min of active play
+  - aggressive ×1.4; swarm ×1.6 but weaker; defensive mostly after you take one of theirs
+  - a decapitated faction attacks half as often
+  - at most 2 incoming or ongoing defenses at once
+  - a 15 min cooldown per region after it's attacked
+- **Grace:**
+  - none during the tutorial or the first 20 min of a realm or dynasty
+  - none before you hold 4 regions
+- **The defense battle** is fought in YOUR region:
+  - **Defending:** your settlements with their militia garrisons (§10.4) and your
+    fortifications (§10.3).
+  - **Attacking:** the enemy war band at a camp on their border, plus partial garrisons of
+    their adjacent settlements.
+  - **Front lines (§4.4)** apply to both sides.
+  - **You win** by holding your keep until the siege timer runs out (about 90–150 s by tier)
+    or by destroying every attacker.
+  - **They win** by taking your keep: your remaining sites surrender, and the region becomes
+    **occupied** (§10.2).
+- **Rewards:** a defense won pays a bounty-style reward plus Renown (§10.7).
+
+### 10.2 Occupation
+- An occupied region becomes the attacker's. Its income stops, and its **prosperity is frozen,
+  not erased**.
+- Its fortifications and Works now **fight for the occupier**: their towers shoot you.
+- It shows as a frontier target, "Occupied by the Amber Horde: Retake". Its garrison is the
+  surviving war band plus the captured defenses.
+- **Retaking it** restores income, the frozen prosperity, and every building. Retaking pays
+  Renown.
+
+### 10.3 Fortifications (defenses per region)
+- **Slots:** each owned region has **2 fortification slots**, +1 at Prosperity II. They are
+  separate from Works.
+- **Building:** with gold, from the owned-region card.
+
+| Fortification | per level |
+|---|---|
+| **Arrow Tower** (I–III) | a real tower site in the region; range and volley rate grow |
+| **Walls** (I–III) | the keep and forts defend ×1.25 / ×1.5 / ×1.8 |
+| **Militia Hall** (I–III) | militia garrisons +40% / +80% / +120%, and they refill faster |
+| **Beacon** (I–II) | +20 s / +40 s of warning before an attack; your squads +10% speed in this region's defenses |
+
+- When a region falls, its fortifications are captured with it (§10.2) and returned when you
+  retake it. Over-fortifying a frontier region you can't hold therefore feeds the enemy.
+- The table shows starting values. The live numbers are tuned in `game/config/frontier.js` (the Arrow Tower
+  was strengthened; Walls I was raised so that every pair of fortifications is viable).
+- **Enemies probe weak spots:** a raid prefers your less-defended border regions (low
+  fortification levels, low militia, recently drained), and a war band sent at a fortified region
+  comes better prepared (larger, scaled by the target's fortification levels). Fortifying is
+  protection, not immunity.
+- Fortifications show on the map as real structures (towers, wall rings).
+
+### 10.4 Militia garrisons
+- Each settlement in a region you own holds a **militia garrison** that refills over time,
+  full in about 8 min after a defense. Militia Halls raise it.
+- Militia defend in defense battles. In your own attack battles the halo still uses the small
+  border share, so attacks aren't trivialised.
+
+### 10.5 Several battles at once
+- Up to **3 battles** can run at the same time (e.g. your attack plus two defenses). Every one
+  keeps running whether you watch it or not.
+- **Battle tray** (under the HUD): one chip per running battle showing the region, kind
+  (sword = attack, shield = defense), a strength bar, its clock, and a pulse when a keep is
+  threatened.
+  - Click a chip, or press Tab, to **switch**: the camera flies there and you command it.
+  - New attacks can be started from the map while defenses run.
+- **On the world map:** contested regions show crossed swords, and incoming war bands march
+  visibly.
+- **Speed and pause are global:** they apply to every running battle. Retreat applies to the
+  battle you're watching.
+- **A settlement can only be in one battle at a time.** A region that is a battle target is
+  excluded from other arenas' halos.
+
+### 10.6 The Steward (your troops when you're not watching)
+- Every battle you aren't watching (or any you set to **Auto**) is commanded by its
+  **commander**: a General (§10.8), or a basic Militia Captain.
+- **Its aim, per the user: keep your troops and buildings alive as long as possible:**
+  - reinforce threatened sites early
+  - pull troops back into defensible sites (keep, forts, towers)
+  - never send into a losing fight
+  - retake a site only with clear odds (≥ 1.5×)
+  - use defensive powers (Bulwark, Levy) when they're ready
+  - in an attack it holds what it has and attacks only with overwhelming odds (≥ 2×)
+  - it never retreats a battle (only you can)
+- The commander's style (§10.8) changes how well and how it holds.
+
+### 10.7 Renown (the second currency)
+- **Earned from deeds:**
+  - each crown: 1
+  - a defense won: 2 (3 if no settlement was lost)
+  - retaking an occupied region: 2
+  - later, bosses and events (§10.9)
+- **Spent on:**
+  - **Festival:** a region instantly gains one prosperity level. The cost rises by level and
+    with each festival held.
+  - **General training:** a General gains a level.
+  - **Hire a mercenary General.**
+  - **Muster:** instantly refill a region's militia.
+- It shows in the HUD next to gold (a laurel). Crowns now pay something you can feel.
+
+### 10.8 Generals
+- **Recruiting:** you start with one named General. Toppling each rival capital recruits
+  that faction's champion; mercenaries can be hired with Renown.
+- **Each General has:**
+  - a **passive** (while commanding)
+  - an **active ability** (once per battle, a button in the battle HUD)
+  - a **steward style**: *Stalwart* (holds sites), *Bold* (counterattacks), *Cunning* (uses
+    powers), or *Swift* (relocates troops fast)
+  - a **level** (1–10) gained from battles and defenses, with a **1-of-2 skill pick** at each
+    level that shapes the passive, ability or style
+- **Assignment:** a General commands one battle at a time. Attacks: pick on the region card
+  (default: the best one free). Defenses: the free General closest to the region is assigned
+  when the attack is announced; change it in the tray.
+  - A battle with no free General gets a Militia Captain (weak steward, no passive).
+- **Losses:** losing a battle **wounds** its General for 10 min.
+- **Persistence:** Generals carry across dynasties, so their levels and skills are long-term
+  progress.
+- Their names, portraits and voices tie into the rival leaders and factions (§3.6).
+
+### 10.9 A varied map (later phase)
+- **Region types:**
+  - Gold Mine (big bounty)
+  - Monastery (Renown, free scouting)
+  - Bandit Hold (elite fight)
+  - Ruins (a Renown cache)
+  - Dragon's Lair (a once-per-dynasty boss)
+- **Battle twists:**
+  - Night: towers see half as far; counts hidden until scouted
+  - Blizzard: slower marches
+  - Flooded: rivers can't be crossed
+  - Holy Ground: no powers
+  - Siege: walls before the keep, which also suits capitals
+  - Raid: capture 3 shrines instead of the keep
+- **Opt-in world events:** a merchant, a plague in rival lands, a rival leader's duel.
+
+### 10.10 While you're away (per the user: only a gentle trickle)
+- Attacks don't happen live while the game is closed. On your return, a reduced number of
+  attacks (about one-fifth of the live rate) are **resolved automatically** from your
+  fortifications, militia and stationed Generals.
+- **Limits on losses:**
+  - A region can only be lost while away if the absence is over 3 h.
+  - At most 1 region per 4 h away, and at most 2 per absence.
+  - Never your home region.
+- **The welcome-back card reports it:** "While you were away: 4 attacks repelled at Fenwall
+  and Lowshire. Brindle was occupied by the Amber Horde: retake it."
+
+### 10.11 Phase 2 detail: Generals (supersedes the summary in §10.8 where more specific)
+**The roster** persists across dynasties (stored outside the per-dynasty state).
+
+| General | Joins | Style | Passive (while commanding) | Active (once per battle) |
+|---|---|---|---|---|
+| **Marshal** (seeded name, e.g. "Marshal Edric") | at the start | Stalwart | your settlements +15% defence | **Shield Wall:** Bulwark on every settlement you hold, for 5 s |
+| **Crimson Champion** (seeded, e.g. "Gorran Redhand") | when you topple the Crimson capital | Bold | squads +15% strength when assaulting settlements | **Charge:** your next 3 squads march +50% faster and hit +30% harder |
+| **Violet Oracle** (e.g. "Sister Veyl") | when you topple the Violet capital | Cunning | power cooldowns −20% | **Foresight:** every enemy squad's target is revealed and enemy squads march −30% for 8 s |
+| **Amber Outrider** (e.g. "Tamsin of the Steppe") | when you topple the Amber capital | Swift | squads +20% march speed | **Raid:** a free squad (about 15% of the camp's starting troops) rides from your strongest site to the target |
+| **Mercenary** (up to 2, hired with Renown) | on hire | a seeded style | one smaller passive (+10% camp troops, +10% speed, or +10% defence) | **Pay the Bonus:** +20% troops at the camp |
+
+**Levels 1–10.** XP comes from battles commanded:
+- a win: 100
+- a defense won: 80
+- a loss: 40
+
+Each level adds +2% to the passive. At **levels 2, 4, 6, 8 and 10** you pick **1 of 2 skills** from that General's tree; the choice is permanent, and a respec costs Renown. Skills change the active, the passive or the steward. Examples:
+- *Marshal:* "Shield Wall lasts 8 s" or "Shield Wall also heals 10% of garrisons"
+- *Outrider:* "Raid sends two squads" or "Raid squads ignore tower fire"
+- *Steward skills,* such as "Stalwart: never abandons a fort" or "Bold: counterattacks at 1.3× instead of 1.5×"
+
+**Steward quality** improves with level: faster thinking and looking further ahead. A level-1 General already holds better than the Militia Captain.
+
+**Assignment:**
+- Each battle has a commander slot; a General commands one battle at a time.
+- **Attacks:** pick on the region card ("Commander: Marshal Edric ▾"); the default is the best free General.
+- **Defenses:** the free General nearest the region is assigned when the attack is announced; change it from the tray chip.
+- With no free General, the Militia Captain commands.
+- **You** command when you watch a battle, and the General's passive and active still apply.
+- **Wounds:** losing a battle wounds its General for 10 min. Renown heals them at once.
+
+### 10.12 Phase 2 detail: Renown and Festivals
+**Earned:**
+
+| Deed | Renown |
+|---|---|
+| each crown | 1 |
+| a defense won | 2 (+1 if no settlement was lost) |
+| a retake | 2 |
+| toppling a capital | 3 |
+
+**Spent** (starting values; tuned):
+
+| Spend | Effect | Cost |
+|---|---|---|
+| **Festival** | an owned region's prosperity rises one level now, and its tenure clock jumps to that level's threshold so natural growth continues from there | 3 × the target level, +25% for each festival this dynasty |
+| **Training** | a General gains a level | 2 × the current level |
+| **Hire a Mercenary** | up to 2 | 12 |
+| **Muster** | refill a region's militia now | 1 |
+| **Heal** | a wounded General returns now | 2 |
+| **Respec** | a General picks their skills again | 5 |
+
+Renown persists within a dynasty and resets on a new one. Generals keep their levels.
+
+**UI:**
+- a laurel counter in the HUD beside gold
+- the owned card's prosperity row gets "Festival · 6 Renown"
+- the fortifications/militia row gets "Muster · 1"
+- a **Generals** HUD button opens the roster: portrait-emblem, level and XP bar, passive, active, style, skill picks, Train / Heal / Respec, and Hire for mercenaries
+- the battle HUD gets the commander's **ability button**
+- the tray shows each battle's commander
+
+### 10.13 Phase 3 detail: a varied map (supersedes the summary in §10.9)
+Variety arrives after the first ring: no types or twists on the tutorial region or first ring,
+so the opening stays clean. Everything is seeded per world, shown on the region card before you
+commit, and revealed in full by Scouting.
+
+**Region types** (about 1 region in 4 beyond the first ring; at most one type per region):
+
+| Type | On the map | What it does |
+|---|---|---|
+| **Gold Mine** | pickaxe | bounty ×3; +25% of the region's income while held |
+| **Monastery** | bell tower | +3 Renown on conquest; regions within 2 are scouted for free while you hold it |
+| **Bandit Hold** | skull banner | an elite fight: an extra Bandit Camp site with veteran troops (+30% attack and defence). Reward: bounty ×2, +2 Renown |
+| **Ruins** | broken arch | an Ancient Tower site (a strong tower) defends it; +5 Renown on first conquest |
+| **Dragon's Lair** | dragon | **one per continent, deep:** a boss battle (below), **optional**: a dynasty can be founded without it; +10 Renown and a dynasty-long boon, **Dragonscale** (every fortification you build counts as one level higher) |
+
+**The Dragon (boss mechanics in the sim):**
+- **Movement:** the dragon perches on an enemy site and flies between them.
+- **Fire:** every ~12 s it breathes fire on the player's strongest nearby site or squad cluster (an enemy Firestorm with a 1.5 s telegraph).
+- **Defeat:** troops assaulting its perch damage it; it has a health bar. Defeat it and the region surrenders.
+- **Telegraphs and counterplay:** split your forces, bait the breath, Bulwark the target.
+
+**Battle twists** (about 1 region in 3 beyond the first ring; at most one per region):
+
+| Twist | Effect |
+|---|---|
+| **Night** | tower range −50% (both sides); enemy garrisons show "?" until scouted or adjacent to your land |
+| **Blizzard** | march speed −30% (both sides); Firestorm +50% |
+| **Flooded** | river crossings are impassable except on road bridges |
+| **Holy Ground** | powers can't be used (General abilities still can) |
+| **Siege** | a **Gate** site stands before the keep; the keep can't be assaulted until the Gate falls. The Gate is a wall: it holds with its own garrison and is never reinforced from the keep. **All rival capitals have Siege** (this also gives capital fights a second phase, from the backlog) |
+| **Raid** | 3 Shrine sites appear; take and hold all 3 at once for 10 s to win, or take the keep as usual |
+
+**World events** (opt-in; about every 15 min of active play; at most one pending; never in the tutorial):
+- **Merchant:** a caravan offers one deal for 90 s, e.g. a free fortification level in a region of your choice for gold, or gold for Renown.
+- **Plague:** a rival faction's regions are −20% strength for 10 min. A window to strike, shown on their regions with a sickly tint.
+- **Duel:** a rival leader challenges you: a short no-powers battle against their champion's war band in a contested region, for +3 Renown, or no shame in declining.
+
+Each event comes with a leader-voice line and a Chronicle entry. A toast offers Accept / Decline with a countdown.
+
+**Balance intent:**
+- Types and twists change *how* a fight plays, not mainly how hard it is.
+- Labels and win chance include them (Night is harder unscouted; Siege is longer).
+- Gold Mines and Monasteries make route choice matter.
+- Bandit Holds and the Dragon are optional peaks: hard, well rewarded, and clearly labelled.
+
+### 10.14 Phase 4: Goals and Rivals (2026-10-03)
+Full spec and contract: `docs/PLAN-PHASE4.md`. Tuned values below supersede the plan where they differ.
+
+The Phase 4 problem: there was no goal between "this battle" and "this continent". It adds:
+- **Bounty Board:** 3 seeded contracts (13 kinds; only ones you can currently complete are drawn, and never two of the same kind). It lives in the Regions panel, because the phone HUD is full.
+  - Rewards: gold scaled to income, plus Renown or General XP on harder contracts.
+  - Reroll: free every 20 active minutes, otherwise 1 Renown.
+- **Conquest Streak:** conquests within 8 active minutes of each other multiply gold bounty: ×1.1 / 1.2 / 1.3 (capped at ×1.3; ×1.5 made the first dynasty too fast).
+  - A won defense refreshes the window.
+  - A lost or retreated *attack* breaks it (a defense retreat does not, PLAN-PHASE5 §5E).
+  - It shows as a flame chip under the gold.
+- **Deeds:** 12 deeds with 29 tiers, kept forever in `state.generals.deeds` (they survive dynasties and New Realm). Each earned tier gives a small capped permanent bonus, about +10% power-equivalent in total. Shown in the Realm panel.
+- **Grudges and Vendettas:**
+  - **Grudge:** each rival leader has 0–100. Taking a region adds +16 (+12 rarely filled before the capital fell), a capital +40. Beaten raids, sabotage and Duels add smaller amounts. It decays slowly while you play.
+  - **Warning at 50:** a voice line.
+  - **Vendetta at 100:** a raid the leader leads in person, with a 90 s warning, a ×1.8 war band, and a **Champion** squad (power 2.0). Killing the Champion cuts the war band's attack by 20%.
+  - **Win:** a Trophy (their banner in the Realm panel, +5% attack against them, stacking to 3) and +4 Renown.
+  - **Loss:** the region is occupied and the Grudge drops to 30.
+  - A leader whose capital you hold is broken and never swears a Vendetta. Measured: Vendettas are held 82% of the time (target 70–85%: a peak, not a formality).
+- **Leader voices:** 8 new triggers: grudge, vendetta, vendettaWon/Lost, plague, merchant, duelWon/Lost. The `vendetta` line is gap-exempt.
+- **Envelope:** a dismissed world-event offer can be reopened from an envelope pip until it expires.
+
+### 10.15 Phase 5: Dynasties that change the rules (2026-10-03)
+Full spec and contract: `docs/PLAN-PHASE5.md`.
+
+The Phase 5 problem: founding a dynasty was "the same game, bigger". Now each dynasty is different:
+- **Edicts:** choose 1 of 3 at founding; 4 with the Heralds Legacy node. The pool has 10 trade-offs, e.g. Age of Iron, Merchant Princes, Long Winter, Iron Frontier, Peace of the Crowns, Age of Dragons, Bounty Hunters, Grand Festival, Warrior Kings, Open Roads. Each lasts the dynasty. The first dynasty has no Edict.
+- **Legacy:** points equal to the stars earned at founding (stars keep their +3% income/bounty), spent in a lasting 3-branch tree (War / Realm / Court, 15 nodes). Nodes add options rather than percentages, e.g. Quick Conquest, a 4th Edict choice, an extra contract slot, free scouts, weaker capital Gates.
+- **Challenges:** opt-in at founding: Iron Will (no powers), Overrun (enemy troops ×1.4), Lone Banner (no Generals). Each completed dynasty with a challenge on pays +50% Legacy at the next founding, plus a laurel in the Realm panel.
+- **Quick Conquest** (Legacy): Easy regions only, never Bandit Holds, the Lair or capitals. The battle is auto-fought headless by your commander's steward and pays the Victory crown only, at 75% bounty. Watching the battle stays the better-paying way.
+- **The founding ceremony:** dynasty summary → Legacy → Edicts → Challenges → the new continent.

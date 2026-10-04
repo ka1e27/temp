@@ -347,3 +347,24 @@
 @media (max-height: 480px) and (max-width: 840px) {
   .battle-top { top: 60px; }
 }
+
+/* --- A varied map (DESIGN 10.13): the twist / boss line under the timer, Holy Ground's locked powers, the Blizzard's stronger Firestorm --- */
+.battle-feature { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); font-weight: 800; color: var(--text); white-space: nowrap; }
+.battle-feature[hidden] { display: none; }
+.battle-feature-bar { position: relative; width: 72px; height: 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); overflow: hidden; flex-shrink: 0; }
+.battle-feature-bar[hidden] { display: none; }
+.battle-feature-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit; background: #c79bff; transition: width 240ms var(--ease-out); }
+.battle-feature.is-dragon .battle-feature-text { color: #ffb38a; }
+.battle-feature.is-dragon .battle-feature-fill { background: linear-gradient(90deg, #ff5a3d, #ff9a5c); }
+.battle-feature.is-raid .battle-feature-text { color: #dcc4ff; }
+.battle-feature.is-raid.is-good .battle-feature-fill { background: var(--good); }
+.battle-feature.is-siege .battle-feature-text { color: #e7dcc2; }
+.battle-feature.is-siege.is-good .battle-feature-text { color: var(--good); }
+.battle-feature.is-holy .battle-feature-text { color: #ffe08a; }
+.battle-feature.is-night .battle-feature-text { color: #c3cdff; }
+.battle-feature.is-blizzard .battle-feature-text { color: #e4f5ff; }
+.battle-feature.is-flooded .battle-feature-text { color: #9fcbff; }
+.reduce-motion .battle-feature-fill { transition: none; }
+.power-btn.is-holy { filter: grayscale(0.85); opacity: 0.5; box-shadow: 0 0 0 2px rgba(255, 224, 138, 0.55); }
+.power-btn.is-boosted .power-level-pip { background: #dff3ff; color: #12304a; min-width: auto; padding: 0 4px; }
+@media (max-width: 640px) { .battle-feature-bar { width: 52px; } }

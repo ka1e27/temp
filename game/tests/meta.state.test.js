@@ -34,7 +34,7 @@ test('createGame: rally starts at level 1, gold/stats/tutorial start at zero', (
   assert.equal(state.dynasty.stars, 0);
   assert.equal(state.upgrades.rally, 1);
   assert.equal(state.tutorial.done, false);
-  assert.equal(state.battle, null);
+  assert.deepEqual(state.battles, []);
   assert.equal(state.stats.regionsConquered, 0);
   assert.equal(state.stats.bestBattleSec, null);
 });

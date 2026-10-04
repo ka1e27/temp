@@ -98,11 +98,19 @@ export async function keepsakeChecks({ launch, BASE, ok, sleep, allErrors, only 
       ok(await q(() => { const body = document.querySelector('.realm .realm-body'); const b = document.querySelector('.dynasty-found-btn'); const r = b.getBoundingClientRect(); return body.firstElementChild.classList.contains('dynasty-panel') && r.top >= 0 && r.bottom <= innerHeight; }),
         `keepsakes ${name}: with the continent won the Dynasty section comes first and Found a Dynasty is on screen without scrolling`);
       ok(await t.clickSel('.dynasty-found-btn'), `keepsakes ${name}: Found a Dynasty clicked`);
-      ok(await t.waitFor(() => !!document.querySelector('.modal-panel .keepsake-save'), 4000), `keepsakes ${name}: the confirmation has a Save the map button`);
-      ok(await t.clickSel('.modal-panel .keepsake-save'), `keepsakes ${name}: Save the map clicked inside the confirmation`);
-      ok(await t.waitFor(() => { const s = document.querySelector('.modal-panel .keepsake-save-status'); return !!s && !s.hidden && /map saved/i.test(s.textContent); }, 30000), `keepsakes ${name}: the picture of the OLD continent is saved (said inside the confirmation)`);
-      ok(await q(() => !!document.querySelector('.modal-panel')), `keepsakes ${name}: saving did not close the confirmation`);
-      ok(await t.clickSel('.modal-panel button', 'Found it'), `keepsakes ${name}: Found it clicked`);
+      // the founding ceremony (Phase 5) carries the Save button on its first page, as the old confirmation did
+      ok(await t.waitFor(() => !!document.querySelector('.ceremony:not([hidden]) .keepsake-save'), 4000), `keepsakes ${name}: the founding ceremony has a Save the map button`);
+      ok(await t.clickSel('.ceremony .keepsake-save'), `keepsakes ${name}: Save the map clicked inside the ceremony`);
+      ok(await t.waitFor(() => { const s = document.querySelector('.ceremony .keepsake-save-status'); return !!s && !s.hidden && /map saved/i.test(s.textContent); }, 30000), `keepsakes ${name}: the picture of the OLD continent is saved (said inside the ceremony)`);
+      ok(await q(() => !document.querySelector('.ceremony').hidden), `keepsakes ${name}: saving did not close the ceremony`);
+      ok(await q(async () => {
+        const step = () => new Promise((r) => setTimeout(r, 250));
+        for (let i = 0; i < 2; i++) { document.querySelector('.ceremony-next').click(); await step(); }
+        document.querySelector('.ceremony .edict-card')?.click();
+        for (let i = 0; i < 2; i++) { document.querySelector('.ceremony-next').click(); await step(); }
+        return document.querySelector('.ceremony').dataset.page === 'found';
+      }), `keepsakes ${name}: through the ceremony to its last page`);
+      ok(await t.clickSel('.ceremony-found'), `keepsakes ${name}: Found the House clicked`);
       ok(await t.waitFor(() => window.__hd.state.dynasty.level === 2, 8000), `keepsakes ${name}: Dynasty II begins`);
       const after = await q(() => window.__hd.state.chronicle.entries.map((e) => e.kind));
       ok(after.includes('dynasty'), `keepsakes ${name}: the new chapter holds the dynasty line (${after.join(', ')})`);

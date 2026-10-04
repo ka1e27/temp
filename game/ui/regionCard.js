@@ -14,6 +14,20 @@ import { shortNumber, formatRate, formatClock, formatDurationWords } from './for
 import { createCrownRow } from './crownRow.js';
 import { createIntelPanel } from './intelPanel.js';
 import { createWorksPanel } from './worksPanel.js';
+import { createGrudgeMeter } from './grudgeMeter.js';
+import { icon as uiIcon } from './icons.js';
+import { drawTypeIcon, drawTwistGlyph } from '../render/featureGlyphs.js';
+import { drawEmblem } from '../render/sprites.js';
+
+/** The Fortifications panel's words (DESIGN 10.3); the effect lines and prices come in the data (meta/forts.js fortsPanelData). */
+const FORTS_PANEL_COPY = Object.freeze({
+  title: 'Fortifications', chooseTitle: 'Build a fortification', subLong: 'Defends this region when it is attacked', subTitle: 'Defends this region when it is attacked',
+  subShort: 'Defends this region', backLabel: 'Back to the fortifications', slotsLabel: 'Fortification slots', groupLabel: 'Fortifications',
+  chooseTip: 'Choose a fortification to build in this slot.', noneAffordable: 'Every fortification is out of reach for now', chooserLabel: 'Fortifications you can build',
+});
+/** Arrow Tower, Walls, Militia Hall, Beacon: the UI kit's own glyphs. */
+const FORT_ICONS = { tower: 'tower', walls: 'castle', hall: 'tent', beacon: 'flame' };
+const fortIcon = (type, size = 20) => uiIcon(FORT_ICONS[type] || 'shield', size);
 
 /**
  * @typedef {Object} RegionCardData
@@ -34,6 +48,8 @@ import { createWorksPanel } from './worksPanel.js';
  * @property {import('./intelPanel.js').IntelPanelData} [intel]  frontier only: Scout / Sabotage panel data
  * @property {{ level: number, label: string, nextInMs: number|null, bonusPct: number }} [prosperity]  owned regions
  * @property {import('./worksPanel.js').WorksPanelData} [works]  owned regions: the Region Works section (meta/works.js worksPanelData)
+ * @property {{ type?: {id:string,name:string,text:string}, twist?: {id:string,name:string,text:string}, boss?: boolean }} [features]
+ *   a varied map (DESIGN 10.13): the region type and battle twist rows
  */
 
 const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
@@ -52,7 +68,7 @@ function setIcon(holder, name, size) {
  *   onDemolishWork?: (id: number, slot: number) => void }} [callbacks]
  */
 export function createRegionCard({
-  onAttack, onSurrender, onScout, onSabotage, onBuildWork, onUpgradeWork, onDemolishWork, crownTexts,
+  onAttack, onSurrender, onScout, onSabotage, onBuildWork, onUpgradeWork, onDemolishWork, onBuildFort, onUpgradeFort, onDemolishFort, onThreat, onCommander, onFestival, onMuster, onQuick, crownTexts,
 } = {}) {
   let currentId = null;
   let lastSig = '';
@@ -86,6 +102,56 @@ export function createRegionCard({
   const perkText = h('span', {}, '');
   const perkEl = h('div.region-card-perk', {}, perkIcon, perkText);
 
+  // A varied map (DESIGN 10.13): the region's type and its battle twist, each a row with the map's own glyph and one honest line;
+  // a Dragon's Lair adds "Boss: the dragon must fall". The glyphs are drawn on small canvases (the very drawing the map uses).
+  function glyphCanvas() {
+    const c = h('canvas.region-card-feature-glyph', { width: 40, height: 40, 'aria-hidden': 'true' });
+    return c;
+  }
+  function paintGlyph(c, kind, id) {
+    const key = `${kind}:${id}`;
+    if (c.dataset.glyph === key) return;
+    c.dataset.glyph = key;
+    const ctx = c.getContext && c.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 40, 40);
+    if (kind === 'type') drawTypeIcon(ctx, id, 20, 20, 34);
+    else if (kind === 'ashen') { ctx.beginPath(); ctx.arc(20, 20, 19, 0, Math.PI * 2); ctx.fillStyle = '#2c2b33'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(169,223,214,0.7)'; ctx.stroke(); drawEmblem(ctx, id, 20, 21, 26, '#e6dcc4'); }
+    else { ctx.beginPath(); ctx.arc(20, 20, 19, 0, Math.PI * 2); ctx.fillStyle = 'rgba(14,16,24,0.82)'; ctx.fill(); drawTwistGlyph(ctx, id, 20, 20, 28); }
+  }
+  function featureRow(cls) {
+    const glyph = glyphCanvas();
+    const name = h('strong.region-card-feature-name', {}, '');
+    const text = h('span.region-card-feature-text', {}, '');
+    const el = h(`div.region-card-feature${cls}`, {}, glyph, h('span.region-card-feature-body', {}, name, text));
+    el.hidden = true;
+    return { el, glyph, name, text };
+  }
+  const typeRow = featureRow('.is-type');
+  const twistRow = featureRow('.is-twist');
+  const ashenRow = featureRow('.is-ashen'); // the Ashen Host's mechanic (PLAN-PHASE6 §6B): The Fallen Rise
+  const bossEl = h('p.region-card-boss', {}, icon('flame', 16), h('span', {}, 'Boss: the dragon must fall'));
+  bossEl.hidden = true;
+  // the owner's Grudge against you (PLAN-PHASE4 §4D), on a rival's frontier card
+  const grudgeMeter = createGrudgeMeter();
+  const grudgeEl = h('div.region-card-grudge', {}, grudgeMeter.el);
+  grudgeEl.hidden = true;
+  const featuresEl = h('div.region-card-features', {}, typeRow.el, twistRow.el, ashenRow.el, bossEl);
+  featuresEl.hidden = true;
+  function patchFeatures(f) {
+    const t = f && f.type;
+    const w = f && f.twist;
+    const a = f && f.ashen;
+    featuresEl.hidden = !t && !w && !a;
+    ashenRow.el.hidden = !a;
+    if (a) { paintGlyph(ashenRow.glyph, 'ashen', a.emblem || 'skullCrown'); setText(ashenRow.name, a.name); setText(ashenRow.text, a.text); }
+    typeRow.el.hidden = !t;
+    if (t) { paintGlyph(typeRow.glyph, 'type', t.id); setText(typeRow.name, t.name); setText(typeRow.text, t.text); }
+    twistRow.el.hidden = !w;
+    if (w) { paintGlyph(twistRow.glyph, 'twist', w.id); setText(twistRow.name, w.name); setText(twistRow.text, w.text); }
+    bossEl.hidden = !(f && f.boss);
+  }
+
   function rewardLine(extraClass, iconName = 'coin') {
     const text = h('span', {}, '');
     return { el: h(`div.reward-line${extraClass}`, {}, icon(iconName, 16), text), text };
@@ -102,8 +168,26 @@ export function createRegionCard({
   // "Prosperity II · +10% income · next in 1h 12m" (the countdown ticks with the card's 1 s refresh).
   const prosperityText = h('span', {}, '');
   const prosperityNext = h('span.region-card-next', {}, '');
-  const ownedProsperity = h('div.region-card-prosperity', {}, icon('star', 16), prosperityText, prosperityNext);
+  // Festival (DESIGN 10.12): Renown raises the prosperity a level now
+  const festivalBtn = h('button.btn.btn-secondary.region-card-renown-btn.region-card-festival', { type: 'button', onClick: () => onFestival?.(currentId) }, h('span.renown-cost-label', {}, ''), icon('laurel', 13));
+  festivalBtn.hidden = true;
+  const ownedProsperity = h('div.region-card-prosperity', {}, icon('star', 16), prosperityText, prosperityNext, festivalBtn);
+  // Muster (DESIGN 10.12): Renown refills this region's militia now
+  const musterText = h('span', {}, '');
+  const musterBtn = h('button.btn.btn-secondary.region-card-renown-btn.region-card-muster', { type: 'button', onClick: () => onMuster?.(currentId) }, h('span.renown-cost-label', {}, ''), icon('laurel', 13));
+  const musterRow = h('div.region-card-renown-row', {}, icon('shield', 16), musterText, musterBtn);
+  musterRow.hidden = true;
+  // the commander of an attack (DESIGN 10.11): a native select (keyboard and screen reader for free), the free Generals plus the Militia Captain
+  const commanderSelect = h('select.region-card-commander-select', { 'aria-label': 'Commander of the attack', onChange: () => onCommander?.(currentId, commanderSelect.value || null) });
+  const commanderEl = h('label.region-card-commander', {}, icon('shield', 16), h('span', {}, 'Commander'), commanderSelect);
+  commanderEl.hidden = true;
+  let commanderSig = '';
   const ownedCrowns = h('div.region-card-crowns.is-owned', {});
+  // "Under attack" (DESIGN 10.1): a war band is coming (the countdown and the odds), or a defense is being fought here; one button: Go / Watch
+  const threatText = h('span.region-card-threat-text', {}, '');
+  const threatBtn = h('button.btn.btn-primary.region-card-threat-btn', { type: 'button', onClick: () => onThreat?.(currentId) }, 'Go');
+  const threatEl = h('div.region-card-threat', { role: 'status' }, icon('sword', 16), threatText, threatBtn);
+  threatEl.hidden = true;
 
   // --- frontier -------------------------------------------------------------------------
   // A labelled matchup, not a bare "32 · Easy · 18": the difficulty chip reads first (centred,
@@ -132,6 +216,11 @@ export function createRegionCard({
   const parLine = h('p.region-card-par', {}, '');
   const frontierCrowns = h('div.region-card-crowns', {}, crownsLabel, parLine);
 
+  // An occupied region of yours (DESIGN 10.2): who holds it, and what retaking it restores (its income, its frozen prosperity, its buildings)
+  const occupiedText = h('span', {}, '');
+  const occupiedEl = h('p.region-card-occupied', { role: 'note' }, icon('flag', 16), occupiedText);
+  occupiedEl.hidden = true;
+
   const frontierIncome = rewardLine('.icon-good');
   const frontierBounty = rewardLine('.icon-gold');
   // Income and bounty share one wrapping row (a second row costs the phone sheet about 20 px).
@@ -141,13 +230,19 @@ export function createRegionCard({
   const intelPanel = createIntelPanel({ onScout, onSabotage });
 
   // The action buttons live for the card's whole life; only their `hidden` flips.
+  const attackLabel = h('span.region-card-action-label', {}, 'Attack');
   const attackBtn = h('button.btn.btn-primary.btn-block.region-card-action', {
     onClick: () => onAttack?.(currentId),
-  }, icon('sword', 16), 'Attack');
+  }, icon('sword', 16), attackLabel);
   const surrenderBtn = h('button.btn.btn-primary.btn-block.region-card-action', {
     onClick: () => onSurrender?.(currentId),
   }, icon('flag', 16), 'Accept Surrender');
   surrenderBtn.hidden = true;
+  // Quick Conquest (PLAN-PHASE5 §5D): beside Attack on an Easy region once the Legacy node is owned; greyed (still focusable, it says why) while it cannot go
+  const quickBtn = h('button.btn.btn-secondary.region-card-quick', { type: 'button', onClick: () => { if (quickBtn.getAttribute('aria-disabled') !== 'true') onQuick?.(currentId); } },
+    icon('boot', 16), h('span.region-card-quick-word', {}, 'Quick Conquest'));
+  quickBtn.hidden = true;
+  const actionsRow = h('div.region-card-actions-row', {}, attackBtn, quickBtn);
   const blockedText = h('span', {}, 'No passable border: conquer a neighbour first');
   const blockedEl = h('p.region-card-blocked', { role: 'note' }, icon('shield', 16), blockedText);
   blockedEl.hidden = true;
@@ -159,14 +254,24 @@ export function createRegionCard({
     onUpgrade: (regionId, slot) => onUpgradeWork?.(regionId, slot),
     onDemolish: (regionId, slot) => onDemolishWork?.(regionId, slot),
   });
+  // Fortifications (DESIGN 10.3): the same panel and patterns as the Works (built once, patched in place, the in-row demolish confirm), with its own words and icons
+  const fortsPanel = createWorksPanel({
+    copy: FORTS_PANEL_COPY,
+    iconFor: fortIcon,
+    onBuild: (regionId, slot, type) => onBuildFort?.(regionId, slot, type),
+    onUpgrade: (regionId, slot) => onUpgradeFort?.(regionId, slot),
+    onDemolish: (regionId, slot) => onDemolishFort?.(regionId, slot),
+  });
+  fortsPanel.el.classList.add('is-forts');
+  fortsPanel.el.hidden = true;
 
   function setMode(next) {
     if (mode === next) return;
     mode = next;
     if (next === 'locked') bodyEl.replaceChildren(lockedEl);
-    else if (next === 'owned') bodyEl.replaceChildren(perkEl, ownedProsperity, ownedRewards, ownedCrowns, worksPanel.el); // Works: the interactive part, last
-    else bodyEl.replaceChildren(perkEl, matchupEl, scoutSlot, intelPanel.el, frontierCrowns, frontierRewards, blockedEl);
-    footerEl.replaceChildren(hintSlot, ...(next === 'frontier' ? [attackBtn, surrenderBtn] : []));
+    else if (next === 'owned') bodyEl.replaceChildren(threatEl, perkEl, featuresEl, ownedProsperity, ownedRewards, ownedCrowns, musterRow, worksPanel.el, fortsPanel.el); // Works and Fortifications: the interactive part, last
+    else bodyEl.replaceChildren(occupiedEl, perkEl, featuresEl, grudgeEl, matchupEl, scoutSlot, intelPanel.el, frontierCrowns, frontierRewards, commanderEl, blockedEl);
+    footerEl.replaceChildren(hintSlot, ...(next === 'frontier' ? [actionsRow, surrenderBtn] : []));
     footerEl.hidden = next !== 'frontier';
   }
 
@@ -189,9 +294,14 @@ export function createRegionCard({
 
   function patchOwned(data) {
     patchPerk(data.perk);
+    patchFeatures(data.features);
     setText(ownedIncome.text, `Income +${formatRate(data.income)}/s`);
     const p = data.prosperity;
     ownedProsperity.hidden = !p;
+    patchRenownButton(festivalBtn, data.festival, (f) => `Festival · ${f.cost}`, (f) => `Festival: raise the prosperity to level ${f.toLevel ?? ''} now, for ${f.cost} Renown`);
+    patchRenownButton(musterBtn, data.muster, (m) => `Muster · ${m.cost}`, (m) => `Muster: refill this region's militia now, for ${m.cost} Renown`);
+    musterRow.hidden = !data.muster;
+    if (data.muster) setText(musterText, data.muster.fill != null ? `Militia ${Math.round(data.muster.fill * 100)}%` : 'Militia');
     if (p) {
       setText(prosperityText, p.level ? `Prosperity ${p.label} · +${p.bonusPct}% income` : 'Prosperity: newly held');
       setText(prosperityNext, p.nextInMs != null ? ` · next in ${formatDurationWords(p.nextInMs / 1000)}` : '');
@@ -205,9 +315,43 @@ export function createRegionCard({
     }
     if (data.works) worksPanel.update(data.works);
     worksPanel.el.hidden = !data.works;
+    if (data.forts) fortsPanel.update(data.forts);
+    fortsPanel.el.hidden = !data.forts;
+    threatEl.hidden = !data.threat;
+    if (data.threat) {
+      setText(threatText, data.threat.text);
+      setText(threatBtn, data.threat.button || 'Go');
+      threatBtn.hidden = !data.threat.button;
+      if (threatBtn.getAttribute('aria-label') !== (data.threat.buttonLabel || data.threat.button || 'Go')) threatBtn.setAttribute('aria-label', data.threat.buttonLabel || data.threat.button || 'Go');
+    }
+  }
+
+  /** A Renown spend button: hidden without data; disabled with its reason as title and name. */
+  function patchRenownButton(btn, d, label, name) {
+    btn.hidden = !d;
+    if (!d) return;
+    setText(btn.querySelector('.renown-cost-label'), label(d));
+    if (btn.disabled !== !d.can) btn.disabled = !d.can;
+    const n = d.can ? name(d) : `${name(d)}. ${d.reason || 'Not available'}`;
+    if (btn.getAttribute('aria-label') !== n) btn.setAttribute('aria-label', n);
+    if (btn.title !== (d.can ? name(d) : d.reason || '')) btn.title = d.can ? name(d) : d.reason || '';
+  }
+
+  /** The commander picker: rebuilt only when the choices change (a select being opened is never replaced by a refresh). */
+  function patchCommander(c) {
+    commanderEl.hidden = !c;
+    if (!c) return;
+    const sig = JSON.stringify(c.options);
+    if (sig !== commanderSig) {
+      commanderSig = sig;
+      commanderSelect.replaceChildren(...c.options.map((o) => h('option', { value: o.id || '' }, o.label)));
+    }
+    const v = c.selected || '';
+    if (commanderSelect.value !== v) commanderSelect.value = v;
   }
 
   function patchFrontier(data) {
+    patchCommander(data.commander);
     const d = data.difficulty || { power: 0, strength: 0, ratio: 1, label: 'Fair', surrender: false };
     const total = Math.max(d.power + d.strength, 1e-6);
     const hasChance = typeof d.winChance === 'number' && Number.isFinite(d.winChance);
@@ -215,6 +359,7 @@ export function createRegionCard({
     const ownerColor = (data.owner && data.owner.color) || '#9a927f';
 
     patchPerk(data.perk);
+    patchFeatures(data.features);
 
     const chipClass = `matchup-chip pill diff-${String(d.label).toLowerCase()}`;
     if (diffChip.className !== chipClass) diffChip.className = chipClass;
@@ -232,8 +377,9 @@ export function createRegionCard({
     if (data.intel) intelPanel.update(data.intel);
 
     const pct = data.crownBonusPct;
-    frontierCrowns.hidden = data.parSec == null;
-    if (data.parSec != null) {
+    // a retake of a region that already holds its crowns earns none again (crowns.js): the medals row would promise gold it never pays, so it goes
+    frontierCrowns.hidden = data.parSec == null || data.crownsPayable === false;
+    if (data.parSec != null && data.crownsPayable !== false) {
       if (crownRow.el.parentNode !== frontierCrowns) frontierCrowns.insertBefore(crownRow.el, parLine);
       crownRow.update({ earned: null, parSec: data.parSec });
       setText(crownsLabel, pct ? `Crowns: +${pct}% bounty each` : 'Crowns');
@@ -241,14 +387,34 @@ export function createRegionCard({
     }
 
     setText(frontierIncome.text, `Income +${formatRate(data.income)}/s forever`);
-    setText(frontierBounty.text, `Bounty ${shortNumber(data.bounty || 0)} gold`);
+    // an occupied region of yours pays the retake reward (meta/progression.js conquestBounty), not a conquest bounty
+    setText(frontierBounty.text, `${data.occupied ? 'Retake reward' : 'Bounty'} ${shortNumber(data.bounty || 0)} gold`);
 
     // a region walled off by mountains cannot be attacked: the card says why instead (a surrender, if one is on offer, still works: it needs no arena)
     const blocked = !!data.attackBlock && !d.surrender;
     setText(blockedText, data.attackBlock === 'unbuildable' ? 'This region cannot be attacked from here yet' : 'No passable border: conquer a neighbour first');
     attackBtn.hidden = !!d.surrender || blocked;
+    // a battle is already being fought here (DESIGN 10.5): the same button opens it; an occupied region of yours is retaken (10.2)
+    setText(attackLabel, data.battleRunning ? 'Watch the battle' : data.occupied ? 'Retake' : 'Attack');
+    occupiedEl.hidden = !data.occupied;
+    if (data.occupied) {
+      const o = data.occupied;
+      setText(occupiedText, `Occupied by ${o.byName}: retake it to restore its income${o.prosperityLabel ? `, Prosperity ${o.prosperityLabel}` : ''}${o.buildings ? ` and ${o.buildings} building${o.buildings === 1 ? '' : 's'}` : ''}.`);
+      occupiedEl.style.setProperty('--occupier', o.color || '#eb5757');
+    }
     surrenderBtn.hidden = !d.surrender;
+    const q = !d.surrender && !blocked && !data.battleRunning ? data.quick : null;
+    quickBtn.hidden = !q;
+    if (q) {
+      const off = !q.can;
+      if (quickBtn.getAttribute('aria-disabled') !== String(off)) quickBtn.setAttribute('aria-disabled', String(off));
+      quickBtn.classList.toggle('is-off', off);
+      const label = off ? `${q.label}: ${q.reason}` : `${q.label}: your commander takes it at once, for the Victory crown and part of the bounty`;
+      if (quickBtn.getAttribute('aria-label') !== label) { quickBtn.setAttribute('aria-label', label); quickBtn.title = label; }
+    }
     blockedEl.hidden = !blocked;
+    grudgeEl.hidden = !data.grudge;
+    if (data.grudge) grudgeMeter.update(data.grudge);
   }
 
   function update(data) {
@@ -276,6 +442,14 @@ export function createRegionCard({
     el, update, destroy,
     /** The Works panel of the owned card (for the tutorial coach: buildButton(), chooserRow(type), view). */
     works: worksPanel,
+    /** The Festival button of the owned card (tutorial R1). */
+    festivalButton: () => (festivalBtn.hidden ? null : festivalBtn),
+    /** The Quick Conquest button (tutorial and checks), or null while hidden. */
+    quickButton: () => (quickBtn.hidden ? null : quickBtn),
+    /** The commander picker of the frontier card. */
+    commanderSelect: () => (commanderEl.hidden ? null : commanderSelect),
+    /** The Fortifications panel of the owned card (same API as `works`). */
+    forts: fortsPanel,
     /** Opens (px > 0) or closes (0) the empty room above the action buttons that the "Attack!" hint bubble sits in. */
     setHintSpace(px, where = 'footer') {
       const slot = where === 'scout' ? scoutSlot : hintSlot;

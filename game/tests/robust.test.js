@@ -198,17 +198,38 @@ test('4: a real saved battle is plausible, and survives a save round trip while 
   assert.equal(plausibleBattle(b, 2), true);
   const state = createGame(3, makeWorld(), 1000);
   state.owner = [...DEFAULT_OWNERS];
-  state.battle = b;
+  state.battle = b; // a save from before the battle manager: one `battle`
   const back = deserialize(serialize(state));
-  assert.ok(back.battle && back.battle.arena.regionId === TARGET_REGION, 'the battle is kept');
+  assert.equal(back.battle, undefined, 'the legacy field is gone');
+  assert.equal(back.battles.length, 1, 'it migrated into a one-element state.battles (ARCHITECTURE 10.2)');
+  assert.ok(back.battles[0].battle.arena.regionId === TARGET_REGION && back.battles[0].regionId === TARGET_REGION && back.battles[0].kind === 'attack' && back.battles[0].id === 1, 'the battle is kept, as an attack run');
+});
+
+test('4: state.battles round-trips; junk runs, a second run on the same region and a fourth run are dropped; ids stay unique', () => {
+  const b = realBattleJson();
+  const state = createGame(3, makeWorld(), 1000);
+  state.owner = [...DEFAULT_OWNERS];
+  const runOf = (extra) => ({ id: 5, kind: 'attack', regionId: TARGET_REGION, battle: b, commander: null, auto: false, startedAt: 10, ...extra });
+  state.battles = [runOf({}), runOf({ id: 6 }), { junk: true }, runOf({ kind: 'siege' })];
+  let back = deserialize(serialize(state));
+  assert.equal(back.battles.length, 1, 'only one run per region, junk and unknown kinds dropped');
+  assert.deepEqual({ ...back.battles[0], battle: null }, { id: 5, kind: 'attack', regionId: TARGET_REGION, battle: null, commander: null, auto: false, startedAt: 10 });
+  state.battles = [runOf({ auto: 'yes', id: -3, regionId: TARGET_REGION + 1 })];
+  back = deserialize(serialize(state));
+  assert.equal(back.battles.length, 0, 'a run whose regionId disagrees with its arena is dropped');
+  state.battles = [runOf({ auto: 'yes', id: -3 })];
+  back = deserialize(serialize(state));
+  assert.equal(back.battles[0].id, 1, 'a bad id is replaced');
+  assert.equal(back.battles[0].auto, false, 'auto is a boolean');
 });
 
 test('4: a battle that cannot be resumed is dropped on load (wrong version, empty, truncated, bad site, unknown region, owned region)', () => {
   const stateWith = (battle, owner = DEFAULT_OWNERS) => {
     const s = createGame(3, makeWorld(), 1000);
     s.owner = [...owner];
-    s.battle = battle;
-    return deserialize(serialize(s));
+    s.battle = battle; // the legacy shape: migrates into state.battles when it can be resumed
+    const back = deserialize(serialize(s));
+    return { battle: back.battles.length ? back.battles[0].battle : null };
   };
   const good = realBattleJson();
   const variants = {

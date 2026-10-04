@@ -232,6 +232,138 @@ const SETTLEMENT_BUILDERS = {
     stoneTower(ctx, cx - w * 0.46, baseY + s * 0.03, s * 0.46, s * 1.2, { teeth: 3, rows: 2 });
     stoneTower(ctx, cx + w * 0.46, baseY + s * 0.03, s * 0.46, s * 1.2, { teeth: 3, rows: 2 });
   },
+  // --- A varied map's feature sites (DESIGN 10.13) ---
+  // Bandit Camp: a sharpened palisade round two dark hide tents, a skull post at the gate
+  bandit(ctx, cx, baseY, s) {
+    tent(ctx, cx - s * 0.36, baseY - s * 0.06, s * 0.62, s * 0.58, '#5a2a22');
+    tent(ctx, cx + s * 0.34, baseY - s * 0.04, s * 0.56, s * 0.5, '#5a2a22');
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#3a2418';
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.67, baseY - s * 0.06); ctx.lineTo(cx - s * 0.36, baseY - s * 0.64); ctx.lineTo(cx - s * 0.05, baseY - s * 0.06); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // the palisade: a row of pointed stakes across the front
+    const n = 9;
+    const w = s * 1.6;
+    for (let i = 0; i < n; i++) {
+      const x = cx - w / 2 + (w / (n - 1)) * i;
+      const hgt = s * (0.36 + ((i * 37) % 5) * 0.025);
+      ctx.fillStyle = i % 2 ? '#7a5534' : '#8f6640';
+      ctx.beginPath();
+      ctx.moveTo(x - s * 0.07, baseY + s * 0.12);
+      ctx.lineTo(x - s * 0.07, baseY + s * 0.12 - hgt);
+      ctx.lineTo(x, baseY + s * 0.12 - hgt - s * 0.1);
+      ctx.lineTo(x + s * 0.07, baseY + s * 0.12 - hgt);
+      ctx.lineTo(x + s * 0.07, baseY + s * 0.12);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(cx - w / 2 - s * 0.07, baseY + s * 0.02, w + s * 0.14, s * 0.05);
+    // a skull on a post
+    ctx.fillStyle = '#5b3d24';
+    ctx.fillRect(cx - s * 0.03, baseY - s * 0.72, s * 0.06, s * 0.6);
+    ctx.fillStyle = '#efe6d0';
+    ctx.beginPath(); ctx.arc(cx, baseY - s * 0.76, s * 0.12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(cx - s * 0.07, baseY - s * 0.7, s * 0.14, s * 0.08);
+    ctx.fillStyle = '#1b1414';
+    ctx.beginPath(); ctx.arc(cx - s * 0.045, baseY - s * 0.77, s * 0.03, 0, Math.PI * 2); ctx.arc(cx + s * 0.045, baseY - s * 0.77, s * 0.03, 0, Math.PI * 2); ctx.fill();
+  },
+  // Gate: a gatehouse astride the road, unlike any keep: low curtain walls running out to both sides, a tall arched gateway with a heavy
+  // iron portcullis (spiked teeth showing under it), squat flanking towers and two torches
+  gate(ctx, cx, baseY, s) {
+    for (const side of [-1, 1]) { // the curtain wall wings
+      const x0 = cx + side * s * 0.62;
+      const x1 = cx + side * s * 1.3;
+      const wl = Math.min(x0, x1);
+      const ww = Math.abs(x1 - x0);
+      const wh = s * 0.46;
+      ctx.fillStyle = side < 0 ? STONE_LIGHT : STONE_DARK;
+      ctx.fillRect(wl, baseY - wh, ww, wh);
+      mortarCourses(ctx, wl + ww / 2, baseY - wh, ww, wh, 2);
+      crenellations(ctx, wl + ww / 2, baseY - wh, ww, 3);
+    }
+    const w = s * 1.0;
+    const h = s * 1.05;
+    const top = baseY - h;
+    ctx.fillStyle = shade(STONE_LIGHT, -0.06);
+    ctx.fillRect(cx - w / 2, top, w, h);
+    ctx.fillStyle = STONE_DARK;
+    ctx.fillRect(cx + w * 0.08, top, w * 0.42, h);
+    mortarCourses(ctx, cx, top, w, h, 4);
+    crenellations(ctx, cx, top, w * 1.04, 5);
+    const aw = s * 0.56; // the gateway: a deep arch and its iron portcullis
+    const ah = h * 0.74;
+    ctx.fillStyle = 'rgba(12, 9, 10, 0.92)';
+    roundRect(ctx, cx - aw / 2, baseY - ah, aw, ah, aw / 2);
+    ctx.fill();
+    ctx.strokeStyle = '#8e8a80';
+    ctx.lineWidth = Math.max(1.2, s * 0.05);
+    ctx.beginPath();
+    for (let i = 1; i < 5; i++) { const x = cx - aw / 2 + (aw / 5) * i; ctx.moveTo(x, baseY - ah + aw * 0.12); ctx.lineTo(x, baseY - s * 0.1); }
+    for (let j = 1; j < 4; j++) { const y = baseY - ah + (ah / 4.2) * j; ctx.moveTo(cx - aw / 2 + s * 0.02, y); ctx.lineTo(cx + aw / 2 - s * 0.02, y); }
+    ctx.stroke();
+    ctx.fillStyle = '#8e8a80'; // the portcullis teeth
+    for (let i = 1; i < 5; i++) { const x = cx - aw / 2 + (aw / 5) * i; ctx.beginPath(); ctx.moveTo(x - s * 0.035, baseY - s * 0.1); ctx.lineTo(x, baseY - s * 0.02); ctx.lineTo(x + s * 0.035, baseY - s * 0.1); ctx.fill(); }
+    ctx.strokeStyle = shade(STONE_LIGHT, 0.12); // the arch's rim
+    ctx.lineWidth = Math.max(1, s * 0.06);
+    ctx.beginPath(); ctx.arc(cx, baseY - ah + aw / 2, aw / 2 + s * 0.03, Math.PI, 0); ctx.stroke();
+    for (const side of [-1, 1]) { // torches either side of the gateway
+      const tx = cx + side * (aw / 2 + s * 0.1);
+      const ty = baseY - ah * 0.62;
+      const g = ctx.createRadialGradient(tx, ty, 0, tx, ty, s * 0.16);
+      g.addColorStop(0, 'rgba(255, 196, 90, 0.95)');
+      g.addColorStop(1, 'rgba(255, 140, 40, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(tx, ty, s * 0.16, 0, Math.PI * 2); ctx.fill();
+    }
+    stoneTower(ctx, cx - w * 0.58, baseY + s * 0.02, s * 0.36, s * 1.22, { teeth: 3, rows: 1 });
+    stoneTower(ctx, cx + w * 0.58, baseY + s * 0.02, s * 0.36, s * 1.22, { teeth: 3, rows: 1 });
+  },
+  // Shrine: a pale standing stone under a small pillared roof, on a stepped plinth, a glowing rune
+  shrine(ctx, cx, baseY, s) {
+    ctx.fillStyle = shade(STONE_LIGHT, 0.08);
+    ctx.fillRect(cx - s * 0.62, baseY - s * 0.1, s * 1.24, s * 0.14);
+    ctx.fillStyle = STONE_LIGHT;
+    ctx.fillRect(cx - s * 0.48, baseY - s * 0.22, s * 0.96, s * 0.13);
+    // two pillars and a roof
+    ctx.fillStyle = '#d9d2c2';
+    ctx.fillRect(cx - s * 0.42, baseY - s * 0.92, s * 0.12, s * 0.7);
+    ctx.fillRect(cx + s * 0.3, baseY - s * 0.92, s * 0.12, s * 0.7);
+    ctx.fillStyle = '#6d5a8c';
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.6, baseY - s * 0.9); ctx.lineTo(cx, baseY - s * 1.28); ctx.lineTo(cx + s * 0.6, baseY - s * 0.9); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(cx - s * 0.6, baseY - s * 0.92, s * 1.2, s * 0.05);
+    // the standing stone with its rune
+    ctx.fillStyle = '#ebe6da';
+    roundRect(ctx, cx - s * 0.15, baseY - s * 0.74, s * 0.3, s * 0.54, s * 0.12);
+    ctx.fill();
+    const g = ctx.createRadialGradient(cx, baseY - s * 0.5, 0, cx, baseY - s * 0.5, s * 0.32);
+    g.addColorStop(0, 'rgba(199,155,255,0.75)');
+    g.addColorStop(1, 'rgba(199,155,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, baseY - s * 0.5, s * 0.32, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#8a5fd0';
+    ctx.lineWidth = Math.max(1, s * 0.04);
+    ctx.beginPath(); ctx.moveTo(cx, baseY - s * 0.64); ctx.lineTo(cx, baseY - s * 0.32); ctx.moveTo(cx - s * 0.08, baseY - s * 0.54); ctx.lineTo(cx + s * 0.08, baseY - s * 0.44); ctx.stroke();
+  },
+  // Ancient Tower (the Ruins): a taller, older tower, mossy and cracked, a pale rune glowing in its window
+  ancientTower(ctx, cx, baseY, s) {
+    const w = s * 0.7;
+    const h = s * 1.75;
+    stoneTower(ctx, cx, baseY, w, h, { teeth: 4, rows: 2 });
+    ctx.fillStyle = 'rgba(86,120,64,0.75)'; // moss at the foot and up one side
+    ctx.beginPath(); ctx.moveTo(cx - w / 2, baseY); ctx.quadraticCurveTo(cx - w * 0.3, baseY - h * 0.35, cx - w / 2, baseY - h * 0.55); ctx.lineTo(cx - w / 2, baseY); ctx.fill();
+    ctx.fillRect(cx - w / 2, baseY - s * 0.1, w, s * 0.1);
+    ctx.strokeStyle = 'rgba(30,24,22,0.6)'; // a crack
+    ctx.lineWidth = Math.max(1, s * 0.03);
+    ctx.beginPath(); ctx.moveTo(cx + w * 0.3, baseY - h); ctx.lineTo(cx + w * 0.12, baseY - h * 0.78); ctx.lineTo(cx + w * 0.26, baseY - h * 0.62); ctx.stroke();
+    const g = ctx.createRadialGradient(cx, baseY - h * 0.72, 0, cx, baseY - h * 0.72, s * 0.28);
+    g.addColorStop(0, 'rgba(140,230,255,0.85)');
+    g.addColorStop(1, 'rgba(140,230,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, baseY - h * 0.72, s * 0.28, 0, Math.PI * 2); ctx.fill();
+  },
   camp(ctx, cx, baseY, s, wall, roof, faction) {
     const trim = faction.color;
     // about a third larger than it was: the first thing a new player looks for is where their troops start

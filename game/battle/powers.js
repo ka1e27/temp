@@ -12,6 +12,8 @@ import { tileAt } from './runtime.js';
 import { worldDist, hexRadiusToWorld } from './geom.js';
 import { sendFromSite } from './squads.js';
 import { canRoute } from './routing.js';
+import { powersBlocked, firestormMult } from './features.js';
+import { onFirestormLanded } from './fallen.js';
 
 /** Only the player can act as a caster today (see file header). */
 function statsFor(battle, owner) {
@@ -56,6 +58,14 @@ export function applyPower(battle, command, t) {
   const stats = statsFor(battle, owner);
   const cfg = POWERS[power];
   if (!stats || !cfg) return;
+  if (stats.powersBlocked) { // the Iron Will Challenge (PLAN-PHASE5 §5C): the player's powers are refused all dynasty
+    battle.events.push({ type: 'refused', reason: stats.powersBlocked, owner, power });
+    return;
+  }
+  if (powersBlocked(battle)) { // Holy Ground (DESIGN §10.13): no powers, General abilities still work
+    battle.events.push({ type: 'refused', reason: 'holy', owner, power });
+    return;
+  }
   const level = stats.powers ? stats.powers[power] : 0;
   if (!level || level < 1) return;
   if (t < battle.cooldowns[power]) return;
@@ -89,7 +99,7 @@ export function applyPower(battle, command, t) {
     if (!tile) return;
     pos = tile;
     appliedTarget = target;
-    const damage = cfg.damage + cfg.damagePerLevel * (level - 1);
+    const damage = (cfg.damage + cfg.damagePerLevel * (level - 1)) * firestormMult(battle); // Blizzard: +50%
     battle.pending.push({
       at: t + cfg.delay, x: tile.x, y: tile.y, owner, power: 'firestorm', damage, radius: cfg.radius,
     });
@@ -148,6 +158,7 @@ export function processPending(battle, t) {
         }
       }
       battle.events.push({ type: 'firestorm', x: p.x, y: p.y, radius: p.radius });
+      onFirestormLanded(battle, p, t); // PLAN-PHASE6: the ground burns (no Fallen rise there) and a Barrow Keep's next Rising is cancelled
     }
   }
   battle.pending = remaining;

@@ -199,7 +199,13 @@ function riverCrossingPenalty(fromTile, toTile, dir) {
   const back = (dir + 3) % 6;
   const leaving = fromTile.river ? (fromTile.river >> dir) & 1 : 0;
   const entering = toTile.river ? (toTile.river >> back) & 1 : 0;
-  return (leaving || entering) ? RIVER_PENALTY : 0;
+  if (!(leaving || entering)) return 0;
+  // Flooded (DESIGN §10.13): a river edge touching a flooded tile is closed unless both banks carry a road there (a bridge)
+  if (fromTile.flood || toTile.flood) {
+    const bridge = ((fromTile.road >> dir) & 1) && ((toTile.road >> back) & 1);
+    if (!bridge) return Infinity;
+  }
+  return RIVER_PENALTY;
 }
 
 // If game/core/hex.js and a shared pathfinder exist by the time this is read: this file's

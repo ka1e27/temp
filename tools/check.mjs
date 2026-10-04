@@ -34,6 +34,11 @@ const { launch } = await import('./cdp.js');
 const { robustChecks } = await import('./robustChecks.mjs');
 const { keepsakeChecks } = await import('./keepsakeChecks.mjs');
 const { playtestChecks } = await import('./playtestChecks.mjs');
+const { frontierChecks } = await import('./frontierChecks.mjs');
+const { generalsChecks } = await import('./generalsChecks.mjs');
+const { varietyChecks } = await import('./varietyChecks.mjs');
+const { goalsChecks } = await import('./goalsChecks.mjs');
+const { phase5Checks } = await import('./phase5Checks.mjs');
 
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
   const [k, ...v] = a.slice(2).split('=');
@@ -591,7 +596,7 @@ async function variant(name, { width, height, mobile }) {
         await dragTo({ x: plan.camp.x, y: plan.camp.y + 4 }, { x: plan.blocked.x, y: plan.blocked.y + 4 }, async () => {
           heldB = await page.eval(() => ({ info: window.__hd.dragInfo(), tip: document.querySelector('.tooltip')?.textContent || '' }));
         });
-        ok(!!heldB && !!heldB.info && heldB.info.outcome === 'noRoute' && heldB.info.color === DRAG_ARROW.blocked, 'the drag arrow is GREY while held over a settlement with no route');
+        ok(!!heldB && !!heldB.info && heldB.info.outcome === 'noRoute' && heldB.info.color === DRAG_ARROW.blocked, `the drag arrow is GREY while held over a settlement with no route (${JSON.stringify(heldB && heldB.info)})`);
         ok(!!heldB && heldB.tip === NO_ROUTE_TEXT, `the tooltip says why ("${heldB && heldB.tip}")`);
         ok(await waitFor((id) => window.__hd.supplyInfo().refused === id, 1500, plan.blocked.id), 'letting go there is refused (the target shakes)');
         ok(await waitFor((t) => { const e = document.querySelector('.tooltip'); return !!e && !e.hidden && e.textContent === t; }, 1500, NO_ROUTE_TEXT), 'and the tooltip explains it over the target');
@@ -674,7 +679,7 @@ async function variant(name, { width, height, mobile }) {
       const pos = await page.eval((id) => window.__hd.regionScreenPos(id), regionId);
       await tap(pos.x, pos.y);
       ok(await waitFor(() => { const w = document.querySelector('.works-panel'); return !!w && !w.hidden && w.getClientRects().length > 0; }, 4000), 'an owned region\'s card has the Works panel');
-      ok(await page.eval(() => document.querySelectorAll('.works-panel .works-slot').length === 3), 'three slots, always (built, empty or locked)');
+      ok(await page.eval(() => document.querySelectorAll('.works-panel:not(.is-forts) .works-slot').length === 3), 'three slots, always (built, empty or locked)');
       await scrollTo('.works-build');
       await clickReal('.works-build', null, 'Build... (empty slot)');
       ok(await waitFor(() => document.querySelectorAll('.works-choice').length >= 5, 2000), 'the chooser lists the five Works');
@@ -704,6 +709,15 @@ async function variant(name, { width, height, mobile }) {
       await clickReal('.works-demolish', null, 'Demolish');
       ok(await waitFor((id) => ((window.__hd.state.works || {})[id] || []).length === 0, 3000, regionId), 'Demolish removes it');
       ok(await page.eval((g) => window.__hd.state.gold > g, g1), 'and refunds gold');
+      // 6d. Fortifications (DESIGN 10.3), the same panel and flow, real input: Build..., the Arrow Tower, it is in state.forts
+      ok(await waitFor(() => { const f = document.querySelector('.works-panel.is-forts'); return !!f && !f.hidden && f.getClientRects().length > 0; }, 3000), 'the owned card also has the Fortifications panel');
+      await scrollTo('.works-panel.is-forts .works-build');
+      await clickReal('.works-panel.is-forts .works-build', null, 'Build... (Fortifications)');
+      ok(await waitFor(() => document.querySelectorAll('.works-panel.is-forts .works-choice').length >= 4, 2000), 'the chooser lists the four fortifications');
+      await scrollTo('.works-panel.is-forts .works-choice');
+      await clickReal('.works-panel.is-forts .works-choice', 'Arrow Tower', 'Arrow Tower (chooser)');
+      ok(await waitFor((id) => ((window.__hd.state.forts || {})[id] || []).some((f) => f.type === 'tower' && f.level === 1), 3000, regionId), 'an Arrow Tower is built (state.forts)');
+      ok(await waitFor((id) => { const raw = localStorage.getItem('hexdominion.v2'); const f = raw ? JSON.parse(raw).forts : null; return !!f && Array.isArray(f[id]) && f[id].length > 0; }, 4000, regionId), 'the fortifications are in the save');
     }
     // 7. persistence -----------------------------------------------------------------------------
     // Prosperity: two and a half hours of tenure (dev hook) make level II, and the level is saved.
@@ -840,7 +854,8 @@ async function variant(name, { width, height, mobile }) {
           await dragTo({ x: cut.camp.x, y: cut.camp.y + 4 }, { x: cut.site.x, y: cut.site.y + 4 }, async () => {
             held = await page.eval(() => ({ info: window.__hd.dragInfo(), tip: document.querySelector('.tooltip')?.textContent || '' }));
           });
-          ok(!!held && !!held.info && held.info.outcome === 'noRoute' && held.info.color === DRAG_ARROW.blocked, 'the drag arrow is GREY while held over a settlement with no route');
+          const under = held && held.info ? '' : await page.eval((x, y) => { const e = document.elementFromPoint(x, y); return `${e && e.tagName}.${e && e.className} toasts=${[...document.querySelectorAll('.toast')].map((n) => n.textContent.slice(0, 30)).join('|')}`; }, cut.camp.x, cut.camp.y + 4);
+          ok(!!held && !!held.info && held.info.outcome === 'noRoute' && held.info.color === DRAG_ARROW.blocked, `the drag arrow is GREY while held over a settlement with no route (${JSON.stringify(held && held.info)} camp ${Math.round(cut.camp.x)},${Math.round(cut.camp.y)} ${under})`);
           ok(!!held && held.tip === NO_ROUTE_TEXT, `the tooltip says why ("${held && held.tip}")`);
           ok(await waitFor((id) => window.__hd.supplyInfo().refused === id, 1500, cut.site.id), 'letting go there is refused (the target shakes)');
           ok(await waitFor((t) => { const e = document.querySelector('.tooltip'); return !!e && !e.hidden && e.textContent === t; }, 1500, NO_ROUTE_TEXT), 'and the tooltip explains it over the target');
@@ -1040,7 +1055,7 @@ const watchdog = setTimeout(() => {
   process.exit(1);
 }, (SUBPATH ? 20 : 32) * 60 * 1000); // the main flow grew (supply lines, Works, front lines, robustness, keepsakes); a loaded machine needs the room
 
-// --only=desktop|phone|robust|keepsakes|playtest|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
+// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
 // plain mode only: they do not depend on the deployed shape, so --base=... runs the two variants and the deploy checks.
 const only = flags.only;
 const wants = (name) => !only || only === name;
@@ -1049,6 +1064,11 @@ if (wants('phone')) await variant('phone', { width: 390, height: 844, mobile: tr
 if (!SUBPATH && wants('robust')) await robustChecks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('keepsakes')) await keepsakeChecks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('playtest')) await playtestChecks({ launch, BASE, ok, sleep, allErrors, shotsDir: flags.shots || null });
+if (!SUBPATH && wants('frontier')) await frontierChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('generals')) await generalsChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('variety')) await varietyChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('goals')) await goalsChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('phase5')) await phase5Checks({ launch, BASE, ok, sleep, allErrors });
 if (SUBPATH && wants('deploy')) await deployChecks();
 clearTimeout(watchdog);
 stopServer();

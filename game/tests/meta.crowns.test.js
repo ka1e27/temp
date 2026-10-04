@@ -279,7 +279,7 @@ test('awardCrowns: crowns are fixed once stored; a second call changes nothing',
   awardCrowns(state, world, 1, { victory: true, swift: false, unbroken: false });
   const snapshot = JSON.stringify(state);
   const again = awardCrowns(state, world, 1, { victory: true, swift: true, unbroken: true });
-  assert.deepEqual(again, { bonusGold: 0, count: 0 });
+  assert.deepEqual(again, { bonusGold: 0, count: 0, renown: 0 });
   assert.equal(JSON.stringify(state), snapshot);
 });
 
@@ -287,8 +287,8 @@ test('awardCrowns: no Victory, no award (a lost battle stores nothing)', () => {
   const world = makeWorld();
   const state = makeGame(world);
   const snapshot = JSON.stringify(state);
-  assert.deepEqual(awardCrowns(state, world, 1, emptyCrowns()), { bonusGold: 0, count: 0 });
-  assert.deepEqual(awardCrowns(state, world, 1, null), { bonusGold: 0, count: 0 });
+  assert.deepEqual(awardCrowns(state, world, 1, emptyCrowns()), { bonusGold: 0, count: 0, renown: 0 });
+  assert.deepEqual(awardCrowns(state, world, 1, null), { bonusGold: 0, count: 0, renown: 0 });
   assert.equal(JSON.stringify(state), snapshot);
 });
 

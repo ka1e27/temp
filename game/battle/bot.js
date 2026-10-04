@@ -4,11 +4,14 @@
 // in `memo`, a plain object the CALLER owns and threads through successive calls; this file
 // never mutates anything except that object. Pure otherwise.
 import { BATTLE, SITE_TYPES, POWERS } from '../config/battle.js';
-import { ownerStats, PLAYER_OWNER } from './combat.js';
+import { ownerStats, siteDefence, PLAYER_OWNER } from './combat.js';
 import { routeFor, canRoute } from './routing.js';
 import { squadPosition } from './position.js';
 import { getRuntime } from './runtime.js';
 import { worldDist, hexRadiusToWorld } from './geom.js';
+import { stewardThink } from './steward.js';
+import { abilityAdvice } from './abilities.js';
+import { towerRangeMult, powersBlocked } from './features.js';
 
 // One look at the board every 3 s (~18 orders a minute, measured): a good human, not a machine. At 0.5 s the
 // bot issued ~53 orders a minute and every battle ended in about half the time a person needs.
@@ -23,7 +26,7 @@ const IMPATIENT_RAMP = 20;    // ...and how long until it is fully all-in with a
 const IMPATIENT_MARGIN = 1.02;
 const ATTRITION_RAMP = 30;    // then, still stuck, it throws waves at a keep it cannot beat in
 const ATTRITION_MARGIN = 0.55; // one blow, trusting that its sites regrow faster than the keep does
-const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90 };
+const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90, bandit: 40, gate: 90, shrine: 80 };
 const BIG_SQUAD_FRACTION = 0.2; // a squad carrying >=20% of our total troops is "a big squad"
 const MAX_LIVE_SQUADS = 14;     // a person does not micro-manage dozens of squads at once
 const MIN_SQUAD = 3;            // ...nor trickle one- and two-troop squads into a fight
@@ -47,12 +50,15 @@ function arrowLoss(battle, tiles, target, speed) {
   if (towers.length === 0) return 0;
   const rt = getRuntime(battle);
   const cfg = SITE_TYPES.tower;
-  const range = hexRadiusToWorld(cfg.range);
   const targetTile = rt.byIndex.get(target.tile);
   let loss = 0;
   for (const tower of towers) {
     const towerTile = rt.byIndex.get(tower.tile);
     if (!towerTile) continue;
+    // a fortification or an Ancient Tower carries its own numbers; Night halves every range (DESIGN §10.3, §10.13)
+    const range = hexRadiusToWorld((tower.range ?? cfg.range) * towerRangeMult(battle));
+    const volleySec = tower.volleySec ?? cfg.volleySec;
+    const kills = tower.volleyKills ?? cfg.volleyKills;
     let inRange = 0;
     for (const i of tiles) {
       const t = rt.byIndex.get(i);
@@ -60,7 +66,7 @@ function arrowLoss(battle, tiles, target, speed) {
     }
     if (targetTile && worldDist(targetTile, towerTile) <= range) inRange += FIGHT_EXPOSURE_SEC;
     const stats = ownerStats(tower.owner, battle.player, battle.arena.enemyFaction, battle.enemy);
-    loss += (inRange / cfg.volleySec) * cfg.volleyKills * stats.atk;
+    loss += (inRange / volleySec) * kills * stats.atk;
   }
   return loss;
 }
@@ -68,12 +74,12 @@ function arrowLoss(battle, tiles, target, speed) {
 function strengthOf(battle, site) {
   const { player, enemy, arena } = battle;
   const stats = ownerStats(site.owner, player, arena.enemyFaction, enemy);
-  return site.troops * stats.atk * stats.def * SITE_TYPES[site.type].def;
+  return site.troops * stats.atk * stats.def * siteDefence(site);
 }
 
 function canUse(battle, power, t) {
   const level = battle.player.powers?.[power] || 0;
-  return level >= 1 && t >= battle.cooldowns[power];
+  return level >= 1 && t >= battle.cooldowns[power] && !powersBlocked(battle); // Holy Ground: no powers
 }
 
 /**
@@ -119,7 +125,7 @@ function planGreedyCapture(battle, mySites, reserve, margin, peak) {
     const travelSec = nearestCost / speed;
     const defStats = ownerStats(target.owner, player, arena.enemyFaction, enemy);
     const growthDuring = defStats.growth * travelSec;
-    const projected = (target.troops + growthDuring) * defStats.atk * defStats.def * SITE_TYPES[target.type].def;
+    const projected = (target.troops + growthDuring) * defStats.atk * defStats.def * siteDefence(target);
     let troopsNeeded = (projected * margin) / Math.max(0.01, myStats.atk * myStats.def);
     if (nearestSource) troopsNeeded += ARROW_SAFETY * arrowLoss(battle, routeFor(battle, PLAYER_OWNER, nearestSource.id, target.id).tiles, target, speed);
     let direct = 0;
@@ -238,7 +244,7 @@ function reinforceThreatened(battle, mySites, peak) {
       .filter((s) => s.owner === PLAYER_OWNER && s.state === 'march' && s.to === site.id)
       .reduce((sum, s) => sum + s.count, 0);
     const myStats = ownerStats(PLAYER_OWNER, player, arena.enemyFaction, enemy);
-    const unit = myStats.atk * myStats.def * SITE_TYPES[site.type].def;
+    const unit = myStats.atk * myStats.def * siteDefence(site);
     const deficit = (atk * 1.1) / unit - site.troops - enRoute;
     if (deficit < 1) continue;
     const helpers = mySites
@@ -325,7 +331,14 @@ export function decide(battle, t, memo = {}) {
   if (mySites.length === 0) return [];
   const peak = trackPeaks(battle, memo);
   const commands = [];
+  const ability = abilityAdvice(battle, t); // the commander's once-per-battle active (DESIGN §10.11), used as a person would
+  if (ability) commands.push(ability);
 
+  // a Dragon's telegraphed breath on one of our settlements: Bulwark it (DESIGN §10.13 counterplay)
+  const breath = battle.dragon && battle.dragon.breath;
+  if (breath && breath.target != null && battle.sites[breath.target]?.owner === PLAYER_OWNER && canUse(battle, 'bulwark', t)) {
+    commands.push({ type: 'power', owner: PLAYER_OWNER, power: 'bulwark', target: breath.target });
+  }
   const falling = findFallingSite(battle, mySites);
   if (falling && canUse(battle, 'bulwark', t)) {
     commands.push({ type: 'power', owner: PLAYER_OWNER, power: 'bulwark', target: falling.id });
@@ -364,7 +377,9 @@ export function decide(battle, t, memo = {}) {
 
   if (memo.supply) commands.push(...planSupply(battle, mySites, memo));
   commands.push(...reinforceThreatened(battle, mySites, peak));
-  if (commands.length === 0) {
+  // a look that only fired powers or the ability still plans a capture (with very short cooldowns a power fires at every look, and
+  // the bot used to stand still for the whole battle: dragon fights in later dynasties timed out at 12 minutes)
+  if (!commands.some((c) => c.type === 'send' || c.type === 'supply' || c.type === 'unsupply')) {
     const idle = t - (memo.lastAct || 0) - IMPATIENT_AFTER;
     const k = Math.max(0, Math.min(1, idle / IMPATIENT_RAMP));
     const k2 = Math.max(0, Math.min(1, (idle - IMPATIENT_RAMP) / ATTRITION_RAMP));
@@ -375,4 +390,18 @@ export function decide(battle, t, memo = {}) {
   // resetting the impatience clock of a bot that is otherwise sitting still.
   if (commands.some((c) => c.type === 'send')) memo.lastAct = t;
   return commands;
+}
+
+// --- Defending in person (DESIGN §10.1), for tools/campaign.mjs and tools/balance.mjs ------------------------------------
+// The player watching a defense: the Steward's rules (steward.js) at a person's cadence (one look every 3 s, like decide()),
+// looking further ahead, holding a wider margin, using every power it owns (Rally to the keep when it is short) and
+// counterattacking the war band with modest odds. Not shipped in the game: the real player plays a watched defense.
+const DEFENDER = Object.freeze({
+  thinkSec: THINK_SEC, lookahead: 20, margin: 1.3, retake: 1.25, attackOdds: 1.25, consolidate: true, evacuate: true,
+  powers: Object.freeze(['bulwark', 'levy', 'firestorm']), reserve: 0.15, useAbility: true,
+});
+
+/** Decides this tick's player commands in a DEFENSE battle, as a person defending in person would. `memo` is the caller's. */
+export function decideDefense(battle, t, memo = {}) {
+  return stewardThink(battle, t, memo, DEFENDER);
 }

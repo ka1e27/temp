@@ -574,8 +574,12 @@ if (flags.dynasty !== 'off') {
   await click('.dynasty-found-btn');
   await settle(900);
   await shot('found-confirm');
-  note(`confirm: ${(await ev(() => document.querySelector('.modal-panel')?.innerText.replace(/\s+/g, ' ')))}`);
-  await click('.modal-actions button', 'Found it');
+  note(`ceremony: ${(await ev(() => document.querySelector('.ceremony-panel')?.innerText.replace(/\s+/g, ' ').slice(0, 400)))}`);
+  // the founding ceremony (Phase 5): the first Edict offered, no Legacy, no Challenge
+  for (let i = 0; i < 2; i++) { await click('.ceremony-next'); await settle(300); }
+  await click('.ceremony .edict-card');
+  for (let i = 0; i < 2; i++) { await click('.ceremony-next'); await settle(300); }
+  await click('.ceremony-found');
   await waitFor(() => window.__hd.state.dynasty.level >= 2 && window.__hd.scene === 'world', 15000);
   await settle(3500);
   await shot('d2-first-screen');

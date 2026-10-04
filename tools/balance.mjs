@@ -22,6 +22,12 @@
 //   --own=chain  the player holds only one region per tier on the way to the target (the
 //                thinnest realistic footprint: least friendly garrison support)
 //   --dump       write every raw battle row (features + outcome) for offline fitting
+//   node tools/balance.mjs --defense [--seeds=1,..,8] [--mults=0.6,1,1.6] [--forts=none,walls:1+tower:1,...]
+//                          [--who=inPerson,captain,stalwart] [--every=2] [--dump=rows.json]
+//                (the Living Frontier, DESIGN §10.1: raids on the border regions of real campaign states, the realm's state after
+//                 every `every`-th conquest from 4 on, one raid per bordering rival; each raid is fought by each commander, at each
+//                 war-band strength multiplier and fortification set; reports the hold rate per commander, by raid depth, and how
+//                 estimateDefense's win chance matches it, with a logistic fit per commander for FRONTIER.estimate.fit)
 //
 // Exported for game/tests/balance.labels.test.js: sweepRows, summarize, LABELS, fitLogistic.
 import fs from 'node:fs';
@@ -32,7 +38,13 @@ import { playerBattleStats, enemyBattleStats, difficulty } from '../game/meta/pr
 import { buildArena } from '../game/battle/arena.js';
 import { createBattle, step, issue, canRoute, routeFor } from '../game/battle/sim.js';
 import { think } from '../game/battle/ai.js';
-import { decide } from '../game/battle/bot.js';
+import { decide, decideDefense } from '../game/battle/bot.js';
+import { stewardDecide } from '../game/battle/steward.js';
+import { canBuildDefenseArena } from '../game/battle/defenseArena.js';
+import * as Frontier from '../game/meta/frontier.js';
+import { runCampaign, hooks as campaignHooks } from './campaign.mjs';
+import { ensureGenerals, recruitChampion, addMercenary, commanderStyle } from '../game/meta/generals.js';
+import { GENERALS, CHAMPION_OF_FACTION } from '../game/config/generals.js';
 import { TICK_SEC, patienceFor } from '../game/config/battle.js';
 
 export const LABELS = ['Easy', 'Fair', 'Hard', 'Deadly'];
@@ -124,6 +136,22 @@ export function stateAt(world, seed, region, level, own = 'half', powerRatio = 0
   return state;
 }
 
+/**
+ * A General of `spec` ({ kind: 'marshal'|'crimson'|'violet'|'amber'|'mercenary', level, skills: 0|1 (the option picked at every
+ * tier the level reaches), passive? }) in the state's roster: the commander of a sweep (Phase 2, DESIGN §10.11).
+ */
+export function withCommander(state, spec) {
+  const roster = ensureGenerals(state).roster;
+  let g = null;
+  if (spec.kind === 'marshal') g = roster[0];
+  else if (spec.kind === 'mercenary') g = addMercenary(state);
+  else g = recruitChampion(state, Number(Object.entries(CHAMPION_OF_FACTION).find(([, k]) => k === spec.kind)[0])) || roster.find((x) => x.kind === spec.kind);
+  g.level = spec.level || 1;
+  g.skills = GENERALS.skillLevels.filter((l) => g.level >= l).map(() => spec.skills ?? 0);
+  if (spec.kind === 'mercenary' && spec.passive) g.passive = { ...GENERALS.mercenaryPassives.find((p) => p.stat === spec.passive) };
+  return g;
+}
+
 /** Plays one full bot-vs-AI battle; returns { result, sec, timedOut }. `human` swaps in decideHuman. */
 export function runBattle(arena, player, enemy, capSec = BATTLE_CAP_SEC, human = false, supply = false) {
   const battle = createBattle(arena, player, enemy);
@@ -181,12 +209,14 @@ export function tierBand(region) {
  */
 export function sweepRows({
   seeds = [1, 2, 3, 4, 5, 6], own = 'half', tier = null, ladder = DEFAULT_LADDER, maxRatio = 6, regionStride = 1,
-  powerRatios = [0.6], varyPowers = false, supply = false, works = null,
+  powerRatios = [0.6], varyPowers = false, supply = false, works = null, commander = null, feature = null,
 } = {}) {
   const rows = [];
   for (const seed of seeds) {
     const world = generateWorld(seed);
-    const regions = world.regions.filter((r) => r.tier > 0 && (tier == null || r.tier === tier));
+    // --feature=<twist|type|plain>: only regions with that twist or type (DESIGN §10.13), or 'plain' for neither
+    const hasFeature = (r) => feature == null || (feature === 'plain' ? !r.type && !r.twist : r.type === feature || r.twist === feature);
+    const regions = world.regions.filter((r) => r.tier > 0 && (tier == null || r.tier === tier) && hasFeature(r));
     regions.forEach((region, idx) => {
       if (idx % regionStride !== 0) return;
       let past = 0;
@@ -195,7 +225,8 @@ export function sweepRows({
         const state = stateAt(world, seed, region, level, own, powerRatio, unlock);
         if (works) withWorks(state, region, works.kind, works.level);
         const d = difficulty(state, world, region.id);
-        const player = playerBattleStats(state, world, region.id);
+        const general = commander ? withCommander(state, commander) : null;
+        const player = playerBattleStats(state, world, region.id, general ? { commander: general } : {});
         const enemy = enemyBattleStats(world, state, region.id);
         let arena;
         try { arena = buildArena(world, state.owner, region.id, player, enemy); } catch { break; }
@@ -350,9 +381,143 @@ first ring: ${rows.length} regions; ratio range ${Math.min(...rows.map((r) => r.
   console.log(`optimiser bot: win ${(100 * rows.filter((r) => r.botWin).length / rows.length).toFixed(0)}%, median ${med(rows.filter((r) => r.botWin).map((r) => r.botSec))}s`);
 }
 
+// --- Defense sweeps (DESIGN §10.1, the Living Frontier) -----------------------------------------------------------------
+
+const DEFENDERS = {
+  inPerson: (b, t, m) => decideDefense(b, t, m),
+  captain: (b, t, m) => stewardDecide(b, t, m, 'captain'),
+  stalwart: (b, t, m) => stewardDecide(b, t, m, 'stalwart'),
+  general: (b, t, m, g) => stewardDecide(b, t, m, commanderStyle(g)), // the commander's own steward (Phase 2)
+};
+
+function parseForts(spec) {
+  if (!spec || spec === 'none') return [];
+  return spec.split('+').map((x) => ({ type: x.split(':')[0], level: Number(x.split(':')[1] || 1) }));
+}
+
+/**
+ * One defense battle played to the end by the war band's AI and `who` (inPerson | captain | stalwart).
+ * @returns {{ result: string, sec: number }}
+ */
+export function playDefense(run, who, general = null) {
+  const b = run.battle;
+  const memo = {};
+  const decide = DEFENDERS[who];
+  while (!b.result && b.t < 600) {
+    for (const cmd of think(b, b.t)) issue(b, cmd);
+    for (const cmd of decide(b, b.t, memo, general)) issue(b, cmd);
+    step(b, TICK_SEC);
+  }
+  return { result: b.result, sec: b.t };
+}
+
+/** Raw strength features of a fresh defense battle, for fitting the odds offline (--dump). */
+function defenseFeatures(b) {
+  const pu = b.player.atk * b.player.def;
+  const eu = b.enemy.atk * b.enemy.def;
+  const keep = b.sites[b.arena.keepSite];
+  const mine = b.sites.filter((x) => x.owner === 0);
+  const foe = b.sites.filter((x) => x.owner === b.arena.enemyFaction);
+  return {
+    keepStr: keep.troops * keep.def * pu, keepGrowth: keep.growth * keep.def * pu,
+    milStr: mine.reduce((a, x) => a + x.troops * x.def * pu, 0), milGrowth: mine.reduce((a, x) => a + x.growth * x.def * pu, 0),
+    campStr: foe.filter((x) => x.type === 'camp').reduce((a, x) => a + x.troops * eu, 0),
+    haloStr: foe.filter((x) => x.type !== 'camp').reduce((a, x) => a + x.troops * eu, 0),
+    foeGrowth: foe.reduce((a, x) => a + x.growth * eu, 0), siege: b.siegeSec, sites: mine.length,
+    keepDirect: canRoute(b, b.arena.enemyFaction, 0, b.arena.keepSite) ? 1 : 0,
+    keepAdjacent: mine.filter((x) => x.id !== keep.id && canRoute(b, b.arena.enemyFaction, 0, x.id)).length,
+    towers: mine.filter((x) => x.type === 'tower').reduce((a, x) => a + 1 / (x.volleySec ?? 0.5), 0) * b.player.atk * eu,
+    levy: b.player.powers.levy || 0, bulwark: b.player.powers.bulwark || 0, firestorm: b.player.powers.firestorm || 0,
+  };
+}
+
+/** Raids on real campaign states (see the usage): one row per battle with the card's odds and the outcome. */
+export function defenseRows({ seeds = [1, 2, 3, 4, 5, 6, 7, 8], mults = [1], forts = ['none'], who = ['inPerson', 'captain', 'stalwart'], every = 2, commander = null } = {}) {
+  const snaps = [];
+  const prev = campaignHooks.onConquest;
+  for (const seed of seeds) {
+    campaignHooks.onConquest = (state, world, row) => { if (row.n >= 4 && row.n % every === 0) snaps.push({ seed, n: row.n, state: structuredClone(state), world }); };
+    runCampaign(seed, { maxRegions: 30, raids: 'off' });
+  }
+  campaignHooks.onConquest = prev;
+  const rows = [];
+  for (const snap of snaps) {
+    for (const { faction, pairs } of Frontier.borderingRivals(snap.state, snap.world)) {
+      const pair = pairs.find((p) => canBuildDefenseArena(snap.world, snap.state.owner, p.to, faction));
+      if (!pair) continue;
+      for (const mult of mults) {
+        for (const fortSpec of forts) {
+          const state = structuredClone(snap.state);
+          state.frontier = undefined;
+          state.forts = { [pair.to]: parseForts(fortSpec) };
+          const raid = { id: 1, faction, fromRegionId: pair.from, toRegionId: pair.to, depth: Frontier.raidDepth(state, snap.world, pair.to), first: false, mult };
+          const general = commander ? withCommander(state, commander) : null;
+          const stats = general ? playerBattleStats(state, snap.world, pair.to, { commander: general }) : null;
+          for (const w of who) {
+            if (w === 'general' && !general) continue;
+            const est = Frontier.estimateDefense(state, snap.world, pair.to, raid, w === 'general' ? { nowMs: 0, general } : { nowMs: 0, commander: w, stats });
+            const run = Frontier.defenseRunFor(state, snap.world, raid, w === 'captain' ? null : stats, { nowMs: 0 });
+            const feat = defenseFeatures(run.battle);
+            const { result, sec } = playDefense(run, w, general);
+            rows.push({
+              seed: snap.seed, n: snap.n, region: pair.to, faction, personality: snap.world.factions[faction].personality,
+              depth: raid.depth, mult, forts: fortSpec, who: w, ratio: est.ratio, winChance: est.winChance, win: result === 'win', sec, ...feat,
+            });
+          }
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+export function printDefense(rows) {
+  const pctOf = (rs) => (rs.length ? `${((100 * rs.filter((r) => r.win).length) / rs.length).toFixed(0).padStart(3)}% (${rs.length})` : '   -    ');
+  const whos = [...new Set(rows.map((r) => r.who))];
+  const mults = [...new Set(rows.map((r) => r.mult))];
+  const forts = [...new Set(rows.map((r) => r.forts))];
+  console.log(`\n${rows.length} defense battles\n`);
+  console.log('hold rate by commander x war-band multiplier x fortifications (all depths)');
+  for (const f of forts) for (const m of mults) console.log(`  mult ${String(m).padEnd(4)} forts ${f.padEnd(18)} ` + whos.map((w) => `${w} ${pctOf(rows.filter((r) => r.who === w && r.mult === m && r.forts === f))}`).join('  '));
+  console.log('\nhold rate by raid depth (multiplier 1, no fortifications)');
+  for (let d = 1; d <= 6; d++) {
+    const rs = rows.filter((r) => r.mult === 1 && r.forts === 'none' && Math.min(6, Math.floor(r.depth)) === d);
+    console.log(`  depth ${d}${d === 6 ? '+' : ' '} ` + whos.map((w) => `${w} ${pctOf(rs.filter((r) => r.who === w))}`).join('  '));
+  }
+  console.log('\nlabels: estimateDefense win chance against the hold rate, by predicted band');
+  const bins = [0, 0.35, 0.6, 0.85, 1.01];
+  for (const w of whos) {
+    const line = [];
+    for (let i = 0; i < bins.length - 1; i++) {
+      const rs = rows.filter((r) => r.who === w && r.winChance >= bins[i] && r.winChance < bins[i + 1]);
+      if (!rs.length) continue;
+      const pred = rs.reduce((a, r) => a + r.winChance, 0) / rs.length;
+      line.push(`[${bins[i]}-${Math.min(1, bins[i + 1])}) pred ${(100 * pred).toFixed(0)}% held ${pctOf(rs)}`);
+    }
+    console.log(`  ${w.padEnd(9)} ${line.join('  ')}`);
+    const fit = fitLogistic(rows.filter((r) => r.who === w));
+    if (fit) console.log(`  ${''.padEnd(9)} fit: logit(P) = ${fit.a.toFixed(2)} + ${fit.b.toFixed(2)} ln(ratio)`);
+  }
+}
+
 async function main() {
   const t0 = Date.now();
   const args = parseArgs(process.argv.slice(2));
+  if (args.defense) {
+    const list = (v, d) => (v ? String(v).split(',') : d);
+    const rows = defenseRows({
+      seeds: list(args.seeds, ['1', '2', '3', '4', '5', '6', '7', '8']).map(Number),
+      mults: list(args.mults, ['1']).map(Number),
+      forts: list(args.forts, ['none']),
+      who: list(args.who, ['inPerson', 'captain', 'stalwart']),
+      every: Number(args.every || 2),
+      commander: args.commander ? { kind: String(args.commander).split(':')[0], level: Number(String(args.commander).split(':')[1] || 1), skills: Number(String(args.commander).split(':')[2] || 0) } : null,
+    });
+    if (args.dump) fs.writeFileSync(String(args.dump), JSON.stringify(rows));
+    printDefense(rows);
+    console.log(`\n(${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+    return;
+  }
   const seeds = (args.seeds ? String(args.seeds).split(',') : [1, 2, 3, 4, 5, 6]).map(Number);
   const opts = {
     seeds,
@@ -363,6 +528,9 @@ async function main() {
     varyPowers: !!args.varypowers,
     supply: args.supply === 'overflow' ? 'overflow' : !!args.supply,
     works: args.works ? { kind: String(args.works).split(':')[0], level: Number(String(args.works).split(':')[1] || 1) } : null,
+    commander: args.commander ? { kind: String(args.commander).split(':')[0], level: Number(String(args.commander).split(':')[1] || 1), skills: Number(String(args.commander).split(':')[2] || 0) } : null,
+    regionStride: Number(args.stride || 1),
+    feature: args.feature ? String(args.feature) : null,
   };
   if (args.tutorial) {
     printTutorial(tutorialRows(seeds));

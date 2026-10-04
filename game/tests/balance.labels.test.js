@@ -101,7 +101,10 @@ test('labels tell the truth in campaign states, per rival personality (campaign 
     const fair = mine.filter((r) => r.label === 'Fair');
     // the brief's bands are Easy >= 85% and Fair 60-85%; small n, so generous
     if (easy.length >= 20) { judged += 1; assert.ok(wonShare(easy) >= 0.68, `${personality}: Easy fights won ${(100 * wonShare(easy)).toFixed(0)}% of ${easy.length}`); }
-    if (fair.length >= 20) { judged += 1; assert.ok(wonShare(fair) >= 0.4 && wonShare(fair) <= 0.92, `${personality}: Fair fights won ${(100 * wonShare(fair)).toFixed(0)}% of ${fair.length}`); }
+    // swarm's ceiling is back at 0.92 (PLAN-PHASE5 §5E): a commander is credited x3 against the swarm (GENERALS.cardCredit.vs), so the
+    // fights the campaign picks there now read Easy (tools/swarmcheck.mjs --probe judges every credited label: Fair 71%, Easy 94%, Hard 40%)
+    const fairCeil = 0.92;
+    if (fair.length >= 20) { judged += 1; assert.ok(wonShare(fair) >= 0.4 && wonShare(fair) <= fairCeil, `${personality}: Fair fights won ${(100 * wonShare(fair)).toFixed(0)}% of ${fair.length}`); }
   }
   assert.ok(judged >= 6, `only ${judged} personality/label cells had enough fights to judge`);
   const easyAll = rows.filter((r) => r.label === 'Easy');

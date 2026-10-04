@@ -670,3 +670,187 @@ confirmation; phones get a two-column stats grid below 480 px. `tools/keepsakeCh
   cropped at DPR 1.75; prefer pageshot for full-resolution captures.
 - In Git Bash never start a path with "/" (MSYS rewrites it); Node's own `fs` calls resolve `/tmp` to
   `C:\tmp`, while shell arguments are translated — pass scripts by path rather than reading `/tmp` from Node.
+
+
+## The Living Frontier, integration side (round 4, Phase 1; ARCHITECTURE 10.1, 10.2, 10.5)
+**The battle manager** (`game/app/battles.js`, `createBattleManager({ getState, getWorld, services })`, one in `main.js` as `services.battles`, dev `__hd.battles`)
+- Owns every running battle: `state.battles` (BattleRun[]: `{ id, kind: 'attack'|'defense', regionId, battle, commander, auto, startedAt }` plus, for a defense,
+  `fromRegionId, attackerFaction, raidId, first`). `main.js` calls `manager.tick(dt)` every frame BEFORE the scene, whatever scene is up, never behind the title.
+  Each run has its own fixed stepper (interpolation: `alphaOf(id)`); speed and pause are global (`setSpeed`, `setPaused`), and any open dialog holds every
+  battle (`setDialogHold`, wired to `onDialogChange` in main.js).
+- Per step and run: `beforeStep` (the view snapshots units and owners), the enemy `think()`, the steward for a run nobody watches or set to Auto
+  (`battle/steward.js stewardDecide(battle, t, undefined, run.commander ? 'stalwart' : 'captain')`; its memo rides in `battle.steward`, so a resumed battle
+  resumes its steward; `setStewardDecide(fn)` swaps it), `step()`, the crown tracker. Events go out per tick as `'events' (runId, events)`; the battle view plays
+  fx/sfx only for its own run. `setGate(id, fn)`: the view holds its run while its fly-in, a hit-stop or its end sequence plays (exactly the old phase gate).
+- A decided run emits `'ended'` once. The WATCHED run is finished by the view (its victory sequence / results card call `recordResult` then `finish`); an
+  unwatched one is recorded and finished at once and emits `'remoteEnded' (id, { kind, regionId, result }, out)` (main.js: a toast; a won attack plays its
+  conquest on the map where it is, `worldScene.onRemoteConquest`). `finish(id, { crownResult })`: an attack won -> `conquer` (which retakes an occupied
+  region) + crowns + chronicle, moved here from the scene; an attack lost or retreated -> nothing; a defense won -> `defenseReward` (gold, militia drain,
+  cooldown); a defense lost or RETREATED -> `occupy`. `recordResult` keeps the lifetime stats once per run. `busy()` is `meta/frontier.js busyFromState`.
+- `start(spec)` refuses a fourth battle (`MAX_BATTLES` = 3) or a second battle on a region; it keeps a defense run's own id (drawn from `state.frontier.seq`).
+- **Save** (`meta/save.js sanitizeBattles`): a legacy `state.battle` migrates into a one-element list (an attack, id 1). A run is kept only if `plausibleBattle`,
+  its `regionId` matches its arena, an attack's region is still the enemy's and a defense's still yours; one run per region; at most 3; unique ids. `withDefaults`
+  also sanitises `frontier`, `occupation`, `forts`, `militia` with the sim side's own sanitisers; `createGame` starts them empty (`defaultFrontier()`).
+
+**The battle scene is a view** of `manager.focused()`: `switchTo(id)` (a camera flight, no intro; only while live, never mid end-sequence), `onMap` (the HUD's
+**Map** button: the battle keeps running under its Captain; never offered in the very first battle), `enter({ runId })` opens a running battle from the map,
+`enter({ resume })` the focused or first saved run. **Tab** on the battle map switches to the next battle (Shift+Tab the previous) and never wraps: from the
+last one Tab moves focus on, so the keyboard is never trapped.
+- **Defense runs:** site 0 is the ENEMY war-band camp (`campSite()` checks the owner, so the camp helpers, the tutorial arrow and the camp tag skip it);
+  the timer pill shows `Hold m:ss` (the siege left) instead of Swift; Retreat asks "Abandon Fenwall?" (a retreat from a defense is a loss); the end has no
+  conquest choreography: a fanfare and the **Defended** card (the reward it will pay on Continue) or the defeat cue and **Region lost** ("occupied by ...;
+  retake it from the map", Back to Map only, no Retry). Walls draw a stone ring round the keep / forts in battle (`site.defMult > 1`). Attack arenas get
+  `attackArenaOpts(state, world, regionId, manager.busy())` (busy sites and an occupier's captured fortifications).
+
+**The tray** (`ui/battleTray.js`, `ui.tray`): one chip per run (kind icon and word, region, clock, a bar of your share of the troops, a red pulse when a settlement
+of yours is outnumbered by what marches at it; still under Reduce Motion), built once per run and patched in place; the chip's name says everything. Beside it
+the **Captain** toggle (`setAuto`; not called "Auto": the battle HUD's Auto is the supply-line switch). Shown on the map with one or more battles, in a battle
+with two or more. `main.js updateTray()` feeds it 4x a second.
+
+**On the map:** crossed swords over every region being fought over (`render/battleMarkers.js`); incoming war bands marching keep to keep with their
+strength (`render/warBands.js`, from `state.frontier.incoming`); occupied regions hatched in the occupier's colour (`render/occupation.js`) with a hatched
+badge by the name (`labels.js occupied`); fortifications as structures (`render/fortMarks.js` from `fortsMarksData`). Region card: an owned region under
+threat says "The X arrive in N s (Fair to hold)" with **Go**, or "Under attack: your Captain holds it" with **Watch**; an occupied one says "Occupied by the X:
+retake it to restore its income, Prosperity II and 2 buildings" and its button reads **Retake**; a region already being fought "Watch the battle".
+
+**The frontier loop** (`app/frontierLoop.js`, `services.frontier`): `tickFrontier` on ACTIVE time (the map or a battle up, the tab visible, no global pause, no
+dialog). Announced raid -> a warning toast with **Go** and a live countdown (in place, once a second; on a phone the in-place update never waits behind a
+leader banner), then the leader line. **Go** before arrival flies the map to the region and opens its card; the defense opens itself on arrival. Arrived ->
+`defenseRunFor(state, world, raid, undefined, { nowMs, busy: manager.busy() })` + `manager.start`; unless Go was pressed, a toast "under attack: your
+Captain holds it [Go]". Dev/checks: `__hd.raid(toRegionId, { sec, first, mult })`.
+**Fortifications panel:** the Works panel itself, parameterised (`createWorksPanel({ copy, iconFor })`, `createWorksChooser({ iconFor, listLabel })`), fed
+`fortsPanelData`; callbacks `onBuildFort / onUpgradeFort / onDemolishFort` -> `meta/forts.js` + `fortsToast`. **Away report:** `resolveAway` after
+`offlineEarnings` (boot and tab return), `awayReportText` on the welcome card (`.welcome-away`, a red rim when a region was lost; the card also shows for a
+report alone). **Toasts** take one `action` button (`{ label, ariaLabel, onClick }`) and queue while a dialog is open (RC2).
+**Tutorial:** F1 (map) / F2 (in a battle): "A war band is coming! Press Go to defend it yourself, or let your Captain hold it." on the raid toast's Go; F3: "Two
+battles at once: press Tab or pick one in the tray" on the chip of the battle you are not watching; F4: "Fortify your border..." on the raided region, then
+its Fortifications Build, then the Arrow Tower row. `FEATURES.frontier` gates F1, F2, F4 and the whole loop. `hintMonitor` resolves all four on its own and
+also fails a bubble over an enemy keep and a toast over an open dialog.
+**Checks:** `check.mjs --only=frontier` (`tools/frontierChecks.mjs`, `tools/defenseChecks.mjs`), desktop and phone, real input: Map leaves a battle running and its
+clock moves, a second attack, switching by chip and by Tab (never trapped), the unwatched battle steps, save and resume with two battles, the phone tray; a raid
+toast with a countdown and Go, the defense opening on arrival with the enemy camp at site 0 and "Hold", the Captain commanding it unwatched, a defense won and
+its reward, a defense lost -> occupied (forts, works, frozen prosperity moved), retaken with all of it back.
+
+## Generals and Renown, integration side (round 4, Phase 2; DESIGN 10.11, 10.12; docs/briefs/phase2-hookup.md)
+- **State:** `createGame` adds `generals` (`defaultGenerals(seed)`: the Marshal) and `renown`; `resetRegions` resets `renown` only; `save.js` sanitises both
+  (`sanitizeGenerals(src.generals, seed)`, `sanitizeRenown`). The roster also survives New Realm and restart (`stateContainer.carryRoster`, regionId cleared);
+  Settings > Reset wipes it (`newRealm(undefined, { keepGenerals: false })`).
+- **Commanders:** an attack's commander is the card's pick (`world.js commanderPick`, a native select on the frontier card: the free Generals + the Militia
+  Captain), else `bestFreeGeneral`; `goto.battle({ regionId, commander })` -> `battle.js startBattle` -> `playerBattleStats(..., { commander })` and
+  `manager.start({ ..., commander })`; Retry keeps it if still free. A defense gets `nearestFreeGeneral` at the announcement (`frontierLoop commanderFor`,
+  in memory), re-checked at arrival. The tray row has a commander select: `assign(run, id, state, world, playerBattleStats)` mid-battle. The steward of an
+  unwatched or Captain run is `stewardDecide(b, t, undefined, commanderStyle(g) ?? 'captain')`.
+- **Endings:** `manager.finish` calls `settleCommander` for every decided run (`out.commander`, event `commanderSettled`); main.js `onDeeds(out)` (on every
+  `'finished'`, and from a surrender) toasts the Renown (`crownAward.renown + result.renown + reward.renown`), level-ups and wounds, and shows the recruitment
+  card when `result.recruited` (a modal with the champion's emblem, title, a line; a Chronicle entry of kind `recruit` with `data.text`).
+- **UI:** HUD: a Renown laurel on the gold's second line (shown once Renown or a win exists) and a **Generals** button with a dot when a skill waits;
+  `ui/generalsPanel.js` (dialog; cards built once per General: emblem, level and XP bar, passive, ability, status with Watch, skill picks with a confirm step,
+  Train / Heal / Respec with costs and refusal words, Hire). Owned card: "Festival · N Renown" on the prosperity row (`festival` + `updateProsperity`, confetti),
+  "Muster · 1" on a militia row. Battle HUD: the ability button (key **G**, spent after use; a Raid arms target mode and a tap on an enemy settlement fires it;
+  fx on the `ability` event: a gold shockwave, its name, a burst on every shielded settlement); Foresight reveals every enemy march's intent line.
+- **Tutorial:** G1 (battle, the ability button, after the first battle), G2 (the Generals button while a skill waits), R1 (a region whose Festival Renown can pay,
+  then its Festival button). `hintMonitor` resolves them.
+- **Checks:** `check.mjs --only=generals` (`tools/generalsChecks.mjs`), desktop and phone: the card's commander (default, keyboard change), Attack under it,
+  the ability by press (and G on desktop), save/resume with the commander and the used ability, the tray picker changing the commander mid-battle (the used
+  ability stays used), a skill pick with its confirm, Train, a Festival, a capital's champion recruited (card, roster, Chronicle), Found a Dynasty keeps the
+  roster and resets Renown. Gallery: `tools/phase2shots.mjs` -> `screenshots/phase2/`.
+
+## A varied map, integration side (round 4, Phase 3; DESIGN 10.13; docs/briefs/phase3-hookup.md)
+- **State and callers (§3.3, §6, §7):** `createGame` / `resetRegions` add `boons` (`defaultBoons`) and `worldEvents` (`defaultWorldEvents`); `save.js`
+  sanitises both. `canFoundDynasty(state, world)` at both world.js callers (the Lair is optional), `foundDynasty(state, seed, undefined, world)` in
+  `stateContainer.tryFoundDynasty`. `app/income.js effectiveRegionIncome` multiplies by `typeIncomeMult(region)` (the card shows what a Gold Mine pays). The
+  attack card's label and chance pass the card's commander: `difficulty(state, world, id, { commander })`.
+- **Map:** `render/featureGlyphs.js` draws the type icons (pickaxe, bell tower, skull banner, broken arch, dragon head, in a round dark badge) and the twist
+  glyphs (moon, snowflake, wave, haloed sun, gate, shrine). `labels.js` places the type badge left of the name (left of a capital's crown) and the twist glyph at
+  the front of the frontier chip, inside the label's collision box. The label datum gets `type` (revealed regions) and `twist` (not owned). A plagued
+  rival's revealed regions get a sickly yellow-green wash with dark hatching (`occupation.js tint`, a slow pulse unless Reduce Motion) and a plague mark
+  beside their names (`featureGlyphs.drawPlagueMark`, label datum `plague`) while `plagueMult < 1`.
+- **Card:** `regionCard.js` `features` rows (the map's own glyph on a 20 px canvas + name + one line): type (`typeText`; an owned region says what it still
+  does, derived from `FEATURES.rewards`), twist (`twistText`, attack cards only), and "Boss: the dragon must fall" on a Lair. Realm panel: a boon line with
+  `FEATURES.copy.dragonscale` while `state.boons.dragonscale`.
+- **Battle:** `scenes/battleFeatures.js` (controller) + `render/battleFeatures.js` (drawing). Sprites for `bandit`, `gate`, `shrine` and the Ruins' tower
+  (`spriteType`: `ancientTower` when `site.feature === 'ancientTower'`) in `sprites-buildings.js`. Night: a vignette, each tower's halved reach as a dashed ring,
+  enemy badges read "?" until `isScoutedOrFree` or a neighbouring tile is yours (`drawTroopBadge` takes a string). Blizzard: a snow layer (sparse and still
+  under Reduce Motion), Firestorm's pip reads "+50%". Flooded: high water over the region's river ribbons (one path per layer), planks where a road crosses.
+  Holy Ground: every power button greyed with a lock (`is-holy`, aria "cannot be used on Holy Ground"); a press, or a `refused { reason: 'holy' }`, toasts why.
+  Siege: the Gate is a gatehouse (curtain walls, portcullis, torches) with a "Gate" tag under it, and the keep it shuts wears a padlock
+  (`drawTags`, after the badges); the keep's no-route words are "No route: take the Gate first"; the Gate's capture plays a "The Gate falls!" shockwave
+  and the HUD line turns to "Gate breached: storm the keep!". Raid: a ring round each Shrine in its holder's colour, filling with the shared hold once all three are yours. Dragon: drawn perched (folded wings)
+  or flying (a ground shadow, an arcing path), a health bar over it, a hit flash on `dragonHit`, the warning circle from `battle.dragon.breath` (fills as it
+  nears, a countdown arc), a flame stream + fire bloom on `dragonBreath`, a fall (or flight) on `dragonFall`. The HUD's feature line under the timer: "Hold all 3
+  Shrines · 2/3" (a bar; "hold N s" once all held), "Dragon" with its health bar ("fire incoming!" during a warning), "Siege: take the Gate first" / "the Gate is
+  down", or the twist's name and effect.
+- **World events:** `app/eventsLoop.js` ticks `tickEvents` after the frontier loop on the same active clock (not before the first won battle). An offer is a
+  toast with a countdown, a primary button (Merchant "See deals", Duel "Accept"; the Plague, news already applied, just "OK") and a quieter "Decline"
+  (`toasts.js` `secondary`, `has(id)`, `className: 'is-event'`: a wider toast with the buttons under the words, stacked below a leader line when one
+  is up); a toast closed with its x stops re-opening. The Merchant opens a dialog with both deals (Renown for gold; a fortification
+  level with region and type pickers and its `merchantFortPrice`), a refusal says so in the dialog. A Duel accepted builds `duelRunFor` (the free General
+  nearest the region) and `manager.start`s it, then opens it. Chronicle entries (kind `event`, `data.text`) for every offer and outcome; the Duel speaks the
+  rival's `battleStart` line. `manager.finish` has a Duel branch: `duelReward`, `out = { kind: 'duel', won, renown }`, never occupies, and a Duel lost settles
+  no commander (no wound). The battle scene treats a Duel like a defense (Hold timer, "Yield the duel?") with its own result card (`duelWon` / `duelLost`).
+- **Deeds:** `onDeeds` also toasts Dragonscale (and a highlighted Chronicle line) when `result.dragonscale`, and writes the Duel's Chronicle line.
+- **Tutorial:** V1 (a typed or twisted frontier region), V2 (the first Siege: the Gate), V3 (the first Raid: a Shrine; the hold from the config), V4 (the Dragon's
+  warning: the Bulwark button), V5 (a world event's toast). `hintMonitor` resolves them.
+- **Checks:** `check.mjs --only=variety` (`tools/varietyChecks.mjs`, seed 9), desktop and phone; `game/tests/integration.phase3.test.js` (save round-trip,
+  card income parity, the manager's Duel branch, the steps). Gallery: `tools/phase3shots.mjs` -> `screenshots/phase3/`. Dev hooks: `__hd.offerEvent(kind)`,
+  `__hd.events`, `__hd.featureInfo()`.
+
+## Goals and Rivals, integration side (round 4, Phase 4; docs/PLAN-PHASE4.md; docs/briefs/phase4-hookup.md)
+- **One glue file:** `app/goals.js createGoals({ getState, getWorld, ui, services })` (as `services.goals`) owns no rules. `tick(dt)` runs every frame after the
+  frontier loop (throttled to 400 ms): `tickStreak`, `drainDeedNews` (a stamped toast + a Chronicle line per tier; held back while a battle is on screen),
+  `drainGrudgeNews` (the `grudge` voice) and `ensureBounties` every 2 s. The battle manager's `'finished'` event calls `goals.onFinished(snapshot, out)`:
+  `onBattleEnd` with `snapshot.summary` (`battles.js finish` builds it with `battleSummaryFor`), the streak, a Vendetta's end (Trophy toast, voice lines),
+  a Duel's voice line. `main.js onDeeds` calls `goals.onConquest` for every conquest (a surrender too); the world scene calls `onProsperity` (Festivals),
+  `onFortBuilt`, `onScout`. **Rule:** every hook's completions go straight to `claim()` (`claimCompleted` + a seal-stamped toast + a Chronicle line).
+- **The streak breaks only on an ATTACK lost or retreated** (Phase 5 §5E): a retreat from a defense already costs the region, so it costs no streak, and the
+  defense's "Abandon?" confirm carries no streak warning. The attack's Retreat confirm adds `goals.retreatWarning()` while a streak is alive.
+- **UI choice (§2.2): the Bounty Board is the top of the Regions panel** (`regionsPanel.js` board, one row per slot, built once per slot and patched; the
+  Reroll press survives refreshes). The HUD's Regions button carries a dot while a contract on the board is unseen (`hudData().boardNews`; opening the panel
+  calls `markBoardSeen`). Rival rows (met leaders, a Grudge meter each, `ui/grudgeMeter.js`) sit under the board; a rival's region card has the same meter.
+- **HUD tabs** hang under the bar's left edge (`hud.tabsEl`): the streak's flame chip ("×1.2 · 3", a ring that drains with the window; static under Reduce
+  Motion) and the envelope pip that reopens a closed world-event offer.
+- **Realm panel:** `ui/deedsPanel.js` `createDeedsSection` (the grid: medal, pips per tier, a bar, "what the next tier asks · what it grants" from
+  `app/goalsCopy.js deedGoalText`) and `createTrophySection` (a banner per Vendetta beaten, shown once a rival is met).
+- **Vendettas:** the frontier loop's raid toast gets `className: 'is-vendetta'` (a red banner with the leader's pennant); the battle draws the Champion with
+  the leader's pennant and plays "{Leader}'s champion has fallen!" (`battleHud.showChampionBanner`) on `championFell`.
+- **Tutorial:** Q1 (the board has opened: the Regions button), Q2 (a Vendetta's Go). **Checks:** `check.mjs --only=goals` (`tools/goalsChecks.mjs`);
+  gallery `tools/phase4shots.mjs` -> `screenshots/phase4/`. Dev hooks: `__hd.vendetta(faction, opts)`, `__hd.bounty(kind)`, `__hd.goals`,
+  `__hd.conquerRegion(id, { hooks: true })`.
+
+## Dynasties that change the rules, integration side (round 4, Phase 5; docs/PLAN-PHASE5.md; docs/briefs/phase5-hookup.md)
+- **Worlds:** every `generateWorld` for a state goes through `worldOptsFor(state)` (`stateContainer` boot, found, import): Long Winter, Age of Dragons and
+  Open Roads shape the continent, and a reload must regenerate the same one. `newRealm` keeps the plain call (a new realm has no Edict).
+- **Glue:** `app/dynasty.js createDynasty(...)` (as `services.dynasty`) builds the ceremony's data, the Realm panel's `dynastyRules` (Edict, laurels) and
+  `legacy` (the tree view: `legacyTreeText` + `legacyInfo`, states owned / affordable / short / locked with a reason), and `ui()` (the few UI facts:
+  Iron Will, Lone Banner, ability uses, streak, raids, Bounty slots, Quick Conquest). It maps the config's icon names to the UI's own: an Edict crest per
+  Edict (`edictIron` ... `edictRoads`), a medallion per Legacy branch (`legacyWar/Realm/Court`), a mark per Challenge (`challengeIronWill/Overrun/LoneBanner`,
+  drawn inside the laurel). Legacy points use the `tree` icon.
+- **The founding ceremony** (`ui/ceremony.js`, replaced the old confirm; `world.js onFoundDynasty`): a five-page stepper over the live map (a veil, a
+  gold-rimmed panel; full screen below 600 px): summary (stats, stars, Legacy earned, the "Save the map" keepsake moved here from the old confirm), the
+  Legacy tree, the Edict cards (a radio group; Next is refused until one is picked), the Challenge toggles (the "harder" warning lights when one is ticked),
+  and "Found the House of {name}" with a recap. The House is named after the home region of the continent being left. **The seed is drawn when the
+  ceremony opens** (`container.nextSeed()`): the Edicts are drawn for it and the new continent is made from it.
+- **Ceremony Legacy is bought on a PREVIEW** (`dynasty.beginSession(seed)`: the real record + `legacyPointsForFounding`), because the points the founding
+  grants exist only on the state `foundDynasty` returns. Heralds bought there redraws the Edicts (the preview's nodes). "Found" passes the buys as
+  `legacyBuys` (`foundDynasty` applies them before the dynasty-start effects, so War Chest / Royal Treasury count at once); the container also buys any
+  that did not land, in order. Closing the ceremony (×, Escape) discards the preview: nothing is spent.
+- **Realm panel** (`ui/dynastyPanel.js`): the Edict (crest, name, gain and price lines) and the laurels at the TOP of the body; the Legacy tree (branch tabs,
+  spend any time, `onBuyLegacy(id, 'realm')`) under the stats, once a founding has granted Legacy. Results are said under the tree, never as a toast.
+- **Quick Conquest** (`app/quickConquest.js` as `services.quick`; `ui/quickOverlay.js`): `meta/quick.js` is imported lazily (no button until it loads).
+  The card's `quick` datum is `cardData(regionId, commander)` (null = no button; greyed with a reason while the region is busy); the button sits beside
+  Attack (`.region-card-actions-row`; icon-only on a phone). A press: `createQuickConquest` with the card's commander, then `stepQuickConquest(job, 600)`
+  per animation frame (a hidden tab falls back to a 16 ms timer) while the overlay's bar fills over at least 1.1 s (0.5 s with Reduce Motion), then
+  `finishQuickConquest` (ALL the meta bookkeeping, the Bounty Board included). The world scene then clears the region's intel, writes the Chronicle line,
+  calls `onDeeds({ quick: true, ... })` (Renown, level-ups, a recruit; `quick` stops a second `goals.onConquest`), plays the conquest choreography, toasts
+  "{region} is yours: Victory crown, +N gold" and celebrates any claimed contracts (`goals.celebrateClaims`). A loss shows a small card with "Attack it".
+- **Rules in the UI:** Iron Will: every power button locked with "No powers: Iron Will" (`powers[i].blocked`, drawn like Holy Ground) and a press or a
+  sim `refused { reason: 'ironWill' }` toasts it. Lone Banner: `commanderFor` (meta/edicts.js) at every commander choice (card, battle start, defense
+  auto-assign, tray); the pickers offer only the Militia Captain; no ability button (the sim gives none). Warrior Kings: the ability button reads
+  "{name} · 2" and counts down (`abilityState().uses/left`). Bounty Hunters: no flame chip and no streak words on Retreat. Peace of the Crowns: no Grudge
+  meters (card, rival rows); raids never fire. The Bounty Board renders however many slots the state has.
+- **Tutorial:** D1, the first ceremony: drawn INSIDE the ceremony over the Edict cards (`ceremony.setEdictHint`; the coach layer is under dialogs), seen
+  when an Edict is picked (its rule is always false, so the coach never picks it). D2: the card's Quick Conquest button, after M1, last in the table,
+  12 s; it carries `afterDone: true`, a new step flag the controller honours (founding a dynasty sets `tutorial.done`, which silences ordinary steps).
+- **Streak (§5E):** see the Phase 4 section: only an attack lost or retreated breaks it.
+- **Checks:** `check.mjs --only=phase5` (`tools/phase5Checks.mjs`, desktop and phone, seed 7). Gallery: `tools/phase5shots.mjs` -> `screenshots/phase5/`.
+  Dev hooks: `__hd.completeRealm()`, `__hd.grantLegacy(n)`, `__hd.dynasty` (`buy(id, 'realm')`, `realmData()`, `session`).

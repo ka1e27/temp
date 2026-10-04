@@ -1,0 +1,300 @@
+/* Phase 4, Goals and Rivals (docs/PLAN-PHASE4.md): the HUD's hanging tabs (streak flame, envelope pip), the Bounty Board, Deeds and Trophies,
+   grudge meters, the Vendetta toast and the champion's fall. Gold on dark, Cinzel headings, the same glass as every panel. */
+
+/* ------------------------------------------------------------------ HUD tabs: hang under the bar's left edge, take no width from it */
+.hud-tabs {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  pointer-events: none;
+}
+.hud-tabs > * { pointer-events: auto; }
+.hud-tabs:not(:has(> :not([hidden]))) { display: none; }
+
+.hud-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 2px;
+  border-radius: 999px;
+  background: var(--panel-bg);
+  border: 1px solid rgba(242, 161, 84, 0.55);
+  box-shadow: var(--panel-shadow);
+  color: var(--gold-bright);
+  font-weight: 800;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.hud-streak[hidden] { display: none; }
+.hud-streak-flame { position: relative; display: inline-grid; place-items: center; width: 28px; height: 28px; color: var(--warn); }
+.hud-streak-flame .icon { grid-area: 1 / 1; filter: drop-shadow(0 0 3px rgba(242, 161, 84, 0.6)); transform-origin: 50% 90%; animation: streak-flicker 1.4s ease-in-out infinite; }
+.hud-streak-ring { grid-area: 1 / 1; width: 28px; height: 28px; transform: rotate(-90deg); }
+.hud-streak-ring circle { fill: none; stroke-width: 2.6; }
+.hud-streak-ring .ring-back { stroke: rgba(255, 255, 255, 0.12); }
+.hud-streak-ring .ring-fill { stroke: var(--warn); stroke-linecap: round; transition: stroke-dashoffset 0.3s linear; }
+.hud-streak.is-low .ring-fill { stroke: var(--bad); }
+.hud-streak.is-low { border-color: rgba(235, 87, 87, 0.6); }
+@keyframes streak-flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  30% { transform: scale(1.08, 0.94) rotate(-3deg); opacity: 0.92; }
+  60% { transform: scale(0.95, 1.07) rotate(2deg); opacity: 1; }
+}
+@keyframes streak-bump { 0% { transform: scale(1); } 35% { transform: scale(1.22); } 100% { transform: scale(1); } }
+.hud-streak.is-bump { animation: streak-bump 520ms var(--ease-punch); }
+html.reduce-motion .hud-streak-flame .icon, html.reduce-motion .hud-streak.is-bump { animation: none; }
+html.reduce-motion .hud-streak-ring .ring-fill { transition: none; }
+
+.hud-pip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--panel-bg);
+  border: 1px solid rgba(245, 196, 81, 0.6);
+  box-shadow: var(--panel-shadow), 0 0 0 0 rgba(245, 196, 81, 0.5);
+  color: var(--gold);
+  cursor: pointer;
+  animation: pip-call 2.2s ease-out infinite;
+}
+.hud-pip[hidden] { display: none; }
+.hud-pip .icon { display: block; }
+.hud-pip:hover { color: var(--gold-bright); border-color: var(--gold); }
+@keyframes pip-call { 0% { box-shadow: var(--panel-shadow), 0 0 0 0 rgba(245, 196, 81, 0.5); } 70%, 100% { box-shadow: var(--panel-shadow), 0 0 0 9px rgba(245, 196, 81, 0); } }
+html.reduce-motion .hud-pip { animation: none; }
+@media (pointer: coarse) {
+  .hud-pip::after { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+}
+.hud-regions { position: relative; }
+
+/* ------------------------------------------------------------------ the Bounty Board (top of the Regions panel) */
+.bounty-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(245, 196, 81, 0.09), rgba(245, 196, 81, 0.02));
+  border: 1px solid rgba(245, 196, 81, 0.32);
+}
+.bounty-board[hidden] { display: none; }
+.bounty-head { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-family: var(--font-title); font-size: var(--fs-md); color: var(--gold-bright); letter-spacing: 0.04em; }
+.bounty-head .icon { color: var(--gold); }
+.bounty-reroll-note { margin-left: auto; font-family: var(--font-ui); font-size: var(--fs-xs); font-weight: 700; color: var(--text-muted); letter-spacing: 0; }
+.bounty-list { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.bounty-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'text reroll' 'bar reroll' 'reward reroll';
+  column-gap: var(--sp-2);
+  row-gap: 4px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  border-radius: 10px;
+  background: rgba(10, 12, 18, 0.55);
+  border: 1px solid var(--panel-border-light);
+  position: relative;
+  overflow: hidden;
+}
+.bounty-row.is-new::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--gold); }
+.bounty-text { grid-area: text; margin: 0; font-size: var(--fs-sm); font-weight: 700; color: var(--text); line-height: 1.3; }
+.bounty-progress { grid-area: bar; display: flex; align-items: center; gap: var(--sp-2); }
+.bounty-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.bounty-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #e0a82e, var(--gold-bright)); border-radius: 3px; transition: width var(--dur-slow) var(--ease-out); }
+.bounty-count { font-size: var(--fs-xs); font-weight: 800; color: var(--text-muted); min-width: 2.4em; text-align: right; }
+.bounty-reward { grid-area: reward; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--fs-xs); font-weight: 800; color: var(--gold-bright); }
+.bounty-reward span { display: inline-flex; align-items: center; gap: 3px; }
+.bounty-reward .icon { width: 14px; height: 14px; color: var(--gold); }
+.bounty-reward .is-xp { color: #bfe3ff; }
+.bounty-reroll { grid-area: reroll; align-self: center; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 56px; min-height: var(--touch-target); padding: 2px 8px; font-size: var(--fs-xs); font-weight: 800; }
+.bounty-reroll .bounty-reroll-cost { font-size: 0.68rem; font-weight: 700; color: var(--text-muted); display: inline-flex; align-items: center; gap: 2px; }
+.bounty-reroll .bounty-reroll-cost .icon { width: 11px; height: 11px; color: var(--gold); }
+.bounty-status { margin: 0; min-height: 1.1em; font-size: var(--fs-xs); color: var(--text-muted); }
+.bounty-status.is-warning { color: var(--bad); }
+.bounty-locked { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+
+/* ------------------------------------------------------------------ rivals and grudges (Regions panel strip, region card row) */
+.rivals-strip { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--sp-3); }
+.rivals-strip[hidden] { display: none; }
+.rivals-title { margin: 0 0 2px; font-family: var(--font-title); font-size: var(--fs-sm); color: var(--text-muted); letter-spacing: 0.05em; }
+.rival-row { display: grid; grid-template-columns: 34px 1fr; gap: 2px var(--sp-2); align-items: center; padding: 6px var(--sp-2); border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
+.rival-portrait { grid-row: span 2; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--chip-color, #888) 32%, #10131b); border: 2px solid var(--chip-color, #888); color: #fff; }
+.rival-name { font-size: var(--fs-sm); font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rival-name small { font-weight: 700; color: var(--text-muted); }
+.grudge-meter { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 800; color: var(--text-muted); }
+.grudge-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; min-width: 60px; }
+.grudge-track > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #b8702c, var(--warn)); transition: width var(--dur-slow) var(--ease-out); }
+.grudge-track::after { content: ''; position: absolute; left: 50%; top: -1px; bottom: -1px; width: 2px; background: rgba(0, 0, 0, 0.6); }
+.grudge-meter.is-warned .grudge-track > span { background: linear-gradient(90deg, #c4452f, var(--bad)); }
+.grudge-meter.is-warned { color: #ffb4a8; }
+.grudge-meter.is-broken { opacity: 0.6; }
+.grudge-meter.is-broken .grudge-track > span { background: #6b7280; }
+.grudge-value { min-width: 4.6em; text-align: right; white-space: nowrap; }
+.region-card-grudge { padding: 0; }
+.region-card-grudge[hidden] { display: none; }
+.region-card-grudge .grudge-meter { font-size: var(--fs-xs); }
+
+/* ------------------------------------------------------------------ the Vendetta toast: a crimson banner with the leader's pennant */
+.toasts:has(.toast.is-vendetta) { width: min(520px, calc(100vw - 24px)); }
+.toast.is-vendetta {
+  background: linear-gradient(180deg, rgba(110, 16, 18, 0.95), rgba(60, 8, 12, 0.95));
+  border: 1px solid rgba(255, 120, 100, 0.65);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 200, 180, 0.18);
+  color: #fff1e8;
+  padding-left: 44px;
+  position: relative;
+  min-height: 56px;
+}
+.toast.is-vendetta::before {
+  /* the leader's pennant hanging from the banner's left edge, in their colour (set on the toast as --vendetta-color) */
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: -4px;
+  width: 22px;
+  height: calc(100% + 4px);
+  max-height: 64px;
+  background: var(--vendetta-color, #c63932);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25);
+}
+.toast.is-vendetta > .icon:first-child { position: absolute; left: 15px; top: 8px; width: 16px; height: 16px; color: #fff; z-index: 1; }
+.toast.is-vendetta .toast-message { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.02em; font-size: var(--fs-md); line-height: 1.3; }
+.toast.is-vendetta .toast-close { color: #ffcfc4; }
+.toast.is-vendetta .toast-action { background: linear-gradient(180deg, #ffd27a, #e09a2e); }
+@keyframes vendetta-in { 0% { transform: translateY(-18px) scale(0.94); } 60% { transform: translateY(2px) scale(1.02); } 100% { transform: none; } }
+.toast.is-vendetta.is-in { animation: vendetta-in 520ms var(--ease-punch); }
+html.reduce-motion .toast.is-vendetta.is-in { animation: none; }
+
+/* ------------------------------------------------------------------ a completed contract: the toast wears a seal that stamps down */
+.toast.is-sealed { position: relative; padding-right: 54px; }
+.toast-seal {
+  position: absolute;
+  right: 26px;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin-top: -17px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 38% 34%, #e0574a, #a3231c 62%, #741612);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(0, 0, 0, 0.22), inset 0 0 0 5px rgba(255, 180, 160, 0.16);
+  color: #ffe1d6;
+  pointer-events: none;
+}
+.toast-seal .icon { width: 18px; height: 18px; }
+@keyframes seal-stamp {
+  0% { transform: scale(2.6) rotate(-24deg); opacity: 0; }
+  55% { transform: scale(0.86) rotate(4deg); opacity: 1; }
+  75% { transform: scale(1.08) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.toast.is-sealed.is-in .toast-seal { animation: seal-stamp 560ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 120ms both; }
+html.reduce-motion .toast.is-sealed.is-in .toast-seal { animation: none; }
+.toast.is-deed { border-color: rgba(245, 196, 81, 0.65); background: linear-gradient(180deg, rgba(48, 38, 14, 0.94), rgba(22, 20, 14, 0.94)); }
+.toast.is-deed > .icon:first-child { color: var(--gold-bright); }
+
+/* ------------------------------------------------------------------ Realm panel: Deeds grid and Trophy wall */
+.realm-section-title { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0 var(--sp-2); font-family: var(--font-title); font-size: var(--fs-md); color: var(--gold-bright); letter-spacing: 0.04em; }
+.realm-section-title .icon { color: var(--gold); }
+.realm-section-title small { margin-left: auto; font-family: var(--font-ui); font-size: var(--fs-xs); color: var(--text-muted); font-weight: 700; letter-spacing: 0; }
+.deeds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-2); }
+.deed {
+  --tier-color: rgba(255, 255, 255, 0.22);
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 2px var(--sp-2);
+  align-items: center;
+  padding: var(--sp-2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border-light);
+}
+.deed-medal { grid-row: span 3; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: rgba(255, 255, 255, 0.45); background: rgba(0, 0, 0, 0.35); box-shadow: inset 0 0 0 2px var(--tier-color); }
+.deed[data-tier='1'] { --tier-color: #c88a4e; }
+.deed[data-tier='2'] { --tier-color: #cfd6df; }
+.deed[data-tier='3'] { --tier-color: var(--gold); border-color: rgba(245, 196, 81, 0.45); }
+.deed[data-tier='1'] .deed-medal, .deed[data-tier='2'] .deed-medal, .deed[data-tier='3'] .deed-medal { color: #1d160a; background: radial-gradient(circle at 36% 30%, #fff8, transparent 55%), var(--tier-color); }
+.deed-name { font-size: var(--fs-sm); font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deed-pips { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
+.deed-pips i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.deed-pips i.on { background: var(--gold); }
+.deed-bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.deed-bar > span { display: block; height: 100%; background: var(--tier-next, var(--gold)); border-radius: 3px; }
+.deed-line { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); line-height: 1.25; }
+.deed.is-maxed .deed-bar > span { background: var(--gold); }
+.deeds-note { margin: var(--sp-2) 0 0; font-size: var(--fs-xs); color: var(--text-muted); }
+
+.trophy-wall { display: flex; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-3) var(--sp-2) var(--sp-2); border-radius: 12px; background: linear-gradient(180deg, rgba(60, 40, 20, 0.35), rgba(20, 16, 12, 0.35)); border: 1px solid rgba(200, 160, 100, 0.25); position: relative; }
+.trophy-wall::before { content: ''; position: absolute; left: 10px; right: 10px; top: 10px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, #6b4a24, #a7773d, #6b4a24); }
+.trophy-empty { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.trophy {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 62px;
+  padding-top: 4px;
+}
+.trophy-banner {
+  width: 46px;
+  height: 64px;
+  display: grid;
+  place-items: start center;
+  padding-top: 10px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--chip-color, #c63932) 85%, #fff 0%), color-mix(in srgb, var(--chip-color, #c63932) 70%, #000));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+  color: #fff;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.3);
+}
+.trophy-banner .icon { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
+.trophy-count { position: absolute; top: 0; right: 2px; min-width: 20px; height: 20px; padding: 0 4px; border-radius: 10px; background: var(--gold); color: #2a1d05; font-size: 0.7rem; font-weight: 900; display: grid; place-items: center; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
+.trophy-label { margin-top: 4px; font-size: 0.68rem; font-weight: 800; color: var(--text-muted); text-align: center; line-height: 1.2; }
+
+/* ------------------------------------------------------------------ battle: "{Leader}'s champion has fallen!" */
+.battle-champion-banner { position: absolute; top: 140px; left: 50%; transform: translateX(-50%); z-index: 3; display: inline-flex; align-items: center; gap: 10px;
+  padding: 8px 20px; border-radius: 999px; background: linear-gradient(180deg, rgba(48, 38, 14, 0.95), rgba(22, 20, 14, 0.95)); border: 1px solid var(--gold);
+  box-shadow: var(--panel-shadow-lg); color: var(--gold-bright); font-family: var(--font-title); font-weight: 700; letter-spacing: 0.04em; font-size: var(--fs-lg); pointer-events: none; white-space: nowrap; }
+.battle-champion-banner[hidden] { display: none; }
+.battle-champion-banner .icon { color: var(--gold); }
+@keyframes champion-banner { 0% { opacity: 0; transform: translate(-50%, 10px) scale(0.9); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1.04); } 20% { transform: translate(-50%, 0) scale(1); } 82% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+.battle-champion-banner.is-in { animation: champion-banner 2.6s ease-out forwards; }
+@keyframes champion-banner-still { 0% { opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
+html.reduce-motion .battle-champion-banner.is-in { animation-name: champion-banner-still; }
+@media (max-width: 640px) { .battle-champion-banner { font-size: var(--fs-md); padding: 6px 14px; white-space: normal; text-align: center; max-width: calc(100vw - 32px); top: 150px; } }
+
+@media (max-width: 640px) {
+  .bounty-board { padding: var(--sp-2); }
+  .deeds-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .deed { grid-template-columns: 28px 1fr; padding: 6px; }
+  .deed-medal { width: 28px; height: 28px; }
+  .deed-medal .icon { width: 15px; height: 15px; }
+}
+
+/* ------------------------------------------------------------------ room for the hanging tabs: the map's tray and toast lane step down while they show */
+#ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])) .battle-tray { top: 132px; }
+@media (max-width: 640px) {
+  #ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])) .battle-tray { top: 116px; }
+  #ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])) .toasts { top: 124px; }
+  #ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 230px; }
+}
+
+/* A 360-380 px phone: the bar's five 44 px buttons and the gold did not fit (the gear poked out of the bar); tighter gaps and a slightly smaller number make room */
+@media (max-width: 380px) {
+  .hud { padding: 6px; gap: 4px; }
+  .hud-actions { gap: 2px; }
+  .hud-gold-block { gap: 4px; }
+  .hud-gold-value { font-size: 1.3rem; }
+  .hud-gold-icon svg { width: 22px; height: 22px; }
+}
+.bounty-status:empty { display: none; }
+@media (max-width: 640px) {
+  .deed-name { white-space: normal; overflow: visible; font-size: 0.8rem; line-height: 1.2; overflow-wrap: anywhere; }
+}

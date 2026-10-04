@@ -18,6 +18,11 @@ const DEFAULT_DURATION_MS = 4200;
  * @property {string} message
  * @property {string} [icon]
  * @property {number} [duration]  ms before auto-dismiss
+ * @property {{ label: string, ariaLabel?: string, onClick: () => void }} [action]  one button in the toast ("Go"); pressing it also dismisses the toast
+ * @property {{ label: string, ariaLabel?: string, onClick: () => void }} [secondary]  a second, quieter button before it (a world event's "Decline")
+ * @property {string} [seal]  an icon name: a wax seal that stamps down on the toast (a completed contract, PLAN-PHASE4 §4A); still under Reduce Motion
+ * @property {string} [accent]  a colour for the toast's accent (`--toast-accent`, `--vendetta-color`): a Vendetta banner's pennant in the leader's colour
+ * @property {string} [className]  extra classes on the toast ('is-event': a world event's wide toast, buttons under the words)
  */
 
 export function createToasts() {
@@ -89,6 +94,8 @@ export function createToasts() {
     if (toast.id != null) {
       const live = [...el.children].find((n) => n.dataset.id === String(toast.id) && n.isConnected && !n.classList.contains('is-out'));
       if (live) {
+        if (toast.action) live._action = toast.action.onClick;
+        if (toast.secondary) live._secondary = toast.secondary.onClick;
         say(live, toast.message);
         live.dataset.message = toast.message;
         if (live._held) { live._dueMs = toast.duration ?? DEFAULT_DURATION_MS; } else arm(live, toast.duration ?? DEFAULT_DURATION_MS);
@@ -96,11 +103,29 @@ export function createToasts() {
       }
     }
     const type = toast.type || 'info';
+    const actionBtn = toast.action ? h('button.btn.btn-primary.toast-action', {
+      type: 'button',
+      'aria-label': toast.action.ariaLabel || toast.action.label,
+      onClick: () => { const fn = node._action; dismiss(node); if (fn) fn(); },
+    }, toast.action.label) : null;
+    const secondaryBtn = toast.secondary ? h('button.btn.btn-secondary.toast-action.toast-secondary', {
+      type: 'button',
+      'aria-label': toast.secondary.ariaLabel || toast.secondary.label,
+      onClick: () => { const fn = node._secondary; dismiss(node); if (fn) fn(); },
+    }, toast.secondary.label) : null;
     const node = h(`div.toast.toast-${type}`, {},
       icon(toast.icon || DEFAULT_ICON[type] || 'bell', 18),
       h('span.toast-message', { role: 'status', 'aria-live': 'polite' }, ''),
+      secondaryBtn,
+      actionBtn,
       h('button.toast-close', { onClick: () => dismiss(node), 'aria-label': 'Dismiss' }, icon('close', 12)),
     );
+    if (secondaryBtn) node.classList.add('has-two');
+    if (toast.accent) { node.style.setProperty('--toast-accent', toast.accent); node.style.setProperty('--vendetta-color', toast.accent); }
+    if (toast.seal) { node.classList.add('is-sealed'); node.appendChild(h('span.toast-seal', { 'aria-hidden': 'true' }, icon(toast.seal, 18))); }
+    if (toast.className) node.classList.add(...String(toast.className).split(' ').filter(Boolean)); // e.g. 'is-event': a world event's wide toast
+    node._action = toast.action ? toast.action.onClick : null;
+    node._secondary = toast.secondary ? toast.secondary.onClick : null;
     node.addEventListener('pointerenter', () => hold(node));
     node.addEventListener('pointerleave', () => { if (!node.contains(document.activeElement)) release(node); });
     node.addEventListener('focusin', () => hold(node));
@@ -130,5 +155,16 @@ export function createToasts() {
     el.replaceChildren();
   }
 
-  return { el, update, destroy, setHeld, isHeld: () => held, queued: () => queue.length };
+  /** Takes a toast away by its id (on screen or still queued): a raid's countdown once the band has arrived. */
+  function dismissId(id) {
+    queue = queue.filter((q) => q.id !== id);
+    for (const node of [...el.children]) if (node.dataset.id === String(id)) dismiss(node);
+  }
+
+  /** Is a toast with this id on screen or waiting in the queue? (A world event's countdown only updates a toast the player has not closed.) */
+  function has(id) {
+    return queue.some((q) => q.id === id) || [...el.children].some((n) => n.dataset.id === String(id) && n.isConnected && !n.classList.contains('is-out'));
+  }
+
+  return { el, update, destroy, dismissId, has, setHeld, isHeld: () => held, queued: () => queue.length };
 }

@@ -5,14 +5,39 @@
 import { PLAYER_BASE, DYNASTY, ECONOMY, DIFFICULTY } from '../config/meta.js';
 import { ENEMY_SCALING, BATTLE, SITE_TYPES } from '../config/battle.js';
 import { PLAYER_FACTION, resetRegions } from './state.js';
-import { UPGRADES, POWER_IDS, levelOf } from './upgrades.js';
+import { UPGRADES, POWER_IDS, levelOf, upgradeCost } from './upgrades.js';
 import { perkMultipliers, perkAccumulate } from './perks.js';
 import { bounty } from './economy.js';
 import { worksBattleEffects, NO_WORKS_EFFECTS } from './worksEffects.js'; // the leaf: works.js imports this file
 import { hexDistance } from '../core/hex.js';
 import { hash32 } from '../core/rng.js';
 import { canBuildArena, arenaBlockedReason, approachTiles } from '../battle/arena.js';
-import { sabotageTroopMult, clearRegionIntel } from './intelState.js'; // the dependency-free leaf: intel.js imports this file
+import { sabotageTroopMult, clearRegionIntel, isScouted } from './intelState.js'; // the dependency-free leaf: intel.js imports this file
+import { occupationOf, retake, ensureFrontier, defaultFrontier } from './frontierState.js'; // the Living Frontier's leaf: frontier.js imports this file
+import { fortEffects } from './fortsEffects.js';
+import { FRONTIER } from '../config/frontier.js';
+import { RENOWN } from '../config/renown.js';
+import { generalById, commanderEffects, recruitChampion, ensureGenerals } from './generalsState.js';
+import { rivalsFor } from './rivals.js';
+import { GENERALS } from '../config/generals.js';
+import { earnRenown, defaultRenown } from './renownState.js';
+import { typeBountyMult, typeRewards, ensureBoons, defaultBoons } from './featuresState.js';
+import { plagueMult, defaultWorldEvents } from './eventsState.js';
+import { FEATURES } from '../config/features.js';
+import { deedBonuses, recordDeed } from './deeds.js';
+import { projectedStreakMultiplier, onStreakConquest, defaultStreak } from './streak.js';
+import { addGrudge, trophyBonus, defaultGrudges, defaultTrophies } from './grudges.js';
+import { defaultBounties } from './bountiesState.js';
+import { edictMods, defaultEdict, isEdictId } from './edicts.js'; // the leaf (PLAN-PHASE5): Edicts, Challenges and Legacy, one modifier source
+import { ensureLegacy, legacyPointsForFounding, cleanChallenges, buyLegacy } from './legacy.js';
+import { CHALLENGES } from '../config/edicts.js';
+
+/** The roster for a new dynasty: every General keeps level, XP and skills; where they last fought is forgotten. */
+function carryGenerals(state) {
+  const g = structuredClone(ensureGenerals(state));
+  for (const x of g.roster) x.regionId = null;
+  return g;
+}
 
 // --- Player --------------------------------------------------------------
 
@@ -21,26 +46,45 @@ import { sabotageTroopMult, clearRegionIntel } from './intelState.js'; // the de
  * @param {import('../world/generate.js').World} world
  * @param {number} [targetRegionId] the region about to be fought over: the Works of the owned regions next to it (Region
  *   Works, DESIGN §5.8) join the army. Leave it out for a stat block that belongs to no particular battle.
+ * @param {{ commander?: object|string|null }} [opts] the General commanding this battle (DESIGN §10.11): a General or its id. Its
+ *   passive (with level and skills) is folded in and its ability is set on `ability`; none (the Militia Captain) adds nothing.
  * @returns {import('../battle/sim.js').PlayerStats}
  */
-export function playerBattleStats(state, world, targetRegionId) {
+export function playerBattleStats(state, world, targetRegionId, opts = {}) {
   const perks = perkMultipliers(state, world);
+  const em = edictMods(state); // PLAN-PHASE5: the Edict, the Challenges and the Legacy nodes
+  const general = opts && opts.commander && !em.forceCaptain ? generalById(state, opts.commander) : null; // Lone Banner: the Militia Captain
+  const dragonscale = state.boons && state.boons.dragonscale ? 1 + em.dragonscaleAtk : 1; // Age of Dragons: Dragonscale +10% attack
+  const cmd = commanderEffects(general);
   const works = targetRegionId == null ? NO_WORKS_EFFECTS : worksBattleEffects(state, world, targetRegionId);
   const starAtkDef = 1 + state.dynasty.stars * DYNASTY.atkDefPerStar;
   const mult = (id) => 1 + levelOf(state, id) * UPGRADES[id].magnitude;
+  // Phase 4 (PLAN-PHASE4 §4C, §4D): the Deeds' settlement defence, and against the target's owner the Kingbreaker deed and Trophies
+  const deeds = deedBonuses(state);
+  const foe = targetRegionId == null ? null : targetFaction(state, world, targetRegionId);
+  const vsFoe = foe == null ? 1 : (deeds.attackVs[foe] ?? 1) * trophyBonus(state, foe);
 
   const powers = {};
   for (const id of POWER_IDS) powers[id] = levelOf(state, id);
 
-  return {
-    atk: PLAYER_BASE.atk * mult('steel') * perks.atk * starAtkDef,
+  let ability = cmd.ability;
+  if (ability && em.noAbility) ability = null;
+  else if (ability && em.abilityUses > 1) ability = { ...ability, uses: em.abilityUses }; // Warrior Kings: twice per battle
+
+  const out = {
+    atk: PLAYER_BASE.atk * mult('steel') * perks.atk * starAtkDef * vsFoe * em.atkMult * dragonscale,
     def: PLAYER_BASE.def * mult('armour') * perks.def * starAtkDef,
     growth: PLAYER_BASE.growth * mult('recruitment') * perks.growth,
-    speed: PLAYER_BASE.speed * mult('logistics') * perks.speed * works.speedMult,
-    campTroops: PLAYER_BASE.campTroops + levelOf(state, 'muster') * UPGRADES.muster.magnitude + works.campTroops,
+    speed: PLAYER_BASE.speed * mult('logistics') * perks.speed * works.speedMult * cmd.speedMult * em.speedMult, // Swift Banners
+    campTroops: (PLAYER_BASE.campTroops + levelOf(state, 'muster') * UPGRADES.muster.magnitude + works.campTroops) * cmd.campTroopsMult * em.campTroopsMult, // Veteran Camp
     garrisonShare: PLAYER_BASE.garrisonShare,
     capBonus: PLAYER_BASE.capBonus,
-    cooldownMult: perks.cooldownMult * works.cooldownMult,
+    cooldownMult: perks.cooldownMult * works.cooldownMult * cmd.cooldownMult * em.powerCooldownMult, // Warrior Kings +50%, Warlord -15%
+    garrisonMult: cmd.garrisonMult * deeds.defenceMult, // the commander's passive (Marshal) x the Warden deed: the player's garrisons defend x this
+    assaultMult: cmd.assaultMult,         // the commander's passive: squads assaulting a settlement x this (Champion)
+    reclaim: cmd.reclaim,                 // the Gravewarden's passive (PLAN-PHASE6, battle/fallen.js): share of attackers' dead joining your settlement
+    ability,                              // the commander's active (battle/abilities.js; `uses` > 1 under Warrior Kings), null with no General
+    commander: general ? general.id : null,
     campVolleyLevel: works.campVolleyLevel, // Watchtowers next door: the War Camp looses arrows like a tower (CAMP_VOLLEY)
     campGrowthMult: works.campGrowthMult,       // Barracks next door: the War Camp's troops-per-second x this
     supplyIntervalMult: works.supplyIntervalMult, // Stables next door: supply lines fire this much sooner (x the interval)
@@ -48,6 +92,17 @@ export function playerBattleStats(state, world, targetRegionId) {
     worksCampTroops: works.campTroops,      // the part of campTroops that came from Barracks (the difficulty card credits only part of it)
     powers,
   };
+  if (em.noPowers) out.powersBlocked = 'ironWill'; // Iron Will: battle/powers.js refuses every power
+  return out;
+}
+
+/** The rival faction a battle for `regionId` is fought against: its occupier, else its owner; null for the player's own region. */
+function targetFaction(state, world, regionId) {
+  const occ = occupationOf(state, regionId);
+  if (occ) return occ.by;
+  const owner = state.owner[regionId];
+  if (owner == null || owner === PLAYER_FACTION) return null;
+  return owner;
 }
 
 // --- Enemy -----------------------------------------------------------------
@@ -94,6 +149,17 @@ function tableAt(table, x) {
 }
 
 /**
+ * Holy Ground (DESIGN §10.13) takes the powers away, which late in a realm are most of an army's worth (the card's power bonus).
+ * Its garrisons and caps shrink by the same factor, so the fight plays differently without walling the campaign:
+ * 1 / (1 + powerBonusPerUnlocked x power units) x FEATURES.holy.garrison, never below FEATURES.holy.floor.
+ */
+function holyGarrisonMult(state) {
+  const powers = {};
+  for (const id of POWER_IDS) powers[id] = levelOf(state, id);
+  return Math.max(FEATURES.holy.floor, FEATURES.holy.garrison / (1 + DIFFICULTY.powerBonusPerUnlocked * powerUnits({ powers })));
+}
+
+/**
  * True once the player holds `factionId`'s capital region (DESIGN §3.3
  * decapitation: -30% strength to the rest of that faction's regions).
  */
@@ -111,10 +177,13 @@ function isDecapitated(state, world, factionId) {
  */
 export function enemyBattleStats(world, state, regionId) {
   const region = world.regions[regionId];
-  const faction = world.factions[region.faction];
+  // An occupied region (DESIGN §10.2) is held by its occupier: that faction's personality fights for it, on the region's own rung.
+  const occ = occupationOf(state, regionId);
+  const factionId = occ ? occ.by : region.faction;
+  const faction = world.factions[factionId] || world.factions[region.faction];
   const tier = Math.max(0, region.tier);
 
-  const decapitated = isDecapitated(state, world, region.faction);
+  const decapitated = isDecapitated(state, world, factionId);
   const done = Math.max(0, state.dynasty.level - 1); // dynasties completed
   const dynastyMult = done === 0 ? 1 : DYNASTY.enemyMultFirst * Math.pow(DYNASTY.enemyMultPerDynasty, done - 1);
 
@@ -130,6 +199,11 @@ export function enemyBattleStats(world, state, regionId) {
   if (region.isCapital) troopMult *= ENEMY_SCALING.capitalMult;
   if (decapitated) troopMult *= ENEMY_SCALING.decapitationMult;
   troopMult *= sabotageTroopMult(state, regionId); // DESIGN §5.7: 1, 0.85, 0.70 (garrisons only: growth, atk and def stay)
+  troopMult *= plagueMult(state, factionId); // a Plague on the faction (DESIGN §10.13): -20% for a while
+  const holy = region.twist === 'holy' ? holyGarrisonMult(state) : 1; // Holy Ground: no powers, garrisons smaller in proportion
+  troopMult *= holy;
+  const em = edictMods(state);
+  troopMult *= em.enemyGarrisonMult; // Open Roads +10%, the Overrun Challenge x1.4 (PLAN-PHASE5)
 
   const growth = Math.pow(ENEMY_SCALING.growthPerTier, depth)
     * (faction.personality === 'passive' ? BATTLE.freeFolkGrowthMult : 1);
@@ -138,7 +212,8 @@ export function enemyBattleStats(world, state, regionId) {
   // stamps this on every enemy-side site (neutral Free Folk hamlets in a rival region get freeFolkCapMult).
   const capMult = Math.pow(ENEMY_SCALING.capPerDepth, Math.max(0, depth - 1)) * dynastyMult
     * (region.isCapital ? ENEMY_SCALING.capitalCapMult : 1)
-    * (faction.personality === 'passive' ? ENEMY_SCALING.freeFolkCapMult : 1);
+    * (faction.personality === 'passive' ? ENEMY_SCALING.freeFolkCapMult : 1)
+    * holy; // Holy Ground: smaller garrisons and caps
 
   const graceTable = ENEMY_SCALING.graceSecByTier;
   const graceSec = Math.max(ENEMY_SCALING.graceFloorSec, graceTable[Math.min(tier, graceTable.length - 1)]
@@ -169,7 +244,11 @@ export function enemyBattleStats(world, state, regionId) {
     thinkSec,
     graceSec,
     personality: faction.personality,
-    factionId: region.faction,
+    factionId,
+    // PLAN-PHASE5, read by battle/arena.js: Merchant Princes' towers and forts, Kingmaker's capital Gates, Age of Dragons' Dragon
+    fortTroopMult: em.enemyFortTroopMult,
+    gateTroopMult: region.isCapital ? em.capitalGateTroopMult : 1,
+    dragonHpMult: em.dragonHpMult,
   };
 }
 
@@ -233,6 +312,30 @@ export function revealed(state, world) {
 }
 
 /**
+ * The gold `conquer` pays for this region right now: the conquest bounty, or, for an occupied region of yours (DESIGN 10.2), the retake share of it
+ * (it was the player's already). The ONE place the payout is computed: the region card and the results card read it too.
+ */
+export function conquestBounty(state, world, regionId) {
+  const occupied = occupationOf(state, regionId) !== null;
+  // a Gold Mine pays x3, a Bandit Hold x2 the first time it is taken (DESIGN §10.13)
+  // x the Conquest Streak the win would make (PLAN-PHASE4 §4B: gold only; the card shows what the next win pays)
+  // PLAN-PHASE5: Merchant Princes x2 (not a retake: that was already the player's), Age of Dragons' Lair rewards x2
+  const em = edictMods(state);
+  const region = world.regions[regionId];
+  const edict = occupied ? 1 : em.bountyMult * (region && region.type === 'dragon' ? em.dragonRewardMult : 1);
+  return bounty(state, world, regionId) * (occupied ? FRONTIER.reward.retakeBountyShare : typeBountyMult(region))
+    * projectedStreakMultiplier(state) * edict;
+}
+
+/**
+ * Whether winning this region now pays crowns: a region keeps the crowns it was first won with (crowns.js awardCrowns pays nothing when the region
+ * already has some), so a retaken region that holds crowns earns none again.
+ */
+export function crownsPayable(state, regionId) {
+  return !(Array.isArray(state.crowns) && state.crowns[regionId]);
+}
+
+/**
  * Flips a region to the player, pays its bounty and updates conquest stats.
  * Does NOT touch battlesWon/battlesLost/surrenders/settlementsTaken/troopsSent
  * — those are per-battle counters the integration layer owns, since this
@@ -244,19 +347,59 @@ export function revealed(state, world) {
  * @param {number} now
  * @returns {{ bounty: number, perk: string, decapitated?: true }}
  */
-export function conquer(state, world, regionId, now) {
+export function conquer(state, world, regionId, now, opts = {}) {
   const region = world.regions[regionId];
-  const gold = bounty(state, world, regionId);
+  const occupied = occupationOf(state, regionId) !== null;
+  const share = opts && Number.isFinite(opts.bountyShare) ? Math.max(0, opts.bountyShare) : 1; // Quick Conquest pays part (PLAN-PHASE5 §5D)
+  const gold = conquestBounty(state, world, regionId) * share; // a retake pays its share (DESIGN §10.2)
+  const loser = state.owner[regionId];
 
   state.owner[regionId] = PLAYER_FACTION;
   state.conqueredAt[regionId] = now;
   clearRegionIntel(state, regionId); // a conquered region forgets what was scouted or sabotaged (DESIGN §5.7)
   state.gold += gold;
   state.stats.goldEarned += gold;
-  state.stats.regionsConquered += 1;
+  if (!occupied) state.stats.regionsConquered += 1;
+  // Taking a region from a rival provokes it (a defensive faction raids mostly after you take one of theirs, DESIGN §10.1)
+  if (loser > 1) {
+    const f = ensureFrontier(state);
+    f.provoked[loser] = f.activeSec;
+  }
 
   const result = { bounty: gold, perk: region.perk };
   if (region.isCapital) result.decapitated = true;
+  result.streak = onStreakConquest(state); // PLAN-PHASE4 §4B: { count, mult } (the gold above already carries the mult)
+  // a rival leader's Grudge (PLAN-PHASE4 §4D): +12 for a region, +40 for the capital
+  if (loser > 1) {
+    const g = addGrudge(state, loser, region.isCapital && region.faction === loser ? 'capital' : 'region', now);
+    if (g) result.grudge = { faction: loser, value: g.value, crossed: g.crossed };
+  }
+  // Deeds (PLAN-PHASE4 §4C): regions conquered (not retakes), a Dragon slain, a rival capital toppled
+  if (!occupied) recordDeed(state, 'conquer', 1);
+  if (!occupied && region.type === 'dragon') recordDeed(state, 'dragon', 1);
+  if (region.isCapital && !occupied && loser > 1) recordDeed(state, `capital:${region.faction}`, 1);
+  // Toppling a rival capital (not a retake of one) recruits its faction's champion and pays Renown (DESIGN §10.11, §10.12)
+  // A region type's Renown (Monastery 3, Bandit Hold 2, Ruins 5, the Dragon 10 and Dragonscale; DESIGN §10.13), once
+  const rewards = typeRewards(region);
+  if (rewards && !occupied) {
+    const dragonMult = region.type === 'dragon' ? edictMods(state).dragonRewardMult : 1; // Age of Dragons: Dragon rewards x2
+    result.renown = (result.renown || 0) + earnRenown(state, (rewards.renown || 0) * dragonMult, 'feature');
+    if (region.type === 'dragon') { ensureBoons(state).dragonscale = true; result.dragonscale = true; }
+    result.type = region.type;
+  }
+  if (region.isCapital && !occupied && loser > 1) {
+    const champion = recruitChampion(state, region.faction);
+    if (champion) result.recruited = champion.id;
+    result.renown = (result.renown || 0) + earnRenown(state, RENOWN.earn.capital, 'capital');
+  }
+  // Long Winter (PLAN-PHASE5 §5A): +Renown for every Blizzard region won (not a retake)
+  const winter = edictMods(state).blizzardRenown;
+  if (winter > 0 && region.twist === 'blizzard' && !occupied) result.renown = (result.renown || 0) + earnRenown(state, winter, 'feature');
+  if (occupied) {
+    const back = retake(state, world, regionId, now); // restores prosperity, fortifications, Works and a thin militia
+    result.retaken = true;
+    result.renown = (result.renown || 0) + (back ? back.renown : 0);
+  }
   return result;
 }
 
@@ -310,8 +453,9 @@ function supportTroops(state, world, region, player) {
 function estimatePower(state, world, region, player) {
   const troops = player.campTroops - (1 - DIFFICULTY.worksCampCredit) * (player.worksCampTroops || 0)
     + supportTroops(state, world, region, player);
+  const holy = region.twist === 'holy' || !!player.powersBlocked; // Holy Ground (DESIGN §10.13) or Iron Will (PLAN-PHASE5): no powers in this fight
   return troops * player.atk * player.def * Math.pow(player.growth, DIFFICULTY.growthExp)
-    * (1 + DIFFICULTY.powerBonusPerUnlocked * powerUnits(player))
+    * (1 + DIFFICULTY.powerBonusPerUnlocked * (holy ? 0 : powerUnits(player)))
     * (1 + DIFFICULTY.volleyPerLevel * (player.campVolleyLevel || 0))
     * (1 + DIFFICULTY.campGrowthCredit * ((player.campGrowthMult || 1) - 1))
     * (1 + DIFFICULTY.supplyCredit * (1 / (player.supplyIntervalMult || 1) - 1))
@@ -326,21 +470,59 @@ function estimatePower(state, world, region, player) {
  * plays a little differently (DIFFICULTY.personality). Neutral Free Folk hamlets inside a rival
  * region are base-stat troops, exactly as buildArena places them.
  */
-function estimateStrength(world, region, enemy) {
+/** What a region's feature sites add to its strength (the arena places them: arena.js addFeatureSites). */
+function featureStrength(region, enemy, siteValue) {
+  const tm = enemy.troopMult;
+  const unit = enemy.atk * enemy.def;
+  const capped = (type, troops) => {
+    const cfg = SITE_TYPES[type];
+    const cap = cfg.cap * (enemy.capMult ?? 1);
+    return (Math.min(troops, DIFFICULTY.overCapCredit * cap) + cfg.growth * enemy.growth * DIFFICULTY.horizonSec) * cfg.def * unit;
+  };
+  let sum = 0;
+  if (region.type === 'bandit') sum += capped('bandit', FEATURES.bandit.troops * tm) * FEATURES.bandit.vet * FEATURES.bandit.vet;
+  if (region.type === 'ruins') sum += capped('tower', FEATURES.ancientTower.troops * tm) * (1 + FRONTIER.occupation.towerCredit * 3);
+  if (region.twist === 'siege') sum += capped('gate', FEATURES.gate.troops * tm * (enemy.gateTroopMult ?? 1)); // Kingmaker
+  if (region.twist === 'raid') sum += capped('shrine', FEATURES.shrine.troops * tm) * FEATURES.shrine.count;
+  if (region.type === 'dragon') sum += FEATURES.dragon.hp * tm * (enemy.dragonHpMult ?? 1) * FEATURES.difficulty.dragonHpWeight; // Age of Dragons
+  void siteValue;
+  return sum;
+}
+
+/** The measured strength factor of a region's type and twist (FEATURES.difficulty; Night only while the region is unscouted). */
+function featureFactor(region, scouted) {
+  const d = FEATURES.difficulty;
+  let k = 1;
+  if (region.twist) k *= region.twist === 'night' && !scouted ? d.nightUnscouted : d[region.twist] ?? 1;
+  if (region.type) k *= d[region.type] ?? 1;
+  return k;
+}
+
+function estimateStrength(world, region, enemy, captured = null, scouted = false) {
   const rival = enemy.factionId !== FREE_FOLK_FACTION;
   let sum = 0;
-  for (const siteId of region.settlements) {
-    const type = world.settlements[siteId].type;
+  const siteValue = (type, neutral, defMult = 1) => {
     const cfg = SITE_TYPES[type];
-    if (!cfg) continue;
-    const neutral = rival && type === 'hamlet';
+    if (!cfg) return 0;
     const mult = neutral ? 1 : enemy.troopMult;
     const unit = neutral ? 1 : enemy.atk * enemy.def;
     const growth = cfg.growth * (neutral ? BATTLE.freeFolkGrowthMult : enemy.growth);
     const cap = cfg.cap * (neutral ? ENEMY_SCALING.freeFolkCapMult : (enemy.capMult ?? 1));
-    const start = Math.min((BATTLE.enemyStart[type] ?? 0) * mult, DIFFICULTY.overCapCredit * cap);
-    sum += (start + growth * DIFFICULTY.horizonSec) * cfg.def * unit;
+    const fortMult = !neutral && (type === 'tower' || type === 'fort') ? (enemy.fortTroopMult ?? 1) : 1; // Merchant Princes
+    const start = Math.min((BATTLE.enemyStart[type] ?? 0) * mult * fortMult, DIFFICULTY.overCapCredit * cap);
+    return (start + growth * DIFFICULTY.horizonSec) * cfg.def * defMult * unit;
+  };
+  for (const siteId of region.settlements) {
+    const type = world.settlements[siteId].type;
+    const walls = captured && (type === 'keep' || type === 'fort') ? captured.wallsMult : 1;
+    sum += siteValue(type, rival && type === 'hamlet', walls);
   }
+  // An occupied region's captured fortifications fight for the occupier (DESIGN §10.2): its Arrow Tower is one more tower site,
+  // worth more per level (FRONTIER.occupation.towerCredit), and its Walls harden the keep and forts (above).
+  if (captured && captured.towerLevel > 0) sum += siteValue('tower', false) * (1 + FRONTIER.occupation.towerCredit * captured.towerLevel);
+  // A varied map (DESIGN §10.13): the feature sites, then a measured factor per type and twist (Night only while unscouted)
+  sum += featureStrength(region, enemy, siteValue);
+  sum *= featureFactor(region, scouted);
   return sum * DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1)
     * Math.pow(DIFFICULTY.depthPerTier, Math.max(0, region.tier - 3))
     * (DIFFICULTY.tierFactor[region.tier] ?? 1);
@@ -401,22 +583,33 @@ function labelFor(ratio) {
  *   `winChance`: the estimated chance of winning, 0..1 (see `winChance(ratio)`), what the card's bar shows
  *   `approach`: tiles of the War Camp's approach strip (0 for an ordinary border; the card charges for them)
  */
-export function difficulty(state, world, regionId) {
+export function difficulty(state, world, regionId, opts = {}) {
   const region = world.regions[regionId];
   const player = playerBattleStats(state, world, regionId);
   const enemy = enemyBattleStats(world, state, regionId);
 
-  const power = estimatePower(state, world, region, player);
+  // the commander (DESIGN §10.11; the card's "Commander: ..." choice): credited at its measured worth, GENERALS.cardCredit
+  const general = opts && opts.commander && !edictMods(state).forceCaptain ? generalById(state, opts.commander) : null; // Lone Banner: no General to credit
+  const vs = (GENERALS.cardCredit.vs && GENERALS.cardCredit.vs[enemy.personality]) ?? 1; // worth more against some rivals (swarm)
+  const cmd = general ? 1 + (GENERALS.cardCredit.base + GENERALS.cardCredit.perLevel * (general.level - 1)) * vs : 1;
+  const power = estimatePower(state, world, region, player) * cmd;
   // a border of mountains puts the War Camp behind a strip of no-man's-land: those fights play harder (DIFFICULTY.approachPerTile)
   const approach = approachTiles(world, state.owner, regionId) || 0;
-  const strength = estimateStrength(world, region, enemy) * (1 + DIFFICULTY.approachPerTile * approach);
+  const occ = occupationOf(state, regionId);
+  const captured = occ && occ.forts && occ.forts.length ? fortEffects(occ.forts) : null;
+  const strength = estimateStrength(world, region, enemy, captured, isScouted(state, regionId)) * (1 + DIFFICULTY.approachPerTile * approach);
   const ratio = strength > 0 ? power / strength : Infinity;
 
   // Surrender is a reward for a proven army: never offered before the first battle is won, so the
   // tutorial fight always happens (DESIGN §5.3).
-  const surrender = ratio >= ECONOMY.surrenderRatio && state.stats.battlesWon > 0;
+  // Old Alliances (PLAN-PHASE5 Legacy): Free Folk regions surrender at a lower ratio
+  const ff = edictMods(state).freeFolkSurrender;
+  const surrenderAt = ff > 0 && enemy.personality === 'passive' ? Math.min(ff, ECONOMY.surrenderRatio) : ECONOMY.surrenderRatio;
+  const surrender = ratio >= surrenderAt && state.stats.battlesWon > 0;
 
-  return { power, strength, ratio, label: labelFor(ratio), surrender, approach, winChance: winChance(ratio) };
+  const out = { power, strength, ratio, label: labelFor(ratio), surrender, approach, winChance: winChance(ratio) };
+  if (enemy.personality === 'undying') out.mechanic = 'fallen'; // PLAN-PHASE6: the card shows The Fallen Rise (meta/rivals.js fallenLine)
+  return out;
 }
 
 // --- Perks (UI display) ------------------------------------------------------
@@ -435,8 +628,15 @@ export function perkTotals(state, world) {
 // --- Dynasty prestige (DESIGN §5.4) -----------------------------------------
 
 /** @param {import('./state.js').GameState} state */
-export function canFoundDynasty(state) {
-  return state.owner.length > 0 && state.owner.every((f) => f === PLAYER_FACTION);
+/**
+ * True when the continent is whole. With `world`, an unconquered Dragon's Lair does not count (DESIGN §10.13: an optional peak;
+ * founding without it only forgoes its Renown and Dragonscale). Without `world` (the old signature) every region must be held.
+ * @param {import('./state.js').GameState} state
+ * @param {import('../world/generate.js').World} [world] the CURRENT continent
+ */
+export function canFoundDynasty(state, world) {
+  if (!(state.owner.length > 0)) return false;
+  return state.owner.every((f, id) => f === PLAYER_FACTION || (world && world.regions[id] && world.regions[id].type === 'dragon'));
 }
 
 /**
@@ -452,13 +652,18 @@ export function canFoundDynasty(state) {
  * be generated until this call decides there IS a next dynasty).
  * @param {import('./state.js').GameState} state
  * @param {number} newSeed
- * @param {import('../world/generate.js').World} [world]
+ * @param {import('../world/generate.js').World} [world] the NEW continent (optional, see above)
+ * @param {import('../world/generate.js').World} [currentWorld] the continent being left: with it, an unconquered Dragon's Lair does not
+ *   block founding (canFoundDynasty)
  * @returns {import('./state.js').GameState|false}
  */
-export function foundDynasty(state, newSeed, world) {
-  if (!canFoundDynasty(state)) return false;
+export function foundDynasty(state, newSeed, world, currentWorld, choice = {}) {
+  if (!canFoundDynasty(state, currentWorld)) return false;
 
   const earned = DYNASTY.starBase + state.dynasty.level;
+  const legacyEarned = legacyPointsForFounding(state); // PLAN-PHASE5 §5B/§5C: the stars x the Challenge bonus of the dynasty completed
+  const edictId = choice && isEdictId(choice.edict) ? choice.edict : null;
+  const challenges = cleanChallenges(choice && choice.challenges);
   const next = {
     ...state,
     seed: newSeed,
@@ -470,12 +675,58 @@ export function foundDynasty(state, newSeed, world) {
     settings: { ...state.settings },
     stats: { ...state.stats },
     tutorial: { ...state.tutorial, done: true },
-    battle: null,
+    battles: [], // no battle crosses into a new continent (ARCHITECTURE 10.2)
     // per-continent state starts empty (resetRegions would do it too; this keeps the interim state clean)
     intel: {},
     crowns: [],
     metFactions: [],
     prosperity: [],
+    // the Living Frontier is per continent too (ARCHITECTURE 10.2): the raid clock and its grace start over
+    frontier: defaultFrontier(),
+    occupation: {},
+    forts: {},
+    militia: {},
+    // Renown belongs to the dynasty (DESIGN §10.12); the Generals' roster carries over (spread above), freed from the old map
+    renown: defaultRenown(),
+    boons: defaultBoons(),          // Dragonscale is this dynasty's (DESIGN §10.13)
+    worldEvents: defaultWorldEvents(),
+    generals: carryGenerals(state), // the lifetime Deeds ride inside it (meta/deeds.js)
+    // Phase 4 (PLAN-PHASE4): the Bounty Board, the Conquest Streak, the Grudges and the Trophies start over; the Deeds are kept
+    bounties: defaultBounties(),
+    streak: defaultStreak(),
+    grudges: defaultGrudges(),
+    trophies: defaultTrophies(),
   };
+  // Phase 5: this dynasty's Edict and Challenges; the lifetime Legacy (inside `generals`) gains the points founding pays
+  next.edict = { ...defaultEdict(), id: edictId, challenges };
+  next.rivals = rivalsFor(newSeed, next.dynasty.level); // PLAN-PHASE6 §6A: the new continent's rivals (worldOptsFor passes them on)
+  const legacy = ensureLegacy(next);
+  legacy.points += legacyEarned;
+  legacy.pendingBonus = CHALLENGES.legacyBonus * challenges.length;
+  // the ceremony's Legacy purchases (choice.legacyBuys), in order, after the points are credited: a refused one is skipped and reported
+  const report = { legacyEarned, bought: [], refused: [] };
+  for (const id of Array.isArray(choice && choice.legacyBuys) ? choice.legacyBuys : []) {
+    const r = buyLegacy(next, id);
+    if (r.ok) report.bought.push(id); else report.refused.push({ id, reason: r.reason });
+  }
+  Object.defineProperty(next, 'founding', { value: report, enumerable: false, configurable: true, writable: true }); // never saved
+  applyLegacyStart(next); // after the buys: nodes bought in the ceremony count for this dynasty
+  const startRenown = deedBonuses(next).renownAtDynastyStart + edictMods(next).startRenown; // the Dragonslayer deed and Patronage (resetRegions grants them again on its fresh record)
+  if (startRenown > 0) earnRenown(next, startRenown, 'deed');
   return world ? resetRegions(next, world, state.lastSeen) : next;
+}
+
+/**
+ * The Legacy start effects that need no world (PLAN-PHASE5 §5B), applied by foundDynasty to the new dynasty's state: War Chest (free
+ * levels of the cheapest Army upgrade) and Royal Treasury (start gold). Old Roads and Patronage are resetRegions' (they need the world
+ * or a fresh Renown record).
+ */
+function applyLegacyStart(next) {
+  const em = edictMods(next);
+  if (em.warChestLevels > 0) {
+    const army = Object.values(UPGRADES).filter((u) => u.tab === 'army');
+    const cheapest = army.reduce((a, u) => (upgradeCost(u.id, levelOf(next, u.id)) < upgradeCost(a.id, levelOf(next, a.id)) ? u : a));
+    next.upgrades[cheapest.id] = levelOf(next, cheapest.id) + em.warChestLevels;
+  }
+  if (em.treasuryGoldSec > 0) next.gold += Math.round(em.treasuryGoldSec * ECONOMY.startRegionIncome * next.dynasty.level);
 }

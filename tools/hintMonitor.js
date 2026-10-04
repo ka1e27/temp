@@ -92,6 +92,63 @@ export function installHintMonitor() {
     if (/found a dynasty/i.test(text)) return list(sel('.hud-btn[aria-label="Realm stats"]'));
     if (/supply line/i.test(text)) return list(sel('.battle-auto, .auto-toggle, .supply-toggle'), siteT(camp));
     if (/only attack where your land/i.test(text)) return list(...sites.filter((s) => s.owner !== 0).map(siteT));
+    // The Living Frontier (F1-F4): the raid toast's Go; the tray chip of a battle you are not watching; the region to fortify, its Fortifications Build, the Arrow Tower row
+    // Goals and Rivals (Q1, Q2): the Regions button (the Bounty Board lives in its panel); a Vendetta banner's Go
+    if (/the bounty board/i.test(text)) return list(sel('.hud-regions'));
+    if (/a vendetta!/i.test(text)) {
+      const btns = [...document.querySelectorAll('.toasts > .toast.is-vendetta:not(.is-out) .toast-action')].filter(isVisible);
+      return btns.length ? btns.map(uiTarget) : null;
+    }
+    if (/war band is coming/i.test(text)) {
+      const btns = [...document.querySelectorAll('.toasts > .toast:not(.is-out) .toast-action')].filter((b) => isVisible(b) && /^raid-/.test(b.closest('.toast').dataset.id || ''));
+      return btns.length ? btns.map(uiTarget) : null;
+    }
+    if (/two battles at once/i.test(text)) {
+      const chips = [...document.querySelectorAll('.battle-tray:not([hidden]) .tray-row:not(.is-focused) .tray-chip')].filter(isVisible);
+      return chips.length ? chips.map(uiTarget) : null;
+    }
+    // Generals and Renown (G1, G2, R1)
+    if (/press g or tap the ability|tap the ability once/i.test(text)) return list(sel('.battle-ability:not([hidden])'));
+    if (/open generals to choose a skill/i.test(text)) return list(sel('.hud-generals'));
+    if (/renown for a festival/i.test(text)) {
+      const id = hd.hintOutline ? hd.hintOutline() : -1;
+      const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
+      const p = id >= 0 ? hd.regionScreenPos(id) : null;
+      return box && p ? [{ box, probe: p }] : null;
+    }
+    if (/festival: this region prospers/i.test(text)) return list(sel('.region-card-festival:not([hidden])'));
+    // A varied map (V1-V5): the typed or twisted frontier region; the Gate; a Shrine; the Bulwark button under the Dragon's warning; the world event's toast
+    if (/treasure or a twist/i.test(text)) {
+      const id = hd.hintOutline ? hd.hintOutline() : -1;
+      const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
+      const p = id >= 0 ? hd.regionScreenPos(id) : null;
+      return box && p ? [{ box, probe: p }] : null;
+    }
+    // The Ashen Host (A1): the Ashen frontier region
+    if (/the fallen rise/i.test(text)) {
+      const id = hd.hintOutline ? hd.hintOutline() : -1;
+      const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
+      const p = id >= 0 ? hd.regionScreenPos(id) : null;
+      return box && p ? [{ box, probe: p }] : null;
+    }
+    if (/take the gate to open the keep/i.test(text)) return list(...sites.filter((s) => s.type === 'gate' && s.owner !== 0).map(siteT));
+    if (/hold all three shrines/i.test(text)) return list(...sites.filter((s) => s.type === 'shrine').map(siteT));
+    if (/bulwark the target/i.test(text)) return list(uiTarget([...document.querySelectorAll('.power-btn')].filter(isVisible)[2]));
+    if (/a world event/i.test(text)) {
+      const t = [...document.querySelectorAll('.toasts > .toast:not(.is-out)')].find((n) => n.dataset.id === 'world-event' && isVisible(n));
+      return t ? list(uiTarget(t.querySelector('.toast-action:not(.toast-secondary)')), uiTarget(t)) : null;
+    }
+    if (/fortify your border/i.test(text)) {
+      const id = hd.hintOutline ? hd.hintOutline() : -1;
+      const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
+      const p = id >= 0 ? hd.regionScreenPos(id) : null;
+      return box && p ? [{ box, probe: p }] : null;
+    }
+    if (/build to fortify/i.test(text)) return list(sel('.works-panel.is-forts .works-build:not([hidden])'));
+    if (/arrow tower shoots/i.test(text)) {
+      const row = [...document.querySelectorAll('.works-panel.is-forts .works-choice')].filter(isVisible).find((b) => /arrow tower/i.test(b.textContent));
+      return row ? [uiTarget(row)] : null;
+    }
     // M3 (Works), three stages: the owned region at the edge of the realm, then its Build button, then the Barracks row of the chooser
     if (/build works in your regions/i.test(text)) {
       if (!worksMod) return null;
@@ -100,7 +157,7 @@ export function installHintMonitor() {
       const p = id >= 0 ? hd.regionScreenPos(id) : null;
       return box && p ? [{ box, probe: p }] : null;
     }
-    if (/^tap build/i.test(text)) return list(sel('.works-build:not([hidden])'));
+    if (/^tap build/i.test(text)) return list(sel('.works-panel:not(.is-forts) .works-build:not([hidden])'));
     if (/^pick barracks/i.test(text)) {
       const row = [...document.querySelectorAll('.works-choice')].filter(isVisible).find((b) => /barracks/i.test(b.textContent));
       return row ? [uiTarget(row)] : null;

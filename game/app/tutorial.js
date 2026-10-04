@@ -23,6 +23,9 @@ export function createTutorialController({ getState }) {
     const state = getState();
     return !!state && !state.tutorial.done && state.settings.hints !== false;
   };
+  // a step marked `afterDone` (Phase 5: Quick Conquest, a dynasty-II feature) may still show once the first tutorial is done (founding a dynasty sets `done`)
+  const hintsOn = () => { const state = getState(); return !!state && state.settings.hints !== false; };
+  const allowed = (def) => (def && def.afterDone ? hintsOn() : enabled());
 
   function markSeen(id) {
     seenMap()[id] = true;
@@ -30,6 +33,7 @@ export function createTutorialController({ getState }) {
   }
 
   function eligible(def, facts) {
+    if (!allowed(def)) return false;
     if (def.scene !== facts.scene) return false;
     if (isSeen(def.id)) return false;
     if (def.needs && !facts.features[def.needs]) return false;
@@ -43,7 +47,7 @@ export function createTutorialController({ getState }) {
    * @param {Record<string, any>} facts
    */
   function pick(facts) {
-    if (!enabled()) { current = null; return null; }
+    if (!hintsOn()) { current = null; return null; }
     const f = { features: {}, ...facts, seen: isSeen };
     if (current && eligible(current, f)) return current;
     const next = TUTORIAL_STEPS.find((def) => eligible(def, f)) || null;
@@ -54,7 +58,7 @@ export function createTutorialController({ getState }) {
 
   /** @param {number} dtSec  (counted while the hint is on screen; the shell only calls it then) */
   function update(dtSec) {
-    if (!current || current.timeoutSec == null || !enabled()) return;
+    if (!current || current.timeoutSec == null || !allowed(current)) return;
     sinceShownSec += dtSec;
     if (sinceShownSec >= current.timeoutSec) markSeen(current.id);
   }

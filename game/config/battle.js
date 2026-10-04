@@ -12,6 +12,11 @@ export const SITE_TYPES = Object.freeze({
   tower:   { growth: 0.2,  cap: 50,  def: 1.4, range: 2.6, volleySec: 0.5, volleyKills: 1 },
   keep:    { growth: 1.2,  cap: 180, def: 1.6 },
   camp:    { growth: 0.8,  cap: 160, def: 1.2 },
+  // A varied map (DESIGN §10.13; game/config/features.js has their garrisons): a Bandit Hold's camp (its veterans' +30% attack and
+  // defence ride on the site), a Siege's Gate (the keep cannot be assaulted until it falls), a Raid's Shrines (hold all three).
+  bandit:  { growth: 0.5,  cap: 100, def: 1.2 },
+  gate:    { growth: 0.25, cap: 120, def: 2.0 },
+  shrine:  { growth: 0.2,  cap: 40,  def: 1.0 },
 });
 
 export const BATTLE = Object.freeze({
@@ -103,7 +108,7 @@ export const ENEMY_SCALING = Object.freeze({
   // thirteen times as strong as ring 1 and its Free Folk keeps a four-minute siege): the top is pinned by the
   // stalemate bound (a garrison must regrow less than fightRateMin per second), so the ladder cannot be steeper.
   atkDefByTier: [1, 0.88, 1.22, 1.523, 1.826, 2.128, 2.431, 2.734],
-  personalityStat: { passive: 1.09, defensive: 0.86, aggressive: 0.82, swarm: 0.77 }, // extra atk AND def from depth 2. Free Folk only 9%: they never attack, so a stronger keep is not a harder fight, it is a stalemate (+40% gave 100-troop keeps the bot timed out on)
+  personalityStat: { passive: 1.09, defensive: 0.86, aggressive: 0.82, swarm: 0.77, undying: 0.86 }, // undying (PLAN-PHASE6): as the Violet, its strength is in garrisons that grow from your dead; extra atk AND def from depth 2. Free Folk only 9%: they never attack, so a stronger keep is not a harder fight, it is a stalemate (+40% gave 100-troop keeps the bot timed out on)
   regionJitter: 0.05,        // each region's atk AND def x 1 +/- this (hash of world seed + region id): regions of one rung are not clones
   ladderCurve: 1,            // 1 = evenly spaced rungs; >1 keeps more regions easy and crowds the hard ones at the end
   capitalStat: 1.038,        // capitals' atk AND def x this on top (capitals already carry capitalMult troops)

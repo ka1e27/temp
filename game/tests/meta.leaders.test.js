@@ -10,7 +10,7 @@ import { makeWorld, makeGame } from './meta.fixtures.js';
 import { conquer } from '../meta/progression.js';
 import { FACTIONS } from '../config/world.js';
 
-const TITLES = { 1: 'Reeve', 2: 'Warlord', 3: 'High Seer', 4: 'Khan' };
+const TITLES = { 1: 'Reeve', 2: 'Warlord', 3: 'High Seer', 4: 'Khan', 5: 'Margrave' }; // 5: the Ashen Host (PLAN-PHASE6)
 
 // --- leaders ----------------------------------------------------------------------------
 
@@ -61,17 +61,20 @@ test('leaderFor: the name changes with every dynasty (same seed) and with the se
 test('leaderFor: the four leaders of one continent never share a name', () => {
   for (let seed = 1; seed <= 400; seed++) {
     const names = LEADER_FACTIONS.map((f) => leaderFor(seed, 1, f).name);
-    assert.equal(new Set(names).size, 4, names.join(','));
+    assert.equal(new Set(names).size, LEADER_FACTIONS.length, names.join(','));
   }
 });
 
 // --- the writing -------------------------------------------------------------------------
 
 test('config: every faction has 4-6 lines for every trigger, and no strays', () => {
-  assert.deepEqual([...LEADER_FACTIONS], [1, 2, 3, 4]);
-  assert.equal(LEADER_TRIGGERS.length, 11);
+  assert.deepEqual([...LEADER_FACTIONS], [1, 2, 3, 4, 5]);
+  assert.equal(LEADER_TRIGGERS.length, 19);
   assert.ok(LEADER_TRIGGERS.includes('scouted') && LEADER_TRIGGERS.includes('sabotaged'), 'DESIGN §5.7 triggers');
-  assert.deepEqual(Object.keys(LEADER_LINES).map(Number).sort(), [1, 2, 3, 4]);
+  for (const t of ['grudge', 'vendetta', 'vendettaWon', 'vendettaLost', 'plague', 'merchant', 'duelWon', 'duelLost']) {
+    assert.ok(LEADER_TRIGGERS.includes(t), `PLAN-PHASE4 trigger ${t}`);
+  }
+  assert.deepEqual(Object.keys(LEADER_LINES).map(Number).sort(), [1, 2, 3, 4, 5]);
   for (const f of LEADER_FACTIONS) {
     assert.deepEqual(Object.keys(LEADER_LINES[f]).sort(), [...LEADER_TRIGGERS].sort(), `faction ${f} trigger set`);
     for (const t of LEADER_TRIGGERS) {
@@ -262,7 +265,7 @@ test('gate: reasons are reported in a fixed order (setting, tutorial, repeat, ga
 });
 
 test('gate: gapExempt triggers skip the gap check but still start a new gap; default exempts the payoff lines', () => {
-  assert.deepEqual([...VOICE.gapExempt], ['keepLost', 'decapitation']);
+  assert.deepEqual([...VOICE.gapExempt], ['keepLost', 'decapitation', 'vendetta']); // + the Vendetta oath (PLAN-PHASE4)
   const gate = createVoiceGate({ gapExempt: ['keepLost'] });
   gate.request('keepAssaulted', ctx(10));
   assert.equal(gate.check('battleStart', ctx(12)).reason, 'gap');

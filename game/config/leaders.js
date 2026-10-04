@@ -10,6 +10,15 @@
 //   scouted        -> the leader of the region the player just scouted (DESIGN §5.7)
 //   sabotaged      -> the leader of the sabotaged region, at battle start, in place of
 //                     battleStart / capitalBattleStart (DESIGN §5.7)
+// Phase 4 (PLAN-PHASE4 §4D, §4E):
+//   grudge         -> the leader whose Grudge just passed 50 (grudges.js drainGrudgeNews)
+//   vendetta       -> the leader swearing a Vendetta ({region}: its target) when it is announced
+//   vendettaWon    -> that leader, when the PLAYER beat the Vendetta (a defeated taunt)
+//   vendettaLost   -> that leader, when the PLAYER lost it (a gloat; {region}: the region occupied)
+//   plague         -> the leader of the plagued faction, when the Plague is announced
+//   merchant       -> any neighbouring rival leader, grumbling when the Merchant arrives
+//   duelWon        -> the challenger, when the PLAYER won the Duel
+//   duelLost       -> the challenger, when the PLAYER lost the Duel
 // Free Folk have no capital region, so their capitalBattleStart and decapitation lines are
 // written for completeness (and future worlds) but never fire in the current world contract.
 //
@@ -21,7 +30,9 @@
 // enforces it, and also the worst case after substituting the longest possible name and region.
 
 /** Faction ids that can have a leader (0 is the player realm: no leader). */
-export const LEADER_FACTIONS = Object.freeze([1, 2, 3, 4]);
+import { ASHEN_LEADER, ASHEN_LINES } from './leadersAshen.js';
+
+export const LEADER_FACTIONS = Object.freeze([1, 2, 3, 4, 5]); // 5: the Ashen Host's Pale Margrave (PLAN-PHASE6, config/leadersAshen.js)
 
 /** Every moment a leader may speak. */
 export const LEADER_TRIGGERS = Object.freeze([
@@ -36,6 +47,15 @@ export const LEADER_TRIGGERS = Object.freeze([
   'playerRetreat',
   'scouted',
   'sabotaged',
+  // Phase 4 (PLAN-PHASE4 §4D, §4E)
+  'grudge',
+  'vendetta',
+  'vendettaWon',
+  'vendettaLost',
+  'plague',
+  'merchant',
+  'duelWon',
+  'duelLost',
 ]);
 
 export const VOICE = Object.freeze({
@@ -46,7 +66,7 @@ export const VOICE = Object.freeze({
   // Triggers that ignore the minimum gap (they still record their time, so they still delay the
   // NEXT line). A keep usually falls 8-20 s after keepAssaulted spoke, so without this the payoff
   // lines were often swallowed by the 15 s gap (lead decision, DESIGN §3.6).
-  gapExempt: ['keepLost', 'decapitation'],
+  gapExempt: ['keepLost', 'decapitation', 'vendetta'], // a Vendetta's oath must never be swallowed by the gap (PLAN-PHASE4 §4D)
 });
 
 /**
@@ -83,6 +103,7 @@ export const LEADERS = Object.freeze({
     mid: ['a', 'i', 'o', 'u'],
     coda: ['ak', 'ko', 'ab', 'shi', 'ug', 'dek', 'po', 'xan', 'zu', 'lo', 'bek', 'tai', 'gai', 'rok'],
   },
+  5: ASHEN_LEADER,
 });
 
 /**
@@ -172,6 +193,54 @@ export const LEADER_LINES = Object.freeze({
       "Who's been at the storehouse? The crows. It's always the crows.",
       'A torch in the thatch! At this time of year!',
     ],
+    grudge: [
+      "We've a long memory in these parts. Longer than our fences.",
+      "Keep on like this and I'll stop lending you the good ladder.",
+      'The village is muttering about you. We mutter rather well.',
+      '{name} has started a list. Your name is near the top.',
+    ],
+    vendetta: [
+      "That's it! Fetch every pitchfork! We're coming for {region}!",
+      'Enough is enough. {name} rides out in person. On the mule.',
+      "We've had it up to here with you. Marching now. Slowly.",
+      'Ring the bell! Not the supper bell, the angry one!',
+    ],
+    vendettaWon: [
+      'Well. That went worse than the turnip festival.',
+      'Back to the fields, lads. Mind the cow on the way.',
+      "We tried. Nobody can say we didn't try. Mostly.",
+      'Fine, fine. Grudge set down. Picked up again later, mind.',
+    ],
+    vendettaLost: [
+      "Ha! That'll teach you to trample our hedges!",
+      '{region} is ours again. Someone fetch the bunting.',
+      'Not bad for a bunch of farmers, eh? Not bad at all.',
+      "Put the kettle on. We've earned a proper brew.",
+    ],
+    plague: [
+      'Half the village is coughing and the other half is sneezing.',
+      'The cows are poorly, the hens are poorly, and so am I.',
+      'Sickness in the barns. Keep your boots out of our lanes.',
+      "Fever's going round. Don't you dare take advantage.",
+    ],
+    merchant: [
+      'A merchant, is it? He sold me a bucket with a hole in it.',
+      'Caravans for them, none for us. Typical.',
+      'Mind that trader. His scales lean like a drunk ox.',
+      'Fancy carts rolling past my turnips. Not even a wave.',
+    ],
+    duelWon: [
+      "Fair's fair. You won. Don't let it go to your head.",
+      "Beaten in a fair fight. Well, fairish. I'll allow it.",
+      "My best lad lost to you. He's sulking in the hayloft.",
+      "All right, you win the duel. You're not winning the fete.",
+    ],
+    duelLost: [
+      'Ha! Farm hands are tougher than they look, see?',
+      'Our champion milks cows every morning. Strong arms.',
+      'Go on home. Tell them a farmer bested you.',
+      "That's a duel won and the hay still in. Lovely day.",
+    ],
   },
 
   // --- Crimson Legion (Warlord): boasts and threatens ------------------------------------
@@ -255,6 +324,54 @@ export const LEADER_LINES = Object.freeze({
       'You cut my ranks and call it clever? It is merely rude.',
       'Missing troops, singed boots. Very well. I will fight barefoot.',
       "A saboteur's trick. I still have enough to finish you.",
+    ],
+    grudge: [
+      'I am counting your insults. My count is getting long.',
+      'Push me further and I will come for you myself.',
+      '{name} does not forget. {name} keeps a ledger in blood.',
+      'Every banner you take, I will take back twice.',
+    ],
+    vendetta: [
+      'No more captains. {name} rides for {region} in person!',
+      'I swear it on my blade: {region} burns by sundown.',
+      'The Warlord marches. Clear the road or line it with graves.',
+      'Vengeance, neighbour. I brought it myself, with friends.',
+    ],
+    vendettaWon: [
+      'My champion fell? Impossible. Count the bodies again.',
+      'Retreat! This is not over. It is merely postponed.',
+      'You broke my charge. Next time I bring a bigger one.',
+      'Bah! Hang my banner, then. It will haunt your hall.',
+    ],
+    vendettaLost: [
+      "Kneel in what is left of {region}. I told you I'd come.",
+      'That is how a Warlord settles a debt. Remember it.',
+      'Your walls cracked like eggs. The Legion is pleased.',
+      "Vengeance tastes better than wine. I'll have another.",
+    ],
+    plague: [
+      'Plague in my barracks! Even sickness fears my sword.',
+      'My soldiers cough, but they still march. Mostly.',
+      'Some rot creeps through my camps. It will pass. I will not.',
+      'Sick or not, the Legion holds. Do not test us.',
+    ],
+    merchant: [
+      "A merchant favours you? I'll tax his wheels off.",
+      'Gold for trinkets. Buy all you like; I take it back later.',
+      'That caravan crossed my road without paying. Bold.',
+      'Merchants are just raiders who learned to smile.',
+    ],
+    duelWon: [
+      "You beat my champion. I'll have him flogged, then promoted.",
+      'A lucky blow. I will remember the face behind it.',
+      'Take your prize. The next duel will be my own blade.',
+      'Fine work. Do not expect a rematch to be so kind.',
+    ],
+    duelLost: [
+      'Ha! That is what Legion steel does to a challenger.',
+      'My champion yawned through that. Bring a real fighter.',
+      'Down you go. Mind the blood, it stains.',
+      'A duel to the Legion. Write it under the other forty.',
     ],
   },
 
@@ -340,6 +457,54 @@ export const LEADER_LINES = Object.freeze({
       'You sabotage what you cannot break. The stars note the difference.',
       'Hands worked in secret. The candles saw everything.',
     ],
+    grudge: [
+      'The candles burn your name now. They burn it slowly.',
+      'Each wrong you do is written in ash. The page fills.',
+      'I have begun to dream of you. You will not like it.',
+      '{name} drew your card twice tonight. The Tower, both times.',
+    ],
+    vendetta: [
+      'The omens are settled. {name} comes for {region} in person.',
+      'The stars have sworn it: {region} falls before the moon.',
+      'I walk out of the Spire for you. Few have earned that.',
+      'Every candle is lit. Every seer is marching. For you.',
+    ],
+    vendettaWon: [
+      'My champion has fallen. The cards did not show this.',
+      'The mirror cracked. That is twice now. I am counting.',
+      'A setback, foretold in small print. I missed the small print.',
+      'You win. The stars are pretending not to have seen.',
+    ],
+    vendettaLost: [
+      '{region} is ours, as the ravens promised. They are smug.',
+      'I told you the stars were watching. They applauded.',
+      'The prophecy is fulfilled. You may stop resisting now.',
+      'Vengeance, served cold, at the hour the bones named.',
+    ],
+    plague: [
+      'A sickness walks my halls. It came without an omen. Rude.',
+      'Fever in the Covenant. The candles are weeping wax.',
+      'My seers cough through their visions. Most unbecoming.',
+      'This plague was not in any reading. I am displeased.',
+    ],
+    merchant: [
+      'A merchant at your gates. I foresaw it. I disapprove.',
+      "That caravan's wheels creak with bad luck. Enjoy it.",
+      'Coins change hands; fortunes do not. Remember that.',
+      'Merchants follow the gold. Omens follow the merchants.',
+    ],
+    duelWon: [
+      'You won the duel. The stars blinked. That is rare.',
+      'My champion fell, as a feather falls. Gently. Annoyingly.',
+      'A victory, then. Fate grants loans, not gifts.',
+      'Well struck. I shall reread the omens with my glasses on.',
+    ],
+    duelLost: [
+      'The bones said you would stumble. You stumbled beautifully.',
+      'My champion won, as written. I do so love being right.',
+      'Fate holds the blade. Today it did not hold yours.',
+      'You lost the duel. The candles did a small dance.',
+    ],
   },
 
   // --- Amber Horde (Khan): jeers and taunts ------------------------------------------------
@@ -424,5 +589,54 @@ export const LEADER_LINES = Object.freeze({
       "Someone's been in the grain tent with a torch. Ha ha ha... ha.",
       'A sneak attack? On the Horde? We invented those!',
     ],
+    grudge: [
+      "Hey! We're getting annoyed. You won't like us annoyed.",
+      'Keep poking the Horde and the Horde pokes back. Hard.',
+      "{name} is making a list. Your name's in big letters.",
+      'Not funny anymore, blue banner. Okay, a bit funny. Stop it.',
+    ],
+    vendetta: [
+      "That's it! {name} is riding out! Hide {region}!",
+      "Vendetta! Great word. Means we're coming for {region}.",
+      'The Khan is saddling up in person. Nobody saddles faster.',
+      "Whole Horde, one target. Guess who? Hint: it's you.",
+    ],
+    vendettaWon: [
+      'Our champion fell? Somebody check the horse.',
+      "Okay, okay, you win this one. We're counting, though.",
+      'Ow. That hurt our pride. And our riders. Mostly pride.',
+      'Fine, hang our banner. It looked better in our tent.',
+    ],
+    vendettaLost: [
+      "Ha! {region} is ours! Told you we'd come!",
+      'Vengeance! Tastes like victory and dust. Mostly dust.',
+      'Ride, laugh, win. Same as always. Thanks for playing!',
+      "We said we'd come for you. We always keep that promise.",
+    ],
+    plague: [
+      'Half the riders are sneezing and the horses hate it.',
+      "Ugh, plague. Everyone's coughing on the snacks.",
+      "We're sick! Don't you dare attack while we're sick!",
+      'Fever in the camp. Riders are grumpy. Horses grumpier.',
+    ],
+    merchant: [
+      'A merchant? We usually just take the cart. Saves time.',
+      'Ooh, shiny caravan. Bet we could outrun it. Easily.',
+      'That trader skipped our tents! Hurtful!',
+      "Buy all you want. We'll come and borrow it after.",
+    ],
+    duelWon: [
+      'You beat our champion? Aww. Okay, that was cool.',
+      'Wow! Lucky swing! Teach us that one later.',
+      "Our best rider, down! He's fine. He's sulking.",
+      'Fine, you win the duel. We still win at racing.',
+    ],
+    duelLost: [
+      "Ha! Down you go! Our champion didn't even sweat!",
+      'That was quick! Want to go again? We have snacks.',
+      'Duel over! Horde wins! Somebody play the drums!',
+      "You fell over. We all saw. We're telling everyone.",
+    ],
   },
+  5: ASHEN_LINES, // the Pale Margrave (PLAN-PHASE6): dry, ancient, patient
 });

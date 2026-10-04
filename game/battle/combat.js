@@ -5,6 +5,7 @@ import { BATTLE, SITE_TYPES, POWERS, CAMP_VOLLEY } from '../config/battle.js';
 import { worldDist, hexRadiusToWorld } from './geom.js';
 import { squadPosition } from './position.js';
 import { PLAYER_OWNER, FREE_FOLK_OWNER } from './owner.js';
+import { towerRangeMult } from './features.js';
 
 export { PLAYER_OWNER, FREE_FOLK_OWNER };
 
@@ -33,10 +34,12 @@ export function ownerStats(owner, player, enemyFaction, enemy) {
 /**
  * Effective troop cap for a site: type base, plus the player's cap bonus while they own it; any other owner
  * gets the base times the site's own `capMult` (depth, capital and Free Folk scaling stamped by buildArena).
+ * `playerCapMult` scales the player's cap on a site that carries one (a defended region's militia sites, DESIGN §10.4,
+ * stamped `pCapMult` by buildDefenseArena); attack arenas never stamp it, so it is 1 there.
  */
-export function effectiveCap(type, owner, player, capMult = 1) {
+export function effectiveCap(type, owner, player, capMult = 1, playerCapMult = 1) {
   const base = SITE_TYPES[type].cap;
-  return owner === PLAYER_OWNER ? base + player.capBonus : base * capMult;
+  return owner === PLAYER_OWNER ? (base + player.capBonus) * playerCapMult : base * capMult;
 }
 
 /** Effective troops/sec growth for a site: type base × current owner's growth stat. */
@@ -54,15 +57,23 @@ export function effectiveGrowth(type, owner, player, enemyFaction, enemy) {
 export function squadPerTroopStrength(owner, player, enemyFaction, enemy, field = false) {
   const s = ownerStats(owner, player, enemyFaction, enemy);
   const charge = field && owner === PLAYER_OWNER ? (player.fieldStrengthMult ?? 1) : 1;
-  return s.atk * s.def * charge;
+  // a commander's passive (DESIGN §10.11, the Champion): the player's squads hit harder when they assault a settlement
+  const assault = !field && owner === PLAYER_OWNER ? (player.assaultMult ?? 1) : 1;
+  return s.atk * s.def * charge * assault;
 }
 
-/** Per-troop strength for a garrison sitting in a site (site defence × Bulwark included). */
+/** A site's own defence multiplier: type defence x its Walls (a fortification, DESIGN §10.3: `site.defMult`, default 1). */
+export function siteDefence(site) {
+  return SITE_TYPES[site.type].def * (site.defMult ?? 1) * (site.dragonDef ?? 1); // a Dragon perched on it guards it (DESIGN §10.13)
+}
+
+/** Per-troop strength for a garrison sitting in a site (site defence × Walls × Bulwark included). */
 export function garrisonPerTroopStrength(site, owner, player, enemyFaction, enemy, t) {
   const s = ownerStats(owner, player, enemyFaction, enemy);
-  const siteDef = SITE_TYPES[site.type].def;
   const bulwark = t < site.bulwarkUntil ? POWERS.bulwark.mult : 1;
-  return s.atk * s.def * siteDef * bulwark;
+  // a commander's passive (DESIGN §10.11, the Marshal): the player's garrisons defend harder
+  const held = owner === PLAYER_OWNER ? (player.garrisonMult ?? 1) : 1;
+  return s.atk * s.def * siteDefence(site) * bulwark * held;
 }
 
 /**
@@ -112,7 +123,12 @@ export function resolveTowerVolleys(battle, runtime, t) {
   for (const site of battle.sites) {
     if (isDead(site.troops)) continue;
     let cfg;
-    if (site.type === 'tower') cfg = SITE_TYPES.tower;
+    if (site.type === 'tower') {
+      // an Arrow Tower fortification (DESIGN §10.3) carries its own range and volley rate by level
+      cfg = site.range || site.volleySec || site.volleyKills
+        ? { range: site.range ?? SITE_TYPES.tower.range, volleySec: site.volleySec ?? SITE_TYPES.tower.volleySec, volleyKills: site.volleyKills ?? SITE_TYPES.tower.volleyKills }
+        : SITE_TYPES.tower;
+    }
     else if (site.type === 'camp' && site.owner === PLAYER_OWNER && player.campVolleyLevel > 0) {
       // Watchtowers next door (DESIGN §5.8): the player's War Camp shoots like a tower, more often at a higher level
       const level = Math.min(Math.floor(player.campVolleyLevel), CAMP_VOLLEY.volleySec.length);
@@ -122,11 +138,11 @@ export function resolveTowerVolleys(battle, runtime, t) {
     if (t < site.nextVolley) continue;
     const towerTile = runtime.byIndex.get(site.tile);
     if (!towerTile) continue;
-    const rangeWorld = hexRadiusToWorld(cfg.range);
+    const rangeWorld = hexRadiusToWorld(cfg.range * towerRangeMult(battle)); // Night: half as far (DESIGN §10.13)
     let best = null;
     let bestDist = Infinity;
     for (const squad of battle.squads) {
-      if (squad.owner === site.owner || isDead(squad.count)) continue;
+      if (squad.owner === site.owner || isDead(squad.count) || squad.noArrows) continue; // Raid squads with the skill ride through arrows
       const pos = squadPosition(battle, squad);
       const d = worldDist(towerTile, pos);
       if (d <= rangeWorld && d < bestDist) {

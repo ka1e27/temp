@@ -16,6 +16,13 @@
 //     The only resets are losing the region (an update while it is not owned) and a new dynasty (resetRegions / resetProsperity).
 import { PROSPERITY } from '../config/prosperity.js';
 import { PLAYER_FACTION } from './state.js';
+import { recordDeed } from './deeds.js';
+import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Grand Festival halves natural growth
+
+/** Tenure counts x this (Grand Festival 0.5). */
+function rate(state) {
+  return edictMods(state).prosperityRateMult;
+}
 
 /**
  * @typedef {Object} LevelUp
@@ -53,7 +60,7 @@ export function prosperityLevel(state, regionId, now) {
   if (!owned(state, regionId)) return 0;
   const at = state.conqueredAt ? state.conqueredAt[regionId] : null;
   if (at == null || !Number.isFinite(at)) return 0;
-  return levelForTenure(now - at);
+  return levelForTenure((now - at) * rate(state));
 }
 
 function sanitize(v) {
@@ -90,6 +97,7 @@ export function updateProsperity(state, world, now) {
     stored[id] = level;
   }
   stored.length = n;
+  if (ups.length) recordDeed(state, 'prosperity', Math.max(...ups.map((u) => u.level))); // the Patron deed
   return ups;
 }
 
@@ -145,12 +153,12 @@ export function nextProsperityAt(state, regionId, now) {
   const th = PROSPERITY.thresholdsMs;
   let level;
   if (now != null) {
-    level = Math.max(levelForTenure(now - at), heldLevel(state, regionId)); // never below what is already credited
+    level = Math.max(levelForTenure((now - at) * rate(state)), heldLevel(state, regionId)); // never below what is already credited
   } else {
     level = Array.isArray(state.prosperity) ? sanitize(state.prosperity[regionId]) : 0;
   }
   if (level >= PROSPERITY.maxLevel || level >= th.length) return null;
-  return at + th[level];
+  return at + th[level] / rate(state);
 }
 
 /**

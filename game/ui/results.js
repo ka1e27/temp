@@ -15,7 +15,12 @@ const DEFAULT_TIPS = [
 
 /**
  * @typedef {Object} ResultsData
- * @property {'victory'|'defeat'|'retreat'} result
+ * @property {'victory'|'defeat'|'retreat'|'defended'|'occupied'|'duelWon'|'duelLost'} result   'defended' / 'occupied': the end of a DEFENSE (DESIGN 10.1);
+ *   'duelWon' / 'duelLost': a world event's Duel (DESIGN 10.13): Renown for a win, nothing lost for a loss
+ * @property {number} [renown]      duelWon: the Renown the duel paid
+ * @property {string} [champion]    duel: who challenged ("Kael of the Crimson Legion")
+ * @property {number} [reward]      defended: the gold the defense paid
+ * @property {string} [occupier]    occupied: who took it ("the Crimson Legion")
  * @property {string} [regionName]
  * @property {number} [bounty]
  * @property {number} [newIncome]
@@ -94,15 +99,61 @@ export function createResults({ onContinue, onRetry, onBackToMap, onCrown, crown
     ));
   }
 
+  /** A defense held (DESIGN 10.1): the reward and the toll, then Continue. */
+  function renderDefended(data) {
+    clear(bodyEl);
+    bodyEl.appendChild(h('div.results-stats-grid', {},
+      stat('coin', `+${shortNumber(data.reward || 0)} reward`, '.icon-gold'),
+      stat('clock', formatClock(data.durationSec || 0)),
+      stat('sword', `${Math.round(data.troopsKilled || 0)} killed`, '', Math.round(data.troopsKilled || 0)),
+      stat('boot', `${Math.round(data.troopsLost || 0)} lost`, '.icon-bad', Math.round(data.troopsLost || 0)),
+    ));
+    bodyEl.appendChild(h('button.btn.btn-primary.btn-block.results-action', { onClick: () => onContinue?.() }, 'Continue'));
+  }
+
+  /** A defense lost (DESIGN 10.2): the region is occupied, not gone; there is no Retry, only the way back to the map to retake it. */
+  function renderOccupied(data) {
+    clear(bodyEl);
+    const tip = data.tip || `${data.regionName || 'The region'} is occupied by ${data.occupier || 'the enemy'}. Retake it from the map: its income, prosperity and buildings come back with it.`;
+    bodyEl.appendChild(h('p.results-tip', {}, icon('flag', 16), h('span', {}, tip)));
+    bodyEl.appendChild(h('div.results-actions', {},
+      h('button.btn.btn-primary.results-action', { onClick: () => onBackToMap?.() }, icon('map', 16), 'Back to Map'),
+    ));
+  }
+
+  /** A Duel's end (DESIGN 10.13): its own card. A win pays Renown; a loss costs nothing (no occupation), so both just go back to the map. */
+  function renderDuel(data) {
+    clear(bodyEl);
+    const won = data.result === 'duelWon';
+    if (won) {
+      bodyEl.appendChild(h('div.results-stats-grid', {},
+        stat('laurel', `+${shortNumber(data.renown || 0)} Renown`, '.icon-gold'),
+        stat('clock', formatClock(data.durationSec || 0)),
+        stat('sword', `${Math.round(data.troopsKilled || 0)} killed`, '', Math.round(data.troopsKilled || 0)),
+        stat('boot', `${Math.round(data.troopsLost || 0)} lost`, '.icon-bad', Math.round(data.troopsLost || 0)),
+      ));
+    }
+    const tip = won ? `${data.champion || 'The champion'} yields. Your name is sung across the realm.` : `${data.champion || 'The champion'} wins the duel. No harm done: ${data.regionName || 'the region'} is still yours.`;
+    bodyEl.appendChild(h('p.results-tip', {}, icon(won ? 'laurel' : 'shield', 16), h('span', {}, tip)));
+    bodyEl.appendChild(h('button.btn.btn-primary.btn-block.results-action', { onClick: () => (won ? onContinue?.() : onBackToMap?.()) }, 'Continue'));
+  }
+
   function update(data) {
     if (!data) return;
     el.dataset.result = data.result;
-    bannerEl.textContent = data.result === 'victory' ? 'VICTORY' : data.result === 'retreat' ? 'RETREATED' : 'DEFEAT';
+    bannerEl.textContent = { victory: 'VICTORY', retreat: 'RETREATED', defended: 'DEFENDED', occupied: 'REGION LOST', duelWon: 'DUEL WON', duelLost: 'DUEL LOST' }[data.result] || 'DEFEAT';
     regionEl.textContent = data.regionName || '';
     summary = data.result === 'victory'
       ? `Victory. ${data.regionName || 'The region'} captured. +${shortNumber(data.bounty || 0)} gold${data.crownBonus > 0 ? `, +${shortNumber(data.crownBonus)} crown bonus` : ''}. ${formatClock(data.durationSec || 0)}.`
-      : `${data.result === 'retreat' ? 'Retreated' : 'Defeat'}. ${data.regionName || ''}`.trim();
+      : data.result === 'defended' ? `Defended. ${data.regionName || 'The region'} held. +${shortNumber(data.reward || 0)} gold.`
+        : data.result === 'occupied' ? `Region lost. ${data.regionName || 'The region'} is occupied by ${data.occupier || 'the enemy'}.`
+          : data.result === 'duelWon' ? `Duel won at ${data.regionName || 'the region'}. +${shortNumber(data.renown || 0)} Renown.`
+            : data.result === 'duelLost' ? `Duel lost at ${data.regionName || 'the region'}. Nothing is lost.`
+          : `${data.result === 'retreat' ? 'Retreated' : 'Defeat'}. ${data.regionName || ''}`.trim();
     if (data.result === 'victory') renderVictory(data);
+    else if (data.result === 'defended') renderDefended(data);
+    else if (data.result === 'occupied') renderOccupied(data);
+    else if (data.result === 'duelWon' || data.result === 'duelLost') renderDuel(data);
     else renderSetback(data);
   }
 

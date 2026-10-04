@@ -35,7 +35,7 @@ test('migrate: fills every missing field with a sane default', () => {
   assert.equal(restored.stats.bestBattleSec, null);
   assert.equal(restored.settings.sound, true);
   assert.equal(restored.tutorial.done, false);
-  assert.equal(restored.battle, null);
+  assert.deepEqual(restored.battles, []);
 });
 
 test('migrate: a partial save keeps what it has and fills only what\'s missing', () => {
@@ -213,4 +213,77 @@ test('a new realm, and a new dynasty (resetRegions), start with no Works', () =>
   state.works = { 1: [{ type: 'market', level: 1 }] };
   resetRegions(state, world, 10);
   assert.deepEqual(state.works, {});
+});
+
+// --- the Living Frontier fields (docs/briefs/frontier-hookup.md §2) ----------------------------------------------------------------------------------------
+
+test('round trip: frontier, occupation, forts and militia survive save and load exactly', () => {
+  const world = makeWorld();
+  const state = createGame(5, world, 100);
+  state.frontier = {
+    seq: 7, rng: 3, activeSec: 1500.5, nextCheckAt: 1520, cooldown: { 2: 2400 },
+    incoming: [{ id: 6, faction: 2, fromRegionId: 2, toRegionId: 1, announcedAt: 1490, arriveAt: 1535, strength: 40, depth: 2, first: false }],
+    lastAwayReport: { awayMs: 1000, at: 5, raids: [], repelled: 0, lost: [] }, provoked: { 2: 1400 }, stats: { raids: 3, defensesWon: 1, defensesLost: 1, retakes: 0 },
+  };
+  state.occupation = { 2: { by: 2, at: 50, prosperity: 2, tenureMs: 7200000, forts: [{ type: 'tower', level: 2 }], works: [{ type: 'barracks', level: 1 }], militia: 0.5 } };
+  state.forts = { 1: [{ type: 'walls', level: 1 }, { type: 'beacon', level: 2 }] };
+  state.militia = { 1: { fill: 0.25, at: 90 } };
+  const restored = deserialize(serialize(state));
+  assert.deepEqual(restored.frontier, state.frontier);
+  assert.deepEqual(restored.occupation, state.occupation);
+  assert.deepEqual(restored.forts, state.forts);
+  assert.deepEqual(restored.militia, state.militia);
+  assert.deepEqual(importCode(exportCode(state)).forts, state.forts);
+});
+
+test('the Living Frontier fields: junk is dropped (strings, negative ids, unknown fort types, Free Folk raids), missing fields get defaults', () => {
+  const world = makeWorld();
+  const state = createGame(5, world, 100);
+  state.frontier = { seq: 'x', incoming: [{ id: 1, faction: 1, fromRegionId: 2, toRegionId: 1 }, { id: -1, faction: 2, fromRegionId: 2, toRegionId: 1 }, 'junk'], cooldown: { a: 5, 3: 'no' } };
+  state.occupation = { 2: { by: 0 }, x: { by: 2 }, 3: 'junk' };
+  state.forts = { 1: [{ type: 'catapult', level: 1 }, { type: 'walls', level: 9 }, { type: 'tower', level: 1 }, { type: 'tower', level: 2 }] };
+  state.militia = { 1: { fill: 'full', at: 1 }, '-2': { fill: 0.5, at: 1 } };
+  const r = deserialize(serialize(state));
+  assert.equal(r.frontier.seq, 1);
+  assert.deepEqual(r.frontier.incoming, [], 'a Free Folk raid and a negative id are dropped');
+  assert.deepEqual(r.frontier.cooldown, {});
+  assert.deepEqual(r.occupation, {});
+  assert.deepEqual(r.forts, { 1: [{ type: 'tower', level: 1 }] }, 'unknown types, impossible levels and a second tower are dropped');
+  assert.deepEqual(r.militia, {});
+  const old = migrate({ owner: [0, 1, 1], gold: 5 });
+  assert.equal(old.frontier.seq, 1);
+  assert.deepEqual([old.occupation, old.forts, old.militia], [{}, {}, {}]);
+});
+
+test('resetRegions starts the Living Frontier over (a new realm or dynasty)', () => {
+  const world = makeWorld();
+  const state = createGame(5, world, 100);
+  state.frontier.activeSec = 999;
+  state.occupation = { 1: { by: 2 } };
+  state.forts = { 1: [{ type: 'walls', level: 1 }] };
+  state.militia = { 1: { fill: 0, at: 0 } };
+  resetRegions(state, world, 200);
+  assert.equal(state.frontier.activeSec, 0);
+  assert.deepEqual([state.occupation, state.forts, state.militia], [{}, {}, {}]);
+});
+
+// --- Generals and Renown (docs/briefs/phase2-hookup.md §2) -------------------------------------------------------------------------------------------------
+
+test('round trip: generals and renown survive save and load; junk is dropped; resetRegions resets Renown only', () => {
+  const world = makeWorld();
+  const state = createGame(5, world, 100);
+  assert.equal(state.generals.roster[0].id, 'marshal', 'a new game has the Marshal');
+  state.generals.roster[0].level = 3;
+  state.generals.roster[0].xp = 40;
+  state.generals.roster[0].skills = [1];
+  state.renown = { ...state.renown, points: 7, earned: 9, spent: 2, festivals: 1 };
+  const back = deserialize(serialize(state));
+  assert.deepEqual(back.generals, state.generals);
+  assert.deepEqual(back.renown, state.renown);
+  const junk = deserialize(serialize({ ...state, generals: 'x', renown: { points: -5 } }));
+  assert.equal(junk.generals.roster[0].id, 'marshal', 'the Marshal is always present');
+  assert.ok(junk.renown.points >= 0);
+  resetRegions(state, world, 200);
+  assert.equal(state.renown.points, 0, 'Renown belongs to the dynasty');
+  assert.equal(state.generals.roster[0].level, 3, 'the Generals persist');
 });

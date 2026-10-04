@@ -7,7 +7,20 @@
 import { PLAYER_FACTION, defaultStats, defaultSettings } from './state.js';
 import { sanitizeIntel } from './intelState.js';
 import { sanitizeWorks } from './worksEffects.js';
+import { sanitizeFrontier, sanitizeOccupation } from './frontierState.js';
+import { sanitizeForts } from './fortsEffects.js';
+import { sanitizeMilitia } from './militia.js';
+import { sanitizeGenerals } from './generalsState.js';
+import { sanitizeRenown } from './renownState.js';
+import { sanitizeBoons } from './featuresState.js';
+import { sanitizeWorldEvents } from './eventsState.js';
 import { sanitizeChronicle } from './chronicleState.js';
+import { sanitizeBounties } from './bountiesState.js';
+import { sanitizeStreak } from './streak.js';
+import { sanitizeGrudges, sanitizeTrophies } from './grudges.js';
+import { sanitizeEdict } from './edicts.js';
+import { sanitizeRivals } from './rivals.js';
+import { sanitizeLegacy } from './legacy.js';
 import { UPGRADES } from './upgrades.js';
 import { FACTIONS } from '../config/world.js';
 
@@ -177,8 +190,8 @@ function withDefaults(raw) {
   const src = plainObject(raw);
   const dynastySrc = plainObject(src.dynasty);
   const owner = numArray(src.owner);
-  // an in-progress battle survives only if it can really be resumed AND its region is still the enemy's (a save of a won region would resume a ghost fight)
-  const battle = plausibleBattle(src.battle, owner.length) && owner[src.battle.arena.regionId] !== PLAYER_FACTION ? src.battle : null;
+  // every in-progress battle (ARCHITECTURE 10.2: state.battles, a legacy state.battle migrates into a one-element list) survives only if it can really be resumed
+  const battles = sanitizeBattles(src, owner);
 
   return {
     version: CURRENT_VERSION,
@@ -202,8 +215,92 @@ function withDefaults(raw) {
     tutorial: migrateTutorial(src.tutorial),
     saveSeq: clampNum(src.saveSeq, 0, 0, 1e12, true),
     lastSeen: clampNum(src.lastSeen, 0, 0, 1e14), // 0 = unknown: the shell treats it as "now" (no welcome-back for a clock that never ran)
-    battle,
+    battles,
+    // the Living Frontier (ARCHITECTURE 10.2): the raid clock, occupied regions, fortifications and militia, each sanitised by its own module
+    frontier: sanitizeFrontier(src.frontier),
+    occupation: sanitizeOccupation(src.occupation),
+    forts: sanitizeForts(src.forts),
+    militia: sanitizeMilitia(src.militia),
+    // Phase 2: the Generals (lifetime, seeded names) and this dynasty's Renown
+    generals: sanitizeGenerals(src.generals, clampNum(src.seed, 1, 0, 4294967295, true)),
+    renown: sanitizeRenown(src.renown),
+    boons: sanitizeBoons(src.boons),
+    worldEvents: sanitizeWorldEvents(src.worldEvents),
+    // Phase 4 (PLAN-PHASE4): this dynasty's Bounty Board, Conquest Streak, Grudges and Trophies (the lifetime Deeds ride inside
+    // `generals`, sanitised by sanitizeGenerals). A save from before Phase 4 gets fresh, empty records.
+    bounties: sanitizeBounties(src.bounties),
+    streak: sanitizeStreak(src.streak),
+    grudges: sanitizeGrudges(src.grudges),
+    trophies: sanitizeTrophies(src.trophies),
+    // Phase 5 (PLAN-PHASE5): this dynasty's Edict and Challenges (an old save plays by the standard rules); the lifetime Legacy rides
+    // inside `generals` (below)
+    edict: sanitizeEdict(src.edict),
+    rivals: sanitizeRivals(src.rivals), // PLAN-PHASE6: a save from before rotation keeps the classic three
   };
+}
+
+/** The most battles that may run at once (DESIGN 10.5; FRONTIER.maxBattles once config/frontier.js exists). */
+export const MAX_SAVED_BATTLES = 3;
+
+/**
+ * The running battles of a save, as `BattleRun`s (ARCHITECTURE 10.2). A legacy single `battle` becomes a one-element list (an attack, id 1). Each run is kept only
+ * if its battle can really be resumed (`plausibleBattle`), its region is real, an ATTACK's region is still the enemy's (a save of a won region would resume a ghost
+ * fight), and no other kept run fights over the same region. Ids are positive integers, unique. At most MAX_SAVED_BATTLES.
+ * @param {object} src the raw save
+ * @param {number[]} owner the sanitised owners
+ * @returns {object[]}
+ */
+export function sanitizeBattles(src, owner) {
+  const raw = Array.isArray(src.battles) && (src.battles.length || !src.battle) ? src.battles
+    : (src.battle ? [{ id: 1, kind: 'attack', regionId: src.battle && src.battle.arena ? src.battle.arena.regionId : -1, battle: src.battle, commander: null, auto: false, startedAt: 0 }] : []);
+  const out = [];
+  const regions = new Set();
+  const ids = new Set();
+  for (const r of raw) {
+    if (out.length >= MAX_SAVED_BATTLES) break;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
+    const kind = r.kind === 'defense' || r.kind === 'duel' ? r.kind : r.kind === 'attack' || r.kind == null ? 'attack' : null; // a Duel (DESIGN 10.13) is a defense-like run
+    if (!kind) continue;
+    if (!plausibleBattle(r.battle, owner.length)) continue;
+    const regionId = r.battle.arena.regionId;
+    if (Number.isInteger(r.regionId) && r.regionId !== regionId) continue; // the run and its arena must agree
+    if (kind === 'attack' && owner[regionId] === PLAYER_FACTION) continue;
+    if ((kind === 'defense' || kind === 'duel') && owner[regionId] !== PLAYER_FACTION) continue; // a defense (or a Duel) is fought in a region that is still yours
+    if (regions.has(regionId)) continue;
+    let id = Number.isInteger(r.id) && r.id > 0 && r.id < 1e9 ? r.id : 0;
+    if (!id || ids.has(id)) { id = 1; while (ids.has(id)) id += 1; }
+    ids.add(id);
+    regions.add(regionId);
+    const run = {
+      id,
+      kind,
+      regionId,
+      battle: r.battle,
+      commander: typeof r.commander === 'string' && r.commander.length <= 64 ? r.commander : null,
+      auto: r.auto === true,
+      startedAt: clampNum(r.startedAt, 0, 0, 1e14),
+    };
+    if (kind === 'defense') {
+      run.fromRegionId = Number.isInteger(r.fromRegionId) && r.fromRegionId >= 0 && r.fromRegionId < owner.length ? r.fromRegionId : null;
+      run.attackerFaction = Number.isInteger(r.attackerFaction) && r.attackerFaction > 0 && r.attackerFaction < 16 ? r.attackerFaction : null;
+      if (Number.isInteger(r.raidId) && r.raidId >= 0) run.raidId = r.raidId;
+      run.first = r.first === true;
+      // a Vendetta (PLAN-PHASE4 §4D): defenseReward settles the Grudge and the Trophy from this flag
+      if (r.vendetta && typeof r.vendetta === 'object' && Number.isInteger(r.vendetta.faction) && r.vendetta.faction > 1 && r.vendetta.faction < 16) {
+        run.vendetta = { faction: r.vendetta.faction, leader: typeof r.vendetta.leader === 'string' ? r.vendetta.leader.slice(0, 60) : '' };
+      }
+    }
+    // the label the card showed when an attack began (the Bounty Board's swiftHard contract reads it at the end)
+    if (kind === 'attack' && ['Easy', 'Fair', 'Hard', 'Deadly'].includes(r.labelAtAttack)) run.labelAtAttack = r.labelAtAttack;
+    if (kind === 'duel') {
+      run.fromRegionId = Number.isInteger(r.fromRegionId) && r.fromRegionId >= 0 && r.fromRegionId < owner.length ? r.fromRegionId : null;
+      run.attackerFaction = Number.isInteger(r.attackerFaction) && r.attackerFaction > 0 && r.attackerFaction < 16 ? r.attackerFaction : null;
+      if (Number.isInteger(r.eventId) && r.eventId >= 0) run.eventId = r.eventId;
+      if (typeof r.champion === 'string' && r.champion.length <= 80) run.champion = r.champion;
+    }
+    out.push(run);
+  }
+  return out;
 }
 
 /**

@@ -68,6 +68,30 @@
 // affordable. `--works=heavy` is the dominance check: every Work of every useful kind at every level, before ANY other
 // purchase (it should land within about +-15% of normal). `--works=none` builds nothing (clearly slower, not stalled).
 //
+// THE LIVING FRONTIER (DESIGN §10; on unless --raids=off). The campaign clock is active play, so the game's own raid scheduler
+// (meta/frontier.js tickFrontier) runs along it in FRONTIER.checkSec chunks. A person watches ONE battle at a time (DESIGN §10.5):
+// a raid that arrives while the player idles through a wait is defended IN PERSON (bot.js decideDefense: the Steward's rules at a
+// person's 3 s cadence), unless another in-person defense is still running; one that arrives during the player's own attack battle,
+// or overlaps an in-person defense, is left to the Steward (the Militia Captain, stewardDecide 'captain'). A won defense pays defenseReward, a lost
+// one is occupied (occupy). Occupied regions are retaken with priority (RETAKE_PREFERENCE x the value score) through conquer, which
+// restores them. FORTIFICATIONS (--forts=normal, the default; heavy; none): Walls then an Arrow Tower at level I in every owned
+// region that borders a rival and is threatened (its unattended odds read under FORT_THREAT, or it has been raided), upgraded to II when that costs at most FORT_UPGRADE_SEC seconds of income; one more item in the
+// savings pool, like Works. Away (--checkinHours, --offlineAt) runs resolveAway after offlineEarnings, exactly as the game does.
+//
+// GENERALS AND RENOWN (DESIGN §10.11, §10.12; off with --generals=off): every attack is commanded by the best free General
+// (bestFreeGeneral), every raid by the nearest free one (nearestFreeGeneral; the attack's General is busy while it fights), the
+// Militia Captain when none is free. Their passives and abilities apply in person (the bots use abilityAdvice) and their own
+// steward fights unattended raids (stewardDecide with commanderStyle). settleCommander gives XP and wounds; skill picks take option
+// 0. Renown comes from the game's own hooks; it is spent (--renown=off to keep it) on a Festival for the richest owned region whose
+// prosperity is not at the top, then Training the Marshal, whichever is affordable first, with a heal for a wounded General first.
+//
+// GOALS AND RIVALS (PLAN-PHASE4): the Conquest Streak and Deeds work inside the game's own meta functions. The Bounty Board is
+// taken as a player takes it with no special play (off with --bounties=off): ensureBounties along the clock, every on* hook at
+// the matching moment (battles through crowns.js battleSummaryFor, conquests, prosperity, fortifications) and claimCompleted at
+// once; nothing is rerolled. Vendettas arrive through tickFrontier and are fought exactly like raids (in person or by the
+// steward); every defense is settled with defenseReward (a lost Vendetta resets its Grudge), and a lost attack breaks the streak.
+// --dynasties=N prints a goals line per dynasty (contracts, best streak, Vendettas, Trophies, deed tiers).
+//
 // Usage:
 //   node tools/campaign.mjs [--seeds=1,2,3,4,5] [--works=normal|heavy|none] [--verbose] [--json] [--no-army]
 //                           [--maxRegions=N] [--offlineAt=N --offlineHours=H [--offlineDynasty=D]] [--intel=finisher|heavy]
@@ -110,6 +134,22 @@ import { ECONOMY } from '../game/config/meta.js';
 import { PLAYER_FACTION } from '../game/meta/state.js';
 import { formatDuration } from '../game/core/format.js';
 import { pathToFileURL } from 'node:url';
+import * as Frontier from '../game/meta/frontier.js';
+import * as Forts from '../game/meta/forts.js';
+import { decideDefense } from '../game/battle/bot.js';
+import { stewardDecide } from '../game/battle/steward.js';
+import { FRONTIER } from '../game/config/frontier.js';
+import * as Generals from '../game/meta/generals.js';
+import * as Renown from '../game/meta/renown.js';
+import * as Events from '../game/meta/events.js';
+import * as Bounties from '../game/meta/bounties.js';
+import { battleSummaryFor } from '../game/meta/crowns.js';
+import { onStreakBroken } from '../game/meta/streak.js';
+import { deedProgress } from '../game/meta/deeds.js';
+import { edictChoices, worldOptsFor } from '../game/meta/edicts.js';
+import * as Quick from '../game/meta/quick.js';
+import { legacyPointsForFounding, legacyInfo, legacyTree } from '../game/meta/legacy.js';
+import { resetRegions } from '../game/meta/state.js';
 
 // --- Tuning knobs for the VIRTUAL PLAYER (not game balance — see file header) -------------
 const CORE_ARMY = ['recruitment', 'steel', 'armour', 'muster'];
@@ -129,6 +169,15 @@ const INTEL_FINISHER_FACTOR = 6; // --intel=finisher: buy scout+sabotage only wh
 // --no-army ablation, where nothing left in the pool ever moves the difficulty ratio again)
 // ends when the pool has nothing left to buy or the 24 h backstop trips.
 const NO_PROGRESS_STALL_LIMIT = 400;
+
+const TYPE_PREFERENCE = { goldmine: 1.6, monastery: 1.3, bandit: 1.1, ruins: 1.1, dragon: 1 }; // value score x this by region type
+const RETAKE_PREFERENCE = 3; // an occupied region's value score x this: the player wants its own land back first
+const FORT_THREAT = 0.9;     // a border region is fortified once its unattended odds read below this (or once it has been raided)
+const FORT_UPGRADE_SEC = 8;   // --forts=normal: a level-II fortification only when it costs at most this many seconds of income
+const FORT_POLICIES = {
+  normal: { types: ['walls', 'tower'], upgradeSec: FORT_UPGRADE_SEC, maxLevel: 2, weight: 1 },
+  heavy: { types: ['walls', 'tower', 'hall'], upgradeSec: Infinity, maxLevel: 3, weight: 0.6 },
+};
 
 /** Debug hook for scratch tools: called with (battle, region, timedOut) after every fought battle. */
 export const hooks = { onBattleEnd: null, onConquest: null };
@@ -218,14 +267,45 @@ function nextWork(state, world, flags) {
   return best;
 }
 
-/** What the player is saving for: the cheapest of the pool upgrades and the wanted Works ('heavy' takes Works first). */
+/** The cheapest fortification the policy wants (owned regions that border a rival): { kind: 'fort', ... } or null. */
+function nextFort(state, world, flags) {
+  if (flags.raids === 'off') return null;
+  const policy = FORT_POLICIES[flags.forts === undefined || flags.forts === true ? 'normal' : String(flags.forts)];
+  if (!policy) return null;
+  const income = incomePerSec(state, world);
+  let best = null;
+  const consider = (cand) => { if (!best || cand.cost < best.cost - 1e-9) best = cand; };
+  for (const region of world.regions) {
+    if (state.owner[region.id] !== PLAYER_FACTION) continue;
+    if (!region.neighbors.some((n) => state.owner[n] > 1)) continue; // only where a rival can raid
+    // threatened: the card reads its odds unattended below FORT_THREAT, or a raid has already come for it
+    const raided = state.frontier && state.frontier.cooldown && state.frontier.cooldown[region.id] != null;
+    if (!raided && Frontier.estimateDefense(state, world, region.id, null, { nowMs: state.lastSeen }).winChance >= FORT_THREAT) continue;
+    const built = Forts.fortsOf(state, region.id);
+    if (built.length < Forts.fortSlots(state, region.id)) {
+      const type = policy.types.find((t) => !built.some((f) => f.type === t));
+      if (type) consider({ kind: 'fort', action: 'build', regionId: region.id, type, slot: built.length, level: 1, cost: Forts.fortCost(state, world, region.id, type, 1), id: 'fort:' + type });
+    }
+    built.forEach((f, slot) => {
+      if (!policy.types.includes(f.type) || f.level >= Math.min(policy.maxLevel, Forts.fortMaxLevel(f.type))) return;
+      const cost = Forts.fortCost(state, world, region.id, f.type, f.level + 1);
+      if (cost <= policy.upgradeSec * income) consider({ kind: 'fort', action: 'upgrade', regionId: region.id, type: f.type, slot, level: f.level + 1, cost, id: 'fort:' + f.type });
+    });
+  }
+  if (best) best.weight = policy.weight;
+  return best;
+}
+
+/** What the player is saving for: the cheapest of the pool upgrades, the wanted Works ('heavy' takes Works first) and the wanted fortifications. */
 function nextTarget(state, world, conquestCount, flags) {
   const uid = cheapestTargetId(state, conquestCount, flags);
   const up = uid ? { kind: 'upgrade', id: uid, cost: upgradeCost(uid, levelOf(state, uid)) } : null;
   const work = nextWork(state, world, flags);
-  if (!work) return up;
-  if (!up) return work;
-  return work.cost * worksPolicy(flags).weight < up.cost ? work : up;
+  let pick = up;
+  if (work && (!pick || work.cost * worksPolicy(flags).weight < pick.cost)) pick = work;
+  const fort = nextFort(state, world, flags);
+  if (fort && (!pick || fort.cost * fort.weight < pick.cost)) pick = fort;
+  return pick;
 }
 
 /** The single upgrade id the virtual player is currently saving toward. */
@@ -249,6 +329,15 @@ function buyingPass(state, world, conquestCount, flags, goldSpent) {
   for (;;) {
     const target = nextTarget(state, world, conquestCount, flags);
     if (!target) break;
+    if (target.kind === 'fort') {
+      if (state.gold < target.cost - 1e-9) break;
+      const res = target.action === 'build' ? Forts.buildFort(state, world, target.regionId, target.type) : Forts.upgradeFort(state, world, target.regionId, target.slot);
+      if (!res) break;
+      if (bountyCtx) bountyClaim(state, world, Bounties.onFortBuilt(state, world, target.regionId, target.type), state.lastSeen);
+      bought.push({ id: target.id, level: target.level, cost: res.cost });
+      goldSpent[target.id] = (goldSpent[target.id] || 0) + res.cost;
+      continue;
+    }
     if (target.kind === 'work') {
       if (state.gold < target.cost - 1e-9) break;
       const res = target.action === 'build' ? Works.buildWork(state, world, target.regionId, target.type) : Works.upgradeWork(state, world, target.regionId, target.slot);
@@ -266,6 +355,188 @@ function buyingPass(state, world, conquestCount, flags, goldSpent) {
   return bought;
 }
 
+// --- The Living Frontier in the campaign (see the header) ---------------------------------------------------------------
+let raidCtx = null; // { state, mode: 'idle'|'playing', log } while a campaign with raids runs
+let genCtx = null;  // { busy: generalId|null, noSpend, log } while a campaign with Generals runs
+let quickCtx = null; // { n, won } while a campaign that may Quick-Conquer runs
+const QUICK_SEC = 2; // a Quick Conquest's overlay: the player's time it takes
+
+/** The General commanding a new battle in the campaign, or null for the Militia Captain (see the header). */
+function pickCommander(state, world, regionId, kind, nowMs) {
+  if (!genCtx) return null;
+  const busy = genCtx.busy;
+  const free = Generals.freeGenerals(state, nowMs).filter((g) => g.id !== busy);
+  if (!free.length) return null;
+  const choose = kind === 'attack' ? Generals.bestFreeGeneral : Generals.nearestFreeGeneral;
+  // bestFree/nearestFree read state.battles for busy Generals; the campaign keeps none there, so filter here
+  const pick = kind === 'attack' ? choose(state, world, regionId, 'attack', nowMs) : choose(state, world, regionId, nowMs);
+  return pick && pick.id !== busy ? pick : free[0];
+}
+
+/** Settles a battle's commander (XP, wounds) and takes every skill pick owed (option 0). */
+function settle(state, run, result, nowMs) {
+  if (!genCtx || !run.commander) return;
+  const out = Generals.settleCommander(state, run, result, nowMs);
+  if (out) genCtx.log.xp += out.xp;
+  const g = Generals.generalById(state, run.commander);
+  while (g && Generals.pendingPicks(g) > 0) Generals.pickSkill(g, 0);
+}
+
+/** The Renown policy (see the header). */
+function spendRenown(state, world, nowMs) {
+  if (!genCtx || genCtx.noSpend) return;
+  for (let guard = 0; guard < 20; guard++) {
+    const wounded = Generals.ensureGenerals(state).roster.find((g) => Generals.isWounded(g, nowMs));
+    if (wounded && Renown.heal(state, wounded.id, nowMs)) { genCtx.log.heals += 1; continue; }
+    let best = null;
+    for (const region of world.regions) {
+      if (Renown.festivalRefusal(state, world, region.id) === 'notOwned' || Renown.festivalRefusal(state, world, region.id) === 'maxed') continue;
+      const v = regionIncome(region);
+      if (!best || v > best.v) best = { id: region.id, v };
+    }
+    const fCost = best ? Renown.festivalCost(state, best.id) : Infinity;
+    const marshal = Generals.generalById(state, 'marshal');
+    const tCost = marshal && marshal.level < 10 ? Renown.trainCost(marshal) : Infinity;
+    if (best && fCost <= tCost && Renown.festival(state, world, best.id, nowMs)) { genCtx.log.festivals += 1; continue; }
+    if (tCost < fCost && Renown.train(state, 'marshal')) { genCtx.log.trains += 1; const g = marshal; while (Generals.pendingPicks(g) > 0) Generals.pickSkill(g, 0); continue; }
+    break;
+  }
+}
+
+function newRaidLog() {
+  return {
+    announced: 0, inPerson: { n: 0, won: 0 }, steward: { n: 0, won: 0 }, lost: [], retakes: [], maxOccupied: 0,
+    defenses: [], firstRaidSec: null, away: [], rivalSec: 0, rateSec: 0, vendettas: { n: 0, won: 0, championFell: 0 },
+  };
+}
+
+/** Fights one arrived raid to the end (in person or by the Militia Captain) and settles it exactly as the game does. */
+function fightRaid(state, world, raid, nowMs, inPerson, log) {
+  const general = pickCommander(state, world, raid.toRegionId, 'defense', nowMs);
+  const est = Frontier.estimateDefense(state, world, raid.toRegionId, raid, general && !inPerson ? { nowMs, general } : { nowMs, commander: inPerson ? 'inPerson' : 'captain' });
+  const stats = general ? playerBattleStats(state, world, raid.toRegionId, { commander: general }) : null;
+  let run;
+  try { run = Frontier.defenseRunFor(state, world, raid, stats, { nowMs }); } catch { return null; }
+  run.commander = general ? general.id : null;
+  const style = general ? Generals.commanderStyle(general) : 'captain';
+  const b = run.battle;
+  const memo = {};
+  const tracker = trackerOf(b);
+  while (!b.result && b.t < 600) {
+    for (const cmd of think(b, b.t)) issue(b, cmd);
+    for (const cmd of (inPerson ? decideDefense(b, b.t, memo) : stewardDecide(b, b.t, memo, style))) issue(b, cmd);
+    step(b, TICK_SEC);
+    trackBattle(tracker, b);
+  }
+  const won = b.result === 'win';
+  // defenseReward settles every defense (a lost Vendetta resets its Grudge), then a loss is occupied
+  Frontier.defenseReward(state, world, run, won ? 'win' : 'lose', nowMs);
+  if (!won) Frontier.occupy(state, world, run.regionId, run.attackerFaction, nowMs);
+  bountyBattle(state, world, run, b, tracker, nowMs);
+  if (run.vendetta) { log.vendettas.n += 1; if (won) log.vendettas.won += 1; if (b.champion && b.champion.fellAt != null) log.vendettas.championFell += 1; }
+  settle(state, run, won ? 'win' : 'lose', nowMs);
+  if (genCtx) genCtx.log[general ? 'generalDefenses' : 'captainDefenses'] += 1;
+  const bucket = inPerson ? log.inPerson : log.steward;
+  bucket.n += 1;
+  if (won) bucket.won += 1;
+  const row = {
+    atSec: nowMs / 1000, region: raid.toRegionId, inPerson, won, sec: b.t, depth: raid.depth, first: !!raid.first,
+    winChance: est.winChance, ratio: est.ratio, forts: Forts.fortsOf(state, raid.toRegionId).length, vendetta: !!run.vendetta,
+    commander: general ? general.kind : null, level: general ? general.level : 0,
+  };
+  log.defenses.push(row);
+  if (!won) log.lost.push(row);
+  log.maxOccupied = Math.max(log.maxOccupied, Object.keys(state.occupation || {}).length);
+  return row;
+}
+
+/**
+ * World events (DESIGN §10.13) as a sensible player takes them: the Merchant's Renown when it costs at most a third of the gold in
+ * hand, the Duel always (fought in person, a short no-powers battle), the Plague is news.
+ */
+function eventsTick(state, world, endSec, dt, ctx) {
+  const { offered } = Events.tickEvents(state, world, endSec * 1000, dt);
+  if (!offered) return;
+  const log = ctx.log.events || (ctx.log.events = { merchant: 0, plague: 0, duel: 0, duelsWon: 0, accepted: 0 });
+  log[offered.kind] += 1;
+  if (offered.kind === 'merchant') {
+    const deal = offered.deals.find((d) => d.deal === 'renown');
+    if (deal && state.gold >= 3 * deal.gold && Events.acceptEvent(state, world, { deal: 'renown' })) log.accepted += 1;
+    else Events.declineEvent(state);
+  } else if (offered.kind === 'duel') {
+    Events.acceptEvent(state, world);
+    log.accepted += 1;
+    let run;
+    try { run = Events.duelRunFor(state, world, offered, null, { nowMs: endSec * 1000 }); } catch { return; }
+    const b = run.battle;
+    const memo = {};
+    while (!b.result && b.t < 300) {
+      for (const cmd of think(b, b.t)) issue(b, cmd);
+      for (const cmd of decideDefense(b, b.t, memo)) issue(b, cmd);
+      step(b, TICK_SEC);
+    }
+    if (Events.duelReward(state, world, run, b.result).renown > 0) log.duelsWon += 1;
+  } else {
+    Events.declineEvent(state); // the Plague applies by itself
+  }
+}
+
+/** Runs the raid scheduler over `dt` active seconds ending at `endSec` and fights whatever arrives. */
+function frontierTick(state, world, endSec, dt, ctx) {
+  if (!ctx.noEvents) eventsTick(state, world, endSec, dt, ctx);
+  const { announced, arrived } = Frontier.tickFrontier(state, world, endSec * 1000, dt);
+  ctx.log.announced += announced.length;
+  bountyEnsure(state, world);
+  if (!Frontier.inGrace(state)) {
+    // pace bookkeeping: rival-seconds of exposure, and the raids the rates promise (before caps and cooldowns)
+    for (const { faction } of Frontier.borderingRivals(state, world)) {
+      const rate = Frontier.raidRate(state, world, faction);
+      if (rate > 0) { ctx.log.rivalSec += dt; ctx.log.rateSec += rate * dt; }
+    }
+  }
+  if (announced.length && ctx.log.firstRaidSec == null) ctx.log.firstRaidSec = endSec;
+  for (const raid of arrived) {
+    // A person watches ONE battle at a time (DESIGN §10.5): during its own attack it watches the attack, and while one defense
+    // is being fought in person a second one that overlaps it is left to the Steward. Idle, it switches to a new raid for free.
+    const inPerson = ctx.mode !== 'playing' && endSec >= ctx.watchingUntil;
+    const row = fightRaid(state, world, raid, endSec * 1000, inPerson, ctx.log);
+    if (row && inPerson) ctx.watchingUntil = endSec + row.sec;
+  }
+}
+
+// --- Phase 4 (PLAN-PHASE4): the Bounty Board as a player takes it, with no special play: every contract it happens to meet is
+// claimed at once (the game's claimCompleted), nothing is rerolled. Off with --bounties=off.
+let bountyCtx = null; // { log } while a campaign with the board runs
+
+function bountyEnsure(state, world) {
+  if (bountyCtx) Bounties.ensureBounties(state, world);
+}
+
+function bountyClaim(state, world, done, nowMs) {
+  if (!bountyCtx || !done || !done.length) return;
+  const r = Bounties.claimCompleted(state, world, done, nowMs);
+  const log = bountyCtx.log;
+  log.completed += r.claimed.length;
+  log.gold += r.gold;
+  log.renown += r.renown;
+  log.xp += r.xp;
+  for (const c of r.claimed) log.byKind[c.kind] = (log.byKind[c.kind] || 0) + 1;
+}
+
+/** updateProsperity, with its level-ups handed to the board (as the game does). */
+function prosper(state, world, nowMs) {
+  const ups = updateProsperity(state, world, nowMs);
+  if (bountyCtx && ups.length) bountyClaim(state, world, Bounties.onProsperity(state, world, ups), nowMs);
+  return ups;
+}
+
+/** A finished battle, handed to the board through the game's own summary. */
+function bountyBattle(state, world, run, battle, tracker, nowMs) {
+  if (!bountyCtx) return;
+  const summary = battleSummaryFor(tracker, battle, run, world, state);
+  bountyClaim(state, world, Bounties.onBattleEnd(state, world, run, battle.result || 'retreat', summary), nowMs);
+}
+
 /**
  * Advances the simulated clock by `sec`, integrating income across prosperity level changes (DESIGN §5.6):
  * income steps up mid-wait when a region reaches its next level, so the jump is split at each one.
@@ -273,16 +544,21 @@ function buyingPass(state, world, conquestCount, flags, goldSpent) {
  */
 function advanceClock(state, world, wallSecRef, sec) {
   let left = sec;
-  for (let guard = 0; left > 1e-9 && guard < 256; guard++) {
+  const raids = raidCtx && raidCtx.state === state ? raidCtx : null;
+  for (let guard = 0; left > 1e-9 && guard < (raids ? 1e6 : 256); guard++) {
     const nowMs = wallSecRef.sec * 1000;
-    updateProsperity(state, world, nowMs);
+    prosper(state, world, nowMs);
     const change = nextProsperityChangeAt(state, world, nowMs); // ms, or null
-    const step = change == null ? left : Math.min(left, Math.max(1e-6, (change - nowMs) / 1000));
+    let step = change == null ? left : Math.min(left, Math.max(1e-6, (change - nowMs) / 1000));
+    if (raids) {
+      step = Math.min(step, FRONTIER.checkSec);
+      frontierTick(state, world, wallSecRef.sec + step, step, raids);
+    }
     tickIncome(state, world, step);
     wallSecRef.sec += step;
     left -= step;
   }
-  updateProsperity(state, world, wallSecRef.sec * 1000);
+  prosper(state, world, wallSecRef.sec * 1000);
 }
 
 /** Waits (analytically, exactly) until `cost` gold is in hand. False when income is zero and gold is short. */
@@ -360,7 +636,7 @@ function pickIntelPlan(state, world, conquestCount, flags, lossRatio) {
 /** Buys the plan with the real intel functions (gold is already in hand). */
 function applyIntelPlan(state, world, plan, goldSpent) {
   const before = state.gold;
-  if (!Intel.isScouted(state, plan.regionId)) Intel.scout(state, world, plan.regionId);
+  if (!Intel.isScouted(state, plan.regionId) && Intel.scout(state, world, plan.regionId) && bountyCtx) Bounties.onScout(state, world, plan.regionId);
   while (Intel.sabotageLevel(state, plan.regionId) < plan.levels) {
     if (!Intel.sabotage(state, world, plan.regionId)) break;
   }
@@ -379,6 +655,8 @@ function rankTargets(candidates, state, world) {
     const strength = Math.max(1e-6, c.diff.strength);
     let score = income / strength;
     if (!perkCounts[region.perk]) score *= PERK_PREFERENCE_MULT;
+    if (Frontier.occupationOf(state, c.regionId)) score *= RETAKE_PREFERENCE;
+    if (region.type) score *= TYPE_PREFERENCE[region.type] ?? 1; // Gold Mines and Monasteries make route choice matter (DESIGN §10.13)
     return { ...c, score };
   });
   scored.sort((a, b) => b.score - a.score || a.regionId - b.regionId);
@@ -387,25 +665,44 @@ function rankTargets(candidates, state, world) {
 
 // --- One battle attempt (or instant surrender) ------------------------------------------------
 function attemptConquest(state, world, regionId, wallSecRef, battleDurations, forceBattle = false) {
-  const diffAtAttack = difficulty(state, world, regionId);
+  const general = pickCommander(state, world, regionId, 'attack', wallSecRef.sec * 1000);
+  const diffAtAttack = difficulty(state, world, regionId, general ? { commander: general } : {}); // the card credits its commander
   const region = world.regions[regionId];
 
   if (diffAtAttack.surrender && !forceBattle) {
-    const { bounty } = conquer(state, world, regionId, wallSecRef.sec * 1000);
+    if (Frontier.occupationOf(state, regionId) && raidCtx) raidCtx.log.retakes.push({ atSec: wallSecRef.sec, region: regionId, label: diffAtAttack.label, ratio: diffAtAttack.ratio, surrender: true });
+    const conq = conquer(state, world, regionId, wallSecRef.sec * 1000);
+    const { bounty } = conq;
     const crowns = crownsForSurrender(); // a surrender earns Victory only (DESIGN §4.8)
     const award = awardCrowns(state, world, regionId, crowns, bounty);
     state.stats.surrenders += 1;
+    if (bountyCtx) bountyClaim(state, world, Bounties.onConquest(state, world, regionId, conq), wallSecRef.sec * 1000);
     return {
       won: true, surrendered: true, battleSec: 0, bounty, crowns, crownBonus: award.bonusGold, diffAtAttack, region,
       personality: world.factions[region.faction].personality,
     };
   }
 
-  const player = playerBattleStats(state, world, regionId);
+  // Quick Conquest (PLAN-PHASE5 §5D; --quick=off to fight every Easy region by hand): an Easy region is auto-resolved once the node is
+  // owned. It takes QUICK_SEC of the player's time (the overlay); a loss counts like any lost attack.
+  if (!forceBattle && quickCtx && Quick.canQuickConquer(state, world, regionId, { commander: general ? general.id : null }).ok) {
+    const job = Quick.createQuickConquest(state, world, regionId, { commander: general ? general.id : null, nowMs: wallSecRef.sec * 1000 });
+    while (!Quick.stepQuickConquest(job, 4000).done);
+    advanceClock(state, world, wallSecRef, QUICK_SEC);
+    const out = Quick.finishQuickConquest(state, world, job, wallSecRef.sec * 1000);
+    quickCtx.n += 1; if (out.won) quickCtx.won += 1;
+    if (out.won) {
+      return { won: true, surrendered: false, quick: true, battleSec: QUICK_SEC, bounty: out.conquerResult.bounty, crowns: out.crowns,
+        crownBonus: out.crownAward.bonusGold, diffAtAttack, region, timedOut: false, personality: world.factions[region.faction].personality };
+    }
+    return { won: false, surrendered: false, quick: true, battleSec: QUICK_SEC, diffAtAttack, region, timedOut: job.battle.result === 'retreat' };
+  }
+
+  const player = playerBattleStats(state, world, regionId, general ? { commander: general } : {});
   const enemy = enemyBattleStats(world, state, regionId);
   let arena;
   try {
-    arena = buildArena(world, state.owner, regionId, player, enemy);
+    arena = buildArena(world, state.owner, regionId, player, enemy, Frontier.attackArenaOpts(state, world, regionId));
   } catch {
     // Rare world-generation edge case (mirrors tools/balance.mjs's own real-world sweep):
     // `frontier()` treats two regions as adjacent whenever their graph-neighbour list says
@@ -427,15 +724,28 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
   const timedOut = !battle.result;
   if (hooks.onBattleEnd) hooks.onBattleEnd(battle, region, timedOut);
   const battleSec = timedOut ? capSec : battle.stats.durationSec;
+  if (raidCtx) raidCtx.mode = 'playing'; // the player watches its own attack: raids that land now are the Steward's
+  if (genCtx) genCtx.busy = general ? general.id : null; // and its General is busy
   advanceClock(state, world, wallSecRef, battleSec);
+  if (raidCtx) raidCtx.mode = 'idle';
+  if (genCtx) genCtx.busy = null;
+  settle(state, { kind: 'attack', regionId, commander: general ? general.id : null }, battle.result === 'win' && !timedOut ? 'win' : 'lose', wallSecRef.sec * 1000);
   battleDurations.push({
     band: bandFor(region), sec: battleSec, timedOut, won: battle.result === 'win',
     ratio: diffAtAttack.ratio, label: diffAtAttack.label, tier: region.tier, personality: enemy.personality,
     capital: region.isCapital, sites: region.settlements.length, regionId,
   });
 
+  const attackRun = { kind: 'attack', regionId, commander: general ? general.id : null, labelAtAttack: diffAtAttack.label };
   if (!timedOut && battle.result === 'win') {
-    const { bounty } = conquer(state, world, regionId, wallSecRef.sec * 1000);
+    const wasOccupied = !!Frontier.occupationOf(state, regionId);
+    const conq = conquer(state, world, regionId, wallSecRef.sec * 1000);
+    const { bounty } = conq;
+    if (bountyCtx) {
+      bountyBattle(state, world, attackRun, battle, tracker, wallSecRef.sec * 1000);
+      bountyClaim(state, world, Bounties.onConquest(state, world, regionId, conq), wallSecRef.sec * 1000);
+    }
+    if (wasOccupied && raidCtx) raidCtx.log.retakes.push({ atSec: wallSecRef.sec, region: regionId, label: diffAtAttack.label, ratio: diffAtAttack.ratio });
     const { crowns } = evaluateBattle(tracker, battle, world, regionId, state);
     const award = awardCrowns(state, world, regionId, crowns, bounty); // pays the bonus, never the base bounty twice
     state.stats.battlesWon += 1; // unlocks surrender offers (DESIGN §5.3), as the game's own results screen does
@@ -444,9 +754,25 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
       personality: enemy.personality,
     };
   }
+  onStreakBroken(state, timedOut ? 'retreat' : 'lost'); // a lost attack (or a retreat) ends the Conquest Streak (PLAN-PHASE4 §4B)
+  bountyBattle(state, world, attackRun, battle, tracker, wallSecRef.sec * 1000);
   return {
     won: false, surrendered: false, battleSec, diffAtAttack, region, timedOut,
   };
+}
+
+/** The share of the realm's region income that comes from prosperity bonuses now (DESIGN §5.6; Festivals raise it). */
+function prosperityShare(state, world) {
+  let base = 0;
+  let bonus = 0;
+  for (const region of world.regions) {
+    if (state.owner[region.id] !== PLAYER_FACTION) continue;
+    const inc = regionIncome(region);
+    const level = Array.isArray(state.prosperity) && Number.isInteger(state.prosperity[region.id]) ? state.prosperity[region.id] : 0;
+    base += inc;
+    bonus += inc * 0.05 * level;
+  }
+  return base > 0 ? bonus / (base + bonus) : 0;
 }
 
 /** How many frontier regions the card shows as Easy/Fair right now, and how many are Deadly. */
@@ -471,7 +797,7 @@ function frontierReadout(state, world) {
 export function runCampaign(seed, flags = {}, carry = null) {
   const world = carry ? carry.world : generateWorld(seed);
   const totalToConquer = Math.min(
-    world.regions.length - 1,
+    world.regions.length - 1 - (world.regions.some((x) => x.type === 'dragon') ? 1 : 0), // the optional Lair is not required
     flags.maxRegions ? Number(flags.maxRegions) : Infinity,
   );
   const state = carry ? carry.state : createGame(seed, world, 0);
@@ -489,8 +815,24 @@ export function runCampaign(seed, flags = {}, carry = null) {
   let offline = null;
   let checkins = 0;
   const lossRatio = new Map(); // region id -> the ratio the card showed when we last lost to it
+  // The Living Frontier: raids run along the clock (see the header). conquestCount is the NET number of regions held beyond the
+  // start, so a region lost to a raid has to be won back before the continent counts as whole.
+  const raidLog = newRaidLog();
+  raidCtx = flags.raids === 'off' ? null : { state, mode: 'idle', log: raidLog, watchingUntil: 0, noEvents: flags.events === 'off' };
+  if (!Array.isArray(state.battles)) state.battles = [];
+  // the Dragon's Lair is optional (DESIGN §10.13): the continent counts as whole without it, and it is attacked only when it reads
+  // Fair or better, like any region (so it is taken when ready, or left behind when the dynasty is founded)
+  const lairId = world.regions.findIndex((x) => x.type === 'dragon');
+  const netOwned = () => state.owner.reduce((n, o, id) => n + (o === PLAYER_FACTION && id !== lairId ? 1 : 0), 0) - 1;
+  const genLog = { xp: 0, festivals: 0, trains: 0, heals: 0, generalDefenses: 0, captainDefenses: 0 };
+  genCtx = flags.generals === 'off' ? null : { busy: null, noSpend: flags.renown === 'off', log: genLog };
+  const bountyLog = { completed: 0, gold: 0, renown: 0, xp: 0, byKind: {} };
+  bountyCtx = flags.bounties === 'off' ? null : { log: bountyLog };
+  if (genCtx) Generals.ensureGenerals(state);
+  const quickLog = { n: 0, won: 0 };
+  quickCtx = flags.quick === 'off' ? null : quickLog;
 
-  for (let iter = 0; iter < MAX_LOOP_ITERATIONS && conquestCount < totalToConquer; iter++) {
+  for (let iter = 0; iter < MAX_LOOP_ITERATIONS && (conquestCount = netOwned()) < totalToConquer; iter++) {
     if (wallSecRef.sec > (flags.checkinHours ? 90 * MAX_WALL_SEC : MAX_WALL_SEC)) {
       stallReason = `stalled: exceeded ${fmtSec(MAX_WALL_SEC)} of simulated wall-clock (well past the 4-7h whole-continent target) without finishing`;
       break;
@@ -498,10 +840,15 @@ export function runCampaign(seed, flags = {}, carry = null) {
     for (const b of buyingPass(state, world, conquestCount, flags, goldSpent)) {
       log.push({ t: wallSecRef.sec, kind: 'buy', ...b });
     }
+    spendRenown(state, world, wallSecRef.sec * 1000);
+    bountyEnsure(state, world);
 
     const candidates = [];
     for (const regionId of frontier(state, world)) {
-      const d = difficulty(state, world, regionId);
+      // The card a player sees, with its default commander's credit (DESIGN §10.11; PLAN-PHASE6 §6C made it the default);
+      // --card=plain reads it without the credit (the pre-Phase-6 campaign)
+      const cmdr = flags.card !== 'plain' ? pickCommander(state, world, regionId, 'attack', wallSecRef.sec * 1000) : null;
+      const d = difficulty(state, world, regionId, cmdr ? { commander: cmdr } : {});
       if (d.label !== 'Easy' && d.label !== 'Fair') continue;
       // A region that just beat us is tougher than its card says: wait until it reads clearly
       // better than it did when we lost, instead of feeding it the same army again.
@@ -519,8 +866,9 @@ export function runCampaign(seed, flags = {}, carry = null) {
       const awaySec = Number(flags.checkinHours) * 3600;
       state.lastSeen = wallSecRef.sec * 1000;
       offlineEarnings(state, world, state.lastSeen + awaySec * 1000);
+      if (raidCtx) raidLog.away.push(Frontier.resolveAway(state, world, awaySec * 1000, state.lastSeen));
       wallSecRef.sec += awaySec;
-      updateProsperity(state, world, wallSecRef.sec * 1000);
+      prosper(state, world, wallSecRef.sec * 1000);
       checkins += 1;
       continue;
     } else {
@@ -573,7 +921,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
 
     if (result.won) {
       battlesWon += result.surrendered ? 0 : 1;
-      conquestCount += 1;
+      conquestCount = netOwned();
       noProgress = 0;
       const waitSec = Math.max(0, wallSecRef.sec - result.battleSec - lastConquestWall);
       timeline.push({
@@ -615,8 +963,9 @@ export function runCampaign(seed, flags = {}, carry = null) {
         const awaySec = Number(flags.offlineHours || 3) * 3600;
         state.lastSeen = wallSecRef.sec * 1000;
         const off = offlineEarnings(state, world, state.lastSeen + awaySec * 1000);
+        if (raidCtx) raidLog.away.push(Frontier.resolveAway(state, world, awaySec * 1000, state.lastSeen));
         wallSecRef.sec += awaySec;
-        updateProsperity(state, world, wallSecRef.sec * 1000);
+        prosper(state, world, wallSecRef.sec * 1000);
         const spent = buyingPass(state, world, conquestCount, flags, goldSpent);
         offline = { atConquest: conquestCount, awaySec, paidSec: off.seconds, goldGained: off.gold, purchases: spent.length, returnedAtSec: wallSecRef.sec, easyFairOnReturn: frontierReadout(state, world).easyFair };
         for (const b of spent) log.push({ t: wallSecRef.sec, kind: 'buy', ...b });
@@ -637,6 +986,22 @@ export function runCampaign(seed, flags = {}, carry = null) {
     }
   }
 
+  raidCtx = null;
+  bountyCtx = null;
+  quickCtx = null;
+  const goals = {
+    bounties: bountyLog,
+    bestStreak: state.streak ? state.streak.best : 0,
+    trophies: Object.entries(state.trophies || {}).filter(([k]) => /^\d+$/.test(k)).reduce((a, [, v]) => a + v, 0),
+    deedTiers: deedProgress(state).reduce((a, d) => a + d.tier, 0),
+  };
+  const genSummary = genCtx ? {
+    ...genLog, renown: { ...Renown.ensureRenown(state) },
+    roster: Generals.ensureGenerals(state).roster.map((g) => ({ id: g.id, kind: g.kind, level: g.level })),
+    prosperityShare: prosperityShare(state, world),
+  } : null;
+  genCtx = null;
+  conquestCount = netOwned();
   const summary = summarize({
     world, timeline, log, battleDurations, goldSpent, battlesWon, battlesLost,
     conquestCount, totalToConquer, wallSec: wallSecRef.sec, stallReason,
@@ -644,6 +1009,11 @@ export function runCampaign(seed, flags = {}, carry = null) {
   const result = {
     seed, timeline, log, summary, stallReason, conquestCount, totalToConquer, battleDurations, offline,
     dynasty: state.dynasty.level, stars: state.dynasty.stars, checkins,
+    generals: genSummary,
+    goals,
+    quick: quickLog,
+    lairTaken: lairId >= 0 && state.owner[lairId] === PLAYER_FACTION,
+    raids: flags.raids === 'off' ? null : { ...raidLog, stats: { ...(state.frontier ? state.frontier.stats : {}) }, activeSec: state.frontier ? state.frontier.activeSec : 0 },
   };
   Object.defineProperty(result, 'endState', { value: { state, world }, enumerable: false }); // for runDynasties; not in --json
   return result;
@@ -664,13 +1034,45 @@ export function runDynasties(seed, count, flags = {}) {
     if (r.stallReason || level === count) break;
     const { state } = r.endState;
     const newSeed = hash32(seed, 'dynasty', level + 1);
-    const world = generateWorld(newSeed, { dynasty: state.dynasty.level + 1 });
-    const next = foundDynasty(state, newSeed, world);
+    // Phase 5 (PLAN-PHASE5 pacing guard): the Edict (--edict=first, the default: the first one offered; --edict=<id> forces one on
+    // every founding; --edict=none: standard rules), the Challenges (--challenges=a,b) and the Legacy bought greedily (--legacy=off: none)
+    const legacyBuys = flags.legacy === 'off' ? [] : greedyLegacy(state);
+    const edictFlag = flags.edict || 'first';
+    const edict = edictFlag === 'none' ? null : edictFlag === 'first'
+      ? edictChoices(state, newSeed, { legacyNodes: previewNodes(state, legacyBuys) })[0].id : edictFlag;
+    const challenges = flags.challenges ? String(flags.challenges).split(',') : [];
+    const next = foundDynasty(state, newSeed, undefined, r.endState.world, { edict, challenges, legacyBuys }); // an unslain Dragon's Lair does not block founding
     if (!next) break;
+    const world = generateWorld(newSeed, worldOptsFor(next));
+    resetRegions(next, world, state.lastSeen);
+    r.founding = { edict, legacyBuys: next.founding ? next.founding.bought : [] };
     Works.resetWorks(next); // a new continent: no Works (state.js's resetRegions does the same once integration has patched it)
     carry = { state: next, world };
   }
   return out;
+}
+
+/** The Legacy nodes a greedy player buys at a founding: the cheapest buyable node, again and again (tree order on a tie). */
+function greedyLegacy(state) {
+  const l = state.generals && state.generals.legacy ? state.generals.legacy : { v: 1, points: 0, spent: 0, nodes: {}, pendingBonus: 0 };
+  const sim = { generals: { legacy: { ...l, nodes: { ...l.nodes }, points: (l.points || 0) + legacyPointsForFounding(state) } } };
+  const order = legacyTree().flatMap((b) => b.nodes);
+  const buys = [];
+  for (let guard = 0; guard < 20; guard++) {
+    const info = legacyInfo(sim);
+    const pick = order.filter((n) => info.nodes[n.id] === 'buyable').sort((a, b) => a.cost - b.cost)[0];
+    if (!pick) break;
+    sim.generals.legacy.nodes[pick.id] = true;
+    sim.generals.legacy.spent += pick.cost;
+    buys.push(pick.id);
+  }
+  return buys;
+}
+
+function previewNodes(state, buys) {
+  const nodes = { ...((state.generals && state.generals.legacy && state.generals.legacy.nodes) || {}) };
+  for (const id of buys) nodes[id] = true;
+  return nodes;
 }
 
 // --- Summary ------------------------------------------------------------------------------
@@ -794,6 +1196,7 @@ function printSeedReport(r, flags) {
   }
 
   const s = r.summary;
+  if (r.raids) printRaids([r], '  ');
   console.log('\n-- summary --');
   console.log(`  time to 1st conquest:  ${fmtSec(s.milestones.first)}`);
   console.log(`  time to 5 regions:     ${fmtSec(s.milestones.five)}`);
@@ -889,7 +1292,50 @@ function aggregate(results) {
       return per;
     })(),
     stalls: results.filter((r) => r.stallReason).map((r) => ({ seed: r.seed, at: r.conquestCount, reason: r.stallReason })),
+    raidResults: results.filter((r) => r.raids),
+    genResults: results.map((r) => r.generals).filter(Boolean),
   };
+}
+
+/** The Living Frontier table (DESIGN §10): pace, defense odds in person and by the Steward, losses, retakes. */
+export function raidTable(results) {
+  const all = results.map((r) => r.raids).filter(Boolean);
+  const sum = (fn) => all.reduce((a, x) => a + fn(x), 0);
+  const defenses = all.flatMap((x) => x.defenses);
+  const pct = (a, b) => (b > 0 ? Math.round((100 * a) / b) : null);
+  const band = (rows) => ({ n: rows.length, won: rows.filter((d) => d.won).length, pct: pct(rows.filter((d) => d.won).length, rows.length) });
+  const early = (d) => d.depth < 2.5;
+  const retakes = all.flatMap((x) => x.retakes);
+  const firsts = all.map((x) => x.firstRaidSec).filter((v) => v != null);
+  return {
+    seeds: all.length,
+    announced: sum((x) => x.announced),
+    perRivalPer10Min: sum((x) => x.rivalSec) > 0 ? sum((x) => x.announced) / (sum((x) => x.rivalSec) / 600) : null,
+    promisedPerRivalPer10Min: sum((x) => x.rivalSec) > 0 ? sum((x) => x.rateSec) / (sum((x) => x.rivalSec) / 600) : null,
+    firstRaidMedianSec: median(firsts),
+    inPerson: band(defenses.filter((d) => d.inPerson)),
+    inPersonEarly: band(defenses.filter((d) => d.inPerson && early(d))),
+    steward: band(defenses.filter((d) => !d.inPerson)),
+    stewardEarly: band(defenses.filter((d) => !d.inPerson && early(d))),
+    fortified: band(defenses.filter((d) => d.forts >= 2)),
+    lostPerSeed: all.map((x) => x.lost.length),
+    maxOccupied: Math.max(0, ...all.map((x) => x.maxOccupied)),
+    retakes: retakes.length,
+    retakeLabels: retakes.reduce((m, x) => { m[x.label] = (m[x.label] || 0) + 1; return m; }, {}),
+    awayRaids: sum((x) => x.away.reduce((a, rep) => a + rep.raids.length, 0)),
+    awayLost: sum((x) => x.away.reduce((a, rep) => a + rep.lost.length, 0)),
+    predicted: defenses.length ? defenses.reduce((a, d) => a + d.winChance, 0) / defenses.length : null,
+    actual: defenses.length ? defenses.filter((d) => d.won).length / defenses.length : null,
+  };
+}
+
+function printRaids(results, pad = '') {
+  const t = raidTable(results);
+  const f = (b) => (b.n ? `${b.pct}% of ${b.n}` : 'n/a');
+  console.log(`${pad}living frontier: ${t.announced} raids, ${t.perRivalPer10Min == null ? 'n/a' : t.perRivalPer10Min.toFixed(2)} per bordering rival per 10 min (rates promise ${t.promisedPerRivalPer10Min == null ? 'n/a' : t.promisedPerRivalPer10Min.toFixed(2)}), first raid at ${fmtSec(t.firstRaidMedianSec)} (median)`);
+  console.log(`${pad}  held in person ${f(t.inPerson)} (early war bands ${f(t.inPersonEarly)}); by the Militia Captain ${f(t.steward)} (early ${f(t.stewardEarly)}); with 2+ fortifications ${f(t.fortified)}`);
+  console.log(`${pad}  label check: predicted ${t.predicted == null ? 'n/a' : (100 * t.predicted).toFixed(0)}% vs held ${t.actual == null ? 'n/a' : (100 * t.actual).toFixed(0)}%`);
+  console.log(`${pad}  regions lost per seed [${t.lostPerSeed.join(',')}], most occupied at once ${t.maxOccupied}; retakes ${t.retakes} (${Object.entries(t.retakeLabels).map(([k, v]) => k + ' ' + v).join(', ') || '-'}); away raids ${t.awayRaids}, lost away ${t.awayLost}`);
 }
 
 const fmtMaybe = (sec) => (sec == null || !Number.isFinite(sec) ? 'never' : formatDuration(sec));
@@ -927,6 +1373,13 @@ function printAggregate(agg, seeds) {
   if (agg.worksShare) console.log(`  median share of all gold spent on Region Works: ${(agg.worksShare * 100).toFixed(1)}%`);
   console.log('  frontier regions readable as Easy/Fair right after conquest n (seeds with NONE before / after shopping, median after):');
   for (const [n, v] of Object.entries(agg.earlyReadout)) console.log(`    after conquest ${n}: none before shop ${v.noneBefore}/${v.seeds}, none after shop ${v.noneAfter}/${v.seeds}, median ${v.median}`);
+  if (agg.raidResults.length) printRaids(agg.raidResults, '  ');
+  const gens = agg.genResults;
+  if (gens.length) {
+    const m = (fn) => median(gens.map(fn));
+    console.log(`  generals and renown (medians per seed): Renown earned ${m((g) => g.renown.earned)} (crowns ${m((g) => g.renown.log.crown)}, defenses ${m((g) => g.renown.log.defense)}, retakes ${m((g) => g.renown.log.retake)}, capitals ${m((g) => g.renown.log.capital)}), festivals ${m((g) => g.festivals)}, trainings ${m((g) => g.trains)}, heals ${m((g) => g.heals)}`);
+    console.log(`    Marshal level ${m((g) => g.roster.find((x) => x.id === 'marshal').level)}, roster size ${m((g) => g.roster.length)}; raids commanded by a General ${m((g) => g.generalDefenses)} vs the Captain ${m((g) => g.captainDefenses)}; prosperity share of region income at the end ${(100 * m((g) => g.prosperityShare)).toFixed(1)}%`);
+  }
   if (agg.stalls.length) {
     console.log('  STALLS:');
     for (const st of agg.stalls) console.log(`    seed ${st.seed} at region ${st.at}: ${st.reason}`);
@@ -962,6 +1415,15 @@ function printDynasties(seeds, flags) {
     const d1 = median(all.map((a) => a[0].summary.milestones.all ?? Infinity));
     const dm = median(times.map((t) => t ?? Infinity));
     console.log(`  D${d + 1}: median ${hrs(Number.isFinite(dm) ? dm : null)} (${Number.isFinite(dm) && Number.isFinite(d1) ? (dm / d1).toFixed(2) : '-'}x of D1); longest wait over 40 min on ${waits.filter((w) => w > 40).length} of ${waits.length} seeds, worst ${Math.round(Math.max(...waits))} min`);
+    const rs = all.map((a) => a[d]).filter(Boolean);
+    const med = (fn) => median(rs.map(fn));
+    const v = rs.reduce((acc, r) => { const x = r.raids ? r.raids.vendettas : null; if (x) { acc.n += x.n; acc.won += x.won; acc.fell += x.championFell; } return acc; }, { n: 0, won: 0, fell: 0 });
+    const kinds = {};
+    for (const r of rs) for (const [k, n] of Object.entries(r.goals ? r.goals.bounties.byKind : {})) kinds[k] = (kinds[k] || 0) + n;
+    const q = rs.reduce((acc, r) => ({ n: acc.n + (r.quick ? r.quick.n : 0), won: acc.won + (r.quick ? r.quick.won : 0) }), { n: 0, won: 0 });
+    const edicts = d > 0 ? all.map((a) => (a[d - 1] && a[d - 1].founding ? a[d - 1].founding.edict || '-' : '-')) : [];
+    if (d > 0) console.log(`      phase 5: Edicts ${edicts.join(' ')}; Legacy bought ${all[0][d - 1] && all[0][d - 1].founding ? all[0][d - 1].founding.legacyBuys.join('+') || '-' : '-'} (seed ${seeds[0]}); Quick Conquests ${q.won}/${q.n}`);
+    console.log(`      goals: contracts ${med((r) => r.goals.bounties.completed)} per seed (${Math.round(med((r) => r.goals.bounties.gold))}g), best streak ${med((r) => r.goals.bestStreak)}, vendettas ${v.n} (won ${v.won}, champion fell ${v.fell}), trophies ${med((r) => r.goals.trophies)}, deed tiers ${med((r) => r.goals.deedTiers)}; by kind ${Object.entries(kinds).map(([k, n]) => k + ' ' + n).join(', ')}`);
   }
 }
 

@@ -4,12 +4,15 @@ import { BATTLE, POWERS } from '../config/battle.js';
 import { ownerStats } from './combat.js';
 import { getRuntime } from './runtime.js';
 import { PLAYER_OWNER } from './owner.js';
+import { marchSpeedMult } from './features.js';
 import { squadPosition } from './position.js';
 
 function squadSpeed(battle, squad, t) {
   const stats = ownerStats(squad.owner, battle.player, battle.arena.enemyFaction, battle.enemy);
   const marchActive = squad.owner === PLAYER_OWNER && t < battle.effects.marchUntil;
-  return BATTLE.baseSpeed * stats.speed * (marchActive ? POWERS.march.mult : 1);
+  // Charge squads march faster; Foresight slows every enemy squad for a while (DESIGN §10.11, battle/abilities.js)
+  const slowed = squad.owner !== PLAYER_OWNER && t < (battle.effects.slowUntil ?? 0) ? 1 - (battle.effects.slow ?? 0) : 1;
+  return BATTLE.baseSpeed * stats.speed * (marchActive ? POWERS.march.mult : 1) * (squad.speedMult ?? 1) * slowed * marchSpeedMult(battle);
 }
 
 /** A squad arriving at a site owned by someone else starts or joins an assault; arriving
@@ -98,6 +101,8 @@ export function mergeSquads(battle) {
       if (b.owner !== a.owner || b.to !== a.to) continue;
       if (a.path[a.seg] !== b.path[b.seg]) continue;
       if (Math.abs(a.prog - b.prog) > EPS) continue;
+      if ((a.power ?? 1) !== (b.power ?? 1) || (a.speedMult ?? 1) !== (b.speedMult ?? 1) || !!a.noArrows !== !!b.noArrows) continue; // a Charge or Raid squad keeps its own traits
+      if (a.champion || b.champion) continue; // a Vendetta's Champion is always its own squad (battle/champion.js)
       a.count += b.count;
       merged.add(b.id);
     }

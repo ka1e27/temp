@@ -22,11 +22,13 @@
 // The AI never emits `power` commands: EnemyStats has no powers (ARCHITECTURE §6). Everything
 // below is phrased as "my faction vs a target site", so an enemy powers pass would be additive.
 import { BATTLE, SITE_TYPES, POWERS } from '../config/battle.js';
-import { ownerStats, PLAYER_OWNER } from './combat.js';
+import { FRONTIER } from '../config/frontier.js';
+import { ownerStats, siteDefence, PLAYER_OWNER } from './combat.js';
 import { getRuntime } from './runtime.js';
 import { routeCost, canRoute } from './routing.js';
+import { UNDYING_AI } from '../config/ashen.js';
 
-const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90 };
+const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90, bandit: 40, gate: 60, shrine: 70 };
 
 // Personality tuning. `reserve`: fraction of a site's usual garrison it never sends out (keeps and
 // threatened sites hold more, see holdBack). `keepGuard`: the keep insists on holding this
@@ -51,6 +53,7 @@ const PERSONALITY = {
     reserve: 0.25, keepGuard: 0.7, margin: 1.0, maxCommit: 0.5, waves: 3, thinkMult: 0.6, open: 2,
     extend: 1.5, softOnly: false, neutrals: true, losing: 0.4, sources: 2,
   },
+  undying: UNDYING_AI.tuning, // the Ashen Host (PLAN-PHASE6): holds thickly, counterattacks once you've spent troops (attritionWindow)
   passive: {
     reserve: 0.6, keepGuard: 1.6, margin: 1.2, maxCommit: 1.0, waves: 0, thinkMult: 1.1, open: 0,
     extend: 1, softOnly: true, neutrals: false, losing: 0, sources: 3,
@@ -64,8 +67,24 @@ const COUNTER_COOLDOWN = 14;
 const PEAK_DECAY = 0.97;  // per think: a site's remembered peak fades so a permanently smaller site stops holding back
 const KEEP_TOPUP = 0.9;
 
-function tuning(personality) {
-  return PERSONALITY[personality] || PERSONALITY.aggressive;
+const raidCache = new Map();
+
+/**
+ * The faction's tuning. In a defense battle (DESIGN §10.1: a war band raiding the player) every personality plays as a raider
+ * (FRONTIER.raidAI overrides: no keep of its own to guard, little reserve, always attacking), keeping only its think rate.
+ */
+function tuning(personality, battle) {
+  const base = PERSONALITY[personality] || PERSONALITY.aggressive;
+  if (!battle || battle.mode !== 'defense') return base;
+  let p = raidCache.get(base);
+  if (!p) raidCache.set(base, (p = { ...base, ...FRONTIER.raidAI.tuning }));
+  return p;
+}
+
+/** Defense battles: how hard the raid presses now. 0 for the first half of the siege, rising to 1 as the timer runs out. */
+function raidUrgency(battle, t) {
+  if (battle.mode !== 'defense' || !(battle.siegeSec > 0)) return 0;
+  return Math.max(0, Math.min(1, (t / battle.siegeSec - FRONTIER.raidAI.urgencyFrom) / (1 - FRONTIER.raidAI.urgencyFrom)));
 }
 
 // --- geometry / projection ----------------------------------------------------------------
@@ -110,7 +129,7 @@ function buildContext(battle, t) {
   const { player, enemy, arena } = battle;
   const me = arena.enemyFaction;
   const myStats = ownerStats(me, player, me, enemy);
-  const p = tuning(enemy.personality);
+  const p = tuning(enemy.personality, battle);
   const marchMult = t < battle.effects.marchUntil ? POWERS.march.mult : 1;
   const ctx = {
     battle, t, me, p, myStats,
@@ -158,7 +177,17 @@ function buildContext(battle, t) {
     if (to && to.owner !== me) addTo(ctx.coverage, to.id, plan.count * ctx.myUnit);
     addTo(ctx.planned, plan.from, plan.count);
   }
+  if (ctx.p.attrition) ctx.p = attritionWindow(battle, ctx);
   return ctx;
+}
+
+/** The 'undying' attrition window (config/ashen.js UNDYING_AI): once the player's strength falls under `spentAt` x its decaying peak,
+ * this think plays with the window's overrides (it strikes while you rebuild). The peak lives in memo (plain JSON). */
+function attritionWindow(battle, ctx) {
+  const memo = battle.ai.memo;
+  memo.plPeak = Math.max(ctx.plStrength, (memo.plPeak || 0) * UNDYING_AI.peakDecay);
+  if (ctx.plStrength >= UNDYING_AI.spentAt * memo.plPeak) return ctx.p;
+  return { ...ctx.p, ...UNDYING_AI.window };
 }
 
 function addTo(map, key, amount) {
@@ -166,7 +195,7 @@ function addTo(map, key, amount) {
 }
 
 function siteDef(site, t) {
-  return SITE_TYPES[site.type].def * (t < site.bulwarkUntil ? POWERS.bulwark.mult : 1);
+  return siteDefence(site) * (t < site.bulwarkUntil ? POWERS.bulwark.mult : 1);
 }
 
 /** Per-troop defensive strength of a site for whoever holds it. */
@@ -241,6 +270,7 @@ function defend(ctx, commands, spent) {
     const assault = assaultStrength(ctx, site);
     const attack = (inc ? inc.strength : 0) + assault;
     if (attack <= 0) continue;
+    if (site.type === 'gate') continue; // the Gate is a wall: it holds with its own garrison, never refilled from the keep (DESIGN §10.13)
     const eta = assault > 0 ? 0 : inc.eta;
     const unit = defUnit(ctx, site);
     const garrison = projectTroops(site, eta) + friendlyEnRoute(ctx, site);
@@ -309,8 +339,10 @@ function evaluate(ctx, target, sources, spent, margin) {
   const garrison = projectTroops(target, arrive) + (ctx.reinf.get(target.id) || 0);
   const need = garrison * unit * margin;
   const covered = ctx.coverage.get(target.id) || 0;
-  if (covered >= need * 0.9) return { covered: true, target };
-  const short = need - covered;
+  // a raid trusts squads already committed less (they arrive in dribbles a regrowing, Levied, Bulwarked keep eats): FRONTIER.raidAI.coverTrust
+  const trust = ctx.battle.mode === 'defense' ? FRONTIER.raidAI.coverTrust : 1;
+  if (covered >= need * trust * 0.9) return { covered: true, target };
+  const short = need - covered / trust;
   const picked = [];
   let pooled = 0;
   for (const s of nearest) {
@@ -320,7 +352,7 @@ function evaluate(ctx, target, sources, spent, margin) {
     pooled += avail * ctx.myUnit;
     if (pooled >= short || picked.length >= ctx.p.sources) break;
   }
-  if (pooled < short) return null;
+  if (pooled < short || picked.length === 0) return null;
   return { target, short, picked, pooled, need, unit };
 }
 
@@ -331,6 +363,7 @@ function scoreTarget(ctx, ev, p) {
   const soft = isSoft(ctx, t);
   if (soft) value *= p.extend;
   if (t.type === 'camp' && t.troops < 0.5 * (ctx.peak[t.id] || 0)) value *= 1.5; // the player's lifeline, left weak
+  if (ctx.battle.mode === 'defense' && t.owner === PLAYER_OWNER && t.type === 'keep') value *= FRONTIER.raidAI.keepValue; // the raid's objective
   const eta = ev.picked[ev.picked.length - 1].eta;
   const cost = 0.5 + ev.short / Math.max(1, ev.pooled);
   return { score: value / ((eta + 4) * cost), soft };
@@ -371,7 +404,7 @@ function attack(ctx, commands, spent) {
   for (let wave = liveWaves(ctx); wave < p.waves; wave++) {
     let best = null;
     for (const target of candidates) {
-      const ev = evaluate(ctx, target, sources, spent, p.margin);
+      const ev = evaluate(ctx, target, sources, spent, p.margin * (1 - FRONTIER.raidAI.urgencyMarginDrop * raidUrgency(ctx.battle, ctx.t)));
       if (!ev || ev.covered) continue;
       const { score, soft } = scoreTarget(ctx, ev, p);
       // A defensive faction does not go looking for a fight: soft targets only, or a target
@@ -450,7 +483,7 @@ export function think(battle, t) {
   if (!battle.ai.memo) battle.ai.memo = {};
   const commands = runPlans(battle, t, me);
   if (t < battle.ai.nextThink) return commands;
-  const p = tuning(enemy.personality);
+  const p = tuning(enemy.personality, battle);
   battle.ai.nextThink = t + Math.max(0.1, (enemy.thinkSec || 2) * p.thinkMult);
 
   const ctx = buildContext(battle, t);

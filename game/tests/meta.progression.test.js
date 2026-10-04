@@ -217,7 +217,7 @@ test('foundDynasty: awards starBase + completed dynasty level in stars, resets g
   assert.deepEqual(next.upgrades, { rally: 1 });
   assert.equal(next.stats.battlesWon, 7, 'lifetime stats carry over');
   assert.equal(next.tutorial.done, true);
-  assert.equal(next.battle, null);
+  assert.deepEqual(next.battles, [], 'no battle crosses into the new continent');
   assert.deepEqual(next.owner, [], 'owner is empty until resetRegions runs on the new world');
 });
 
@@ -228,4 +228,29 @@ test('foundDynasty: with a world already in hand, also repopulates owner/conquer
   const next = foundDynasty(state, 42, world);
   assert.deepEqual(next.owner, world.regions.map((r) => r.faction));
   assert.equal(next.conqueredAt[world.startRegion], 12345);
+});
+
+test('conquestBounty is what conquer pays: the full bounty, or the retake share for an occupied region; crownsPayable', async () => {
+  const { conquestBounty, crownsPayable, conquer } = await import('../meta/progression.js');
+  const { bounty } = await import('../meta/economy.js');
+  const { occupy } = await import('../meta/frontierState.js');
+  const { FRONTIER } = await import('../config/frontier.js');
+  const { generateWorld } = await import('../world/generate.js');
+  const { createGame } = await import('../meta/state.js');
+  const world = generateWorld(7);
+  const state = createGame(7, world, 0);
+  const id = world.regions.find((r) => state.owner[r.id] !== 0 && r.neighbors.includes(world.startRegion)).id;
+  assert.equal(conquestBounty(state, world, id), bounty(state, world, id));
+  let g0 = state.gold;
+  conquer(state, world, id, 1000);
+  assert.ok(Math.abs(state.gold - g0 - bounty(state, world, id)) < 1e-6 || state.gold - g0 > 0);
+  state.crowns[id] = { victory: true, swift: false, unbroken: false };
+  occupy(state, world, id, 2, 2000);
+  const want = conquestBounty(state, world, id);
+  const { projectedStreakMultiplier } = await import('../meta/streak.js'); // PLAN-PHASE4 §4B: the streak the win would make
+  assert.ok(Math.abs(want - bounty(state, world, id) * FRONTIER.reward.retakeBountyShare * projectedStreakMultiplier(state)) < 1e-6, 'the retake share');
+  assert.equal(crownsPayable(state, id), false, 'it keeps its crowns: none are paid again');
+  g0 = state.gold;
+  const res = conquer(state, world, id, 3000);
+  assert.ok(Math.abs(state.gold - g0 - want) < 1e-6 && Math.abs(res.bounty - want) < 1e-6, 'conquer paid exactly conquestBounty');
 });

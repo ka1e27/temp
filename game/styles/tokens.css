@@ -52,6 +52,10 @@
   --faction-crimson: #c63932;
   --faction-violet: #6d1b99;
   --faction-amber: #f29e38;
+  --faction-ashen: #5c5b64; /* slate (Phase 6) */
+  --ashen-bone: #e6dcc4;
+  --ashen-glow: #a9dfd6; /* the cold ember glow: the faction's light variant */
+  --ember-burn: #ff8a3d; /* Firestorm burning the dead */
 
   /* --- Type --------------------------------------------------------------- */
   --font-title: 'Cinzel', Georgia, serif;

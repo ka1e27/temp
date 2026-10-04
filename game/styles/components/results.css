@@ -28,7 +28,8 @@
   letter-spacing: 0.08em;
   line-height: 1;
 }
-.results-card[data-result='victory'] .results-banner {
+.results-card[data-result='victory'] .results-banner,
+.results-card[data-result='duelWon'] .results-banner {
   background: linear-gradient(180deg, #ffe9a8, var(--gold) 60%, #e0a82e);
   -webkit-background-clip: text;
   background-clip: text;
@@ -37,6 +38,7 @@
 }
 .results-card[data-result='defeat'] .results-banner { color: var(--bad); }
 .results-card[data-result='retreat'] .results-banner { color: var(--text-muted); }
+.results-card[data-result='duelLost'] .results-banner { color: var(--text-muted); } /* a Duel lost costs nothing (DESIGN 10.13): no alarm red */
 
 .results-region {
   font-family: var(--font-title);

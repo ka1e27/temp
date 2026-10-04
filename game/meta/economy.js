@@ -7,6 +7,9 @@ import { UPGRADES, levelOf } from './upgrades.js';
 import { perkMultipliers } from './perks.js';
 import { prosperityIncomeMult } from './prosperity.js';
 import { worksIncomeMult } from './worksEffects.js'; // the leaf (DESIGN §5.8): a Market raises its own region's income
+import { typeIncomeMult } from './featuresState.js'; // the leaf (DESIGN §10.13): a Gold Mine pays more
+import { deedBonuses } from './deeds.js'; // the leaf (PLAN-PHASE4 §4C): the Conqueror and Crowned deeds
+import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Age of Iron -15% income
 
 /**
  * Gold/s a single region pays, before taxes/perks/dynasty stars.
@@ -30,13 +33,13 @@ export function incomePerSec(state, world) {
   let sum = 0;
   for (const region of world.regions) {
     if (state.owner[region.id] === PLAYER_FACTION) {
-      sum += regionIncome(region) * prosperityIncomeMult(state, region.id) * worksIncomeMult(state, region.id);
+      sum += regionIncome(region) * prosperityIncomeMult(state, region.id) * worksIncomeMult(state, region.id) * typeIncomeMult(region); // a Gold Mine +25%
     }
   }
   const taxMult = 1 + levelOf(state, 'taxes') * UPGRADES.taxes.magnitude;
   const perks = perkMultipliers(state, world);
   const starMult = 1 + state.dynasty.stars * DYNASTY.incomePerStar;
-  return sum * taxMult * perks.income * starMult;
+  return sum * taxMult * perks.income * starMult * deedBonuses(state).incomeMult * edictMods(state).incomeMult;
 }
 
 /**
@@ -90,5 +93,5 @@ export function bounty(state, world, regionId) {
   const plunderMult = 1 + levelOf(state, 'plunder') * UPGRADES.plunder.magnitude;
   const perks = perkMultipliers(state, world);
   const starMult = 1 + state.dynasty.stars * DYNASTY.bountyPerStar;
-  return ECONOMY.bountySeconds * incomePerSec(state, world) * plunderMult * perks.bounty * starMult;
+  return ECONOMY.bountySeconds * incomePerSec(state, world) * plunderMult * perks.bounty * starMult * deedBonuses(state).bountyMult;
 }

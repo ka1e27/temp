@@ -17,7 +17,15 @@ import { createBattleHud } from './ui/battleHud.js';
 import { createResults } from './ui/results.js';
 import { createTitle } from './ui/title.js';
 import { createToasts } from './ui/toasts.js';
+import { createBattleTray } from './ui/battleTray.js';
+import { createGeneralsPanel, generalEmblem } from './ui/generalsPanel.js';
+import { createModal } from './ui/modal.js';
+import { recordChronicle } from './meta/chronicle.js';
+import { assign, generalById, freeGenerals } from './meta/generals.js';
+import { playerBattleStats } from './meta/progression.js';
+import { GENERALS } from './config/generals.js';
 import { onDialogChange } from './ui/dialogs.js';
+import { announce } from './ui/live.js';
 import { createSettings } from './ui/settings.js';
 import { createCoach } from './ui/coach.js';
 import { createRealm } from './ui/realm.js';
@@ -37,10 +45,24 @@ import { createSceneManager } from './scenes/flow.js';
 import { createTitleScene } from './scenes/title.js';
 import { createWorldScene } from './scenes/world.js';
 import { createBattleScene } from './scenes/battle.js';
+import { createBattleManager } from './app/battles.js';
+import { createFrontierLoop } from './app/frontierLoop.js';
+import { createEventsLoop } from './app/eventsLoop.js';
+import { createGoals } from './app/goals.js';
+import { createDynasty } from './app/dynasty.js';
+import { commanderFor as edictCommander, edictMods } from './meta/edicts.js';
+import { createQuickConquest } from './app/quickConquest.js';
+import { createCeremony } from './ui/ceremony.js';
+import { createQuickOverlay } from './ui/quickOverlay.js';
+import { dynastyStarText } from './app/perkInfo.js';
+import { FEATURES as MAP_FEATURES } from './config/features.js';
+import { FEATURES } from './app/features.js';
+import { PLAYER_OWNER } from './battle/owner.js';
 import { BOOT, WORLD_SCENE } from './scenes/timing.js';
 
 import { loadFrom, exportCode, importCode, SAVE_KEY } from './meta/save.js';
 import { offlineEarnings } from './meta/economy.js';
+import { resolveAway, awayReportText } from './meta/frontier.js';
 import { offlineCapHours } from './app/income.js';
 import { CROWN_TEXTS } from './app/crownCopy.js';
 import { createLeaderVoice } from './meta/leaders.js';
@@ -72,10 +94,12 @@ function getStorage() {
 
 /** Welcome-card form of level-ups: [{ name, level }]. */
 /** The one door every prosperity tick goes through: the level-ups, and the realm's story hears about a first Prosperity III (Keepsakes). The story can never break the tick. */
+let prosperityHook = null; // Phase 4: the Bounty Board hears every level-up (app/goals.js onProsperity), once the services exist
 function runProsperity(state, world, now) {
   const ups = updateProsperity(state, world, now);
   if (ups.length) {
     try { chronicleOnProsperity(state, world, ups, { t: now }); } catch (err) { console.warn('[chronicle] prosperity line skipped:', err); }
+    if (prosperityHook) prosperityHook(ups);
   }
   return ups;
 }
@@ -128,6 +152,15 @@ function boot() {
   // Welcome-back is a celebration of gold already granted (DESIGN §5.1) —
   // credit it once, right at boot, regardless of which scene shows first.
   let pendingWelcome = null;
+  /** The away trickle (DESIGN 10.10, meta/frontier.js resolveAway), after offlineEarnings: its welcome-card line, or null when nothing happened. */
+  function awayReport(state, world, awaySec) {
+    if (!FEATURES.frontier || !(awaySec > 0)) return null;
+    try {
+      const report = resolveAway(state, world, awaySec * 1000, Date.now());
+      const text = awayReportText(report, world);
+      return text ? { text, lost: report.lost.length } : null;
+    } catch (err) { console.warn('[frontier] the away report failed:', err); return null; }
+  }
   let bootProsperity = []; // level-ups the welcome card did not take (an absence too short for it)
   if (resumed) {
     // a save with no usable clock (sanitised to 0) was not away "since 1970": treat it as seen just now (no welcome-back for a clock that never ran)
@@ -139,10 +172,11 @@ function boot() {
     const awaySec = Math.max(0, (Date.now() - bootState.lastSeen) / 1000); // the REAL absence: offlineEarnings pays (and reports) only the capped part
     const off = offlineEarnings(bootState, bootWorld, Date.now());
     const ups = runProsperity(bootState, bootWorld, Date.now());
-    if (off.seconds >= WORLD_SCENE.welcomeBackMinSec && off.gold > 0.05) {
+    const away = awayReport(bootState, bootWorld, awaySec); // the gentle trickle of attacks while away (DESIGN 10.10), after the gold
+    if ((off.seconds >= WORLD_SCENE.welcomeBackMinSec && off.gold > 0.05) || away) {
       pendingWelcome = {
         timeAwaySec: awaySec, goldEarned: off.gold, prospered: prosperedList(bootWorld, ups),
-        capHours: offlineCapHours(bootState), capped: awaySec > off.seconds + 1,
+        capHours: offlineCapHours(bootState), capped: awaySec > off.seconds + 1, away: away ? away.text : '', awayLoss: !!(away && away.lost),
         epoch: container.epoch, // made for THIS realm: New Realm, a reset, an import or a new dynasty drops it (it used to survive them and show as a ghost welcome with negative gold)
       };
     } else {
@@ -188,6 +222,8 @@ function boot() {
   // --- shared state helpers ----------------------------------------------------
   const cur = () => container.get();
   let sessionStarted = false; // becomes true once the player enters the world scene
+  let battlesRef = null; // the battle manager (created with the services, below)
+  let frontierRef = null; // the frontier loop (likewise)
 
   function hasSaveOnDisk() {
     try { return loadFrom(storage) != null; } catch { return false; }
@@ -233,6 +269,9 @@ function boot() {
     renderer.ambient.rebuild({ owner: state.owner, prosperity: state.prosperity });
     renderer.ambient.prewarm(fit * 1.25);
     purgeStalePending(); // the realm was replaced (import, reset, new dynasty, reseed): nothing queued for the old one may show in the new one
+    if (battlesRef) battlesRef.reset(); // so were its running battles (state.battles): forget the old runtimes
+    if (frontierRef) frontierRef.reset();
+    if (services && services.goals) services.goals.reset();
   }
 
   const autosave = createAutosave({
@@ -274,7 +313,13 @@ function boot() {
   const goto = {
     title: (payload) => { ui.leaderBanner.hide(); music.setScene('title'); sceneManager.goto('title', titleScene, payload); },
     world: (payload) => { ui.leaderBanner.hide(); music.setScene('world'); sceneManager.goto('world', worldScene, payload); },
-    battle: (payload) => { ui.leaderBanner.hide(); music.setScene('battle'); sceneManager.goto('battle', battleScene, payload); },
+    battle: (payload) => {
+      ui.leaderBanner.hide();
+      // the map's celebrations (a Deed, a fulfilled contract, a Trophy) leave as a battle opens: their close buttons would sit over the field (PLAN-PHASE4)
+      for (const n of ui.toasts.el.querySelectorAll('.toast.is-deed, .toast.is-sealed')) ui.toasts.dismissId(n.dataset.id);
+      music.setScene('battle');
+      sceneManager.goto('battle', battleScene, payload);
+    },
   };
   const tutorial = createTutorialController({ getState: () => cur().state });
 
@@ -300,7 +345,9 @@ function boot() {
       onCouncil: () => worldScene.onCouncilOpen(),
       onRealm: () => worldScene.onRealmOpen(),
       onRegions: () => worldScene.onRegionsOpen(),
+      onGenerals: () => worldScene.onGeneralsOpen(),
       onSettings: () => openSettings(),
+      onEventReopen: () => { services.events.reopen(); worldScene.updateHudNow?.(); },
     }),
     regionCard: createRegionCard({
       crownTexts: CROWN_TEXTS,
@@ -311,6 +358,19 @@ function boot() {
       onBuildWork: (id, slot, type) => worldScene.onBuildWork(id, slot, type),
       onUpgradeWork: (id, slot) => worldScene.onUpgradeWork(id, slot),
       onDemolishWork: (id, slot) => worldScene.onDemolishWork(id, slot),
+      onBuildFort: (id, slot, type) => worldScene.onBuildFort(id, slot, type),
+      onCommander: (id, g) => worldScene.onCommander(id, g),
+      onFestival: (id) => worldScene.onFestival(id),
+      onMuster: (id) => worldScene.onMuster(id),
+      onQuick: (id) => worldScene.onQuickConquest(id),
+      onThreat: (id) => {
+        const run = services.battles.list().find((r) => r.regionId === id);
+        if (run) { switchToBattle(run.id); return; }
+        const raid = ((cur().state.frontier && cur().state.frontier.incoming) || []).find((r) => r.toRegionId === id);
+        if (raid) services.frontier.go(raid.id);
+      },
+      onUpgradeFort: (id, slot) => worldScene.onUpgradeFort(id, slot),
+      onDemolishFort: (id, slot) => worldScene.onDemolishFort(id, slot),
     }),
     council: createCouncil({
       onBuy: (id) => worldScene.onBuy(id),
@@ -321,9 +381,21 @@ function boot() {
       onFoundDynasty: () => worldScene.onFoundDynasty(),
       onSaveMap: () => worldScene.onSaveMap(),
       onClose: () => worldScene.onRealmClose(),
+      onBuyLegacy: (id) => worldScene.onBuyLegacy(id, 'realm'),
     }),
+    // Phase 5 (PLAN-PHASE5): the founding ceremony that replaced the old confirm, and Quick Conquest's short overlay
+    ceremony: createCeremony({
+      onBuyLegacy: (id) => worldScene.onBuyLegacy(id, 'ceremony'),
+      onFound: (choice) => worldScene.onCeremonyFound(choice),
+      onClose: () => worldScene.onCeremonyClose(),
+      onSaveMap: () => worldScene.onSaveMap(),
+      onPage: (pageId) => worldScene.onCeremonyPage(pageId),
+      onPick: () => worldScene.onEdictPicked(),
+    }),
+    quick: createQuickOverlay(),
     regions: createRegionsPanel({
       onSelect: (id) => worldScene.onRegionsSelect(id),
+      onReroll: (slot) => worldScene.onReroll(slot),
       onClose: () => worldScene.onRegionsClose(),
     }),
     welcome: createWelcome({ onCollect: () => worldScene.onWelcomeCollect() }),
@@ -334,6 +406,8 @@ function boot() {
       onPauseToggle: () => battleScene.onPauseToggle(),
       onSpeed: (s) => battleScene.onSpeed(s),
       onRetreat: () => battleScene.onRetreat(),
+      onMap: () => battleScene.onMap(),
+      onAbility: () => battleScene.onAbility(),
     }),
     results: createResults({
       crownTexts: CROWN_TEXTS,
@@ -398,7 +472,7 @@ function boot() {
       onReset: () => {
         try { storage.removeItem(SAVE_KEY); } catch { /* ignore */ }
         sessionStarted = false;
-        container.newRealm();
+        container.newRealm(undefined, { keepGenerals: false }); // Reset wipes everything, the Generals too
         applyWorld();
         closeSettings();
         goto.title({});
@@ -410,7 +484,8 @@ function boot() {
       onDismiss: () => tutorial.dismiss(),
       selfTick: false,
       obstacles: () => [
-        ui.hud.el, ui.regionCard.dock, ui.council.el, ui.realm.el, ui.regions.el, ui.settings.el, ui.welcome.el, ui.results.el,
+        ui.hud.el, ui.hud.el.hidden ? null : ui.hud.tabsEl, ui.regionCard.dock, ui.council.el, ui.realm.el, ui.regions.el, ui.generals.el, ui.settings.el, ui.welcome.el, ui.results.el,
+        ui.tray.el.hidden ? null : ui.tray.el,
         // toasts slide in: their box is padded so a hint placed beside an arriving toast is still clear of it when it settles
         ui.toasts.el.children.length ? () => { const r = ui.toasts.el.getBoundingClientRect(); return { x: r.left - 8, y: r.top - 8, w: r.width + 16, h: r.height + 28, weight: 0.03 }; } : null,
         ui.leaderBanner.isShowing() ? ui.leaderBanner.el : null,
@@ -419,12 +494,35 @@ function boot() {
         ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-bottom'),
       ],
     }),
+    // every running battle as a chip (DESIGN 10.5): switch with a click or Tab; Auto per battle
+    tray: createBattleTray({
+      onSelect: (id) => switchToBattle(id),
+      onAuto: (id, on) => { services.battles.setAuto(id, on); updateTray(true); },
+      // a new commander mid-battle (DESIGN 10.11): the passive and ability are re-folded into the running battle; an ability already used stays used
+      onCommander: (id, gid) => {
+        const run = services.battles.get(id);
+        if (!run) return;
+        assign(run, edictCommander(cur().state, gid || null), cur().state, cur().world, playerBattleStats); // Lone Banner keeps the Militia Captain
+        const g = gid ? generalById(cur().state, gid) : null;
+        announce(`${g ? g.name : GENERALS.copy.captainName} commands at ${cur().world.regions[run.regionId]?.name || 'the battle'}`);
+        services.autosave.save();
+        updateTray(true);
+      },
+    }),
+    // the roster (DESIGN 10.11)
+    generals: createGeneralsPanel({
+      onTrain: (id) => worldScene.onTrain(id), onHeal: (id) => worldScene.onHeal(id), onRespec: (id) => worldScene.onRespec(id),
+      onPick: (id, c) => worldScene.onPickSkill(id, c), onHire: () => worldScene.onHire(), onWatch: (id) => worldScene.onWatchGeneral(id),
+      onClose: () => worldScene.onGeneralsClose(),
+    }),
     toasts: createToasts(),
     tooltip: createTooltip(),
     // Rival leaders (DESIGN 3.6): a click-through banner under whatever top chrome is on screen.
     leaderBanner: createLeaderBanner({
       below: () => [
         ui.hud.el,
+        ui.hud.el.hidden || !ui.hud.tabsEl.getClientRects().length ? null : ui.hud.tabsEl,
+        ui.tray.el.hidden ? null : ui.tray.el,
         ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-top'),
         ui.battleHud.el.hidden ? null : ui.battleHud.el.querySelector('.battle-topright'),
       ],
@@ -443,6 +541,7 @@ function boot() {
   cardDock.hidden = true;
   ui.regionCard.el.hidden = false; // visibility is controlled on the dock
   ui.toasts.el.hidden = false; // toasts manage their own children
+  ui.tray.el.hidden = true; // the tray shows itself (updateTray)
   ui.leaderBanner.el.hidden = false; // the banner hides itself between lines
 
   /** Anything queued for a realm that has since been replaced is dropped (see the container's epoch). */
@@ -459,7 +558,10 @@ function boot() {
     cardDock.hidden = true;
     ui.council.el.hidden = true;
     ui.realm.el.hidden = true;
+    ui.ceremony.el.hidden = true;
+    ui.quick.el.hidden = true;
     ui.regions.el.hidden = true;
+    ui.generals.el.hidden = true;
     ui.welcome.el.hidden = true;
     ui.battleHud.el.hidden = true;
     ui.results.el.hidden = true;
@@ -542,7 +644,9 @@ function boot() {
     for (const q of toastQueue.splice(0)) if (now - q.at < 9000) toastUpdate(q.toast); // a stale one is no news
   }
   ui.toasts.update = (toast) => {
-    if (renderer.cssWidth < 768 && ui.leaderBanner.isShowing()) {
+    // an update to a toast already on screen (a raid's countdown) changes it in place: it adds nothing, so it never waits for the banner
+    const live = toast && toast.id != null && [...ui.toasts.el.children].some((n) => n.dataset.id === String(toast.id) && !n.classList.contains('is-out'));
+    if (!live && renderer.cssWidth < 768 && ui.leaderBanner.isShowing()) {
       toastQueue.push({ toast, at: performance.now() });
       if (!toastTimer) toastTimer = setInterval(flushToasts, 200);
       return;
@@ -566,6 +670,169 @@ function boot() {
     devRevealAll: false,
     time: { t: 0, nowMs: 0 },
   };
+
+  // every running battle (ARCHITECTURE 10.1): stepped each frame below, whatever scene is up; the battle scene is a view of the focused one
+  services.battles = createBattleManager({ getState: () => cur().state, getWorld: () => cur().world, services });
+  battlesRef = services.battles;
+  onDialogChange((count) => services.battles.setDialogHold(count > 0)); // any open dialog holds every battle (DESIGN 7.5a)
+  /**
+   * What a finished battle (or a surrender) earned beyond gold (DESIGN 10.11, 10.12): Renown from crowns, a defense, a retake or a capital; the commander's
+   * level-ups and wounds; a champion who joins when a capital falls (the recruitment card and a Chronicle line).
+   */
+  function onDeeds(out) {
+    if (!out) return;
+    const { state, world } = cur();
+    if (out.kind === 'attack' && out.result && services.goals && !out.quick) services.goals.onConquest(out.regionId, out.result); // the Bounty Board (PLAN-PHASE4 §4A); a Quick Conquest's meta already told it
+    const renown = (out.crownAward && out.crownAward.renown || 0) + (out.result && out.result.renown || 0) + (out.reward && out.reward.renown || 0);
+    if (renown > 0) ui.toasts.update({ id: 'renown', type: 'success', icon: 'laurel', message: `+${renown} Renown`, duration: 3600 });
+    const c = out.commander;
+    if (c) {
+      const g = generalById(state, c.id);
+      if (g && c.levels > 0) ui.toasts.update({ id: `level-${c.id}`, type: 'success', icon: 'star', message: `${g.name} reaches level ${c.level}${c.picks > 0 ? ': a new skill to choose in Generals' : ''}`, duration: 5200 });
+      if (g && c.wounded) ui.toasts.update({ id: `wound-${c.id}`, type: 'warning', icon: 'shield', message: `${g.name} is wounded and rests for a while (Renown heals at once)`, duration: 5200 });
+      if (c.levels > 0) tutorial.notify('generalLevelUp');
+    }
+    if (out.result && out.result.recruited) showRecruit(out.result.recruited, out.regionId);
+    // a varied map (DESIGN 10.13): the Dragon slain gives the realm Dragonscale; a Duel's end goes in the Chronicle
+    if (out.result && out.result.dragonscale) {
+      ui.toasts.update({ id: 'dragonscale', type: 'success', icon: 'shield', message: `The Dragon is slain! ${MAP_FEATURES.copy.dragonscale}`, duration: 7000 });
+      try { recordChronicle(state, { kind: 'event', t: Date.now(), hl: true, data: { text: `The Dragon of ${world.regions[out.regionId]?.name || 'the Lair'} fell. Its scales now armour the realm's fortifications.`, regionId: out.regionId } }); } catch (err) { console.warn('[chronicle] dragon line skipped:', err); }
+    }
+    if (out.kind === 'duel') {
+      const f = world.factions[out.attackerFaction];
+      try { recordChronicle(state, { kind: 'event', t: Date.now(), data: { text: out.won ? `Your champion won the duel at ${world.regions[out.regionId]?.name || 'the border'} against the ${f ? f.name : 'rivals'}.` : `The duel at ${world.regions[out.regionId]?.name || 'the border'} went to the ${f ? f.name : 'rivals'}.`, regionId: out.regionId } }); } catch (err) { console.warn('[chronicle] duel line skipped:', err); }
+    }
+    if (sceneManager.name === 'world') worldScene.updateGenerals?.();
+  }
+  services.onDeeds = onDeeds;
+  services.battles.on('finished', (id, out) => onDeeds(out)); // every finished battle, watched or not (surrenders call onDeeds themselves)
+
+  /** "Gorran Redhand, the Crimson Champion, joins your cause": a short card with the champion's line, and a Chronicle entry. */
+  function showRecruit(id, regionId) {
+    const { state, world } = cur();
+    const g = generalById(state, id);
+    if (!g) return;
+    const kind = GENERALS.kinds[g.kind] || {};
+    const factionId = Number(String(id).split(':')[1]);
+    const faction = world.factions[factionId];
+    const word = faction ? faction.name.split(' ')[0] : '';
+    const title = `the ${word} ${kind.title || 'Champion'}`.replace(/\s+/g, ' ');
+    const lines = GENERALS.copy.recruitLines || {};
+    const line = lines[g.kind] || lines.other || '';
+    try {
+      recordChronicle(state, { kind: 'recruit', t: Date.now(), data: { text: `${g.name}, ${title}, joins your cause after the fall of ${world.regions[regionId]?.name || 'their capital'}.`, regionId } });
+    } catch (err) { console.warn('[chronicle] recruit line skipped:', err); }
+    const modal = createModal({
+      title: `${g.name} joins your cause`,
+      body: h('div.recruit-card', {},
+        generalEmblem(g.kind, 64),
+        h('p.recruit-title', {}, `${g.name}, ${title}`),
+        h('p.recruit-line', {}, `"${line}"`),
+        h('p.recruit-what', {}, `${kind.title || 'Champion'} · ${GENERALS.copy.styleNames[g.style] || ''} · Ability: ${GENERALS.copy.abilityNames[(kind.ability) || ''] || ''}`)),
+      actions: [{ label: 'Welcome', variant: 'primary', onClick: () => modal.destroy() }],
+    }, { onDismiss: () => modal.destroy() });
+    modal.el.classList.add('is-recruit');
+    document.body.appendChild(modal.el);
+    sfx.play('victory', { volume: 0.5 });
+  }
+
+  // a battle nobody was watching has ended (its commander fought it): say so, and the map shows a conquest where it happened
+  services.battles.on('remoteEnded', (id, run, out) => {
+    const name = cur().world.regions[run.regionId] ? cur().world.regions[run.regionId].name : 'a region';
+    const won = run.result === 'win';
+    const msg = run.kind === 'duel'
+      ? (won ? `Your champion won the duel at ${name}: +${out && out.renown ? out.renown : 0} Renown.` : `The duel at ${name} is lost. Nothing is lost with it.`)
+      : run.kind === 'defense'
+      ? (won ? `${name} held: the attackers are beaten.` : `${name} has fallen.`)
+      : (won ? `${name} is yours: your commander won the battle.` : `The attack on ${name} failed.`);
+    ui.toasts.update({ type: won ? 'success' : 'warning', icon: won ? 'crown' : 'flag', message: msg, duration: 5200 });
+    if (won && out && out.kind !== 'duel') worldScene.onRemoteConquest(out);
+    updateTray(true);
+  });
+
+  /** Watch a running battle: in a battle the view switches (a camera flight); from the map the battle scene opens on it. */
+  function switchToBattle(id) {
+    if (!services.battles.get(id)) return;
+    if (sceneManager.name === 'battle') battleScene.switchTo(id);
+    else if (sceneManager.name === 'world') goto.battle({ runId: id });
+  }
+  services.switchToBattle = switchToBattle;
+  /** Shows a region on the map (an incoming raid's Go): flies there and opens its card, when the map is up. */
+  services.focusRegion = (id) => {
+    if (sceneManager.name !== 'world') return;
+    worldScene.devFlyToRegion(id, undefined, 650);
+    worldScene.selectRegion(id);
+  };
+  // the Living Frontier (DESIGN 10.1): raids on active play time, the incoming toast with Go, the defense on arrival
+  services.frontier = createFrontierLoop({
+    getState: () => cur().state, getWorld: () => cur().world, manager: services.battles, ui, services,
+    isActive: () => sessionStarted && (sceneManager.name === 'world' || sceneManager.name === 'battle') && !document.hidden
+      && !services.battles.paused && !document.documentElement.hasAttribute('data-dialog'),
+  });
+  frontierRef = services.frontier;
+  // world events (DESIGN 10.13): the Merchant, the Plague, the Duel, offered on the same active clock (never in the very first battle)
+  services.events = createEventsLoop({
+    getState: () => cur().state, getWorld: () => cur().world, manager: services.battles, ui, services,
+    isActive: () => sessionStarted && (sceneManager.name === 'world' || sceneManager.name === 'battle') && !document.hidden
+      && !services.battles.paused && !document.documentElement.hasAttribute('data-dialog'),
+    inTutorial: () => (cur().state.stats.battlesWon || 0) < 1,
+  });
+
+  // Phase 4, Goals and Rivals (docs/PLAN-PHASE4.md): the streak's window, deeds, the Bounty Board, grudges and Vendettas
+  services.goals = createGoals({ getState: () => cur().state, getWorld: () => cur().world, ui, services });
+  // Phase 5 (docs/PLAN-PHASE5.md): Edicts, Legacy, Challenges, Quick Conquest
+  services.starText = dynastyStarText;
+  services.dynasty = createDynasty({ getState: () => cur().state, getWorld: () => cur().world, container, ui, services });
+  services.quick = createQuickConquest({ getState: () => cur().state, getWorld: () => cur().world, ui, services });
+  services.onQuickReady = () => { if (sceneManager.name === 'world') worldScene.devRefreshCard(); };
+  services.sceneName = () => sceneManager.name;
+  services.onGoalsChanged = (opts) => { if (sceneManager.name === 'world') worldScene.onGoalsChanged?.(opts); };
+  services.battles.on('finished', (id, out, snapshot) => services.goals.onFinished(snapshot, out));
+  prosperityHook = (ups) => services.goals.onProsperity(ups);
+
+  /** A run's commander for its chip: the name, and the choices (free Generals + this one + the Militia Captain). */
+  function trayCommander(r) {
+    const { state } = cur();
+    const g = r.commander ? generalById(state, r.commander) : null;
+    const free = edictMods(state).forceCaptain ? [] : freeGenerals(state, Date.now()); // Lone Banner: only the Captain
+    const options = [...(g ? [g] : []), ...free.filter((x) => !g || x.id !== g.id)].map((x) => ({ id: x.id, label: x.name.split(' ').slice(-1)[0] }));
+    options.push({ id: '', label: 'Captain' });
+    return { commanderId: g ? g.id : '', commanderName: g ? g.name : GENERALS.copy.captainName, commanderOptions: options };
+  }
+
+  /** The tray's view data, a few times a second: every run, its share of the troops, its clock, a threatened settlement of ours. */
+  let trayAtMs = -1e9;
+  function updateTray(force = false) {
+    const nowMs = performance.now();
+    if (!force && nowMs - trayAtMs < 250) return;
+    trayAtMs = nowMs;
+    const runs = services.battles.list();
+    const scene = sceneManager.name;
+    const visible = (scene === 'world' && runs.length >= 1) || (scene === 'battle' && runs.length >= 2);
+    const { world } = cur();
+    const focusedId = services.battles.focusedId;
+    ui.tray.update({
+      visible,
+      runs: runs.map((r) => {
+        const b = r.battle;
+        let mine = 0;
+        let total = 0;
+        for (const site of b.sites) { total += site.troops; if (site.owner === PLAYER_OWNER) mine += site.troops; }
+        for (const q of b.squads) { total += q.count; if (q.owner === PLAYER_OWNER) mine += q.count; }
+        // a settlement of ours that the marching enemy outnumbers
+        const incoming = new Map();
+        for (const q of b.squads) if (q.owner !== PLAYER_OWNER && q.state === 'march') incoming.set(q.to, (incoming.get(q.to) || 0) + q.count);
+        const threatened = b.sites.some((site) => site.owner === PLAYER_OWNER && (incoming.get(site.id) || 0) > site.troops);
+        const sec = Math.max(0, Math.floor(b.t));
+        return {
+          id: r.id, kind: r.kind, regionName: world.regions[r.regionId] ? world.regions[r.regionId].name : 'a region',
+          share: total > 0 ? mine / total : 0, clock: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`,
+          threatened, focused: scene === 'battle' && r.id === focusedId, auto: !!r.auto, autoLabel: 'Delegate',
+          ...trayCommander(r),
+        };
+      }),
+    });
+  }
 
   titleScene = createTitleScene(services);
   worldScene = createWorldScene(services);
@@ -595,6 +862,8 @@ function boot() {
       loseBattle: () => battleScene.forceLose(),
       screenPosOfSite: (id) => battleScene.screenPosOfSite(id),
       siteInfo: () => battleScene.siteInfo(),
+      featureInfo: () => battleScene.featureInfo(),
+      ashenInfo: () => battleScene.ashenInfo(), // Phase 6: rises, burns, Risings, wisps
       afterFrame,
       tutorialArrow: () => battleScene.tutorialArrow(),
       dragInfo: () => battleScene.dragInfo(),
@@ -605,12 +874,29 @@ function boot() {
       selection: () => battleScene.selection(),
       threatInfo: () => battleScene.threatInfo(),
       get battle() { return battleScene.battle; },
+      get battles() { return services.battles; }, // the battle manager (app/battles.js): list(), get(id), focusedId, busy()
+      /** Dev/checks: a war band against one of your regions now (app/frontierLoop.js devRaid). */
+      raid: (toRegionId, opts) => services.frontier.devRaid(toRegionId, opts),
+      get frontier() { return services.frontier; },
+      /** Dev/checks: offer a world event of this kind now (app/eventsLoop.js devOffer); answer it with events.answer(id, 'accept'|'decline'). */
+      offerEvent: (kind) => services.events.devOffer(kind),
+      get events() { return services.events; },
+      /** Dev/checks (Phase 4): `faction` (default: the first rival bordering you) swears a Vendetta now, arriving in `opts.sec` active seconds. */
+      vendetta: (faction, opts) => services.frontier.devVendetta(faction, opts),
+      /** Dev/checks (Phase 4): a contract of this kind on the Bounty Board now (app/goals.js devBounty): { slot, contract } or null. */
+      bounty: (kind) => services.goals.devBounty(kind),
+      get goals() { return services.goals; },
+      /** Dev/checks (Phase 5): own every region at once (the founding button shows), then the world refreshes. */
+      completeRealm: () => worldScene.devCompleteRealm(),
+      get dynasty() { return services.dynasty; },
+      /** Dev/checks (Phase 5): grant Legacy points (for the Realm panel's tree). */
+      grantLegacy: (n) => { const l = services.dynasty.devGrant(n); worldScene.onGoalsChanged?.(); return l; },
       get battlePhase() { return battleScene.phase; },
       regionScreenPos: (id) => worldScene.regionScreenPos(id),
       regionHintBox: (id) => worldScene.regionHintBoxOf(id),
       hintOutline: () => worldScene.devHintOutline(),
       conquerRegions: (n) => worldScene.devConquer(n),
-      conquerRegion: (id) => worldScene.devConquerRegion(id),
+      conquerRegion: (id, opts) => worldScene.devConquerRegion(id, opts),
       surrender: (id) => worldScene.devSurrender(id),
       refreshCard: () => worldScene.devRefreshCard(),
       flyToRegion: (id, zoom, ms) => worldScene.devFlyToRegion(id, zoom, ms),
@@ -734,10 +1020,12 @@ function boot() {
     const awaySec = Math.max(0, (Date.now() - state.lastSeen) / 1000);
     const off = offlineEarnings(state, world, Date.now()); // paid with the levels at departure
     const ups = runProsperity(state, world, Date.now()); // levels gained while away, reported once
-    if (off.seconds >= WORLD_SCENE.welcomeBackMinSec && off.gold > 0.05) {
+    const away = awayReport(state, world, awaySec);
+    if ((off.seconds >= WORLD_SCENE.welcomeBackMinSec && off.gold > 0.05) || away) {
       const w = {
         timeAwaySec: awaySec, goldEarned: off.gold, prospered: prosperedList(world, ups),
         capHours: offlineCapHours(state), capped: awaySec > off.seconds + 1, epoch: container.epoch,
+        away: away ? away.text : '', awayLoss: !!(away && away.lost),
       };
       if (sceneManager.name === 'world') worldScene.showWelcome(w);
       else services.pendingWelcome = w;
@@ -784,7 +1072,13 @@ function boot() {
       }
 
       const t0 = performance.now();
+      // battles run whatever scene is up, but never behind the title (a saved battle waits for Continue, as it always did)
+      if (sceneManager.name !== 'title' && sessionStarted) services.battles.tick(dt);
+      services.frontier.tick(dt);
+      services.events.tick(dt);
+      if (sceneManager.name !== 'title' && sessionStarted) services.goals.tick(dt);
       sceneManager.frame(dt, tAccum, nowMs);
+      updateTray();
       ui.coach.tick(); // the hint follows its target: placed against this frame's final camera
       for (const fn of afterFrame) fn(); // dev: per-frame monitors (tools/hintMonitor.js) measure the finished frame
       perf.cpuMs = performance.now() - t0;

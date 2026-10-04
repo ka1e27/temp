@@ -61,6 +61,13 @@ const setTitle = (node, value) => { if (node.title !== value) node.title = value
 
 const CONFIRM_MS = 6000;
 
+/** The words of the panel: Region Works by default; the Fortifications panel (DESIGN 10.3) passes its own (same panel, same patterns). */
+export const WORKS_PANEL_COPY = Object.freeze({
+  title: 'Works', chooseTitle: 'Build a Work', subLong: 'Helps battles in the regions next to this one', subTitle: 'Helps battles in the regions next to this one',
+  subShort: 'Helps battles in nearby regions', backLabel: 'Back to the Works list', slotsLabel: 'Works slots', groupLabel: 'Region Works',
+  chooseTip: 'Choose a Work to build in this slot.', noneAffordable: 'Every Work is out of reach for now', chooserLabel: 'Works you can build',
+});
+
 /**
  * @param {{ onBuild?: (regionId: number, slot: number, type: string) => void,
  *           onUpgrade?: (regionId: number, slot: number) => void,
@@ -68,7 +75,7 @@ const CONFIRM_MS = 6000;
  *           onView?: (view: 'slots'|'choose') => void }} [callbacks]
  *   `onView` fires when the panel swaps between the slot list and the chooser (the card may want to scroll).
  */
-export function createWorksPanel({ onBuild, onUpgrade, onDemolish, onView } = {}) {
+export function createWorksPanel({ onBuild, onUpgrade, onDemolish, onView, copy = WORKS_PANEL_COPY, iconFor = worksIcon } = {}) {
   let data = null;
   let confirmSlot = -1;
   let confirmTimer = 0;
@@ -77,16 +84,17 @@ export function createWorksPanel({ onBuild, onUpgrade, onDemolish, onView } = {}
   let lastRegionId = null;
 
   const chooser = createWorksChooser({
+    iconFor, listLabel: copy.chooserLabel,
     onPick: (type) => { if (data && chooseSlot >= 0) onBuild?.(data.regionId, chooseSlot, type); },
   });
 
   // --- header ---------------------------------------------------------------------------
-  const titleEl = h('span.works-title', {}, 'Works');
+  const titleEl = h('span.works-title', {}, copy.title);
   // the full sentence on a wide screen; a phone sheet has no room for a second line, so it gets the short one (the full words stay in the tooltip and for a screen reader)
-  const subEl = h('span.works-sub', { title: 'Helps battles in the regions next to this one' },
-    h('span.works-sub-long', {}, 'Helps battles in the regions next to this one'),
-    h('span.works-sub-short', { 'aria-hidden': 'true' }, 'Helps battles in nearby regions'));
-  const backBtn = h('button.works-back', { type: 'button', 'aria-label': 'Back to the Works list', onClick: () => setView('slots') },
+  const subEl = h('span.works-sub', { title: copy.subTitle },
+    h('span.works-sub-long', {}, copy.subLong),
+    h('span.works-sub-short', { 'aria-hidden': 'true' }, copy.subShort));
+  const backBtn = h('button.works-back', { type: 'button', 'aria-label': copy.backLabel, onClick: () => setView('slots') },
     icon('close', 12), h('span', {}, 'Back'));
   const headEl = h('div.works-head', {}, titleEl, subEl, backBtn);
   backBtn.hidden = true;
@@ -140,12 +148,12 @@ export function createWorksPanel({ onBuild, onUpgrade, onDemolish, onView } = {}
     };
   }
   const slots = [0, 1, 2].map(makeSlot);
-  const listEl = h('div.works-slots', { role: 'list', 'aria-label': 'Works slots' }, ...slots.map((s) => s.row));
+  const listEl = h('div.works-slots', { role: 'list', 'aria-label': copy.slotsLabel }, ...slots.map((s) => s.row));
 
   const chooseWrap = h('div.works-choose', {}, chooser.el);
   chooseWrap.hidden = true;
 
-  const el = h('div.works-panel', { role: 'group', 'aria-label': 'Region Works', dataset: { view: 'slots' } },
+  const el = h('div.works-panel', { role: 'group', 'aria-label': copy.groupLabel, dataset: { view: 'slots' } },
     headEl, listEl, chooseWrap);
 
   // --- view switching ---------------------------------------------------------------------------
@@ -160,7 +168,7 @@ export function createWorksPanel({ onBuild, onUpgrade, onDemolish, onView } = {}
     chooseWrap.hidden = view !== 'choose';
     backBtn.hidden = view !== 'choose';
     subEl.hidden = view === 'choose';
-    setText(titleEl, view === 'choose' ? 'Build a Work' : 'Works');
+    setText(titleEl, view === 'choose' ? copy.chooseTitle : copy.title);
     if (data && view === 'choose') chooser.update({ choices: data.choices, intro: data.intro });
     // Keyboard users keep their place: focus moves into the chooser (Escape then works) and back to the slot's button.
     if (view === 'choose') backBtn.focus?.({ preventScroll: true });
@@ -219,7 +227,7 @@ export function createWorksPanel({ onBuild, onUpgrade, onDemolish, onView } = {}
     if (slot.chipKey === key) return;
     slot.chipKey = key;
     setData(slot.chip, 'type', state === 'built' ? type : '');
-    slot.chip.replaceChildren(state === 'built' ? worksIcon(type, 20) : state === 'empty' ? worksIcon('build', 18) : icon('lock', 15));
+    slot.chip.replaceChildren(state === 'built' ? iconFor(type, 20) : state === 'empty' ? worksIcon('build', 18) : icon('lock', 15));
   }
 
   function patchBuilt(slot, s) {
@@ -249,7 +257,7 @@ export function createWorksPanel({ onBuild, onUpgrade, onDemolish, onView } = {}
   function patchEmpty(slot, s) {
     setText(slot.buildHint, s.canBuild || s.cheapest == null ? '' : `from ${shortNumber(s.cheapest)}`);
     setData(slot.buildBtn, 'poor', s.canBuild ? '0' : '1');
-    const tip = s.canBuild ? 'Choose a Work to build in this slot.' : `Every Work is out of reach for now (the cheapest costs ${shortNumber(s.cheapest ?? 0)} gold).`;
+    const tip = s.canBuild ? copy.chooseTip : `${copy.noneAffordable} (the cheapest costs ${shortNumber(s.cheapest ?? 0)} gold).`;
     setTitle(slot.buildBtn, tip);
   }
 

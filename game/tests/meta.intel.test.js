@@ -1,6 +1,7 @@
 // Scout and Sabotage (DESIGN §5.7): costs, gating, the sabotage multiplier, and the contract that
 // matters most - the scout report's garrisons ARE the garrisons buildArena places for the battle.
 import { test } from 'node:test';
+import { FEATURES } from '../config/features.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { generateWorld } from '../world/generate.js';
@@ -404,7 +405,9 @@ test('scoutReport shape: keep first in groups, chips add up, at most two notes, 
         assert.equal(s.x, tile.x);
         assert.equal(s.y, tile.y);
         assert.equal(s.elev, tile.elev);
-        assert.equal(s.name, world.settlements[s.settlement].name);
+        // a feature site (DESIGN §10.13) carries its kind's name; settlements their own
+        const featureOf = { gate: 'gate', shrine: 'shrine', bandit: 'bandit', tower: 'ancientTower' };
+        assert.equal(s.name, s.settlement >= 0 ? world.settlements[s.settlement].name : FEATURES.copy.siteNames[featureOf[s.type]]);
       }
       assert.ok(r.personalityLine.length > 0 && r.personalityLine.length <= 56);
     }

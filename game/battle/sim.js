@@ -13,6 +13,12 @@ import {
   ownerStats, resolveTowerVolleys, resolveEngagements, PLAYER_OWNER,
 } from './combat.js';
 import { applyPower, processPending } from './powers.js';
+import { applyAbility, abilityState, abilityAdvice } from './abilities.js';
+import { marchSpeedMult } from './features.js';
+import { processDragon, initialDragon } from './dragon.js';
+import { initialChampion, championSquadRef, processChampion } from './champion.js';
+import { processRising } from './fallen.js';
+import { FEATURES } from '../config/features.js';
 import { sendFromSite } from './squads.js';
 import { advanceMovement, mergeSquads } from './movement.js';
 import { resolveCombat, applyGrowth, checkEndConditions } from './resolve.js';
@@ -21,7 +27,7 @@ import { canRoute, routeFor, routeCost } from './routing.js';
 import { computeTerritory, tileOwner, territoryVersion } from './territory.js';
 import { squadPosition } from './position.js';
 
-export { squadPosition, canRoute, routeFor, routeCost, computeTerritory, tileOwner, territoryVersion };
+export { squadPosition, canRoute, routeFor, routeCost, computeTerritory, tileOwner, territoryVersion, abilityState, abilityAdvice };
 
 /** @returns {object} a fresh BattleState (ARCHITECTURE §6) for an arena + stat blocks. */
 export function createBattle(arena, player, enemy, opts = {}) {
@@ -32,6 +38,9 @@ export function createBattle(arena, player, enemy, opts = {}) {
     focus: { ...arena.focus },
   };
   const playerCopy = { ...player, powers: { ...player.powers } };
+  if (player.ability) playerCopy.ability = { ...player.ability };
+  // A Beacon in a defended region (DESIGN §10.3): the player's squads march faster in this battle
+  if (arenaCopy.playerSpeedMult) playerCopy.speed = (playerCopy.speed ?? 1) * arenaCopy.playerSpeedMult;
   const enemyCopy = { ...enemy };
 
   const sites = arenaCopy.sites.map((s) => {
@@ -41,18 +50,34 @@ export function createBattle(arena, player, enemy, opts = {}) {
       type: s.type,
       owner: s.owner,
       troops: s.troops,
-      cap: effectiveCap(s.type, s.owner, playerCopy, s.capMult),
+      cap: effectiveCap(s.type, s.owner, playerCopy, s.capMult, s.pCapMult),
       capMult: s.capMult ?? 1,
       growth: effectiveGrowth(s.type, s.owner, playerCopy, arenaCopy.enemyFaction, enemyCopy),
-      def: SITE_TYPES[s.type].def,
+      def: SITE_TYPES[s.type].def * (s.defMult ?? 1),
       bulwarkUntil: 0,
       assault: null,
     };
+    // Fortifications (DESIGN §10.3), only on defense arenas: Walls, an Arrow Tower's range and rate, the militia cap scale
+    if (s.pCapMult != null) site.pCapMult = s.pCapMult;
+    if (s.defMult != null) site.defMult = s.defMult;
+    if (s.range != null) site.range = s.range;
+    if (s.volleySec != null) site.volleySec = s.volleySec;
+    if (s.volleyKills != null) site.volleyKills = s.volleyKills;
+    if (s.fort) site.fort = s.fort;
+    if (s.feature) site.feature = s.feature;
+    if (s.squadPower != null) site.squadPower = s.squadPower;
     if (s.type === 'tower') site.nextVolley = 0;
     return site;
   });
 
-  return {
+  // Defense mode (ARCHITECTURE §10.3): the arena says so; opts may override the siege timer.
+  if (arenaCopy.dragon) arenaCopy.dragon = { ...arenaCopy.dragon };
+  const mode = opts.mode ?? arenaCopy.mode ?? 'attack';
+  const modeFields = mode === 'defense'
+    ? { mode, siegeSec: opts.siegeSec ?? arenaCopy.siegeSec ?? 120 }
+    : {};
+
+  const battle = {
     version: 1,
     t: 0,
     tick: 0,
@@ -73,7 +98,12 @@ export function createBattle(arena, player, enemy, opts = {}) {
     stats: { sent: 0, lost: 0, killed: 0, captured: 0, durationSec: 0 },
     nextId: 0,
     ...opts,
+    ...modeFields,
+    ...(arenaCopy.dragon ? { dragon: initialDragon(arenaCopy) } : {}),
+    ...(arenaCopy.champion ? { champion: initialChampion(arenaCopy) } : {}), // a Vendetta's Champion (PLAN-PHASE4 §4D, battle/champion.js)
   };
+  if (battle.dragon && battle.dragon.perch >= 0) battle.sites[battle.dragon.perch].dragonDef = FEATURES.dragon.perchDef;
+  return battle;
 }
 
 /** Queues a command; applied at the start of the next step() call. */
@@ -105,6 +135,8 @@ function applyCommand(battle, cmd, t) {
     applyUnsupply(battle, cmd);
   } else if (cmd.type === 'power') {
     applyPower(battle, cmd, t);
+  } else if (cmd.type === 'ability') {
+    applyAbility(battle, cmd, t); // a General's once-per-battle active (DESIGN §10.11)
   } else if (cmd.type === 'retreat') {
     battle.result = 'retreat';
     battle.stats.durationSec = t;
@@ -206,16 +238,20 @@ export function step(battle, dt) {
   battle.t += dt;
   battle.tick += 1;
   const t = battle.t;
+  const champion = battle.champion ? championSquadRef(battle) : null; // the Champion's squad before this step (did it die, or settle?)
 
   processSupply(battle, t);
   const blocked = resolveEngagements(battle);
   advanceMovement(battle, dt, t, blocked);
   mergeSquads(battle);
   processPending(battle, t);
+  processDragon(battle, t); // a Dragon's Lair (DESIGN §10.13): flights, telegraphed breath
+  processRising(battle, t); // a Barrow Keep (PLAN-PHASE6): its dead rise every 20 s, telegraphed
   resolveCombat(battle, dt, t);
   resolveTowerVolleys(battle, getRuntime(battle), t);
   applyGrowth(battle, dt);
   checkEndConditions(battle, t);
+  if (battle.champion) processChampion(battle, t, champion); // launches it on time; its fall cuts the war band's attack
 
   return battle;
 }
@@ -292,7 +328,7 @@ function pathDurationSec(battle, owner, path) {
   const runtime = getRuntime(battle);
   const stats = ownerStats(owner, battle.player, battle.arena.enemyFaction, battle.enemy);
   const marchActive = owner === PLAYER_OWNER && battle.t < battle.effects.marchUntil;
-  const speed = BATTLE.baseSpeed * stats.speed * (marchActive ? POWERS.march.mult : 1);
+  const speed = BATTLE.baseSpeed * stats.speed * (marchActive ? POWERS.march.mult : 1) * marchSpeedMult(battle);
   let seconds = 0;
   for (const tileIndex of path) {
     const tile = runtime.byIndex.get(tileIndex);

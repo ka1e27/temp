@@ -8,13 +8,17 @@ import { PLAYER_OWNER, FREE_FOLK_OWNER } from './owner.js';
 import { legalRouteFor } from './routing.js';
 import { computeTerritory } from './territory.js';
 import { TERRAIN_COST } from '../config/world.js';
+import { busyKey, normalizeBusy } from './defenseArena.js';
+import { fortEffects, fortTowerTiles } from './fortSites.js';
+import { FEATURES } from '../config/features.js';
+import { banditTile, ancientTowerTile, gateTile, shrineTiles } from '../world/regionFeatures.js';
 
 function isAdjacentToPlayer(world, owners, regionId) {
   return world.regions[regionId].neighbors.some((n) => owners[n] === PLAYER_OWNER);
 }
 
 /** Player-owned passable tiles within `BATTLE.arenaPlayerDepth` hexes of the region. */
-function playerHaloTiles(world, owners, region) {
+function playerHaloTiles(world, owners, region, busyRegions = null) {
   const regionAxial = region.tiles.map((i) => world.tiles[i]);
   const depth = BATTLE.arenaPlayerDepth;
   // Cheap bbox pre-filter (world units) before the exact per-tile hex-distance check —
@@ -27,6 +31,7 @@ function playerHaloTiles(world, owners, region) {
   const halo = [];
   for (const t of world.tiles) {
     if (!t.passable || t.region === -1 || owners[t.region] !== PLAYER_OWNER) continue;
+    if (busyRegions && busyRegions.has(t.region)) continue; // another battle's target (DESIGN §10.5)
     if (t.x < bbox.minX || t.x > bbox.maxX || t.y < bbox.minY || t.y > bbox.maxY) continue;
     let minDist = Infinity;
     for (const rt of regionAxial) {
@@ -196,7 +201,7 @@ function planApproach(world, owners, tileSet, targetTiles, keepTile, border) {
  * Everything buildArena needs before it creates a single site, or the reason it cannot: `{ code, message }` with code
  * 'no-region' | 'owned' | 'not-adjacent' | 'no-passable-border'.
  */
-function planArena(world, owners, regionId) {
+function planArena(world, owners, regionId, busy = null) {
   const region = world.regions[regionId];
   if (!region) return { code: 'no-region', message: `buildArena: no such region ${regionId}` };
   if (owners[regionId] === PLAYER_OWNER) return { code: 'owned', message: `buildArena: region ${regionId} is already player-owned` };
@@ -204,7 +209,7 @@ function planArena(world, owners, regionId) {
     return { code: 'not-adjacent', message: `buildArena: region ${regionId} is not adjacent to any player-owned region` };
   }
   const targetTiles = region.tiles.map((i) => world.tiles[i]).filter((t) => t.passable);
-  const halo = playerHaloTiles(world, owners, region);
+  const halo = playerHaloTiles(world, owners, region, busy ? busy.regions : null);
   const tileSet = new Map(); // world tile index -> tile
   for (const t of targetTiles) tileSet.set(t.i, t);
   for (const t of halo) tileSet.set(t.i, t);
@@ -281,11 +286,19 @@ function approachSummary(world, owners, regionId) {
  * @param {number} regionId the target region to attack.
  * @param {object} player PlayerStats.
  * @param {object} enemy EnemyStats.
+ * @param {object} [opts]
+ * @param {{regions:Set<number>, sites:Set<string>}} [opts.busy] what other running battles hold (ARCHITECTURE §10.1, DESIGN §10.5):
+ *   regions that are another battle's target are left out of the halo, and settlements in `busy.sites` ("regionId:index",
+ *   see defenseArena.js busyKey) are left out of the arena. A busy target throws an Error with `code: 'busy'`.
+ * @param {{type:string, level:number}[]} [opts.forts] fortifications the target's occupier captured (DESIGN §10.2): an Arrow
+ *   Tower becomes an enemy tower site, Walls multiply the enemy keep's and forts' defence.
  * @returns {object} Arena (ARCHITECTURE §6).
  */
-export function buildArena(world, owners, regionId, player, enemy) {
-  const plan = planArena(world, owners, regionId);
-  if ('code' in plan) throw new Error(plan.message);
+export function buildArena(world, owners, regionId, player, enemy, opts = {}) {
+  const busy = normalizeBusy(opts.busy);
+  if (busy.regions.has(regionId)) throw Object.assign(new Error(`buildArena: region ${regionId} is already being fought over`), { code: 'busy' });
+  const plan = planArena(world, owners, regionId, busy);
+  if ('code' in plan) throw Object.assign(new Error(plan.message), { code: plan.code });
   const {
     region, targetTiles, halo, tileSet, keepTile, approach,
   } = plan;
@@ -301,9 +314,10 @@ export function buildArena(world, owners, regionId, player, enemy) {
   const rest = [];
   const targetSettlements = region.settlements
     .map((id) => world.settlements[id])
-    .filter((s) => tileSet.has(s.tile))
+    .filter((s) => tileSet.has(s.tile) && !(busy.sites.size && busy.sites.has(busyKey(world, s.id))))
     .sort((a, b) => a.id - b.id);
   const isRivalRegion = owners[regionId] !== FREE_FOLK_OWNER;
+  const captured = opts.forts ? fortEffects(opts.forts) : null; // an occupied region's fortifications fight for the occupier
   for (const s of targetSettlements) {
     const isNeutralHamlet = isRivalRegion && s.type === 'hamlet';
     const owner = isNeutralHamlet ? FREE_FOLK_OWNER : owners[regionId];
@@ -311,15 +325,32 @@ export function buildArena(world, owners, regionId, player, enemy) {
     // Enemy caps scale with depth, capitals get a bonus, Free Folk sites cap lower (DESIGN §4.6): one number per
     // site, fixed here. `enemy.capMult` already holds depth x capital x Free Folk for the region's own owner.
     const capMult = isNeutralHamlet ? ENEMY_SCALING.freeFolkCapMult : (enemy.capMult ?? 1);
-    rest.push({
+    const site = {
       id: rest.length + 1, settlement: s.id, tile: s.tile, type: s.type, owner,
-      troops: BATTLE.enemyStart[s.type] * troopMult, capMult,
-    });
+      troops: BATTLE.enemyStart[s.type] * troopMult * (!isNeutralHamlet && (s.type === 'tower' || s.type === 'fort') ? (enemy.fortTroopMult ?? 1) : 1), capMult, // Merchant Princes (PLAN-PHASE5)
+    };
+    if (captured && captured.wallsMult !== 1 && (s.type === 'keep' || s.type === 'fort')) site.defMult = captured.wallsMult;
+    rest.push(site);
   }
+  if (captured && captured.towerLevel > 0) {
+    const occupied = new Set(rest.map((x) => x.tile));
+    const tile = fortTowerTiles(world, regionId, 1).find((i) => tileSet.has(i) && !occupied.has(i));
+    if (tile !== undefined) {
+      rest.push({
+        id: rest.length + 1, settlement: -1, tile, type: 'tower', owner: owners[regionId], fort: 'tower',
+        troops: BATTLE.enemyStart.tower * enemy.troopMult * (enemy.fortTroopMult ?? 1), capMult: enemy.capMult ?? 1,
+        range: captured.towerRange, volleySec: captured.towerVolleySec, volleyKills: captured.towerKills,
+      });
+    }
+  }
+
+  // A varied map (DESIGN §10.13): the region's type and twist add sites (tiles from world/regionFeatures.js)
+  const features = opts.noFeatures ? { type: null, twist: null } : { type: region.type || null, twist: region.twist || null };
+  addFeatureSites(world, region, features, rest, tileSet, owners[regionId], enemy);
 
   const haloTileIds = new Set(halo.map((t) => t.i));
   const playerSettlements = world.settlements
-    .filter((s) => haloTileIds.has(s.tile) && owners[s.region] === PLAYER_OWNER)
+    .filter((s) => haloTileIds.has(s.tile) && owners[s.region] === PLAYER_OWNER && !(busy.sites.size && busy.sites.has(busyKey(world, s.id))))
     .sort((a, b) => a.id - b.id);
   for (const s of playerSettlements) {
     const cap = SITE_TYPES[s.type].cap + player.capBonus;
@@ -384,6 +415,15 @@ export function buildArena(world, owners, regionId, player, enemy) {
   };
 
   const arena = { regionId, enemyFaction, tiles: arenaTiles, sites, focus, marches: [] };
+  if (features.twist) arena.twist = features.twist;
+  if (features.type) arena.type = features.type;
+  if (features.type === 'dragon') arena.dragon = { hp: FEATURES.dragon.hp * (enemy.troopMult ?? 1) * (enemy.dragonHpMult ?? 1) }; // Age of Dragons +25% (PLAN-PHASE5)
+  if (features.twist === 'flooded') flood(world, arena, regionId);
+  // The Barrow Keep (PLAN-PHASE6 §6B): an 'undying' capital's keep raises a squad every ASHEN.rising.everySec (battle/fallen.js)
+  if (region.isCapital && enemy.personality === 'undying') {
+    const keep = sites.find((x) => x.type === 'keep' && x.owner === enemyFaction && world.tiles[x.tile].region === regionId);
+    if (keep) arena.rising = { site: keep.id, keepTroops: keep.troops };
+  }
   if (stripTiles.length) {
     const end = stripTiles[stripTiles.length - 1]; // the strip's end nearest the target
     const near = sites.filter((x) => x.owner !== PLAYER_OWNER)
@@ -392,6 +432,57 @@ export function buildArena(world, owners, regionId, player, enemy) {
   }
   openCorridors(arena, region.tier === 1 ? BATTLE.openingTargetsFirstRing : BATTLE.openingTargets);
   return arena;
+}
+
+/**
+ * The feature sites a region's type and twist add to its attack arena (DESIGN §10.13), pushed onto `rest` (ids follow on): a
+ * Bandit Hold's veteran camp, the Ruins' Ancient Tower, a Siege's Gate, a Raid's three Shrines. Each is held by the region's owner
+ * with FEATURES' garrison x the troop multiplier, on its tile from world/regionFeatures.js (skipped when that tile is missing or taken).
+ */
+function addFeatureSites(world, region, features, rest, tileSet, owner, enemy) {
+  const taken = new Set(rest.map((x) => x.tile));
+  const tm = enemy.troopMult ?? 1;
+  const capMult = enemy.capMult ?? 1;
+  const put = (tile, site) => {
+    if (tile == null || taken.has(tile) || !tileSet.has(tile)) return;
+    taken.add(tile);
+    rest.push({ id: rest.length + 1, settlement: -1, tile, owner, capMult, ...site });
+  };
+  if (features.type === 'bandit') {
+    const vet = FEATURES.bandit.vet * FEATURES.bandit.vet; // +30% attack and defence
+    put(banditTile(world, region.id), { type: 'bandit', feature: 'bandit', troops: FEATURES.bandit.troops * tm, defMult: vet, squadPower: vet });
+  }
+  if (features.type === 'ruins') {
+    const a = FEATURES.ancientTower;
+    put(ancientTowerTile(world, region.id), { type: 'tower', feature: 'ancientTower', troops: a.troops * tm, range: a.range, volleySec: a.volleySec, volleyKills: a.kills });
+  }
+  if (features.twist === 'siege') put(gateTile(world, region.id), { type: 'gate', feature: 'gate', troops: FEATURES.gate.troops * tm * (enemy.gateTroopMult ?? 1) }); // Kingmaker
+  if (features.twist === 'raid') {
+    for (const tile of shrineTiles(world, region.id)) put(tile, { type: 'shrine', feature: 'shrine', troops: FEATURES.shrine.troops * tm });
+  }
+}
+
+/**
+ * Flooded (DESIGN §10.13): the target region's tiles carry their river and road edges and `flood`, so routes cross its rivers only on
+ * road bridges (geom.js findPath). If that would cut the War Camp off from the keep, the twist is dropped for this fight.
+ */
+function flood(world, arena, regionId) {
+  const backup = [];
+  for (const t of arena.tiles) {
+    if (t.region !== regionId) continue;
+    const w = world.tiles[t.i];
+    backup.push(t);
+    t.flood = true;
+    t.river = w.river || 0;
+    t.road = w.road || 0;
+  }
+  const byKey = buildTileIndex(arena.tiles);
+  const camp = arena.tiles.find((t) => t.i === arena.sites[0].tile);
+  const keepSite = arena.sites.find((x) => x.type === 'keep' && x.owner !== PLAYER_OWNER);
+  const keep = keepSite && arena.tiles.find((t) => t.i === keepSite.tile);
+  if (camp && keep && findPath(byKey, camp, keep)) return;
+  for (const t of backup) { delete t.flood; delete t.river; delete t.road; }
+  delete arena.twist;
 }
 
 /**

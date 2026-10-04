@@ -4,6 +4,114 @@ Branch `redesign` (v1 preserved at tag `v1-final` and playable at `classic.html`
 Nothing has been committed or pushed yet; `main` (which auto-deploys to GitHub Pages) is
 untouched.
 
+## ROUND 4 (2026-10-02): the Living Frontier, in progress
+The user found the loop boring ("fight the next area, then upgrade"). Brainstorm: docs/PROGRESSION-PLANS.md. Picked B + C plus
+counterattacks (live only, gentle trickle while away), fortifications that change hands, up to 3 concurrent battles with switching
++ Steward AI, occupation (retake restores), Renown for festivals. Design DESIGN §10, contract ARCHITECTURE §10, phases
+docs/PLAN-FRONTIER.md. Phase 1 started 2026-10-02 with two opus55-engineers: sim/meta (new; defense mode, steward, frontier/forts/militia meta,
+campaign + tuning, writes docs/briefs/frontier-hookup.md) and integration (the RC2 QA engineer; Step 1 = battle manager refactor with no
+behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away report/tutorial/checks).
+- Integration Step 1 DONE: `game/app/battles.js` manager (state.battles, legacy migration, sanitizeBattles, the scene is a view;
+  setStewardDecide slot); 942/942, all checks green. Step 2 in progress (tray, Map button, Tab, second attack, markers,
+  occupied visuals; `check.mjs --only=frontier`). progression.js foundDynasty now sets battles: [] (relayed to sim/meta).
+- Sim/meta defense API FINAL (balance still tuning): defenseArena.js (site 0 = ENEMY camp in defense arenas), defense mode results,
+  steward.js styles, fortification site fields, meta frontier/forts/militia. Lead: retreating from a defense = abandoning → occupy.
+  Relayed to integration for Step 2 wiring.
+- **Sim/meta Phase 1 DONE** (1010/1010): in person 86 % hold, Captain 54 %, waits ≤ 28 min (12/12), D1 1h24, retakes all
+  Easy/Fair, away-rule tests, determinism, perf. Lead: fortified regions too safe (92-100 %) → smart targeting of weak spots +
+  siege preparation (target 85-90 % unattended); Walls I ~×1.35; Captain ≥ 55 % in the first two depth bands. DESIGN §10.3
+  updated. Integration resumed Step 2 after the usage limit (~03:10 reset).
+- Tuning round DONE (1013/1013): weak-spot targeting (FRONTIER.targeting) + siege prep (+12 %/fort level); Walls ×1.5/1.65/1.85, Hall
+  ×1.6/2.0/2.4, Tower kills 0.6/0.9/1.2; fort pairs Captain 85-91 % / in person 98-99 %; Captain by depth 57/70/57/45/35/78 %;
+  campaign losses 0-2/seed, waits ≤ 28 m, D1 1h23. Lead: accept the numbers; fix campaign.mjs so only one overlapping battle is
+  in person (the rest stewarded) and re-measure losses; no game changes unless losses spiral.
+- 2026-10-02 10:45: a NEW session. Tree 1013/1013, 72 uncommitted Phase 1 files. Integration had most of Step 2 in place (frontierLoop,
+  tray, markers, war bands, occupation render, incoming toast, away report, defense checks in progress); both agents resumed
+  (integration: finish Step 2 + full regression + screenshots; sim/meta: report the one-battle campaign re-measure).
+- **Sim/meta DONE for Phase 1**: one-battle-at-a-time campaign → live losses [2,0,1,3,1,0,0,0,1,2,3,2], max 2 occupied, 15 retakes
+  (14 Easy), in person 24 (96 %), Captain 156 (91 %), 2+ forts 128/128 held, waits median 11m26 / worst 23m52, D1 1h22. The campaign
+  policy FORT_THREAT 0.8→0.9 (bot behaviour only; lead accepted). 1013/1013 verified by the lead.
+- **Integration Step 2 DONE → PHASE 1 COMPLETE** (~12:30): frontier loop on active time, incoming toast + Go, defense view (Hold timer,
+  Abandon copy, Defended / Region lost cards), Walls ring, occupied hatching + Retake card, Fortifications panel, away report, tray
+  with a Captain toggle, tutorial F1-F4; check frontier 153, desktop 191, phone 188, --base=temp 421, a11y/icons/hints/galleries
+  green; screens `screenshots/frontier/`. Lead: approved + 3 polish fixes (honest retake reward copy, camp badge above squads,
+  war-band label vs region label). Next: hand Phase 1 to the user to play; then Phase 2 (Generals + Renown).
+- **PHASE 2 started** (~12:45): lead wrote DESIGN §10.11 (Generals roster/levels/skills/actives/steward/assignment/wounds) and §10.12
+  (Renown earn/spend, Festivals). The sim/meta engineer is building generals.js, renown.js, abilities in the sim, the steward by
+  style/level, configs, balance, campaign, and docs/briefs/phase2-hookup.md. Integration does the Phase 2 UI after the Phase 1 polish.
+- Phase 1 polish DONE: conquestBounty()/crownsPayable() (honest retake reward, one source), badges drawn above squads/fx, war-band
+  badge avoids label boxes. 1014/1014; frontier 159, desktop 191, phone 188.
+- Phase 2 meta/sim API FINAL (tuning ongoing): generals persist (sanitizeGenerals), renown per dynasty, playerBattleStats {commander},
+  ability command + abilityState, settleCommander, renown returned from awardCrowns/defenseReward/conquer (+recruited), spends with
+  refusals, panel data fns. Integration started the Phase 2 UI (HUD laurel + Generals panel, commander picker, ability button G,
+  recruitment card, Festival/Muster on the card, tutorial G1/G2/R1, checks, screenshots/phase2/).
+- **Sim/meta Phase 2 DONE**: generals ×1.05-1.09 (L1) / ×1.15-1.20 (L10) army power; unattended no-fort holds L1 66-81 %, L10 73-89 %;
+  Renown ~100/D1 (7 festivals); D1 1h21; D2/D3 now 1.16×/1.26× (persistent Generals). Lead accepted: shorter later dynasties
+  (long-term progress), Marshal 89 % (defensive specialist), festivals kept affordable. 1041/1042 (timing flake).
+- **PHASE 3 detail written** (DESIGN §10.13: region types incl. Dragon boss, battle twists incl. Siege on capitals, world events).
+  The sim/meta engineer started Phase 3. Both agents hit the usage limit (~15:30) and were resumed at 16:00 (1050/1053; Phase 3 in flight).
+- Phase 3 sim/meta API FINAL (label recalibration ongoing): region.type/twist, feature sites, dragon events, the Lair falls with the dragon,
+  conquer returns type/renown/dragonscale, boons/worldEvents state, tickEvents/accept/decline, duel runs. Phase 3 UI queued for
+  integration after its Phase 2 report.
+- **Sim/meta Phase 3 DONE** (1066/1066): D1 1h26, waits ≤ 30 m on 12/12, capitals 3m10, labels Easy 91 / Fair 77, card factors measured per
+  twist/type, the attack-bot power quirk fixed. Problem: the Lair walls later dynasties (founding needs every region; worst wait 206 m).
+  Lead: the Lair is OPTIONAL for founding (canFoundDynasty ignores it; DESIGN §10.13 updated) + re-measure the Duel (target 60-75 %).
+- **Sim/meta Phase 3 CLOSED** (1067/1067): canFoundDynasty(state, world) ignores an unconquered Lair (1-arg form unchanged);
+  foundDynasty(state, seed, newWorld?, currentWorld?); world-gen never places the Lair as a cut vertex. D1 1.33 h / D2 1.32x / D3 1.21x,
+  waits > 40 m on 0/2/2 of 12 (worst 19/47/56 m). Gate garrison 26 -> 18, Holy Ground x0.8, unscouted Night label x0.92.
+  Duel 74 % (28/38). Integration owes: world.js:478/:1176 + stateContainer.js:96 callers (phase3-hookup.md §7).
+- **Integration Phase 2 UI ACCEPTED** (generals 127, frontier 159, desktop 191, phone 188, a11y 152, icons 25, hints 17 placed;
+  gallery screenshots/phase2/). Lead polish sent: laurel Renown icon (was the Realm trophy), ability name as a header banner
+  (was clipped under badges), General emblem on the ability button, tray chip subtitle = kind only + toggle renamed "Delegate",
+  skill buttons state the real effect, Militia row typography, recruit lines -> config. Then Phase 3 UI per phase3-hookup.md.
+- **2026-10-03 Phase 3 UI DONE, handed to the user for playtest** (user: less mid-way QA, one pass at the end). Final pass: npm 1072,
+  desktop 191, phone 188, frontier 159, generals 127. Lead fix: ai.js defend() never reinforces the Gate (keep refilled it endlessly);
+  this broke one label test (swarm Fair 92 %); sim re-fit the Siege label factor 0.88 -> 0.75, 1072/1072 green, D1 1.31 h / D2 1.28x /
+  D3 1.24x, waits > 40 m on 0/1/1 of 12. Gates behind a settlement (15 of 48) kept: take the near settlement first.
+- **2026-10-03 PHASE 4 "Goals and Rivals" STARTED** (user: "work on more of the new features"). Spec + contract: docs/PLAN-PHASE4.md
+  (Bounty Board, Conquest Streak, Deeds across dynasties, Rival Grudges and Vendettas with a Champion, Phase 3 rough edges).
+  Fresh Opus engineers: sim/meta (writes docs/briefs/phase4-hookup.md early) and integration (4E first, then UI, then hook-up).
+  One QA pass at the end, then the user playtests.
+- **2026-10-03 PHASE 4 DONE, handed to the user for playtest.** Sim/meta: bounties (13 kinds), streak (cap x1.3), 12 deeds / 29 tiers
+  in state.generals.deeds, grudges (+16 per region) and Vendettas (war band x1.8, Champion power 2.0; held 82 %), 8 new voice
+  triggers; D1 1.13 h / D2 1.44 h / D3 1.45 h, waits > 40 m on 0/1/0 of 12. Integration: board in the Regions panel (HUD full at
+  360 px), streak chip under gold, Deeds grid + Trophy wall in Realm, grudge strip + card meter, Vendetta banner, Champion ring and
+  pennant, envelope pip for dismissed offers. npm 1088/1089 (only the generateWorld timing test under load; ~100 ms alone);
+  checks desktop 191, phone 188, generals 127, goals 118, hints + iconcheck ok. Gallery screenshots/phase4/. Open: swarm label
+  calibration (ceiling 0.99), Champion gallery frames weak, INTEGRATION-NOTES has no Phase 4 section (brief is phase4-hookup.md).
+- **2026-10-03 PHASE 5 "Dynasties that change the rules" STARTED** (user: "continue working"). Spec + contract: docs/PLAN-PHASE5.md
+  (Edicts 1-of-3 at founding, Legacy tree in state.generals.legacy, Challenges, Quick Conquest for Easy regions, the founding
+  ceremony; plus swarm calibration, defense retreats keep the streak, INTEGRATION-NOTES Phase 4/5). Fresh Opus sim/meta +
+  integration engineers; one QA pass at the end.
+- **Sim/meta Phase 5 DONE** (1105/1105): edictMods = the one modifier source (Edict + Challenges + Legacy); 15 Legacy nodes in
+  state.generals.legacy; foundDynasty(..., {edict, challenges, legacyBuys}); Quick Conquest driven by the attacker bot (steward
+  only 65-81 %), 99.6 % on Easy. D1 1.13 h / D2 1.17x / D3 1.13x, 0 waits > 40 m; every Edict D2 0.91-1.37x (Warrior Kings
+  cooldown cost eased +50 -> +35 %). Swarm label honest again via GENERALS.cardCredit.vs.swarm = 3, test ceiling back to 0.92.
+  Later: an economy pass with the campaign reading the commander-credited card (D1 would drop to 1.04 h).
+- **2026-10-04 PHASE 6 "The Ashen Host" STARTED** (spec docs/PLAN-PHASE6.md): rival rotation from D2, a 4th rival with The
+  Fallen Rise (20 % of your losses join them; Firestorm burns the dead), the Barrow Keep Rising, the Gravewarden General, the Pale
+  Margrave voice, + the credited-card economy pass. Sim/meta started in NEW files only while Phase 5 integration finishes its QA;
+  lead sends "Phase 5 QA done" to unlock edits. Integration for Phase 6 starts after the Phase 5 report.
+- **2026-10-04 PHASE 5 DONE** (integration): founding ceremony (game/ui/ceremony.js, 5 steps, full screen < 600 px), Realm Edict +
+  laurels + Legacy tree, Quick Conquest button/overlay (600 sim steps per frame), Edict/Challenge UI effects, tutorial D1 (inside the
+  ceremony) + D2 (afterDone flag), Realm stats split This dynasty / All time. Final pass: npm 1105, phase5 96, desktop 191, phone 188,
+  frontier 159, generals 129, goals 118, hints all placed, iconcheck ok. Gallery screenshots/phase5/. Phase 6 unlocked; Phase 6
+  integration engineer started. Rough edges: no leader lines for
+  Plague/Merchant; an event toast closed with x cannot be reopened; phase3 gallery not re-shot after the gate/toast/plague fixes.
+  - TODO: swarm calibration pass: Fair fights vs Amber won 98%, ceiling temporarily 0.98-0.99: 50 of 51 failed 0.98 (game/tests/balance.labels.test.js).
+- **Integration Phase 2 polish + Phase 3 UI DONE** (report pending lead review): laurel everywhere Renown shows, ability banner, emblem on the
+  ability button, "Delegate" tray toggle, real-effect skill picks, Militia row typography, recruit lines in config. Phase 3: §7 callers, boons /
+  worldEvents state + save (Duel runs survive save), Gold Mine income on the card; map type badges + twist glyphs + Plague tint; card type /
+  twist / boss rows; battle sprites (Bandit Camp, Gate, Shrine, Ancient Tower), Night / Blizzard / Flooded / Holy / Siege / Raid visuals, the
+  Dragon (perch, flight, telegraph, breath, health, fall); world events loop (offer toasts, Merchant deals, Plague, Duel with its own card);
+  Dragonscale in Realm; tutorial V1-V5. `check.mjs --only=variety`, `integration.phase3.test.js`, gallery `screenshots/phase3/`.
+- **Integration Step 2 DONE** (~11:00): the tray (+ Captain toggle), Map / switching / Tab, a second attack, crossed swords, marching war bands,
+  incoming toast with Go + countdown (`app/frontierLoop.js`, `__hd.raid`), defense runs on arrival (enemy camp at site 0, "Hold m:ss", Abandon copy,
+  Defended / Region lost cards), the steward for unwatched runs (captain; stalwart with a commander), occupied hatch + badge + Retake card, the
+  Fortifications panel (the Works panel parameterised) + fort marks on the map + walls in battle, the away report on the welcome card, tutorial
+  F1-F4, battleThreat uses siteDefence (Walls). `check.mjs --only=frontier` (multi-battle + defenses, desktop and phone). Gallery
+  `screenshots/frontier/` (`tools/frontiershots.mjs`).
+
 ## LIVE (2026-10-02): v2 deployed to GitHub Pages from main a48e1d7
 
 ## ROUND 3 (2026-09-30 ~11:00): user playtest feedback, done

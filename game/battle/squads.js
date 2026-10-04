@@ -36,6 +36,14 @@ export function sendFromSite(battle, fromSiteId, toSiteId, fraction, opts = null
     state: 'march',
     foe: null,
   };
+  // Charge (DESIGN §10.11): the player's next squads march faster and hit harder
+  const fx = battle.effects;
+  if (from.squadPower) squad.power = from.squadPower; // a Bandit Camp's veterans hit harder wherever they march (DESIGN §10.13)
+  if (squad.owner === PLAYER_OWNER && fx && fx.chargeLeft > 0) {
+    squad.power = fx.chargePower;
+    squad.speedMult = fx.chargeSpeed;
+    fx.chargeLeft -= 1;
+  }
   battle.squads.push(squad);
   if (squad.owner === PLAYER_OWNER) battle.stats.sent += count;
   const event = {

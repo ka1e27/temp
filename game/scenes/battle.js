@@ -3,6 +3,7 @@
 // the victory sequence (hit-stop, surrender cascade, tile flood, fanfare, card) and the defeat /
 // retreat cards. The look of the arena itself lives in render/arenaLayer.js (live territory + soft
 // dim) and render/units.js (squads, intent lines); who-owns-what timing in scenes/arenaOwnership.js.
+import { edictMods, commanderFor as edictCommander } from '../meta/edicts.js';
 import { hexDistance } from '../core/hex.js';
 import { elevOffset } from '../render/tiles.js';
 import { drawDragArrow } from '../render/sprites.js';
@@ -13,29 +14,34 @@ import {
 } from '../render/supplyLines.js';
 import { buildArena } from '../battle/arena.js';
 import {
-  createBattle, step, issue, previewSend, canRoute, routeFor,
+  createBattle, issue, previewSend, canRoute, routeFor,
 } from '../battle/sim.js';
-import { think } from '../battle/ai.js';
 import { tileAt } from '../battle/runtime.js';
 import { PLAYER_OWNER, FREE_FOLK_OWNER } from '../battle/owner.js';
-import { createFixedStepper } from '../input/clock.js';
 import { hexRadiusToWorld } from '../battle/geom.js';
 import {
-  playerBattleStats, enemyBattleStats, conquer, revealed, frontier,
+  playerBattleStats, enemyBattleStats, revealed, conquestBounty, crownsPayable, difficulty
 } from '../meta/progression.js';
 import { PLAYER_FACTION } from '../meta/state.js';
 import { plausibleBattle } from '../meta/save.js';
-import { chronicleOnConquest } from '../meta/chronicle.js';
 import { announce } from '../ui/live.js';
+import { icon } from '../ui/icons.js';
 import { POWER_IDS, UPGRADES } from '../meta/upgrades.js';
 import { bounty } from '../meta/economy.js';
 import {
-  trackerOf, trackBattle, evaluateBattle, awardCrowns, crownBonus, swiftDeadlineSec,
+  trackerOf, evaluateBattle, crownBonus, swiftDeadlineSec,
 } from '../meta/crowns.js';
 import { CROWN_BONUS_PCT } from '../app/crownCopy.js';
-import { sabotageBattleNote, sabotageLevel, clearRegionIntel } from '../meta/intel.js';
+import { sabotageBattleNote, sabotageLevel } from '../meta/intel.js';
 import { battleIntensity, battleAssault } from '../audio/musicIntensity.js';
-import { TICK_SEC, POWERS, SUPPLY } from '../config/battle.js';
+import { POWERS, SUPPLY } from '../config/battle.js';
+import { FRONTIER } from '../config/frontier.js';
+import { EVENTS } from '../config/events.js';
+import { attackArenaOpts } from '../meta/frontier.js';
+import { bestFreeGeneral, freeGenerals, generalById, abilityText } from '../meta/generals.js';
+import { abilityState } from '../battle/sim.js';
+import { GENERALS } from '../config/generals.js';
+import { generalEmblem } from '../ui/generalsPanel.js';
 import { perkDisplay } from '../app/perkInfo.js';
 import { effectiveRegionIncome } from '../app/income.js';
 import { createModal } from '../ui/modal.js';
@@ -49,6 +55,9 @@ import { onDialogChange, dialogCount } from '../ui/dialogs.js';
 import { siteBox, unionBox, boxOfRect } from '../app/hintTargets.js';
 import { FEATURES } from '../app/features.js';
 import { createArenaOwnership } from './arenaOwnership.js';
+import { createBattleFeatures } from './battleFeatures.js';
+import { createBattleAshen } from './battleAshen.js';
+import { championTitle } from '../meta/leaders.js';
 import { computeThreats } from './battleThreat.js';
 import {
   frameInRect, openCameraLimits, pickLandTile,
@@ -61,8 +70,10 @@ const MAX_DIM = 1 - BATTLE_ENTER.dimBrightness;
 const SHORT_POWER_NAMES = { rally: 'Rally', firestorm: 'Storm', bulwark: 'Bulwark', march: 'March', levy: 'Levy' };
 
 /** A saved battle that can really be resumed: the right shape (meta/save.js plausibleBattle) and a region the player has not already taken. */
-function resumable(b, state, world) {
-  return plausibleBattle(b, state.owner.length) && !!world.regions[b.arena.regionId] && state.owner[b.arena.regionId] !== PLAYER_FACTION;
+function resumable(b, state, world, kind = 'attack') {
+  if (!plausibleBattle(b, state.owner.length) || !world.regions[b.arena.regionId]) return false;
+  // an attack on a region already won would be a ghost fight; a DEFENSE is fought in a region that is still yours
+  return kind === 'defense' || kind === 'duel' ? state.owner[b.arena.regionId] === PLAYER_FACTION : state.owner[b.arena.regionId] !== PLAYER_FACTION; // a Duel too is fought in a region of yours
 }
 
 /**
@@ -73,12 +84,14 @@ export function createBattleScene(services) {
     camera, renderer, ui, input, container, sfx, tutorial, goto, music, speak, voice,
   } = services;
   const { ctx } = renderer;
-  const stepper = createFixedStepper(TICK_SEC);
+  // Battles live in the manager (app/battles.js, ARCHITECTURE 10.1): it steps every run; this scene is a VIEW of the run it is focused on.
+  const manager = services.battles;
 
   let active = false;
   let world = null;
   let regionId = null;
   let battle = null;
+  let run = null; // the BattleRun this view shows (manager.focused())
   let own = null; // arena ownership (display owners, ripple, cascade, flood)
   let battleOwners = []; // region -> faction for the chunked terrain (target region + fog blanked)
   let hiddenIds = []; // fogged regions, kept under the dim
@@ -134,6 +147,29 @@ export function createBattleScene(services) {
   let surrenderSites = []; // sites the last `surrender` event flipped (victory cascade)
 
   const reduceMotion = () => !!container.get().state.settings.reduceMotion;
+  const isMine = (id) => active && !!run && id === run.id;
+  /** The run shown is a DEFENSE of one of your regions (DESIGN 10.1): site 0 is the ENEMY's war-band camp there, the end is "Defended" or "Region lost". */
+  // a Duel (DESIGN 10.13) is fought like a defense: site 0 is the champion's war band, you hold until the time runs out
+  const isDefense = () => !!run && (run.kind === 'defense' || run.kind === 'duel');
+  const isDuel = () => !!run && run.kind === 'duel';
+  /** "the Crimson Legion": the attacker of a defense, or the defender of an attack. */
+  const theAttacker = () => {
+    const f = world.factions[run && run.attackerFaction != null ? run.attackerFaction : battle.arena.enemyFaction];
+    return f ? (/^the /i.test(f.name) ? f.name : `the ${f.name}`) : 'the enemy';
+  };
+  /** The Retreat confirmation's warning while a conquest streak is alive (PLAN-PHASE4 §4B; app/goals.js), or ''. */
+  const streakWarning = () => (services.goals ? services.goals.retreatWarning() : '');
+  // the manager steps the run; the view snapshots the units and owners before each step and plays the events of the run it shows
+  manager.on('beforeStep', (id) => {
+    if (!isMine(id)) return;
+    renderer.units.snapshot(battle);
+    lastOwnerSnapshot = battle.sites.map((s) => s.owner);
+  });
+  manager.on('events', (id, events) => {
+    if (!isMine(id)) return;
+    const nowMs = performance.now();
+    for (const ev of events) handleEvent(ev, nowMs);
+  });
 
   // --- geometry / helpers -------------------------------------------------------
   function siteTile(site) {
@@ -206,9 +242,20 @@ export function createBattleScene(services) {
     return camera.worldToScreen(p.x, p.y);
   }
 
+  // A varied map (DESIGN 10.13): twists, feature sites and the Dragon (scenes/battleFeatures.js draws and words them)
+  const feat = createBattleFeatures({
+    ctx, camera, renderer, sfx, ui, container, reduceMotion, tutorial, siteWorldPos, playerFaction: PLAYER_FACTION,
+    ownerFaction: (owner) => (owner === PLAYER_OWNER ? PLAYER_FACTION : owner === FREE_FOLK_OWNER ? -1 : battle.arena.enemyFaction),
+  });
+
+  // The Ashen Host (PLAN-PHASE6 §6B): The Fallen Rise's wisps, Firestorm burning the dead, the Barrow Keep's Rising (scenes/battleAshen.js)
+  const ashen = createBattleAshen({ ctx, camera, renderer, sfx, ui, reduceMotion, siteWorldPos });
+
   // --- fx / sfx event routing (INTEGRATION-NOTES event mapping) ---------------------
   function handleEvent(ev, nowMs) {
     const fx = renderer.fx;
+    if (ashen.onEvent(ev, nowMs)) return;
+    if (feat.onEvent(ev, nowMs)) return;
     switch (ev.type) {
       case 'send': {
         const p = siteWorldPos(battle.sites[ev.from]);
@@ -266,6 +313,8 @@ export function createBattleScene(services) {
         if (nowMs - lastArrowSfx > 140) { lastArrowSfx = nowMs; sfx.play('arrow', { volume: 0.35 }); } // several sources can loose at once: one twang
         break;
       case 'power': handlePowerEvent(ev); break;
+      case 'ability': handleAbilityEvent(ev); break;
+      case 'championFell': handleChampionFell(ev); break;
       case 'surrender': surrenderSites = ev.sites.slice(); break;
       case 'end': beginEndSequence(ev.result, nowMs); break;
       default: break;
@@ -326,6 +375,7 @@ export function createBattleScene(services) {
       const duration = POWERS.bulwark.duration + POWERS.bulwark.durationPerLevel * (level - 1);
       fx.spawn('shield', ev.x, ev.y, { duration });
       sfx.play('bulwark');
+      if (ev.owner === PLAYER_OWNER) tutorial.notify('bulwark');
     } else if (ev.power === 'march') {
       sfx.play('march');
     } else if (ev.power === 'levy') {
@@ -339,25 +389,43 @@ export function createBattleScene(services) {
   }
 
   // --- end sequences ---------------------------------------------------------------
+  /** The end of a DEFENSE (DESIGN 10.1): no conquest choreography; a fanfare and "Defended", or the defeat cue and "Region lost". */
+  function endDefense(result, nowMs) {
+    targeting = null;
+    drag = null;
+    selection.clear();
+    ui.tooltip.update({ visible: false });
+    manager.recordResult(run.id);
+    if (result === 'win') {
+      sfx.play('victory');
+      music.stinger('victory', { resolveInSec: 0.4 });
+      const f = battle.arena.focus;
+      if (!reduceMotion()) renderer.fx.spawn('confetti', (f.minX + f.maxX) / 2, (f.minY + f.maxY) / 2, {});
+    } else {
+      sfx.play('defeat');
+      music.stinger('defeat');
+    }
+    phase = 'defeat'; // the same short pause before the card as a lost attack
+    defeatAtMs = nowMs;
+    resultsShown = false;
+    services.autosave.save();
+  }
+
   function beginEndSequence(result, nowMs) {
     lastResult = result;
+    if (isDefense()) { endDefense(result, nowMs); return; }
     const { state } = container.get();
-    state.stats.troopsSent += battle.stats.sent;
     targeting = null;
     drag = null;
     selection.clear();
     ui.tooltip.update({ visible: false });
     if (result === 'win') {
       crownResult = evaluateBattle(trackerOf(battle), battle, world, regionId, state);
-      state.stats.battlesWon += 1;
-      state.stats.settlementsTaken += battle.stats.captured;
-      if (state.stats.bestBattleSec == null || battle.stats.durationSec < state.stats.bestBattleSec) {
-        state.stats.bestBattleSec = battle.stats.durationSec;
-      }
+      manager.recordResult(run.id); // lifetime stats (troops sent, battles won, settlements taken, best time): the manager's, shared with unwatched runs
       startVictory(nowMs);
     } else {
+      manager.recordResult(run.id);
       if (result === 'lose') {
-        state.stats.battlesLost += 1;
         sfx.play('defeat');
         music.stinger('defeat');
       } else {
@@ -448,12 +516,31 @@ export function createBattleScene(services) {
     resultsShown = true;
     const { state } = container.get();
     const region = world.regions[regionId];
+    if (isDuel()) {
+      // a Duel (DESIGN 10.13): its own card; the Renown is paid on Continue (app/battles.js finish -> duelReward)
+      const champ = run.champion || theAttacker();
+      ui.results.update({ result: lastResult === 'win' ? 'duelWon' : 'duelLost', regionName: region.name, renown: EVENTS.duel.renown, champion: champ, durationSec: battle.stats.durationSec, troopsLost: battle.stats.lost, troopsKilled: battle.stats.killed });
+      ui.results.el.hidden = false;
+      ui.battleHud.el.hidden = true;
+      if (helpBtn) helpBtn.hidden = true;
+      return;
+    }
+    if (isDefense()) {
+      // the reward is paid on Continue (app/battles.js finish -> defenseReward); the card shows what it will be
+      ui.results.update(lastResult === 'win'
+        ? { result: 'defended', regionName: region.name, reward: Math.round(bounty(state, world, regionId) * FRONTIER.reward.bountyShare), durationSec: battle.stats.durationSec, troopsLost: battle.stats.lost, troopsKilled: battle.stats.killed }
+        : { result: 'occupied', regionName: region.name, occupier: theAttacker(), durationSec: battle.stats.durationSec });
+      ui.results.el.hidden = false;
+      ui.battleHud.el.hidden = true;
+      if (helpBtn) helpBtn.hidden = true;
+      return;
+    }
     if (lastResult === 'win') {
       if (!crownResult) crownResult = evaluateBattle(trackerOf(battle), battle, world, regionId, state);
       ui.results.update({
         result: 'victory',
         regionName: region.name,
-        bounty: bounty(state, world, regionId),
+        bounty: conquestBounty(state, world, regionId), // the payout's own function: a retake pays its share
         newIncome: effectiveRegionIncome(state, world, region),
         perk: perkDisplay(region.perk, world, region),
         durationSec: battle.stats.durationSec,
@@ -461,7 +548,8 @@ export function createBattleScene(services) {
         troopsKilled: battle.stats.killed,
         crowns: crownResult.crowns,
         parSec: crownResult.parSec,
-        crownBonus: crownBonus(state, world, regionId, crownResult.crowns), // exact, pre-conquest bounty
+        // exact, pre-conquest, from what conquer pays (awardCrowns multiplies the same base); a region that already holds crowns earns none again
+        crownBonus: crownsPayable(state, regionId) ? crownBonus(state, world, regionId, crownResult.crowns, conquestBounty(state, world, regionId)) : 0,
         bonusPct: CROWN_BONUS_PCT,
         // The first victory explains crowns once, as a static line on the card (no coach z-index games).
         firstVictory: state.stats.battlesWon === 1 && state.settings.hints !== false,
@@ -492,31 +580,25 @@ export function createBattleScene(services) {
 
   function onResultsContinue() {
     if (lastResult !== 'win') { onBackToMap(); return; }
-    const { state } = container.get();
-    const beforeRevealed = revealed(state, world);
-    const frontierBefore = frontier(state, world);
-    const oldOwner = battle.arena.enemyFaction;
-    const id = regionId;
+    const id = run.id;
+    if (isDefense()) {
+      leave(() => {
+        const out = manager.finish(id); // defenseReward: the gold, the militia drain, the region's cooldown (a Duel: duelReward's Renown)
+        goto.world({ cameFromBattle: true });
+        if (out && out.kind === 'duel') { if (out.renown > 0) ui.toasts.update({ type: 'success', icon: 'laurel', message: `Duel won at ${world.regions[out.regionId].name}: +${out.renown} Renown` }); services.autosave.save(); return; }
+        if (out && out.reward && out.reward.gold > 0) ui.toasts.update({ type: 'success', icon: 'coin', message: `${world.regions[out.regionId].name} held: +${Math.round(out.reward.gold)} gold` });
+        services.autosave.save();
+      });
+      return;
+    }
     leave(() => {
-      const result = conquer(state, world, id, Date.now());
-      clearRegionIntel(state, id); // scouted / sabotaged only until the region is ours
-      // Crowns pay their bonus on top of the base bounty (never repaying it); retries only count the winning battle.
-      const crownAward = crownResult
-        ? awardCrowns(state, world, id, crownResult.crowns, result.bounty)
-        : { bonusGold: 0, count: 0 };
-      // the realm's story (Keepsakes): a line for a notable conquest. The story must never be able to stop a conquest from landing, so it is guarded.
-      try {
-        chronicleOnConquest(state, world, id, {
-          crowns: crownResult ? crownResult.crowns : null, // { victory, swift, unbroken }
-          battleSec: battle.stats.durationSec, // the winning battle's length (a retry only counts the battle that won)
-          decapitated: !!result.decapitated,
-        });
-      } catch (err) { console.warn('[chronicle] conquest line skipped:', err); }
-      state.battle = null;
+      // conquer + crowns + chronicle: the manager applies a won attack (ARCHITECTURE 10.1), with the crowns this view already evaluated
+      const out = manager.finish(id, { crownResult });
+      if (!out) { goto.world({ cameFromBattle: true }); return; }
       goto.world({
         cameFromBattle: true,
         conquered: {
-          regionId: id, bounty: result.bounty + crownAward.bonusGold, beforeRevealed, oldOwner, frontierBefore, decapitated: !!result.decapitated,
+          regionId: out.regionId, bounty: out.result.bounty + out.crownAward.bonusGold, beforeRevealed: out.beforeRevealed, oldOwner: out.oldOwner, frontierBefore: out.frontierBefore, decapitated: !!out.result.decapitated,
         },
       });
       services.autosave.save();
@@ -525,16 +607,14 @@ export function createBattleScene(services) {
 
   function onRetry() {
     if (leaving) return;
-    const { state } = container.get();
-    state.battle = null;
-    startBattle(regionId, { skipIntro: true });
+    if (run) manager.remove(run.id);
+    startBattle(regionId, { skipIntro: true, commander: freeOrCaptain(lastCommander) }); // the same commander, if still free
   }
 
   function onBackToMap() {
     if (leaving) return;
     leave(() => {
-      const { state } = container.get();
-      state.battle = null;
+      if (run) manager.finish(run.id); // a lost or retreated attack changes nothing; the run is removed
       goto.world({ cameFromBattle: true });
       services.autosave.save();
     });
@@ -542,7 +622,7 @@ export function createBattleScene(services) {
 
   function onRetreat() {
     if (!battle || battle.result || phase !== 'live') return;
-    issue(battle, { type: 'retreat' });
+    manager.retreat(run.id);
   }
 
   // --- input ----------------------------------------------------------------------
@@ -564,6 +644,14 @@ export function createBattleScene(services) {
 
   function handleTargetTap(sx, sy, wx, wy, meta) {
     const power = targeting.power;
+    if (power === 'ability') {
+      // a Raid's target: an enemy settlement (DESIGN 10.11); a tap elsewhere cancels
+      const siteId = hitTestSites(allSiteCandidates(), camera, sx, sy);
+      targeting = null;
+      if (siteId == null || battle.sites[siteId].owner === PLAYER_OWNER) { ui.toasts.update({ id: 'ability', message: 'Raid cancelled: pick an enemy settlement', duration: 1800 }); return; }
+      useAbility(siteId);
+      return;
+    }
     if (power === 'firestorm') {
       const tile = nearestArenaTile(wx, wy) || pickLandTile(world, wx, wy);
       if (!tile) { targeting = null; return; }
@@ -678,6 +766,7 @@ export function createBattleScene(services) {
 
   /** A send or supply order the front-line rule refused: the target shakes, says why, and the error cue plays. */
   function onRefused(ev, nowMs) {
+    if (ev.reason === 'ironWill') { refusedPower(IRON_WILL_TEXT, ev.power); return; } // the sim refused a power under Iron Will (PLAN-PHASE5 §5C)
     if (ev.reason !== 'noRoute') return;
     refusal = { site: ev.to, startMs: nowMs, tipUntilMs: nowMs + 2600 };
     sfx.play('error', { volume: 0.6 });
@@ -770,7 +859,8 @@ export function createBattleScene(services) {
         drag.outcome = preview.outcome; // the arrow turns green (capture), red (not enough) or grey (no route), like the tooltip says
         drag.unroutable = preview.unroutable || [];
         // on a phone the words sit about 60 px above the finger, which would otherwise cover them
-        ui.tooltip.update({ visible: true, x: sx, y: sy - (services.isTouch() ? 84 : 0), text: drag.supply ? supplyPreviewText(preview, drag.from, target) : previewText(preview) });
+        const gateText = preview.outcome === 'noRoute' ? feat.noRouteText(target) : null; // Siege: the keep is shut until its Gate falls
+        ui.tooltip.update({ visible: true, x: sx, y: sy - (services.isTouch() ? 84 : 0), text: gateText || (drag.supply ? supplyPreviewText(preview, drag.from, target) : previewText(preview)) });
       } else {
         drag.outcome = null;
         drag.unroutable = [];
@@ -822,7 +912,7 @@ export function createBattleScene(services) {
   }
 
   // --- the keyboard site cursor (DESIGN 7.5a B2): arrows move a ring between settlements, Enter selects one of yours or sends to another, the live region says what would happen ---
-  const SITE_WORDS = { keep: 'keep', fort: 'fort', tower: 'tower', town: 'town', village: 'village', hamlet: 'hamlet', camp: 'War Camp' };
+  const SITE_WORDS = { keep: 'keep', fort: 'fort', tower: 'tower', town: 'town', village: 'village', hamlet: 'hamlet', camp: 'War Camp', bandit: 'Bandit Camp', gate: 'Gate', shrine: 'Shrine' };
 
   function describeSite(site) {
     const who = site.owner === PLAYER_OWNER ? 'yours' : site.owner === FREE_FOLK_OWNER ? 'neutral' : `held by ${(world.factions[site.owner] || { name: 'the enemy' }).name}`;
@@ -919,11 +1009,66 @@ export function createBattleScene(services) {
     if (!active) return;
     const code = event ? event.code : '';
     if (key === 'Escape') { onCancel(); return; }
+    if (key === 'Tab' && event && !event.ctrlKey && !event.metaKey && !event.altKey && cycleBattle(event.shiftKey ? -1 : 1)) { event.preventDefault(); return; }
     if (key === ' ' || key === 'Spacebar' || code === 'Space') { togglePause(); return; }
     if (event && document.activeElement === renderer.canvas && !event.ctrlKey && !event.metaKey && !event.altKey && phase === 'live' && onCursorKey(key, event)) return;
     if ((code === 'KeyA' || (!code && (key === 'a' || key === 'A'))) && phase === 'live') {
       selection = new Set(battle.sites.filter((s) => s.owner === PLAYER_OWNER).map((s) => s.id));
     }
+  }
+
+  /**
+   * Tab on the battle map switches to the next running battle (Shift+Tab the previous one), DESIGN 10.5. It never wraps: from the last battle Tab moves focus
+   * on as usual (to the HUD), so the keyboard is never trapped on the map. True when it switched.
+   */
+  function cycleBattle(dir) {
+    if (phase !== 'live' || document.activeElement !== renderer.canvas || !run) return false;
+    const runs = manager.list();
+    if (runs.length < 2) return false;
+    const at = runs.findIndex((r) => r.id === run.id);
+    const next = runs[at + dir];
+    if (!next) return false;
+    switchTo(next.id);
+    return true;
+  }
+
+  /** Watches another running battle: the manager's focus moves, this view re-frames on it (a camera flight, no intro). */
+  function switchTo(id) {
+    if (!active || phase !== 'live') return false; // never in the middle of a fly-in, a victory sequence or a results card (that run's ending must play out)
+    const next = manager.get(id);
+    if (!next || (run && next.id === run.id)) return false;
+    if (run && manager.get(run.id)) manager.setGate(run.id, null);
+    renderer.units.reset();
+    renderer.arena.end();
+    if (own) own.settle();
+    renderer.fx.clear();
+    ui.results.el.hidden = true;
+    if (skipBtn) skipBtn.hidden = true;
+    run = next;
+    battle = run.battle;
+    regionId = run.regionId;
+    manager.focus(run.id);
+    setupView({ skipIntro: true, fly: true });
+    if (battle.result) resumeEnded(); else announce(`Watching the ${run.kind === 'duel' ? 'duel at' : run.kind === 'defense' ? 'defense of' : 'attack on'} ${world.regions[regionId].name}. Battle ${manager.list().findIndex((r) => r.id === run.id) + 1} of ${manager.list().length}.`);
+    tutorial.notify('battleSwitched');
+    return true;
+  }
+
+  /** Back to the map with this battle still running (DESIGN 10.5): its commander holds it, the tray brings you back. */
+  function leaveToMap() {
+    if (!active || !run || phase !== 'live' || leaving) return;
+    const name = world.regions[regionId].name;
+    leave(() => {
+      manager.focus(null);
+      goto.world({ cameFromBattle: true, fromBattleView: true });
+      ui.toasts.update({ id: 'battle-running', type: 'info', icon: 'sword', message: `The battle for ${name} goes on: your commander holds it. Pick it in the tray to return.`, duration: 3600 });
+    });
+  }
+
+  /** Whether the HUD offers "Map" (leave the battle running): never in the very first battle (the tutorial fight is fought by hand). */
+  function canLeave() {
+    const { state } = container.get();
+    return phase === 'live' && state.stats.battlesWon + state.stats.battlesLost > 0;
   }
 
   function installHandlers() {
@@ -967,6 +1112,7 @@ export function createBattleScene(services) {
   function togglePause() {
     if (!active || phase !== 'live') return;
     paused = !paused;
+    manager.setPaused(paused); // speed and pause are global (ARCHITECTURE 10.1)
     tutorial.notify('pauseOrSpeed');
     ui.battleHud.update({ paused: paused || dialogOpen });
     ui.battleHud.el.classList.toggle('is-paused', paused);
@@ -975,11 +1121,14 @@ export function createBattleScene(services) {
   function onSpeed(next) {
     if (!active) return;
     speed = next;
+    manager.setSpeed(next);
     tutorial.notify('pauseOrSpeed');
     container.get().state.settings.speed = next;
     ui.battleHud.update({ speed });
   }
 
+  const IRON_WILL_TEXT = 'No powers: Iron Will';
+  const noPowers = () => { const st = container.get().state; return !!edictMods(st).noPowers || !!(battle && battle.player && battle.player.powersBlocked); };
   /** A refused power is SEEN as well as heard: a toast (in place, never a pile) and the button shakes. */
   function refusedPower(message, id) {
     sfx.play('error');
@@ -987,10 +1136,88 @@ export function createBattleScene(services) {
     if (id) ui.battleHud.refuse(id);
   }
 
+  // --- the commander's ability (DESIGN 10.11) ------------------------------------------------------------------------
+  /** The HUD button's data, or null under the Militia Captain (no ability). */
+  function abilityHud() {
+    const st = abilityState(battle);
+    if (!st) return null;
+    const { state } = container.get();
+    const g = run && run.commander ? generalById(state, run.commander) : null;
+    return { kind: g ? g.kind : 'captain', emblem: () => generalEmblem(g ? g.kind : 'captain', 26), name: GENERALS.copy.abilityNames[st.id] || st.id, ready: st.ready && phase === 'live', used: st.used, uses: st.uses || 1, left: st.left ?? (st.ready ? 1 : 0), armed: !!(targeting && targeting.power === 'ability'), desc: g ? abilityText(g) : '' };
+  }
+  /** The button (or G): fires at once, or, for a Raid, waits for a target tap (press again to cancel). */
+  function onAbility() {
+    if (!active || !battle || phase !== 'live') return;
+    const st = abilityState(battle);
+    if (!st || !st.ready) { if (st) refusedPower('Your commander has used their ability this battle.'); return; }
+    if (targeting && targeting.power === 'ability') { targeting = null; updateBattleHud(performance.now(), true); return; }
+    if (st.needsTarget) {
+      targeting = { power: 'ability' };
+      ui.toasts.update({ id: 'ability', message: 'Raid: pick the enemy settlement to strike', duration: 2400 });
+      updateBattleHud(performance.now(), true);
+      return;
+    }
+    useAbility(null);
+  }
+  function useAbility(target) {
+    const st = abilityState(battle);
+    if (!st) return;
+    const cmd = { type: 'ability', owner: PLAYER_OWNER, ability: st.id };
+    if (target != null) cmd.target = target;
+    issue(battle, cmd);
+    tutorial.notify('abilityUsed');
+    updateBattleHud(performance.now(), true);
+  }
+  /** The commanding General's emblem element, for the ability banner. */
+  function commanderEmblem() {
+    const g = run && run.commander ? generalById(container.get().state, run.commander) : null;
+    return generalEmblem(g ? g.kind : 'captain', 20);
+  }
+
+  /** fx for the ability event at (x, y); a Shield Wall rings every settlement it covers. */
+  function handleAbilityEvent(ev) {
+    const fx = renderer.fx;
+    const gold = ACCENTS.gold;
+    if (ev.x != null) {
+      fx.spawn('shockwave', ev.x, ev.y, { color: gold, growth: 3.2, duration: 0.7, thickness0: 0.1, thickness1: 0.02 });
+    }
+    for (const id of ev.sites || []) {
+      const site = battle.sites[id];
+      if (!site) continue;
+      const p = siteWorldPos(site);
+      fx.spawn('burst', p.x, p.y, { color: '#9cc4ff', flashSize: 1.1, sparkleCount: 6 });
+    }
+    if (ev.owner === PLAYER_OWNER) ui.battleHud.showAbilityBanner(GENERALS.copy.abilityNames[ev.ability] || 'Ability', commanderEmblem());
+    sfx.play('rally', { pitch: 1.15 });
+    if (ev.owner === PLAYER_OWNER) announce(`${GENERALS.copy.abilityNames[ev.ability] || 'The ability'} is used`);
+  }
+
+  /** A Vendetta's Champion is dead (PLAN-PHASE4 §4D): "{Leader}'s champion has fallen!", a gold shockwave where it fell, the war band's attack drops. */
+  function handleChampionFell(ev) {
+    const fx = renderer.fx;
+    const champTitle = championTitle(run && run.vendetta ? run.vendetta.faction : battle.arena.enemyFaction); // the Ashen send a Barrow Knight (PLAN-PHASE6)
+    let x = ev.x;
+    let y = ev.y;
+    if (x == null && ev.site != null && battle.sites[ev.site]) ({ x, y } = siteWorldPos(battle.sites[ev.site]));
+    if (x != null) {
+      fx.spawn('shockwave', x, y, { color: ACCENTS.gold, growth: 4, duration: 0.8, thickness0: 0.14, thickness1: 0.02 });
+      fx.spawn('burst', x, y, { color: ACCENTS.gold, flashSize: 1.4, sparkleCount: 10 });
+      fx.spawn('floatText', x, y - 0.8, { text: `${champTitle} slain!`, color: ACCENTS.gold, size: 0.42 });
+      fx.shake(0.3, 0.3);
+    }
+    const leader = ev.leader || (run && run.vendetta && run.vendetta.leader) || 'The leader';
+    const text = `${leader}'s ${champTitle === 'Champion' ? 'champion' : champTitle} has fallen!`;
+    ui.battleHud.showChampionBanner(text, icon('pennant', 20));
+    sfx.play('victory', { volume: 0.45, pitch: 1.1 });
+    announce(text);
+  }
+
   function onPower(id) {
     if (!active || !battle || phase !== 'live') return;
     const level = battle.player.powers[id] || 0;
     if (level < 1) { sfx.play('error'); ui.toasts.update({ message: 'Unlock this power in the War Council', duration: 2200 }); return; }
+    if (noPowers()) { refusedPower(IRON_WILL_TEXT, id); return; } // Iron Will: no powers this dynasty
+    if (feat.powerFlags(id).holy) { feat.onEvent({ type: 'refused', reason: 'holy', owner: PLAYER_OWNER, power: id }, performance.now()); return; } // Holy Ground (DESIGN 10.13)
     if (battle.t < battle.cooldowns[id]) {
       const left = Math.max(1, Math.ceil(battle.cooldowns[id] - battle.t));
       refusedPower(`${UPGRADES[id].name} is recharging: ${left} s.`, id);
@@ -1012,6 +1239,7 @@ export function createBattleScene(services) {
   function updateBattleHud(nowMs, force = false) {
     if (!force && nowMs - lastHudMs < HUD_HZ_MS) return;
     lastHudMs = nowMs;
+    ui.battleHud.update({ canLeave: canLeave() });
     const youCount = battle.sites.filter((s) => s.owner === PLAYER_OWNER).length;
     const enemyCount = battle.sites.length - youCount;
     ui.battleHud.update({
@@ -1023,12 +1251,22 @@ export function createBattleScene(services) {
         enemyColor: factionColor(battle.arena.enemyFaction),
       },
       timeSec: battle.t,
-      swiftSec: swiftDeadlineSec(world, regionId, container.get().state) - battle.t, // the Swift countdown beside the clock (it dims once missed)
+      // an attack shows the Swift countdown (it dims once missed); a defense the siege left to hold
+      swiftSec: isDefense() ? undefined : swiftDeadlineSec(world, regionId, container.get().state) - battle.t,
+      holdSec: isDefense() ? (battle.arena.siegeSec || battle.siegeSec || 0) - battle.t : undefined,
+      retreat: isDuel()
+        ? { title: 'Yield the duel?', body: 'You yield to the champion. A duel costs nothing: the region stays yours.', action: 'Yield' }
+        : isDefense()
+        ? { title: `Abandon ${world.regions[regionId].name}?`, body: `${world.regions[regionId].name} falls to ${theAttacker()}: it is occupied until you retake it. Its fortifications and Works fight for them meanwhile.`, action: 'Abandon it' }
+        : streakWarning() ? { title: 'Retreat?', body: `Your War Camp falls back. Squads already in the field will be lost. ${streakWarning()}`, action: 'Retreat' }
+        : null,
       sendFraction,
       speed,
       slowBattles: !!container.get().state.settings.slowBattles,
       paused: paused || dialogOpen,
       auto: autoMode,
+      ability: abilityHud(),
+      feature: feat.hud(), // "Hold all 3 Shrines", the Dragon's health, "take the Gate first", the twist (DESIGN 10.13)
       powers: POWER_IDS.map((id) => {
         const level = battle.player.powers[id] || 0;
         const locked = level < 1;
@@ -1041,6 +1279,8 @@ export function createBattleScene(services) {
         }
         return {
           id, icon: UPGRADES[id].icon, name: UPGRADES[id].name, shortName: SHORT_POWER_NAMES[id], level, locked, cooldownFrac: frac, cooldownSec: sec, armed: targeting?.power === id,
+          ...feat.powerFlags(id), // Holy Ground greys them all; the Blizzard's Firestorm reads stronger
+          blocked: noPowers() ? IRON_WILL_TEXT : null, // Iron Will: every power locked, with the reason
         };
       }),
     });
@@ -1102,8 +1342,24 @@ export function createBattleScene(services) {
       selectedCount: selection.size,
       noRouteSeen,
       hasBlocked: !!blockedSite(),
+      // the Living Frontier's steps (F2, F3)
+      incoming: (state.frontier && state.frontier.incoming || []).length,
+      raidToast: !!raidGoButton(),
+      runs: manager.list().length,
+      abilityReady: !!(abilityState(battle) && abilityState(battle).ready),
+      // a varied map (DESIGN 10.13): V2 the first Siege while its Gate stands, V3 the first Raid, V4 the Dragon's warning
+      gateStanding: !!feat.anchors().gate,
+      raid: feat.twist() === 'raid' && !!feat.anchors().shrine,
+      telegraph: !!feat.anchors().telegraph,
+      bulwarkUnlocked: (battle.player.powers.bulwark || 0) >= 1 && feat.twist() !== 'holy',
       features: FEATURES,
     };
+  }
+
+  /** The Go button of the newest incoming raid's toast (tutorial F2), or null. */
+  function raidGoButton() {
+    const btns = [...document.querySelectorAll('.toasts > .toast:not(.is-out) .toast-action')].filter((b) => b.getClientRects().length && /^raid-/.test(b.closest('.toast').dataset.id || ''));
+    return btns.length ? btns[btns.length - 1] : null;
   }
 
   /** The live target for a step (and the side the bubble prefers), or null when there is nothing to point at right now. */
@@ -1115,6 +1371,13 @@ export function createBattleScene(services) {
         avoid: [() => { const p = tutorialArrowTarget(); return p ? unionBox(siteBoxOf(p.camp), siteBoxOf(p.target)) : null; }],
       };
       case 'sendBar': return { target: { find: sendBarEl }, prefer: 'above' };
+      case 'gate': { const g = feat.anchors().gate; return g ? { target: { get: () => siteBoxOf(feat.anchors().gate) }, key: `gate${g.id}` } : null; }
+      case 'shrine': { const sh = feat.anchors().shrine; return sh ? { target: { get: () => siteBoxOf(feat.anchors().shrine) }, key: `shrine${sh.id}` } : null; }
+      case 'telegraph': {
+        // the Dragon's warning: the Bulwark button (the counter), the ring itself out of the bubble's way
+        if (!feat.anchors().telegraph) return null;
+        return { target: { find: () => powerBtnEl('bulwark') }, prefer: 'above', key: 'telegraph' };
+      }
       case 'enemyKeep': return { target: { get: () => siteBoxOf(enemyKeepSite()) } };
       case 'twoSites': {
         // the camp and the nearest other site of yours: two things to click
@@ -1160,6 +1423,14 @@ export function createBattleScene(services) {
       }
       case 'supply': return { target: { find: () => ui.battleHud.el.querySelector('.battle-auto') }, prefer: 'above' };
       case 'blocked': return { target: { get: () => siteBoxOf(blockedSite()) }, key: 'blocked' };
+      case 'ability': return ui.battleHud.abilityButton() ? { target: { find: () => ui.battleHud.abilityButton() }, prefer: 'above', key: 'ability' } : null;
+      case 'raidGo': return raidGoButton() ? { target: { find: () => raidGoButton() }, prefer: 'below', key: 'raidGo' } : null;
+      case 'tray': {
+        // the chip of a battle you are NOT watching: that is the one to switch to
+        const other = manager.list().find((r) => !run || r.id !== run.id);
+        const chip = () => (other ? ui.tray.chipOf(other.id) : null);
+        return chip() ? { target: { find: chip }, prefer: services.isPhone() ? 'below' : 'right', key: `tray${other.id}` } : null;
+      }
       default: return null;
     }
   }
@@ -1264,23 +1535,40 @@ export function createBattleScene(services) {
   }
 
   // --- sim tick -------------------------------------------------------------------------
-  function runSim(dtSec, nowMs) {
-    const frameEvents = [];
-    const alpha = stepper.advance(dtSec, paused || dialogOpen ? 0 : speed, () => {
-      renderer.units.snapshot(battle);
-      lastOwnerSnapshot = battle.sites.map((s) => s.owner);
-      const cmds = think(battle, battle.t);
-      for (const cmd of cmds) issue(battle, cmd);
-      step(battle, TICK_SEC);
-      trackBattle(trackerOf(battle), battle); // once per STEP (3x speed runs several a frame)
-      for (const ev of battle.events) frameEvents.push(ev);
-    });
-    for (const ev of frameEvents) handleEvent(ev, nowMs);
-    return alpha;
+  /** The manager stepped the run (main.js calls `manager.tick` before the scene's frame); the view only needs its interpolation factor. */
+  function runSim() {
+    return manager.alphaOf(run.id);
   }
 
   // --- drawing -------------------------------------------------------------------------
+  /** Walls round a settlement (DESIGN 10.3): a ring of stone blocks under it, in its holder's colour at the joints. */
+  function drawWallRing(x, y, z, owner) {
+    const r = z * 0.78;
+    ctx.save();
+    ctx.translate(x, y + z * 0.12);
+    ctx.scale(1, 0.62); // lies on the ground
+    ctx.lineWidth = Math.max(3, z * 0.13);
+    ctx.strokeStyle = 'rgba(30, 26, 22, 0.75)';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([Math.max(4, z * 0.16), Math.max(2, z * 0.06)]);
+    ctx.lineWidth = Math.max(2, z * 0.09);
+    ctx.strokeStyle = '#c9bfa8';
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = Math.max(1, z * 0.025);
+    ctx.strokeStyle = owner >= 0 ? factionColor(owner) : 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.arc(0, 0, r + Math.max(2, z * 0.06), 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  let badges = [];
+  /** The troop badges, drawn over the squads: a war band massed at its own camp used to hide the camp's number (defense battles). */
+  function drawSiteBadges(t) {
+    for (const b of badges) renderer.sites.drawSite(ctx, b.x, b.y, b.s, 'camp', b.owner, b.troops, t, { badgeOnly: true, pulse: b.pulse, flash: b.flash });
+  }
+
   function drawSites(t, nowMs) {
+    badges = [];
     const list = battle.sites.map((site) => ({ site, p: siteWorldPos(site) }));
     list.sort((a, b) => a.p.y - b.p.y);
     const chips = [];
@@ -1292,20 +1580,24 @@ export function createBattleScene(services) {
         const progress = Math.max(0, Math.min(1, (nowMs - campDropStartMs) / BATTLE_ENTER.campDropMs));
         s *= 0.15 + 0.85 * progress;
       }
-      if (phase === 'defeat' && site.type === 'camp') {
+      if (phase === 'defeat' && site.type === 'camp' && !isDefense()) { // (in a defense the camp is the ENEMY's war band)
         bannerDrop = Math.min(1, (nowMs - defeatAtMs) / DEFEAT.bannerFallMs);
       }
       const flashUntil = siteFlash.get(site.id) || 0;
       const owner = own.siteOwner(site.id, nowMs);
       sp.x += refusalShake(site.id, nowMs);
-      renderer.sites.drawSite(ctx, sp.x, sp.y, s, site.type, owner, Math.floor(site.troops), t, {
+      // fortifications (DESIGN 10.3) read on the field: Walls are a stone ring round the keep / fort, an Arrow Tower fortification wears a shield
+      if ((site.defMult ?? 1) > 1) drawWallRing(sp.x, sp.y, s, owner);
+      renderer.sites.drawSite(ctx, sp.x, sp.y, s, feat.spriteType(site), owner, Math.floor(site.troops), t, {
         selected: selection.has(site.id),
         highlight: hoverSite === site.id && phase === 'live' && (!!targeting || !!drag),
         pulse: !!site.assault,
         phase: site.id * 1.31,
         bannerDrop,
         flash: flashUntil > nowMs ? (flashUntil - nowMs) / 700 : 0,
+        hideBadge: true, // the badges go on top of the squads (drawSiteBadges, after units.draw)
       });
+      badges.push({ x: sp.x, y: sp.y, s, owner, troops: feat.badgeLabel(site) ?? Math.floor(site.troops), pulse: !!site.assault, flash: flashUntil > nowMs ? (flashUntil - nowMs) / 700 : 0 }); // Night: '?' until scouted or next to your land
       const threat = phase === 'live' ? threats.get(site.id) : undefined;
       if (threat) chips.push({ x: sp.x, y: sp.y, s, threat });
     }
@@ -1501,7 +1793,7 @@ export function createBattleScene(services) {
     if (nowMs >= refusal.tipUntilMs) { refusal = null; if (!drag) ui.tooltip.update({ visible: false }); return; }
     if (drag || !battle.sites[refusal.site]) return;
     const p = siteScreenPos(battle.sites[refusal.site]);
-    ui.tooltip.update({ visible: true, x: p.x - 24, y: p.y - 4, text: NO_ROUTE_TEXT });
+    ui.tooltip.update({ visible: true, x: p.x - 24, y: p.y - 4, text: feat.noRouteText(refusal.site) || NO_ROUTE_TEXT }); // Siege: "take the Gate first"
   }
 
   function frame(dt, t, nowMs) {
@@ -1540,7 +1832,7 @@ export function createBattleScene(services) {
 
     // The sim holds still during the keep-capture hit-stop; everything else keeps drawing.
     let alpha = 1;
-    if (phase === 'live' && !stopped) alpha = runSim(dt, nowMs);
+    if (phase === 'live' && !stopped) alpha = runSim();
 
     if (phase === 'victory' && victory) updateVictory(nowMs);
     if (phase === 'defeat' && !resultsShown && nowMs - defeatAtMs >= DEFEAT.bannerFallMs) showResults();
@@ -1575,11 +1867,18 @@ export function createBattleScene(services) {
     renderer.overlays.drawArenaGlow(ctx, camera, regionId, tm);
     if (phase !== 'entering') drawSupplyLines(t);
     if (phase !== 'entering') renderer.units.drawIntent(ctx, camera, battle, t);
+    ashen.drawGround(t, nowMs); // Firestorm's burning ground, the Barrow Keep's ash ring
+    feat.drawGround(t, nowMs); // high water, Night's tower reach, the Shrine rings, the Dragon's warning
     const chips = drawSites(t, nowMs);
-    renderer.units.draw(ctx, camera, battle, alpha, t);
+    renderer.units.draw(ctx, camera, battle, alpha, t, { still: reduceMotion(), championColor: run && run.vendetta ? factionColor(run.vendetta.faction) : undefined });
     if (!stopped) fx.update(dt);
     fx.draw(ctx, camera);
+    feat.drawAir(t, nowMs); // the Dragon, its health and its breath
+    ashen.drawAir(t, nowMs); // The Fallen Rise's wisps and "+N risen" pops
+    drawSiteBadges(t); // over the squads AND the dust a busy camp kicks up: the number is always readable
+    feat.drawTags(); // Siege: the Gate's tag, the padlock on the keep it shuts
     renderer.sites.drawThreatChips(ctx, chips, t); // last, so nothing covers the readout
+    feat.drawWeather(t); // Night's shade, the Blizzard's snow: over the field, under the arrows and the HUD
     drawOverlays(t, nowMs);
     void world0;
 
@@ -1631,6 +1930,8 @@ export function createBattleScene(services) {
     battleOwners = state.owner.map((o, i) => (i === regionId || !reveal[i] ? -1 : o));
     hiddenIds = world.regions.filter((r) => !reveal[r.id]).map((r) => r.id);
     own = createArenaOwnership(world, battle, regionId, state.owner);
+    feat.reset(battle, world, regionId);
+    ashen.reset(battle);
     const holeTiles = new Map();
     for (const t of battle.arena.tiles) holeTiles.set(t.i, world.tiles[t.i]);
     for (const t of own.regionTiles) holeTiles.set(t.i, t);
@@ -1662,6 +1963,11 @@ export function createBattleScene(services) {
     dialogOpen = dialogCount() > 0;
     speed = state.settings.speed || 1;
     if (speed === 0.5 && !state.settings.slowBattles) speed = 1; // the half-speed setting was switched off since
+    manager.setPaused(false);
+    manager.setSpeed(speed);
+    // the run stands still while this view plays its fly-in, a hit-stop or its end sequence (it used to step only in phase 'live', outside a hit-stop)
+    const gatedId = run.id;
+    manager.setGate(gatedId, () => active && !!run && run.id === gatedId && (phase !== 'live' || performance.now() < hitStopUntilMs));
     sendFraction = 0.5;
     enterElapsedSec = 0;
     campDropStartMs = null;
@@ -1682,7 +1988,7 @@ export function createBattleScene(services) {
       phase = 'entering';
       dimAlpha = 0;
     }
-    applyBattleCamera(!!opts.skipIntro);
+    applyBattleCamera(!!opts.skipIntro && !opts.fly);
     ui.battleHud.el.hidden = !opts.skipIntro;
     if (opts.skipIntro) ensureHelpButton();
     updateBattleHud(performance.now(), true);
@@ -1701,18 +2007,48 @@ export function createBattleScene(services) {
     if (note) ui.toasts.update({ type: 'warning', icon: 'flame', message: note });
   }
 
+  /** A run whose sim has already decided: straight to its results card (a resumed save, or a switch to a battle that just ended). */
+  function resumeEnded() {
+    const { state } = container.get();
+    lastResult = battle.result;
+    phase = battle.result === 'win' ? 'victory' : 'defeat';
+    if (battle.result === 'win') {
+      crownResult = evaluateBattle(trackerOf(battle), battle, world, regionId, state);
+      victory = { fanfared: true, slots: [], flood: { schedule: [] }, nextSlot: 0, nextFlood: 0, endMs: 0 };
+    }
+    manager.recordResult(run.id);
+    showResults();
+  }
+
+  let lastCommander = null;
+  /** A General id if that General is free now (not commanding elsewhere, not wounded), else null: the Militia Captain. */
+  function freeOrCaptain(id) {
+    if (!id) return null;
+    const { state } = container.get();
+    return freeGenerals(state, Date.now()).some((g) => g.id === id) ? id : null;
+  }
+
   function startBattle(id, opts = {}) {
     music.setScene('battle'); // Retry does not go through goto.battle
     const { state } = container.get();
     world = container.get().world;
     regionId = id;
-    const player = playerBattleStats(state, world, regionId); // with the Works next to the target (DESIGN 5.8)
+    // the commander (DESIGN 10.11): the card's pick, else the best free General, else the Militia Captain (null); their passive and ability fold into the stats
+    // Lone Banner (PLAN-PHASE5 §5C): the Militia Captain commands, always (meta/edicts.js commanderFor)
+    const commander = edictCommander(state, opts.commander !== undefined ? opts.commander : (bestFreeGeneral(state, world, regionId, 'attack', Date.now())?.id ?? null));
+    lastCommander = commander;
+    const player = playerBattleStats(state, world, regionId, { commander }); // with the Works next to the target (DESIGN 5.8)
     const enemy = enemyBattleStats(world, state, regionId);
-    const arena = buildArena(world, state.owner, regionId, player, enemy);
+    // the running battles' regions and settlements stay out of this arena; an occupier's captured fortifications fight in it (ARCHITECTURE 10.3)
+    const arena = buildArena(world, state.owner, regionId, player, enemy, attackArenaOpts(state, world, regionId, manager.busy()));
     battle = createBattle(arena, player, enemy);
-    trackerOf(battle); // crowns tracker: plain JSON, saved with state.battle
+    // the label at attack time (the Bounty Board's "Win Swift on a Hard or Deadly region", PLAN-PHASE4 §4A): taken now, before the fight changes anything
+    let labelAtAttack = null;
+    try { labelAtAttack = difficulty(state, world, regionId, { commander }).label || null; } catch { labelAtAttack = null; }
+    run = manager.start({ kind: 'attack', regionId, battle, commander, labelAtAttack }); // the manager owns it (state.battles); it also starts the crowns tracker
+    if (!run) throw new Error('the battle could not start (too many battles, or this region is already being fought over)');
+    manager.focus(run.id);
     voice.resetBattle(); // every leader trigger may speak again
-    state.battle = battle;
     setupView(opts);
     tutorial.notify('battleStart');
     if (opts.skipIntro) speakBattleStart(); // Retry lands live at once; a fresh fight speaks when the fly-in ends
@@ -1722,27 +2058,25 @@ export function createBattleScene(services) {
     const { state } = container.get();
     world = container.get().world;
     renderer.fx.clear();
-    if (payload.resume && state.battle) {
+    const saved = payload.runId != null ? manager.get(payload.runId) : payload.resume ? (manager.focused() || manager.list()[0] || null) : null;
+    if (saved) {
       // A saved battle that cannot be resumed (a corrupt or older shape, a region already won) must never brick Continue: drop it, tell the player, and let
       // the scene manager put them back on the map (scenes/flow.js).
       try {
-        if (!resumable(state.battle, state, world)) throw new Error('the saved battle is not resumable');
-        battle = state.battle;
+        if (!resumable(saved.battle, state, world, saved.kind)) throw new Error('the saved battle is not resumable');
+        run = saved;
+        battle = run.battle;
         regionId = battle.arena.regionId;
-        setupView({ skipIntro: true });
+        manager.focus(run.id);
+        setupView({ skipIntro: true, fly: payload.runId != null });
         if (battle.result) {
-          lastResult = battle.result;
-          phase = battle.result === 'win' ? 'victory' : 'defeat';
-          if (battle.result === 'win') {
-            crownResult = evaluateBattle(trackerOf(battle), battle, world, regionId, state);
-            victory = { fanfared: true, slots: [], flood: { schedule: [] }, nextSlot: 0, nextFlood: 0, endMs: 0 };
-          }
-          showResults();
-        } else {
+          resumeEnded();
+        } else if (payload.runId == null) {
           ui.toasts.update({ message: 'Battle resumed' });
         }
       } catch (err) {
-        state.battle = null;
+        manager.remove(saved.id);
+        run = null;
         battle = null;
         const e = new Error(`battle resume failed: ${err && err.message}`);
         e.userMessage = 'That saved battle couldn’t be resumed: you are back on the map.';
@@ -1750,11 +2084,12 @@ export function createBattleScene(services) {
       }
       return;
     }
-    startBattle(payload.regionId, {});
+    startBattle(payload.regionId, { commander: payload.commander });
   }
 
   function exit() {
     active = false;
+    if (run && manager.get(run.id)) manager.setGate(run.id, null); // a run still alive behind the map is no longer held by this view
     renderer.canvas.tabIndex = -1;
     ui.battleHud.el.hidden = true;
     ui.results.el.hidden = true;
@@ -1786,6 +2121,10 @@ export function createBattleScene(services) {
     onResultsContinue,
     onRetry,
     onBackToMap,
+    onMap: leaveToMap,
+    onAbility,
+    switchTo,
+    get runId() { return run ? run.id : null; },
     forceWin() {
       if (!battle || battle.result || phase !== 'live') return;
       const nowMs = performance.now();
@@ -1812,6 +2151,19 @@ export function createBattleScene(services) {
       const site = battle.sites[id];
       return site ? siteScreenPos(site) : null;
     },
+    /** Dev/automation: a varied map's state as the view shows it (DESIGN 10.13): the twist and type, the HUD line, the garrisons Night hides, the Dragon. */
+    featureInfo() {
+      if (!battle) return null;
+      return {
+        twist: feat.twist(), type: (battle.arena && battle.arena.type) || null, hud: feat.hud(),
+        hidden: battle.sites.filter((s) => feat.badgeLabel(s) === '?').map((s) => s.id),
+        dragon: battle.dragon ? { ...battle.dragon } : null,
+        powers: POWER_IDS.map((id) => ({ id, ...feat.powerFlags(id) })),
+        noRoute: battle.sites.filter((s) => feat.noRouteText(s.id)).map((s) => s.id),
+      };
+    },
+    /** Dev/automation: what the Ashen layer has shown this battle (PLAN-PHASE6): rises, burns, Risings, wisps in the air. */
+    ashenInfo() { return battle ? ashen.info() : null; },
     /** Dev/automation: every site with its owner, troops and screen position. */
     siteInfo() {
       if (!battle) return [];

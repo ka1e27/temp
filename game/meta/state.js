@@ -3,6 +3,18 @@
 // implements.
 
 import { createChronicle } from './chronicleState.js';
+import { defaultFrontier } from './frontierState.js';
+import { defaultGenerals } from './generalsState.js';
+import { defaultRenown } from './renownState.js';
+import { defaultBoons } from './featuresState.js';
+import { defaultWorldEvents } from './eventsState.js'; // (a cycle frontierState -> state is safe: it only reads PLAYER_FACTION inside functions)
+import { defaultBounties } from './bountiesState.js';
+import { defaultStreak } from './streak.js';
+import { defaultGrudges, defaultTrophies } from './grudges.js'; // (the same safe cycle: grudges reads PLAYER_FACTION inside functions)
+import { deedBonuses } from './deeds.js';
+import { earnRenown } from './renownState.js';
+import { edictMods, defaultEdict } from './edicts.js'; // the leaf (PLAN-PHASE5): Patronage and Old Roads at a dynasty's start
+import { PROSPERITY } from '../config/prosperity.js';
 
 /** Faction id that always identifies the player's own realm (see FACTIONS). */
 export const PLAYER_FACTION = 0;
@@ -64,7 +76,7 @@ export const PLAYER_FACTION = 0;
  *   scenes/timing.js TUTORIAL_STEPS); `done` switches every hint off. Saves from before this shape ({ step, done }) are migrated by save.js.
  * @property {number} saveSeq             rises with every write of the save: two tabs of the same origin must not overwrite each other (app/autosave.js)
  * @property {number} lastSeen            ms timestamp of last save
- * @property {object|null} battle         in-progress BattleState, for resume
+ * @property {object[]} battles         every running battle (BattleRun[], ARCHITECTURE 10.2), for resume; replaces `battle`
  */
 
 /** @returns {GameStats} */
@@ -118,6 +130,32 @@ export function resetRegions(state, world, now) {
   state.prosperity = [];
   // Region Works (DESIGN 5.8) are built on this continent's regions: a new continent starts with none.
   state.works = {};
+  // the Living Frontier (ARCHITECTURE 10.2) belongs to this continent: the raid clock, cooldowns and grace start over
+  state.frontier = defaultFrontier();
+  state.occupation = {};
+  state.forts = {};
+  state.militia = {};
+  // Renown belongs to the dynasty (DESIGN 10.12); the Generals do NOT reset here: they are lifetime progress
+  state.renown = defaultRenown();
+  // the Dragonslayer deed (PLAN-PHASE4 §4C): Renown at the start of every dynasty after the first (the deeds ride with the Generals)
+  // ... and the Patronage Legacy node (PLAN-PHASE5 §5B)
+  const em = edictMods(state);
+  const startRenown = state.dynasty && state.dynasty.level > 1 ? deedBonuses(state).renownAtDynastyStart + em.startRenown : 0;
+  if (startRenown > 0) earnRenown(state, startRenown, 'deed');
+  // Old Roads (PLAN-PHASE5 §5B): the start region begins at a prosperity level, its tenure clock set to that level's threshold
+  const startLevel = Math.min(PROSPERITY.maxLevel, em.startProsperity);
+  if (startLevel > 0 && world.regions[world.startRegion]) {
+    state.prosperity = world.regions.map(() => 0);
+    state.prosperity[world.startRegion] = startLevel;
+    state.conqueredAt[world.startRegion] = now - PROSPERITY.thresholdsMs[startLevel - 1] / em.prosperityRateMult;
+  }
+  state.boons = defaultBoons();
+  state.worldEvents = defaultWorldEvents();
+  // Phase 4 (PLAN-PHASE4): the Bounty Board, the Conquest Streak, the rivals' Grudges and the Trophies belong to this continent
+  state.bounties = defaultBounties();
+  state.streak = defaultStreak();
+  state.grudges = defaultGrudges();
+  state.trophies = defaultTrophies();
   return state;
 }
 
@@ -145,7 +183,26 @@ export function createGame(seed, world, now) {
     tutorial: { seen: {}, done: false },
     saveSeq: 0,
     lastSeen: now,
-    battle: null,
+    battles: [], // every running battle (ARCHITECTURE 10.2: BattleRun[]; replaces the single `battle`)
+    // the Living Frontier (ARCHITECTURE 10.2): the raid clock, occupied regions, fortifications, militia
+    frontier: defaultFrontier(),
+    occupation: {},
+    forts: {},
+    militia: {},
+    // Phase 2 (DESIGN 10.11, 10.12): the Generals persist across dynasties; Renown belongs to this dynasty
+    generals: defaultGenerals(seed),
+    renown: defaultRenown(),
+    // Phase 3 (DESIGN 10.13): this dynasty's boons (Dragonscale) and world events
+    boons: defaultBoons(),
+    worldEvents: defaultWorldEvents(),
+    // Phase 4 (PLAN-PHASE4): per dynasty; the lifetime Deeds live inside `generals` (meta/deeds.js)
+    bounties: defaultBounties(),
+    streak: defaultStreak(),
+    grudges: defaultGrudges(),
+    trophies: defaultTrophies(),
+    // Phase 5 (PLAN-PHASE5): this dynasty's Edict and Challenges (the first dynasty plays by the standard rules)
+    edict: defaultEdict(),
+    rivals: [2, 3, 4], // PLAN-PHASE6 §6A: the rival line-up (the classic three in Dynasty 1; foundDynasty draws the next one)
   };
   return resetRegions(state, world, now);
 }

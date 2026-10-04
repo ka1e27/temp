@@ -121,7 +121,7 @@ Each run plays differently, not just bigger. Every edict must pass `campaign.mjs
 - Frontier regions whose label changed since your last visit show an up/down arrow ("now Fair").
 
 ## Rejected, and why
-- **Rivals raiding your land while you're away:** punishes absence, which is anti-idle.
+- ~~Rivals raiding your land while away~~: reversed by the user on 2026-10-02 (DESIGN §10: live counterattacks plus a gentle trickle while away).
 - **More troop types:** the v1 lesson (DESIGN §9).
 - **Naval play / islands:** high world-gen and pathing cost for little battle depth.
 - **Login streaks, daily chests, random loot:** timer and gacha pressure (DESIGN §9 spirit).

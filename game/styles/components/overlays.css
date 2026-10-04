@@ -367,3 +367,25 @@
 .welcome-prospered[hidden] { display: none; }
 .welcome-cap { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-muted); text-align: center; text-wrap: balance; }
 .welcome-cap[hidden] { display: none; }
+/* a toast with one action ("Go", DESIGN 10.1): the button takes clicks even though the toast layer passes them through */
+.toast-action { pointer-events: auto; flex-shrink: 0; min-height: 36px; padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+@media (pointer: coarse) { .toast-action { min-height: var(--touch-target); min-width: var(--touch-target); } }
+/* the away report on the welcome card (DESIGN 10.10) */
+.welcome-away { margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: 10px; background: rgba(255, 255, 255, 0.05); font-size: var(--fs-sm); font-weight: 700; color: var(--text); line-height: 1.4; }
+.welcome-away.is-loss { border: 1px solid var(--bad); }
+.welcome-away[hidden] { display: none; }
+
+/* A boon of this dynasty in the Realm panel (DESIGN 10.13: Dragonscale). */
+.realm-boon { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-3); padding: var(--sp-2) var(--sp-3); border-radius: 10px; border: 1px solid rgba(255, 122, 61, 0.55); background: rgba(255, 122, 61, 0.12); font-size: var(--fs-sm); font-weight: 800; color: var(--text); line-height: 1.35; }
+.realm-boon[hidden] { display: none; }
+.realm-boon .icon { color: #ff9a5c; flex-shrink: 0; }
+/* A world event's toast (DESIGN 10.13; app/eventsLoop.js, class is-event): wider than the plain lane, the words across the full width and the buttons
+   on a row of their own under them; and when a rival's line is up, the event toast stacks BELOW it (the banner takes the top slot). */
+.toasts:has(.toast.is-event) { width: min(520px, calc(100vw - 24px)); }
+.toast.is-event { flex-wrap: wrap; position: relative; row-gap: var(--sp-2); }
+.toast.is-event .toast-message { flex: 1 1 calc(100% - 64px); padding-right: 22px; line-height: 1.35; }
+.toast.is-event .toast-secondary { margin-left: 26px; }
+.toast.is-event .toast-action { flex: 1 1 0; }
+.toast.is-event .toast-close { position: absolute; top: 4px; right: 4px; }
+#ui:has(.toast.is-event) .leader-banner { --leader-banner-top: 84px; }
+#ui:has(.toast.is-event):has(.leader-banner[data-state='in']) .toasts { top: 168px; }

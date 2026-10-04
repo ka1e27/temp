@@ -53,9 +53,9 @@ const cellState = (page, key) => page.eval((k) => {
   return {
     gold: Math.round(cell.state.gold),
     works: JSON.parse(JSON.stringify(cell.state.works[g.heroId] || [])),
-    view: root.querySelector('.works-panel').dataset.view,
-    slots: [...root.querySelectorAll('.works-slot')].map((s) => s.dataset.state),
-    pips: [...root.querySelectorAll('.works-slot')].map((s) => [...s.querySelectorAll('.works-pip')].filter((p) => p.dataset.on === '1').length),
+    view: root.querySelector('.works-panel:not(.is-forts)').dataset.view,
+    slots: [...root.querySelectorAll('.works-panel:not(.is-forts) .works-slot')].map((s) => s.dataset.state),
+    pips: [...root.querySelectorAll('.works-panel:not(.is-forts) .works-slot')].map((s) => [...s.querySelectorAll('.works-pip')].filter((p) => p.dataset.on === '1').length),
     toasts: document.querySelectorAll('.toast').length,
   };
 }, key);

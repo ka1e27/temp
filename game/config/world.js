@@ -20,6 +20,9 @@ export const FACTIONS = Object.freeze([
   { id: 2, name: 'Crimson Legion', color: '#c63932', colorDark: '#8f1f1c', colorLight: '#ff9c93', emblem: 'sword', personality: 'aggressive' },
   { id: 3, name: 'Violet Covenant', color: '#6d1b99', colorDark: '#3b1058', colorLight: '#d3b5ff', emblem: 'eye', personality: 'defensive' },
   { id: 4, name: 'Amber Horde', color: '#f29e38', colorDark: '#a85f10', colorLight: '#ffd29a', emblem: 'sun', personality: 'swarm' },
+  // PLAN-PHASE6 §6B: the Ashen Host, a rival that rotates in from Dynasty 2 (config/ashen.js RIVALS). Slate and bone with a
+  // cold glow (the light tint): chosen by integration, colour-blind separation from the other five checked in ui.a11y.test.js.
+  { id: 5, name: 'Ashen Host', color: '#5c5b64', colorDark: '#2c2b33', colorLight: '#a9dfd6', emblem: 'skullCrown', personality: 'undying' },
 ]);
 
 // Movement cost per terrain (Infinity = impassable). Roads replace the base cost.

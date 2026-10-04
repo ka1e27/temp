@@ -6,7 +6,9 @@
 // The state accessors and the sabotage multiplier live in ./intelState.js (a leaf with no meta
 // dependencies, so progression.js can import them without a cycle); this module re-exports them
 // and adds everything that needs the economy, the upgrades or the battle arena.
+import { edictMods, freeScoutsLeft, ensureEdict } from './edicts.js'; // the leaf (PLAN-PHASE5): free scouting
 import { INTEL } from '../config/intel.js';
+import { FEATURES } from '../config/features.js';
 import { BATTLE, SITE_TYPES, ENEMY_SCALING } from '../config/battle.js';
 import { PLAYER_FACTION } from './state.js';
 import { incomePerSec } from './economy.js';
@@ -21,6 +23,8 @@ import {
   ensureIntel, intelOf, sabotageLevel, sabotagePercent,
 } from './intelState.js';
 import { worksScoutedFree } from './worksEffects.js'; // the leaf (no cycle): a Watchtower next door scouts for free
+import { monasteryScoutsFree } from './featuresState.js'; // a Monastery held within 2 scouts for free too (DESIGN §10.13)
+import { addGrudge } from './grudges.js'; // the leaf (PLAN-PHASE4 §4D): sabotage feeds the owner's Grudge
 
 export * from './intelState.js';
 
@@ -81,6 +85,7 @@ export function isTutorialRegion(state, world, regionId) {
  */
 export function scoutCost(state, world, regionId) {
   if (isTutorialRegion(state, world, regionId)) return 0;
+  if (edictMods(state).freeScout || freeScoutsLeft(state) > 0) return 0; // Open Roads; the Spymaster's free scouts (PLAN-PHASE5)
   const { incomeSeconds, minCost } = INTEL.scout;
   return Math.max(minCost, Math.round(incomePerSec(state, world) * incomeSeconds));
 }
@@ -90,7 +95,7 @@ export function scoutCost(state, world, regionId) {
  * Exported so the map's garrison badges use the very same predicate as the card.
  */
 export function isScoutedOrFree(state, world, regionId) {
-  return intelOf(state, regionId).scouted || worksScoutedFree(state, world, regionId);
+  return intelOf(state, regionId).scouted || worksScoutedFree(state, world, regionId) || monasteryScoutsFree(state, world, regionId);
 }
 
 /** Frontier region, not scouted yet, and the gold is there. */
@@ -108,6 +113,7 @@ export function scout(state, world, regionId) {
   if (!canScout(state, world, regionId)) return false;
   const cost = scoutCost(state, world, regionId);
   state.gold -= cost;
+  if (cost === 0 && !edictMods(state).freeScout && !isTutorialRegion(state, world, regionId) && freeScoutsLeft(state) > 0) ensureEdict(state).scoutsUsed += 1; // a Spymaster scout
   ensureIntel(state)[regionId] = { scouted: true, sabotage: intelOf(state, regionId).sabotage };
   return { cost };
 }
@@ -156,7 +162,11 @@ export function sabotage(state, world, regionId) {
   const level = intelOf(state, regionId).sabotage + 1;
   state.gold -= cost;
   ensureIntel(state)[regionId] = { scouted: true, sabotage: level };
-  return { cost, level };
+  const out = { cost, level };
+  const owner = state.owner[regionId];
+  const g = owner > 1 ? addGrudge(state, owner, 'sabotage') : null; // a rival leader remembers (PLAN-PHASE4 §4D)
+  if (g) out.grudge = { faction: owner, value: g.value, crossed: g.crossed };
+  return out;
 }
 
 /** Fills `{region}` and `{pct}` in one of INTEL.toasts. */
@@ -445,7 +455,7 @@ export function scoutReport(state, world, regionId, playerStats, enemyStats) {
       id: s.id,
       settlement: s.settlement,
       tile: s.tile,
-      name: world.settlements[s.settlement]?.name ?? '',
+      name: world.settlements[s.settlement]?.name ?? (FEATURES.copy.siteNames[s.feature] ?? ''), // a feature site (DESIGN §10.13) has its kind's name
       type: s.type,
       garrison: s.troops,
       capMult: s.capMult ?? 1,
