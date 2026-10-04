@@ -5,6 +5,7 @@ import { icon } from './icons.js';
 import { createLegacyTree } from './legacyTree.js';
 
 const put = (node, t) => { if (node.textContent !== t) node.textContent = t; };
+const NL = String.fromCharCode(10); // a line break inside a tooltip
 
 /**
  * @typedef {Object} RealmDynastyData
@@ -14,16 +15,17 @@ const put = (node, t) => { if (node.textContent !== t) node.textContent = t; };
  * @property {import('./legacyTree.js').LegacyView|null} legacy   null until the first founding grants points (the tree still shows its nodes)
  */
 
-/** The Edict and the Challenge laurels: one section, hidden on a first dynasty with neither. */
+/**
+ * The Edict and the Challenge laurels as ONE compact line near the top of the Realm panel (lead decision 2026-10-04: Dynasty first when the continent is
+ * won, then this line, then the Chronicle): a small crest, "Edict: {name}", the sworn Challenges as small laurels. The Edict's gain and price ride in its
+ * tooltip and accessible name. Hidden on a first dynasty with neither.
+ */
 export function createEdictSection() {
   const crest = h('span.realm-edict-crest', { 'aria-hidden': 'true' });
   const name = h('span.realm-edict-name', {}, '');
-  const up = h('span.edict-line.is-up', {}, icon('star', 12), h('span', {}, ''));
-  const cost = h('span.edict-line.is-cost', {}, icon('flame', 12), h('span', {}, ''));
-  const edictEl = h('div.realm-edict', {}, crest, h('div.realm-edict-text', {}, h('span.realm-edict-kicker', {}, 'Edict of this dynasty'), name, up, cost));
-  const laurels = h('div.realm-laurels', { role: 'list', 'aria-label': 'Challenges sworn' });
-  const note = h('p.realm-laurels-note', {}, '');
-  const el = h('section.realm-dynasty-edict', { 'aria-label': 'Edict and Challenges' }, edictEl, laurels, note);
+  const edictEl = h('span.realm-edict', {}, crest, h('span.realm-edict-kicker', {}, 'Edict'), name);
+  const laurels = h('span.realm-laurels', { role: 'list', 'aria-label': 'Challenges sworn' });
+  const el = h('section.realm-dynasty-edict', { 'aria-label': 'Edict and Challenges' }, edictEl, laurels);
   el.hidden = true;
   let iconName = '';
   let laurelSig = '';
@@ -36,22 +38,21 @@ export function createEdictSection() {
     el.hidden = !e && !list.length;
     edictEl.hidden = !e;
     if (e) {
-      if (iconName !== e.icon) { iconName = e.icon; crest.replaceChildren(icon(e.icon, 40)); }
+      if (iconName !== e.icon) { iconName = e.icon; crest.replaceChildren(icon(e.icon, 22)); }
       put(name, e.name);
-      put(up.lastChild, e.upside);
-      put(cost.lastChild, e.cost);
-      edictEl.setAttribute('aria-label', `Edict: ${e.name}. Gain: ${e.upside}. Price: ${e.cost}`);
+      const label = `Edict: ${e.name}. Gain: ${e.upside}. Price: ${e.cost}`;
+      edictEl.setAttribute('aria-label', label);
+      edictEl.title = [e.upside, e.cost].join(NL);
     }
-    const sig = list.map((c) => `${c.id}|${c.name}|${c.rule}`).join(';');
+    const sig = list.map((c) => `${c.id}|${c.name}|${c.rule}`).join(';') + `|${d.challengeNote || ''}`;
     if (sig !== laurelSig) {
       laurelSig = sig;
-      laurels.replaceChildren(...list.map((c) => h('div.realm-laurel', { role: 'listitem', 'data-challenge': c.id, title: c.rule, 'aria-label': `${c.name}: ${c.rule}` },
-        h('span.challenge-badge', { 'aria-hidden': 'true' }, icon('laurel', 30), h('span.challenge-badge-mark', {}, icon(c.icon, 12))),
+      const tip = (c) => (d.challengeNote ? [c.rule, d.challengeNote].join(NL) : c.rule);
+      laurels.replaceChildren(...list.map((c) => h('span.realm-laurel', { role: 'listitem', 'data-challenge': c.id, title: tip(c), 'aria-label': `${c.name}: ${c.rule}` },
+        h('span.challenge-badge', { 'aria-hidden': 'true' }, icon('laurel', 18), h('span.challenge-badge-mark', {}, icon(c.icon, 8))),
         h('span.realm-laurel-name', {}, c.name))));
     }
     laurels.hidden = !list.length;
-    put(note, list.length ? d.challengeNote || '' : '');
-    note.hidden = !list.length || !d.challengeNote;
   }
   return { el, update };
 }

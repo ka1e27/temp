@@ -103,7 +103,9 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy } 
   // Phase 5 (PLAN-PHASE5): this dynasty's Edict and Challenge laurels (top: they are the rules you play by), and the Legacy tree (spend any time)
   const edictSection = createEdictSection();
   const legacySection = createLegacySection({ onBuy: (id) => onBuyLegacy?.(id) });
-  const bodyEl = h('div.realm-body.scroll-y', {}, edictSection.el, boonEl, statsSection, legacySection.el, trophies.el, deeds.el, chronicle.el, saveMap.el, saveMap.statusEl, dynastyEl);
+  // Order (lead decision 2026-10-04): [Dynasty, when the continent is won] · the Edict and Challenges (one compact line) · the Chronicle (on a 390x844 phone it
+  // starts on the first screen) · Deeds · Trophies · the stats · the Legacy tree; the Dynasty section sits last until the continent is won.
+  const bodyEl = h('div.realm-body.scroll-y', {}, edictSection.el, boonEl, chronicle.el, saveMap.el, saveMap.statusEl, deeds.el, trophies.el, statsSection, legacySection.el, dynastyEl);
   const el = h('div.realm.glass-panel', {},
     h('div.realm-header', {},
       h('h2.realm-title', {}, 'Realm'),
@@ -113,6 +115,10 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy } 
   );
 
   watchDialog(el, { onEscape: () => onClose?.() });
+  // opened with the continent won: start at the top, where Found a Dynasty is (a scroll left from an earlier visit hid it)
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(() => { if (!el.hidden && el.classList.contains('is-dynasty-ready')) bodyEl.scrollTop = 0; }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+  }
 
   /** @param {RealmData} data */
   function update(data) {
@@ -145,7 +151,7 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy } 
     if (data.save) { saveData = data.save; for (const b of savers) b.update(data.save); }
     if (data.canFoundDynasty != null) {
       // the whole continent is won: the Dynasty section comes FIRST (on a phone it was below the fold, under the stats and the Chronicle)
-      if (data.canFoundDynasty && bodyEl.firstChild !== dynastyEl) { bodyEl.prepend(dynastyEl); el.classList.add('is-dynasty-ready'); }
+      if (data.canFoundDynasty && bodyEl.firstChild !== dynastyEl) { bodyEl.prepend(dynastyEl); bodyEl.scrollTop = 0; el.classList.add('is-dynasty-ready'); } // to the top, where it now is
       else if (!data.canFoundDynasty && bodyEl.lastChild !== dynastyEl) { bodyEl.append(dynastyEl); el.classList.remove('is-dynasty-ready'); }
       foundBtn.disabled = !data.canFoundDynasty;
       foundBtn.title = data.canFoundDynasty ? '' : "Conquer every region first (the Dragon's Lair is optional)";

@@ -150,8 +150,15 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     await sleep(900);
     ok(await t.waitFor(() => { const c = document.querySelector('.coach'); return !!c && !c.hidden && /a world event/i.test(c.textContent); }, 8000), tag('V5: the world-event hint points at the offer'));
     ok(await q(() => /deal|merchant/i.test(document.querySelector('.toast[data-id="world-event"]')?.textContent || '')), tag('the Merchant toast is up with its countdown'));
-    ok(await pressSel('.toast[data-id="world-event"] .toast-action:not(.toast-secondary)'), tag('a real press on "See deals"'));
-    ok(await t.waitFor(() => !!document.querySelector('.modal.is-merchant, .is-merchant'), 4000), tag('the Merchant\'s deals open'));
+    // the toast moves when a leader's banner (the neighbour grumbling about the caravan) slides in above it: press once it has stood still
+    const seeDeals = '.toast[data-id="world-event"]:not(.is-out) .toast-action:not(.toast-secondary)';
+    const stillAt = async () => { let prev = null; for (let i = 0; i < 20; i++) { const c = await centre(seeDeals); if (c && prev && Math.abs(c.x - prev.x) < 1 && Math.abs(c.y - prev.y) < 1) return c; prev = c; await sleep(150); } return prev; };
+    let at = await stillAt();
+    if (at) await press(at.x, at.y);
+    ok(!!at, tag('a real press on "See deals"'));
+    let opened = await t.waitFor(() => !!document.querySelector('.modal.is-merchant, .is-merchant'), 2500);
+    if (!opened && (at = await stillAt())) { await press(at.x, at.y); opened = await t.waitFor(() => !!document.querySelector('.modal.is-merchant, .is-merchant'), 2500); } // once more if the first press landed mid-slide
+    ok(opened, tag('the Merchant\'s deals open'));
     const renown0 = await q(() => window.__hd.state.renown.points);
     await sleep(300);
     ok(await pressSel('.merchant-buy-renown'), tag('a real press on the Renown deal'));
@@ -160,15 +167,18 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     const duel1 = await q(() => window.__hd.offerEvent('duel'));
     ok(!!duel1 && duel1.kind === 'duel', tag('a Duel is offered'));
     await sleep(700);
-    ok(await pressSel('.toast[data-id="world-event"] .toast-secondary'), tag('a real press on Decline'));
+    ok(await pressSel('.toast[data-id="world-event"]:not(.is-out) .toast-secondary'), tag('a real press on Decline'));
     await sleep(500);
     ok(await q(() => !window.__hd.state.worldEvents.pending && window.__hd.battles.list().length === 0), tag('the Duel is declined: no battle'));
     const plague = await q(() => window.__hd.offerEvent('plague'));
     ok(!!plague && plague.kind === 'plague', tag('a Plague is reported'));
     await sleep(700);
     ok(await q(() => !!window.__hd.state.worldEvents.plague), tag('the Plague applies at once (the map tints the faction)'));
-    ok(await pressSel('.toast[data-id="world-event"] .toast-action'), tag('a real press on OK'));
-    await sleep(400);
+    // the declined Duel's toast may still be sliding out, and on a phone the news waits behind a leader's banner: wait for the live one
+    await t.waitFor(() => [...document.querySelectorAll('.toast[data-id="world-event"]:not(.is-out) .toast-action')].some((b) => b.getClientRects().length && /plague/i.test(b.closest('.toast').textContent)), 8000);
+    await sleep(300);
+    ok(await pressSel('.toast[data-id="world-event"]:not(.is-out) .toast-action'), tag('a real press on OK'));
+    await t.waitFor(() => !window.__hd.state.worldEvents.pending, 3000);
     ok(await q(() => !window.__hd.state.worldEvents.pending && !!window.__hd.state.worldEvents.plague), tag('the news is dismissed; the Plague still runs'));
     for (const outcome of ['lose', 'win']) {
       const d = await q(() => window.__hd.offerEvent('duel'));
@@ -178,7 +188,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       // the rival's line (a leader banner) can slide in over the toast as it opens: press again while the offer is still open
       let pressed = false;
       for (let k = 0; k < 4 && !pressed; k++) {
-        await pressSel('.toast[data-id="world-event"] .toast-action:not(.toast-secondary)');
+        await pressSel('.toast[data-id="world-event"]:not(.is-out) .toast-action:not(.toast-secondary)');
         pressed = await t.waitFor(() => !window.__hd.state.worldEvents.pending, 1500);
       }
       ok(pressed, tag(`a real press on Accept (duel to ${outcome})`));
@@ -275,7 +285,8 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       const cd0 = await q(() => JSON.stringify(window.__hd.battle.cooldowns));
       ok(await pressSel('.power-btn'), tag('a real press on a power'));
       await sleep(500);
-      ok(await q(() => /Holy Ground/.test(document.querySelector('.toasts')?.textContent || '')), tag('the Holy Ground toast says why'));
+      // on a phone a toast waits while a leader's banner speaks (the battle's opening line): on screen, or posted and waiting, both count
+      ok(await t.waitFor(() => /Holy Ground/.test(document.querySelector('.toasts')?.textContent || '') || window.__hd.services.ui.toasts.has('holy'), 6000), tag('the Holy Ground toast says why'));
       ok(await q((c) => JSON.stringify(window.__hd.battle.cooldowns) === c && !window.__hd.battle.commands.some((x) => x.type === 'power'), cd0), tag('nothing is cast'));
       ok(await q(() => /Holy Ground/.test(document.querySelector('.power-btn')?.getAttribute('aria-label') || '')), tag('the power buttons say "cannot be used on Holy Ground"'));
       await toWorld();
@@ -298,7 +309,22 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       ok(await q(() => /fire incoming/i.test(window.__hd.featureInfo().hud.text)), tag('the HUD says "fire incoming"'));
       ok(await t.waitFor(() => { const c = document.querySelector('.coach'); return !!c && !c.hidden && /bulwark the target/i.test(c.textContent); }, 3000), tag('V4: "Bulwark the target!"'));
       // the Lair falls with its Dragon: the player's side on Auto (the steward) with a strong army, at 3x
-      await q(() => { const hd = window.__hd; const run = hd.battles.list()[0]; hd.battles.setAuto(run.id, true); hd.battles.setSpeed(3); window.__dragonBoost = setInterval(() => { const b = hd.battle; if (!b || b.result) return; for (const s of b.sites) if (s.owner === 0) s.troops = Math.max(s.troops, 3000); }, 700); });
+      // (the steward alone sometimes never assaults the Dragon's perch: after 60 s of battle time every site of ours is sent at the perch now and then, real sends)
+      await q(async () => {
+        const hd = window.__hd; const run = hd.battles.list()[0]; hd.battles.setAuto(run.id, true); hd.battles.setSpeed(3);
+        const S = await import(new URL('game/battle/sim.js', document.baseURI).href);
+        let lastPush = 0;
+        window.__dragonBoost = setInterval(() => {
+          const b = hd.battle; if (!b || b.result) return;
+          for (const s of b.sites) if (s.owner === 0) s.troops = Math.max(s.troops, 3000);
+          const dr = b.dragon;
+          if (dr && dr.hp > 0 && dr.perch >= 0 && b.t > 60 && b.t - lastPush > 6) {
+            lastPush = b.t;
+            const from = b.sites.filter((s) => s.owner === 0).map((s) => s.id);
+            if (from.length) S.issue(b, { type: 'send', owner: 0, from, to: dr.perch, fraction: 0.5 });
+          }
+        }, 700);
+      });
       const won = await t.waitFor(() => { const b = window.__hd.battle; return b && b.result === 'win'; }, 240000);
       await q(() => clearInterval(window.__dragonBoost));
       ok(won, tag('the Lair is won'));
