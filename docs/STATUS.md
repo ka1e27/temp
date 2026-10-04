@@ -96,7 +96,12 @@ behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away rep
   laurels + Legacy tree, Quick Conquest button/overlay (600 sim steps per frame), Edict/Challenge UI effects, tutorial D1 (inside the
   ceremony) + D2 (afterDone flag), Realm stats split This dynasty / All time. Final pass: npm 1105, phase5 96, desktop 191, phone 188,
   frontier 159, generals 129, goals 118, hints all placed, iconcheck ok. Gallery screenshots/phase5/. Phase 6 unlocked; Phase 6
-  integration engineer started. Rough edges: no leader lines for
+  integration engineer started.
+- **2026-10-04 COMMITTED + DEPLOYED** b425e2b (Phases 1-5 + Phase 6 WIP) to redesign and main (user: "commit and push whatever i need
+  to test", then "merge to main and deploy"). Pages deploys via the "Deploy to GitHub Pages" workflow on main.
+- **Sim/meta Phase 6 DONE** (after b425e2b, uncommitted): Barrow Keep Rising 0.05 + DIFFICULTY.undyingCapital 1.45; undying card 2.1,
+  personalityStat 0.75, lighter settlement mix; UPGRADE_COST_MULT 1.2 (credited-card economy); swarm card credit 3 -> 1.5.
+  D1 1.24 h, D2 (Ashen) 1.34x, D3 1.38 h; Ashen fights 1.10x / capital 1.03x. Watch: Ashen Easy 78 % on one sweep (noise?). Rough edges: no leader lines for
   Plague/Merchant; an event toast closed with x cannot be reopened; phase3 gallery not re-shot after the gate/toast/plague fixes.
   - TODO: swarm calibration pass: Fair fights vs Amber won 98%, ceiling temporarily 0.98-0.99: 50 of 51 failed 0.98 (game/tests/balance.labels.test.js).
 - **Integration Phase 2 polish + Phase 3 UI DONE** (report pending lead review): laurel everywhere Renown shows, ability banner, emblem on the

@@ -17,7 +17,7 @@ const TYPE_WEIGHTS = {
   aggressive: { town: 0.45, village: 0.55 },
   defensive: { fort: 0.35, tower: 0.25, village: 0.3, hamlet: 0.1 },
   swarm: { village: 0.6, hamlet: 0.4 },
-  undying: { fort: 0.3, town: 0.3, village: 0.4 }, // the Ashen Host (PLAN-PHASE6) holds its sites thickly: forts and towns, no hamlets
+  undying: { fort: 0.2, town: 0.3, village: 0.5 }, // the Ashen Host (PLAN-PHASE6) holds its sites thickly: forts and towns, no hamlets
 };
 
 const HILLS_FORT_CHANCE = 0.4;

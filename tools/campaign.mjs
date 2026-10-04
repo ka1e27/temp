@@ -1043,6 +1043,7 @@ export function runDynasties(seed, count, flags = {}) {
     const challenges = flags.challenges ? String(flags.challenges).split(',') : [];
     const next = foundDynasty(state, newSeed, undefined, r.endState.world, { edict, challenges, legacyBuys }); // an unslain Dragon's Lair does not block founding
     if (!next) break;
+    if (flags.rivals === 'classic') next.rivals = [2, 3, 4]; // PLAN-PHASE6 guard: --rivals=classic plays every dynasty against the classic three
     const world = generateWorld(newSeed, worldOptsFor(next));
     resetRegions(next, world, state.lastSeen);
     r.founding = { edict, legacyBuys: next.founding ? next.founding.bought : [] };

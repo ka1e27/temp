@@ -523,6 +523,7 @@ function estimateStrength(world, region, enemy, captured = null, scouted = false
   // A varied map (DESIGN §10.13): the feature sites, then a measured factor per type and twist (Night only while unscouted)
   sum += featureStrength(region, enemy, siteValue);
   sum *= featureFactor(region, scouted);
+  if (region.isCapital && enemy.personality === 'undying') sum *= DIFFICULTY.undyingCapital; // the Barrow Keep (PLAN-PHASE6)
   return sum * DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1)
     * Math.pow(DIFFICULTY.depthPerTier, Math.max(0, region.tier - 3))
     * (DIFFICULTY.tierFactor[region.tier] ?? 1);

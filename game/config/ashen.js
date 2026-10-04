@@ -35,7 +35,7 @@ export const ASHEN = Object.freeze({
     radius: 2,            // hexes: the ash ring the UI draws around the keep
     // the squad: this share of the keep's starting garrison (min `minTroops`). 0.12 x a capital keep (about 60-110 troops at D2) is
     // 7-13 troops every 20 s: a steady pressure the player must answer (about one hamlet's worth), never a second army.
-    troopsShare: 0.12,
+    troopsShare: 0.05, // Phase 6 guard: 0.12 timed out 14 of 28 Barrow Keep fights at D2, 0.07 still 6 of 20
     minTroops: 4,
   }),
   copy: Object.freeze({

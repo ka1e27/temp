@@ -47,6 +47,10 @@ ashenOnFrontier(state, world)       // a frontier region held by the Ashen, or n
 ASHEN.copy.hint                     // "The Fallen Rise: your losses join them. Strike decisively, or burn the dead with Firestorm."
 ```
 
+Intel (the Scout panel) already shows the personality line from `config/intel.js` `INTEL.personalityLines.undying`:
+"Undying: holds thickly, strikes once you have spent troops". `fallenLine` on the Barrow Keep (an undying capital) appends
+"The Barrow Keep: its dead rise every 20 s".
+
 The card's win chance already includes The Fallen Rise (the `undying` personality factor is measured from bot fights in which the
 mechanic is live). The label is honest without any extra UI maths.
 

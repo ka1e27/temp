@@ -35,7 +35,9 @@ export const GENERALS = Object.freeze({
   // bot with its best General, seeds 1-12), by the card's credited label: x1 Easy 100% / Fair 89% / Hard 62% (the card read too hard);
   // x2 94 / 83 / 48 (6 seeds); x3 94% (49/52) / 71% (46/65) / 40% (14/35); x4 93 / 66 / 35 (6 seeds). The synthetic ladder has no
   // commander and is unchanged.
-  cardCredit: Object.freeze({ base: 0.07, perLevel: 0.012, vs: Object.freeze({ swarm: 3 }) }),
+  // PLAN-PHASE6 §6C: with the campaign reading the credited card, vs swarm x3 made Fair swarm fights a coin flip (16 of 32 won, D1, 12 seeds)
+  // and broke balance.labels' calibration (bin 1.3-1.55: 68% won vs 80% said); x1.5 restores it (75% vs 80%).
+  cardCredit: Object.freeze({ base: 0.07, perLevel: 0.012, vs: Object.freeze({ swarm: 1.5 }) }),
 
   // --- The kinds (DESIGN §10.11 table) -------------------------------------------------------------------------------------
   // passive: { stat, value } on PlayerStats while commanding (see meta/generals.js commanderEffects):

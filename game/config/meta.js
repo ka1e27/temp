@@ -11,7 +11,10 @@
 // growth a handful of levels decided every fight and the last regions were a cost cliff (days) while the middle fell
 // in minutes. Every knob below was settled together by coordinate descent against the whole target set (milestones,
 // longest wait per seed, win rate, battle lengths, crown rates); the reasons sit on the lines.
-export const UPGRADE_TUNING = Object.freeze({
+// PLAN-PHASE6 §6C: every upgrade cost x this. The campaign now reads the commander-credited card (what a person sees), which
+// opens fights earlier: D1's median fell to 1.11 h. A uniform nudge keeps every ratio between lines as tuned above.
+export const UPGRADE_COST_MULT = 1.2; // 1.06 left D1 at 1.10 h, 1.12 at 1.13 h (12 seeds): D1 is mostly battle- and frontier-bound
+const UPGRADE_BASE = Object.freeze({ // the pre-Phase-6 prices; UPGRADE_TUNING below applies UPGRADE_COST_MULT
   recruitment: { baseCost: 33, growth: 1.4, magnitude: 0.0333 },  // DESIGN +10%/level; a third of it, see above
   steel: { baseCost: 33, growth: 1.4, magnitude: 0.027 },         // DESIGN +8%
   armour: { baseCost: 33, growth: 1.4, magnitude: 0.027 },        // DESIGN +8%
@@ -30,6 +33,8 @@ export const UPGRADE_TUNING = Object.freeze({
   march: { baseCost: 310, growth: 1.12 },
   levy: { baseCost: 457, growth: 1.12 },
 });
+export const UPGRADE_TUNING = Object.freeze(Object.fromEntries(Object.entries(UPGRADE_BASE)
+  .map(([id, t]) => [id, Object.freeze({ ...t, baseCost: Math.round(t.baseCost * UPGRADE_COST_MULT) })])));
 
 // Income, bounty and offline rules (DESIGN §5.1). Income rises 39% per depth tier (the lever that keeps the late waits
 // short: the last regions pay like the realm they sit in) and the start region pays 1.82 gold/s so the first upgrades
@@ -127,10 +132,12 @@ export const DIFFICULTY = Object.freeze({
   strengthScale: 0.0681,     // band fit on sweep rows plus every frontier fight of 36 + 16 x 3 campaigns, with battles that outlast PATIENCE_SEC lost (config/battle.js)
   overCapCredit: 2,          // troops above 2x a site's cap bleed off before they matter
   horizonSec: 90,            // a garrison regrows while you fight: this many seconds of growth
+  // PLAN-PHASE6: an 'undying' capital (the Barrow Keep: Gate + the Rising + The Fallen Rise) reads this much stronger on the card
+  undyingCapital: 1.45, // 1.3: Fair Barrow Keeps were won 7 of 13
   depthPerTier: 0.79,        // strength x this per tier above 3: the ladder's atk/def climb slightly over-credits depth
   // Tier 1 plays far easier than its size says (the bot wins it at any upgrade level); the card deliberately
   // reads it harder (2.27 x the Free Folk factor 0.585 x the scale) so the first ring shows Easy-but-not-trivial
   // and stays under the surrender ratio on every seed.
   tierFactor: [1, 1.5, 1.094], // tier 1: the first ring reads Easy on 28 of 30 seeds (the tutorial pick on 10 of 12) and stays under the surrender ratio (card ratio 1.3-2.7); tier 2 was 0.948 before the ladder cliff was smoothed
-  personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.4, undying: 1.8 }), // undying (PLAN-PHASE6): measured with The Fallen Rise live, see below; Free Folk never attack; rival AIs punish a 3-second-cadence player (swarm 2.48 -> 2.4 with Generals and a varied map: its campaign Fair fights were won 93%; 2.3 broke the synthetic ladder)
+  personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.4, undying: 2.1 }), // undying (PLAN-PHASE6): measured with The Fallen Rise live, see below; Free Folk never attack; rival AIs punish a 3-second-cadence player (swarm 2.48 -> 2.4 with Generals and a varied map: its campaign Fair fights were won 93%; 2.3 broke the synthetic ladder)
 });
