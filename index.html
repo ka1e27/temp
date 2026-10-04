@@ -54,6 +54,10 @@
   @keyframes boot-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
 </style>
 <script>
+// The service worker is handed every file this page loaded (performance resource entries, see the bottom of the page),
+// but the browser keeps only 250 entries by default and the game is more modules than that: without a bigger buffer the
+// late ones were never cached, and an offline reload after a first visit failed. Raised before main.js starts loading.
+if (performance.setResourceTimingBufferSize) performance.setResourceTimingBufferSize(2000);
 // Classic (non-module) script so it still runs when module loading is blocked:
 // ES modules cannot load from file://, and the page would otherwise stay blank.
 if (location.protocol === 'file:') {
