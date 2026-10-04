@@ -101,7 +101,19 @@ behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away rep
   to test", then "merge to main and deploy"). Pages deploys via the "Deploy to GitHub Pages" workflow on main.
 - **Sim/meta Phase 6 DONE** (after b425e2b, uncommitted): Barrow Keep Rising 0.05 + DIFFICULTY.undyingCapital 1.45; undying card 2.1,
   personalityStat 0.75, lighter settlement mix; UPGRADE_COST_MULT 1.2 (credited-card economy); swarm card credit 3 -> 1.5.
-  D1 1.24 h, D2 (Ashen) 1.34x, D3 1.38 h; Ashen fights 1.10x / capital 1.03x. Watch: Ashen Easy 78 % on one sweep (noise?). Rough edges: no leader lines for
+  D1 1.24 h, D2 (Ashen) 1.34x, D3 1.38 h; Ashen fights 1.10x / capital 1.03x. Watch: Ashen Easy 78 % on one sweep (noise?).
+- **DEPLOY BLOCKED:** the Pages workflow runs the FULL check.mjs (+ --base=temp); b425e2b failed 8 checks (keepsakes: Found a Dynasty /
+  Chronicle pushed off the first screen by the new Realm sections; variety: Merchant deals no longer open on desktop; phone Plague/Holy
+  Ground). Live site still a48e1d7. Balance commit 4d64d2b pushed to redesign + main (same failures expected). Integration is fixing;
+  lead decided the Realm order: Dynasty (when won) > compact Edict line > Chronicle > Deeds/Trophies/stats/Legacy.
+- **Deploy fixed:** c41340d (Realm order + robust variety checks) and 96d5252 (performance.setResourceTimingBufferSize(2000): the game loads
+  258 files and the 250-entry default dropped some from the offline precache). Verified on a clean worktree with the CI commands, then
+  pushed to redesign + main (96d5252). **LIVE 2026-10-04:** the Pages workflow passed (verify, browser, deploy) and
+  https://ka1e27.github.io/temp/ serves 96d5252.
+- **Phase 6 integration DONE (uncommitted):** Ashen colours #5c5b64 / #2c2b33 / #a9dfd6 (CIEDE2000 >= 20.4 under all visions), skull-crown
+  emblem, 1.9x territory wash, battleAshen.js + ashenFx.js (rise wisps, ember burn, Rising ring, Raise the Fallen), card line, A1 hint,
+  Gravewarden card. Final pass all green incl. new --only=phase6 (72). Gallery screenshots/phase6/. Gaps: no live check for Raise the
+  Fallen; burning ground is not restored after a reload. Rough edges: no leader lines for
   Plague/Merchant; an event toast closed with x cannot be reopened; phase3 gallery not re-shot after the gate/toast/plague fixes.
   - TODO: swarm calibration pass: Fair fights vs Amber won 98%, ceiling temporarily 0.98-0.99: 50 of 51 failed 0.98 (game/tests/balance.labels.test.js).
 - **Integration Phase 2 polish + Phase 3 UI DONE** (report pending lead review): laurel everywhere Renown shows, ability banner, emblem on the

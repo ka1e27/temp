@@ -895,6 +895,7 @@ function boot() {
       regionScreenPos: (id) => worldScene.regionScreenPos(id),
       regionHintBox: (id) => worldScene.regionHintBoxOf(id),
       hintOutline: () => worldScene.devHintOutline(),
+      hintFacts: () => worldScene.devHintFacts(), // the facts the world's tutorial rules read (debugging)
       conquerRegions: (n) => worldScene.devConquer(n),
       conquerRegion: (id, opts) => worldScene.devConquerRegion(id, opts),
       surrender: (id) => worldScene.devSurrender(id),

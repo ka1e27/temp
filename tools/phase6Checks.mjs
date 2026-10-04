@@ -99,13 +99,20 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     });
     ok(cap != null, tag(`the Barrow Keep's region can be attacked (${cap})`));
     if (cap == null) throw new Error('no Ashen capital on the frontier');
-    await q((id) => window.__hd.flyToRegion(id, undefined, 1), cap);
+    // A1 points at the lowest-tier Ashen region on the frontier: bring it on screen (the coach hides a hint whose target is off screen)
+    const hintRegion = await q(() => window.__hd.hintFacts().ashenRegion);
+    ok(hintRegion >= 0, tag(`an Ashen region is on the frontier (${hintRegion})`));
+    await q((id) => window.__hd.flyToRegion(id, undefined, 1), hintRegion);
     ok(await t.waitFor(() => { const c = document.querySelector('.coach'); return !!c && !c.hidden && /The Fallen Rise/.test(c.textContent); }, 8000), tag('the A1 hint: "The Fallen Rise: your losses join them..."'));
+    ok(await q((id) => window.__hd.hintOutline() === id, hintRegion), tag('the hint outlines that region'));
+    await sleep(600);
     await shot('01-ashen-territory-hint');
+    await q((id) => window.__hd.flyToRegion(id, undefined, 1), cap);
+    await sleep(700);
     const pctWant = await q(() => import(new URL('game/config/ashen.js', document.baseURI).href).then((m) => `${Math.round(m.ASHEN.fallen.share * 100)}%`));
     const p = await q((id) => window.__hd.regionScreenPos(id), cap);
     if (p) await press(p.x, p.y);
-    if (!(await t.waitFor((id) => window.__hd.services?.ui?.regionCard && !document.querySelector('.region-card-dock, .region-card')?.closest('[hidden]') && /Fallen Rise/.test(document.querySelector('.region-card-feature.is-ashen')?.textContent || ''), 3000, cap))) {
+    if (!(await t.waitFor(() => { const e = document.querySelector('.region-card-feature.is-ashen'); return !!e && !e.hidden && e.getClientRects().length > 0; }, 2500))) {
       await q((id) => window.__hd.selectRegion(id), cap); // the label sat under something: open it directly
     }
     ok(await t.waitFor(() => { const e = document.querySelector('.region-card-feature.is-ashen'); return !!e && !e.hidden && e.getClientRects().length > 0; }, 4000), tag('the card has The Fallen Rise row'));
@@ -118,7 +125,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
 
     // 3. Attack (a real press): the Barrow Keep battle
     await q(() => { const hd = window.__hd; hd.grantGold(1e7); });
-    ok(await pressSel('.region-card-action button, .region-card-attack'), tag('a real press on Attack'));
+    ok(await pressSel('button.region-card-action'), tag('a real press on Attack'));
     ok(await t.waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live', 30000), tag('the Barrow Keep battle is live'));
     await sleep(600);
     // troops sent to die: the camp keeps sending everything at the strongest Ashen settlement it can reach (powers unlocked for step 5)
@@ -130,21 +137,72 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       const camp = b.sites.find((s) => s.type === 'camp' && s.owner === 0);
       const foes = b.sites.filter((s) => s.owner === b.arena.enemyFaction && s.type !== 'keep' && R.canRoute(b, 0, camp.id, s.id)).sort((a, z) => z.troops - a.troops);
       const tgt = foes[0] || b.sites.find((s) => s.type === 'keep' && s.owner !== 0);
-      tgt.troops = Math.max(tgt.troops, 60); // a garrison the camp cannot take: every troop sent dies there
-      camp.troops = Math.max(camp.troops, 40);
-      S.issue(b, { type: 'send', owner: 0, from: camp.id, to: tgt.id, fraction: 1 });
+      tgt.troops = Math.min(Math.max(tgt.troops, 500), 1500); // a garrison small sends cannot take (every troop sent dies there), but not so big its own sends overrun us
+      camp.troops = Math.max(camp.troops, 6000); // a deep camp: the Rising's squads must not take it while this check watches
+      // the stage: D2's dev-conquered realm is far weaker than a played one, so the enemy's garrisons are capped and ours kept deep while
+      // this check watches (the Fallen Rise, the Rising and the burn are what it tests, not the balance)
+      for (const s of b.sites) if (s.owner !== 0 && s.owner !== 1 && s !== tgt) s.troops = Math.min(s.troops, 600);
+      clearInterval(window.__p6keep);
+      window.__p6keep = setInterval(() => { const bb = window.__hd.battle; if (bb) for (const s of bb.sites) if (s.owner === 0) s.troops = Math.max(s.troops, 3000); }, 200);
+      S.issue(b, { type: "send", owner: 0, from: camp.id, to: tgt.id, fraction: 0.02 });
       window.__p6 = { camp: camp.id, tgt: tgt.id };
       return { id: tgt.id, type: tgt.type };
     });
     ok(!!target, tag(`the assault goes in at the ${target && target.type}`));
     await q(() => { const sp = document.querySelector('.battle-speed'); if (sp) { sp.click(); sp.click(); } }); // 3x
     ok(await t.waitFor(() => (window.__hd.ashenInfo()?.risen || 0) > 0, 25000), tag('the fallen rise (fallenRose)'));
-    await sleep(250);
+    await sleep(600); // the "+N risen" pop gathers for about half a second
     const i1 = await info();
     ok(i1.wisps > 0, tag(`wisps in the air (${i1.wisps}), ${i1.risen} risen`));
     await shot('03-fallen-rise');
 
-    // (steps 4-6 follow)
+    // 4. the Rising: the ash ring round the Barrow Keep, then the risen squad emerges
+    await q(() => { const sp = document.querySelector('.battle-speed'); if (sp) sp.click(); }); // back to 1x: the telegraph lasts 3 s
+    ok(await t.waitFor(() => !!window.__hd.ashenInfo()?.telegraph, 30000), tag('the Rising is telegraphed (the ash ring)'));
+    await sleep(1400);
+    await shot('04-rising-telegraph');
+    ok(await t.waitFor(() => (window.__hd.ashenInfo()?.emerged || 0) > 0, 12000), tag('the risen squad emerges from the keep'));
+    await sleep(300);
+    await shot('05-rising-emerges');
+
+    // 5. Firestorm on the settlement, then the assault: the dead burn instead of rising
+    const before = await info();
+    const cast = await q(async () => {
+      const hd = window.__hd;
+      const S = await import(new URL('game/battle/sim.js', document.baseURI).href);
+      const b = hd.battle;
+      const { camp, tgt } = window.__p6;
+      const site = b.sites[tgt];
+      if (!site || site.owner !== b.arena.enemyFaction) return 'the target fell';
+      b.player.powers = { ...(b.player.powers || {}), firestorm: Math.max(1, (b.player.powers || {}).firestorm || 0) };
+      b.player.powersBlocked = undefined;
+      b.cooldowns.firestorm = 0;
+      site.troops = Math.min(Math.max(site.troops, 500), 1500);
+      for (const s of b.sites) if (s.owner === 0) s.troops = Math.max(s.troops, 5000);
+      const tile = b.arena.tiles.find((x) => x.i === site.tile);
+      S.issue(b, { type: 'power', owner: 0, power: 'firestorm', target: { q: tile.q, r: tile.r } });
+      const c = b.sites[camp];
+      if (c && c.owner === 0) { c.troops = Math.max(c.troops, 6000); S.issue(b, { type: "send", owner: 0, from: camp, to: tgt, fraction: 0.02 }); }
+      return 'ok';
+    });
+    ok(cast === 'ok', tag(`Firestorm cast on the settlement, then the assault (${cast})`));
+    ok(await t.waitFor((n) => (window.__hd.ashenInfo()?.burned || 0) > n, 20000, before.burned || 0), tag('Firestorm burns the dead (fallenBurned)'));
+    await sleep(700); // the "N burned" pop gathers for about half a second
+    await shot('06-ember-burn');
+
+    // 6. win (dev hook): the Gravewarden joins
+    await q(() => { clearInterval(window.__p6keep); window.__hd.winBattle(); });
+    ok(await t.waitFor(() => { const c = document.querySelector('.results-card'); return !!c && !c.hidden && c.dataset.result === 'victory'; }, 30000), tag('Victory over the Barrow Keep'));
+    await sleep(1500);
+    ok(await t.clickText('.results-action', 'Continue'), tag('Continue'));
+    ok(await t.waitFor(() => { const m = document.querySelector('.is-recruit'); return !!m && /joins your cause/.test(m.textContent); }, 8000), tag('the recruitment card'));
+    const rec = await q(() => { const m = document.querySelector('.is-recruit'); return { text: m ? m.textContent : '', emblem: !!m?.querySelector('.general-emblem[data-kind="gravewarden"] .icon-skullCrown'), g: window.__hd.state.generals.roster.find((x) => x.kind === 'gravewarden') }; });
+    ok(!!rec.g, tag(`the Gravewarden is on the roster (${rec.g && rec.g.name})`));
+    ok(/Gravewarden/.test(rec.text) && rec.emblem, tag('the card names the Gravewarden, with the skull-crown emblem'));
+    await sleep(500);
+    await shot('07-gravewarden-card');
+    await pressSel('.is-recruit button', 'Welcome');
+
     const errs = t.unexpected();
     ok(errs.length === 0, tag(`no console errors${errs.length ? `: ${errs[0]}` : ''}`));
     allErrors.push(...errs);

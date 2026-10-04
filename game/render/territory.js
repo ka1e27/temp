@@ -9,7 +9,7 @@
 // passive squatters: border only, no tint and no band. Region boundaries INSIDE one owner's
 // land are thin dashed light lines.
 import { drawHexTint, drawHexEdge, elevOffset, hexCorners, hexPath } from './tiles.js';
-import { factionColor, factionColorLight, rgba } from './palette.js';
+import { factionColor, factionColorLight, faction, rgba } from './palette.js';
 import { DIRS } from '../core/hex.js';
 
 export const FREE_FOLK_OWNER = 1;
@@ -22,6 +22,10 @@ const FLAT_PLAYER = 0.17;
 const FLAT_RIVAL = 0.08;
 const BAND_PLAYER = 0.9; // alpha of the band at the border
 const BAND_RIVAL = 0.62;
+// The Ashen Host's slate is nearly grey: at the rivals' alpha its wash vanished into the terrain (PLAN-PHASE6). An 'undying' faction's interior
+// wash is this much stronger, so its land reads as ashen at a glance, like the saturated rivals' land does.
+const UNDYING_TINT = 1.9;
+const tintBoost = (owner) => (faction(owner)?.personality === 'undying' ? UNDYING_TINT : 1);
 const BAND_DEPTH = 0.38; // in hexes (world units): 0.3-0.4 per the brief
 
 // Overlay-blend strength multiplier by terrain: rock and snow drink colour and turn muddy/purple.
@@ -127,7 +131,8 @@ export function drawTerritory(target, world, landTiles, ownerOf, s, ox, oy, dpr 
     const x = ox + t.x * s;
     const topY = oy + t.y * s - elevOffset(t, s);
     const color = factionColor(owner);
-    const tintAlpha = (owner === 0 ? TINT_PLAYER : TINT_RIVAL) * mult;
+    const boost = tintBoost(owner);
+    const tintAlpha = (owner === 0 ? TINT_PLAYER : TINT_RIVAL) * mult * boost;
     if (target.overlay) {
       drawHexTint(tctx, x, topY, s, color, tintAlpha);
     } else {
@@ -137,7 +142,7 @@ export function drawTerritory(target, world, landTiles, ownerOf, s, ox, oy, dpr 
       tctx.fill();
       tctx.globalAlpha = 1;
     }
-    ctx.globalAlpha = (owner === 0 ? FLAT_PLAYER : FLAT_RIVAL) * (FLAT_BY_TERRAIN[t.terrain] ?? 1);
+    ctx.globalAlpha = (owner === 0 ? FLAT_PLAYER : FLAT_RIVAL) * (FLAT_BY_TERRAIN[t.terrain] ?? 1) * boost;
     ctx.fillStyle = color;
     hexPath(ctx, x, topY, s);
     ctx.fill();

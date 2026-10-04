@@ -1877,6 +1877,7 @@ export function createWorldScene(services) {
     showWelcome,
     /** The region the open hint outlines on the map (-1: none): for the placement checks. */
     devHintOutline() { return hintOutlineRegion; },
+    devHintFacts() { const f = hintFacts(Number.MAX_SAFE_INTEGER); return Object.fromEntries(Object.entries(f).filter(([, v]) => typeof v !== 'object' && typeof v !== 'function')); },
     /** The map cursor's region id (-1 before it is used): for the keyboard-only check. */
     devMapCursor() { return cursorId; },
     /** The box a hint about this region must keep clear (hintTargets.regionHintBox), for the placement monitor. */

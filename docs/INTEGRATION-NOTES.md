@@ -854,3 +854,38 @@ its reward, a defense lost -> occupied (forts, works, frozen prosperity moved), 
 - **Streak (§5E):** see the Phase 4 section: only an attack lost or retreated breaks it.
 - **Checks:** `check.mjs --only=phase5` (`tools/phase5Checks.mjs`, desktop and phone, seed 7). Gallery: `tools/phase5shots.mjs` -> `screenshots/phase5/`.
   Dev hooks: `__hd.completeRealm()`, `__hd.grantLegacy(n)`, `__hd.dynasty` (`buy(id, 'realm')`, `realmData()`, `session`).
+
+## Phase 6: the Ashen Host (2026-10-04)
+Spec: `docs/PLAN-PHASE6.md`. Pure API: `docs/briefs/phase6-hookup.md`.
+
+**Faction look**
+- The Ashen Host is `FACTIONS[5]`: slate `#5c5b64`, dark `#2c2b33`, glow `#a9dfd6`, with bone `#e6dcc4` on the emblem and FX. CIEDE2000 separation is checked by `ui.a11y.test.js`.
+- Its territory wash is drawn 1.9× stronger in `render/territory.js`, because slate disappears into the terrain otherwise.
+- The emblem is `skullCrown` in `ui/icons.js`, and the same shape in `render/sprites.js` `drawEmblem`.
+- Rotation: everything faction-indexed reads `world.factions`. Absent rivals have `absent: true`; never assume ids 2–4.
+
+**Battle effects:** `scenes/battleAshen.js` (a controller wired into `scenes/battle.js`) draws with `render/ashenFx.js`.
+
+| Event | What it shows |
+|---|---|
+| `fallenRose` | pale wisps and "+N risen". War band growth reads "+N join the Host"; a Gravewarden rise is drawn in your blue. |
+| `fallenBurned` | ember wisps and "N burned". A Firestorm in an Ashen battle also draws its burning ground for `ASHEN.fallen.burnSec`. |
+| `rising` | a 3 s ash-ring telegraph ("The dead stir…"). It is redrawn when a battle resumes mid-telegraph. |
+| the rising `send` | a shockwave and "The dead rise! +N" |
+| `risingCancelled` | "The Rising burns!" |
+| `raiseFallen` | the Gravewarden's ability: wisps and "+N raised", on top of the shared ability effect |
+
+Under Reduce Motion there are fewer wisps and no tails. Wisps are capped per site so the additive glow never blows out to white.
+
+**Text and hints**
+- An Ashen region card has a row from `fallenLine()`, so its number comes from config. A capital adds the Barrow Keep line.
+- The Vendetta banner uses `championTitle()`, which gives "Barrow Knight" for the Ashen.
+- Tutorial A1 (`ASHEN.copy.hint`) comes after M1 with `afterDone`. It points at the lowest-tier Ashen frontier region and is marked seen on `ashenCardOpened`.
+
+**Checks and dev hooks**
+- `tools/phase6Checks.mjs` runs as `check.mjs --only=phase6`.
+- Dev hooks: `__hd.ashenInfo()` and `__hd.hintFacts()`.
+
+**Known gaps**
+- No live check exercises Raise the Fallen.
+- The burning ground isn't restored after a save and reload.

@@ -41,12 +41,12 @@ export function drawWisp(ctx, x, y, r, color, alpha, tail) {
     }
   }
   const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
-  g.addColorStop(0, rgba(color, alpha * 0.9));
-  g.addColorStop(0.35, rgba(color, alpha * 0.45));
+  g.addColorStop(0, rgba(color, alpha * 0.7));
+  g.addColorStop(0.35, rgba(color, alpha * 0.3));
   g.addColorStop(1, rgba(color, 0));
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, TAU); ctx.fill();
-  ctx.fillStyle = rgba(color === ASHEN_FX.ember ? ASHEN_FX.emberCore : ASHEN_FX.core, alpha);
+  ctx.fillStyle = rgba(color === ASHEN_FX.ember ? ASHEN_FX.emberCore : ASHEN_FX.core, alpha * 0.85);
   ctx.beginPath(); ctx.arc(x, y, r * 0.45, 0, TAU); ctx.fill();
   ctx.restore();
 }
@@ -102,12 +102,12 @@ export function drawBurnGround(ctx, x, y, r, k, t, still) {
   ctx.save();
   const ry = 0.86;
   const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
-  g.addColorStop(0, rgba(ASHEN_FX.ember, 0.16 * k));
-  g.addColorStop(1, rgba(ASHEN_FX.ember, 0.02));
+  g.addColorStop(0, rgba(ASHEN_FX.ember, 0.3 * k));
+  g.addColorStop(1, rgba(ASHEN_FX.ember, 0.06 * k));
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.ellipse(x, y, r, r * ry, 0, 0, TAU); ctx.fill();
-  ctx.lineWidth = Math.max(1.5, r * 0.03);
-  ctx.strokeStyle = rgba(ASHEN_FX.ember, (0.35 + (still ? 0 : 0.15 * Math.sin(t * 11))) * k);
+  ctx.lineWidth = Math.max(2, r * 0.04);
+  ctx.strokeStyle = rgba(ASHEN_FX.ember, (0.6 + (still ? 0 : 0.2 * Math.sin(t * 11))) * k);
   ctx.setLineDash([r * 0.06, r * 0.08]);
   ctx.beginPath(); ctx.ellipse(x, y, r, r * ry, 0, 0, TAU); ctx.stroke();
   ctx.setLineDash([]);

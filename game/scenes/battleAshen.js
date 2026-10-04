@@ -47,9 +47,10 @@ export function createBattleAshen(deps) {
   }
 
   /** Spawns `n` wisps from points round `c` (an annulus rIn..rOut, world units) into `c` (fade 'in'), or rising off it (fade 'up'). */
-  function spawnWisps(c, n, { rIn = 0.45, rOut = 1.1, color = ASHEN_FX.glow, fade = 'in', nowMs, spread = 380, life = 1300 }) {
+  function spawnWisps(c, n, { rIn = 0.45, rOut = 1.1, color = ASHEN_FX.glow, fade = 'in', nowMs, spread = 380, life = 1300, cap = PER_SITE }) {
     const rm = reduceMotion();
-    const count = Math.max(1, Math.round(rm ? Math.min(n, 2) : n));
+    const near = wisps.reduce((k, w) => k + (Math.abs(w.x1 - c.x) < 0.3 && Math.abs(w.y1 - c.y) < 1.2 ? 1 : 0), 0);
+    const count = Math.min(Math.max(0, cap - near), Math.max(1, Math.round(rm ? Math.min(n, 2) : n)));
     for (let i = 0; i < count && wisps.length < MAX_WISPS; i++) {
       const a = rnd() * Math.PI * 2;
       const d = rIn + rnd() * (rOut - rIn);
@@ -59,7 +60,7 @@ export function createBattleAshen(deps) {
       wisps.push({
         x0, y0, x1: up ? x0 + (rnd() - 0.5) * 0.4 : c.x, y1: up ? y0 - 0.9 - rnd() * 0.5 : c.y - 0.05,
         lift: up ? 0.2 : 0.55 + rnd() * 0.35, born: nowMs + (rm ? 0 : rnd() * spread), life: (rm ? 0.7 : 1) * (life + rnd() * 400),
-        r: 0.07 + rnd() * 0.04, color, fade,
+        r: 0.12 + rnd() * 0.06, color, fade,
       });
     }
   }
@@ -78,7 +79,9 @@ export function createBattleAshen(deps) {
     }
   }
 
-  function wispCount(n) { return Math.min(7, 2 + Math.round(Math.sqrt(n) * 1.4)); }
+  function wispCount(n) { return Math.min(5, 2 + Math.round(Math.sqrt(n))); }
+  // at most this many wisps in flight per site: a long assault is a steady trickle, never a blown-out white blob (additive glow)
+  const PER_SITE = 9;
 
   function onEvent(ev, nowMs) {
     if (!battle) return false;
@@ -91,7 +94,7 @@ export function createBattleAshen(deps) {
         if (ev.kind === 'warBand') {
           // an Ashen war band's ranks swell with the defenders it killed: wisps rise off your settlement toward the attackers
           spawnWisps(c, wispCount(ev.count), { rIn: 0, rOut: 0.35, fade: 'up', nowMs });
-          pop(`w:${ev.site}`, ev.site, ev.count, (n) => `+${n} risen`, ASHEN_FX.glow, nowMs);
+          pop(`w:${ev.site}`, ev.site, ev.count, (n) => `+${n} join the Host`, ASHEN_FX.glow, nowMs); // your dead swell THEIR war band
         } else if (ev.kind === 'gravewarden') {
           spawnWisps(c, wispCount(ev.count), { nowMs, color: ASHEN_FX.glow });
           pop(`g:${ev.site}`, ev.site, ev.count, (n) => `+${n} risen`, factionColorLight(0), nowMs);
@@ -139,7 +142,7 @@ export function createBattleAshen(deps) {
         if (c) {
           fx.spawn('shockwave', c.x, c.y, { color: ASHEN_FX.glow, growth: 2.6, duration: 0.7, thickness0: 0.12, thickness1: 0.02 });
           fx.spawn('smoke', c.x, c.y, { count: 12, spread: 0.9, color: '#3a3942' });
-          spawnWisps(c, 8, { rIn: 0.6, rOut: 1.4, nowMs, spread: 200, life: 900 });
+          spawnWisps(c, 8, { rIn: 0.6, rOut: 1.4, nowMs, spread: 200, life: 900, cap: 12 });
           fx.spawn('floatText', c.x, c.y - 0.95, { text: `The dead rise! +${Math.round(ev.count)}`, color: ASHEN_FX.glow, size: 0.42 });
           fx.shake(0.25, 0.3);
         }
@@ -158,7 +161,7 @@ export function createBattleAshen(deps) {
         const c = pos(ev.target);
         if (c && ev.count > 0) {
           stats.raised += ev.count;
-          spawnWisps(c, reduceMotion() ? 3 : 14, { rIn: 1.2, rOut: 3.2, nowMs, spread: 600, life: 1500 });
+          spawnWisps(c, reduceMotion() ? 3 : 14, { rIn: 1.2, rOut: 3.2, nowMs, spread: 600, life: 1500, cap: 16 });
           renderer.fx.spawn('floatText', c.x, c.y - 0.75, { text: `+${Math.round(ev.count)} raised`, color: ASHEN_FX.glow, size: 0.4 });
         }
         return false; // the shared ability fx and banner still play
