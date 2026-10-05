@@ -241,7 +241,8 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       const { frontier, difficulty } = await import(new URL('game/meta/progression.js', document.baseURI).href);
       // a region that FIGHTS: one that would surrender shows "Accept Surrender" instead of Attack (that was this step's flake)
       const busy = new Set(hd.battles.list().map((r) => r.regionId));
-      const ids = frontier(hd.state, hd.world).filter((id) => !busy.has(id) && !difficulty(hd.state, hd.world, id).surrender);
+      // ... judged WITH the Gravewarden credited (DESIGN 10.11): its card credit can tip a region into offering surrender, which hid Attack in CI
+      const ids = frontier(hd.state, hd.world).filter((id) => !busy.has(id) && !difficulty(hd.state, hd.world, id, { commander: g && g.id }).surrender);
       const rid = ids.sort((a, b) => hd.world.regions[a].tier - hd.world.regions[b].tier || a - b)[0];
       hd.selectRegion(rid);
       return { g: g && g.id, rid };
@@ -257,6 +258,22 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     }, gw.g);
     ok(picked, tag('the Gravewarden is chosen to command'));
     await sleep(400);
+    // belt and braces: if the card still offers only a surrender (Attack hidden), move to the next region that fights
+    for (let tries = 0; tries < 4; tries++) {
+      const attackShown = await q(() => [...document.querySelectorAll('button.region-card-action')].some((b) => !b.hidden && /Attack/.test(b.textContent)));
+      if (attackShown) break;
+      await q(async ({ gid, skip }) => {
+        const hd = window.__hd;
+        const { frontier, difficulty } = await import(new URL('game/meta/progression.js', document.baseURI).href);
+        const busy = new Set(hd.battles.list().map((r) => r.regionId));
+        const next = frontier(hd.state, hd.world).filter((id) => !busy.has(id) && !difficulty(hd.state, hd.world, id, { commander: gid }).surrender)
+          .sort((x, y) => hd.world.regions[x].tier - hd.world.regions[y].tier || x - y)[skip];
+        if (next != null) hd.selectRegion(next);
+      }, { gid: gw.g, skip: tries + 1 });
+      await sleep(700);
+      await q((gid) => { const sel = document.querySelector('.region-card-commander-select'); if (sel && [...sel.options].some((o) => o.value === gid)) { sel.value = gid; sel.dispatchEvent(new Event('change', { bubbles: true })); } }, gw.g);
+      await sleep(400);
+    }
     ok(await pressSel('button.region-card-action', 'Attack'), tag('a real press on Attack'));
     const gwLive = await t.waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live', 30000);
     const gwDiag = gwLive ? '' : await q(() => JSON.stringify({ scene: window.__hd.scene, phase: window.__hd.battlePhase, card: [...document.querySelectorAll('.region-card-action')].map((b) => `${b.textContent}|${b.hidden}|${b.disabled}`), dialogs: [...document.querySelectorAll('[role=dialog]')].filter((d) => !d.closest('[hidden]') && d.getClientRects().length).map((d) => d.className), toasts: [...document.querySelectorAll('.toast')].map((x) => x.textContent).slice(0, 3) }));
