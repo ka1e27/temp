@@ -21,6 +21,8 @@ import { BOONS, BOON_LIST, DUO_LIST } from '../config/boons.js';
 import { RELICS, RELIC_LIST } from '../config/relics.js';
 import { ASHEN } from '../config/ashen.js';
 import { INTEL } from '../config/intel.js';
+import { CHALLENGE_MODE, DAILY, RECORD, BANNERS } from '../config/challenges.js';
+import { SCENARIO_LIST, SCENARIOS } from '../config/scenarios.js';
 
 // --- number words (from config values only) ---
 export const pct = (x) => `${Math.round(x * 100)}%`;
@@ -66,7 +68,11 @@ export const CODEX_GROUPS = [
   { id: 'dynasties', title: 'Dynasties' },
   { id: 'boons', title: 'Boons and Relics' },
   { id: 'ashen', title: 'The Ashen Host' },
+  { id: 'challenges', title: 'Challenges' },
 ];
+// Phase 9: the Challenges open after the realm's first conquest beyond home (CHALLENGE_MODE.unlockConquests), or in any later dynasty
+const challengesOpen = (s) => dynastyLevel(s) > 1 || (o(s.stats).regionsConquered | 0) >= CHALLENGE_MODE.unlockConquests;
+const bannerOf = (kind) => BANNERS.filter((b) => b.unlock.kind === kind);
 
 const rally = POWERS.rally;
 const fs = POWERS.firestorm;
@@ -207,12 +213,24 @@ export const CODEX_TOPICS = [
     lines: ['The Ashen Host is a rival of the dead. Troops you lose at their settlements rise and join them.',
       'Their capital, the Barrow Keep, raises its dead on a timer. Fire burns the dead before they can rise.'],
     numbers: [['Your losses that rise', pct(ASHEN.fallen.share)], ['Barrow Keep rises every', secs(ASHEN.rising.everySec)], ['Burning ground', secs(ASHEN.fallen.burnSec)]] },
+  // --- Challenges (Phase 9) ---
+  { id: 'daily', group: 'challenges', title: 'The Daily', icon: 'sun', seen: challengesOpen,
+    lines: ['Every day brings one challenge that everyone plays: the same small continent, Edict, Boons, General and goal. Play it from the title screen or Settings > Challenges.',
+      'Your time is the score (crowns break a tie). Retry as often as you like: your best counts, and your first try is kept apart. It never touches your realm.',
+      'Past days can be played as practice. Copy your result to share it.'],
+    numbers: [['Regions', `${CHALLENGE_MODE.minRegions} to ${CHALLENGE_MODE.maxRegions}`], ['Boons', list(DAILY.boonCount.map(String)).replace(' and ', ' or ')],
+      ['Reward to your realm', `+${RECORD.rewardRenown} Renown, once a day`], ...bannerOf('streak').map((b) => [`${b.name} banner`, `a ${b.unlock.n}-day streak`])] },
+  { id: 'scenarios', group: 'challenges', title: 'Scenarios', icon: 'castle', seen: challengesOpen,
+    lines: ['Handcrafted challenges that each test one idea: a siege, a defense, the Dragon, the Ashen, several battles at once, and gold.',
+      `Each earns up to ${SCENARIOS.starsEach} stars. The first ${SCENARIOS.alwaysOpen} are always open; the others open once you have met their system in your realm.`],
+    numbers: [['Scenarios', String(SCENARIO_LIST.length)], ['Stars', String(SCENARIO_LIST.length * SCENARIOS.starsEach)],
+      ...bannerOf('stars').map((b) => [`${b.name} banner`, `all ${b.unlock.n} stars`])] },
 ];
 
 /** Which topic each panel's "?" opens. */
 export const PANEL_TOPICS = {
   council: 'council', realm: 'prosperity', regions: 'bounties', generals: 'generals', settings: 'sending', boonDraft: 'boons',
-  ceremony: 'founding', reliquary: 'reliquary', works: 'works', forts: 'forts', battle: 'sending', merchant: 'worldEvents',
+  ceremony: 'founding', reliquary: 'reliquary', works: 'works', forts: 'forts', battle: 'sending', merchant: 'worldEvents', challenges: 'daily',
 };
 
 /**

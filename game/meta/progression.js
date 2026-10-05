@@ -142,7 +142,8 @@ function ladderPosition(world, region) {
 export function enemyDepth(world, region) {
   const tier = Math.max(0, region.tier);
   if (tier <= 0) return 0;
-  const span = ENEMY_SCALING.atkDefByTier.length - 2;
+  // PLAN-PHASE9: a challenge's small continent climbs a shorter ladder (world.ladderSpan, set by meta/challenges.js challengeWorld)
+  const span = Number.isFinite(world.ladderSpan) ? world.ladderSpan : ENEMY_SCALING.atkDefByTier.length - 2;
   return 1 + span * Math.pow(ladderPosition(world, region), ENEMY_SCALING.ladderCurve);
 }
 

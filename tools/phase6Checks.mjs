@@ -100,6 +100,9 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(cap != null, tag(`the Barrow Keep's region can be attacked (${cap})`));
     if (cap == null) throw new Error('no Ashen capital on the frontier');
     // A1 points at the lowest-tier Ashen region on the frontier: bring it on screen (the coach hides a hint whose target is off screen)
+    // (the world's realm-wide hint facts are recomputed at most every 250 ms, Phase 8: right after the dev conquests they can still be the old ones,
+    // and a loaded machine stretches that over several frames; wait for the fresh value instead of reading once)
+    await t.waitFor(() => window.__hd.hintFacts().ashenRegion >= 0, 5000);
     const hintRegion = await q(() => window.__hd.hintFacts().ashenRegion);
     ok(hintRegion >= 0, tag(`an Ashen region is on the frontier (${hintRegion})`));
     await q((id) => window.__hd.flyToRegion(id, undefined, 1), hintRegion);
@@ -193,6 +196,10 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       }
       if (!best) return 'no reachable Ashen settlement';
       const site = best.site;
+      // The Gravewarden's Lantern (a Relic this dynasty may have claimed on an earlier conquest, depending on which regions fell first) stops the Fallen
+      // rising AND burning within its radius of the War Camp, and the nearest Ashen settlement is usually inside it: the step then waited 40 s for a
+      // burn that the rules forbid (the flake: burn present, assault on, nothing gathered). The Lantern has its own tests; this step turns it off.
+      if (b.player.boons && b.player.boons.lanternRadius) { window.__p6lantern = b.player.boons.lanternRadius; b.player.boons.lanternRadius = 0; }
       site.troops = Math.min(Math.max(site.troops, 800), 1500);
       const tile = tileOf(site);
       window.__p6 = { ...(window.__p6 || {}), tgt: site.id };
@@ -212,9 +219,11 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       return 'ok';
     });
     ok(cast === 'ok', tag(`Firestorm cast on the settlement, then the assault (${cast})`));
+    console.log(`  info ${name}: relics held ${JSON.stringify(await q(() => (window.__hd.state.relics || {}).owned || []))}, Lantern ${await q(() => window.__p6lantern || 0)}`);
     const burnedOk = await t.waitFor((n) => (window.__hd.ashenInfo()?.burned || 0) > n, 40000, before.burned || 0);
-    const bdiag = burnedOk ? '' : await q(() => { const b = window.__hd.battle; const { tgt } = window.__p6 || {}; const s = b && b.sites[tgt]; return JSON.stringify({ t: b && b.t, burns: b && b.fallen && b.fallen.burns, site: s && { owner: s.owner, troops: Math.round(s.troops), tile: s.tile }, pending: b && b.pendingPowers, squads: b && b.squads.map((x) => ({ o: x.owner, to: x.to, n: Math.round(x.count), st: x.state, seg: x.seg, len: x.path && x.path.length, foe: x.foe })), paused: window.__hd.battles.paused, phase: window.__hd.battlePhase, dlg: document.documentElement.hasAttribute("data-dialog"), info: window.__hd.ashenInfo(), cd: b && b.player.cooldowns }); });
-    ok(burnedOk, tag(`Firestorm burns the dead (fallenBurned)${bdiag ? ` ${bdiag}` : ''}`));
+    const bdiag = burnedOk ? '' : await q(() => { const b = window.__hd.battle; const { tgt } = window.__p6 || {}; const s = b && b.sites[tgt]; return JSON.stringify({ t: b && b.t, burns: b && b.fallen && b.fallen.burns, site: s && { owner: s.owner, troops: Math.round(s.troops), tile: s.tile }, pending: b && b.pendingPowers, squads: b && b.squads.map((x) => ({ o: x.owner, to: x.to, n: Math.round(x.count), st: x.state, seg: x.seg, len: x.path && x.path.length, foe: x.foe })), paused: window.__hd.battles.paused, phase: window.__hd.battlePhase, dlg: document.documentElement.hasAttribute("data-dialog"), info: window.__hd.ashenInfo(), cd: b && b.cooldowns, acc: b && b.fallen && b.fallen.acc[tgt], lantern: b && b.player.boons && b.player.boons.lanternRadius, relics: window.__hd.state.relics && window.__hd.state.relics.owned }); });
+    const lantern = await q(() => { const v = window.__p6lantern || 0; const b = window.__hd.battle; if (v && b && b.player.boons) b.player.boons.lanternRadius = v; window.__p6lantern = 0; return v; });
+    ok(burnedOk, tag(`Firestorm burns the dead (fallenBurned)${lantern ? ` (the Lantern, radius ${lantern}, was off for this step)` : ''}${bdiag ? ` ${bdiag}` : ''}`));
     await sleep(700); // the "N burned" pop gathers for about half a second
     await shot('06-ember-burn');
     await q(() => clearInterval(window.__p6burn));

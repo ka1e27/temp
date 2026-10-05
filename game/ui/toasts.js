@@ -23,6 +23,7 @@ const DEFAULT_DURATION_MS = 4200;
  * @property {string} [seal]  an icon name: a wax seal that stamps down on the toast (a completed contract, PLAN-PHASE4 §4A); still under Reduce Motion
  * @property {string} [accent]  a colour for the toast's accent (`--toast-accent`, `--vendetta-color`): a Vendetta banner's pennant in the leader's colour
  * @property {string} [className]  extra classes on the toast ('is-event': a world event's wide toast, buttons under the words)
+ * @property {string[]} [aliases]  ids this toast also answers to in has() / dismissId() (a merged toast: the shell's post-battle digest)
  */
 
 export function createToasts() {
@@ -176,6 +177,7 @@ export function createToasts() {
     node.addEventListener('focusout', () => { if (!node.matches(':hover')) release(node); });
     node._data = toast;
     node.dataset.id = toast.id ?? `t${++seq}`;
+    if (Array.isArray(toast.aliases) && toast.aliases.length) node.dataset.aliases = toast.aliases.join(' ');
     node.dataset.message = toast.message;
     el.appendChild(node);
     say(node, toast.message);
@@ -202,14 +204,17 @@ export function createToasts() {
   }
 
   /** Takes a toast away by its id (on screen or still queued): a raid's countdown once the band has arrived. */
+  // a merged toast (the shell's digest) carries `aliases`: the ids of the toasts it stands for
+  const isId = (id) => (q) => q.id === id || (Array.isArray(q.aliases) && q.aliases.includes(id));
+  const nodeIs = (n, id) => n.dataset.id === String(id) || (n.dataset.aliases || '').split(' ').includes(String(id));
   function dismissId(id) {
-    queue = queue.filter((q) => q.id !== id);
-    for (const node of [...el.children]) if (node.dataset.id === String(id)) dismiss(node);
+    queue = queue.filter((q) => !isId(id)(q));
+    for (const node of [...el.children]) if (nodeIs(node, id)) dismiss(node);
   }
 
   /** Is a toast with this id on screen or waiting in the queue? (A world event's countdown only updates a toast the player has not closed.) */
   function has(id) {
-    return queue.some((q) => q.id === id) || [...el.children].some((n) => n.dataset.id === String(id) && n.isConnected && !n.classList.contains('is-out'));
+    return queue.some(isId(id)) || [...el.children].some((n) => nodeIs(n, id) && n.isConnected && !n.classList.contains('is-out'));
   }
 
   return { el, update, destroy, dismissId, has, setHeld, setMaxVisible, isHeld: () => held, queued: () => queue.length };

@@ -7,18 +7,23 @@
 // Battle facts: { scene: 'battle', live, t, battlesBefore, ownSites, enemySites, captured, rallyReady, firestormReady, selectedCount,
 //                 noRouteSeen, hasBlocked, seen(id), features }
 
+import { HINT_PACE } from '../scenes/timing.js';
+
 export const RULES = Object.freeze({
   W0: (c) => c.panelsClosed,
   // "drag to move the map" only while the player has not already found a region on their own
   W1: (c) => c.panelsClosed && !c.cardOpen && !c.seen('W2'),
   W2: (c) => c.panelsClosed && !c.cardOpen && c.frontierCount > 0,
-  W3: (c) => c.cardOpen && c.cardAttackable,
+  // Phase 10A: only after a moment of hesitation (a player who presses Attack on their own never needs it)
+  W3: (c) => c.cardOpen && c.cardAttackable && !(c.cardOpenSec < HINT_PACE.attackHintDelaySec),
   B1: (c) => c.live,
-  B2: (c) => c.live,
+  // Phase 10A: the send size and multi-select wait for the second battle (the tutorial battle had four hints in its first 10 s); the first teaches the
+  // drag (B1) and captures and the keep (B3)
+  B2: (c) => c.live && c.battlesBefore >= 1,
   // explains captures: once the first send has landed and the size hint has had its turn, or the moment the first capture happens
   B3: (c) => c.live && (c.seen('B2') || c.captured >= 1) && c.enemySites > 0,
-  B4: (c) => c.live && c.ownSites >= 2,
-  B5: (c) => c.live && c.t >= 15 && c.rallyReady,
+  B4: (c) => c.live && c.ownSites >= 2 && c.battlesBefore >= 1,
+  B5: (c) => c.live && c.t >= 15 && c.rallyReady && c.battlesBefore >= 1, // Phase 10A: Rally waits for the second battle too
   // after the player's first capture in THIS battle (it used to fire at 0:02 of the second battle, before anything had been taken)
   C1: (c) => c.live && c.battlesBefore >= 1 && c.captured >= 1,
   // the first refusal ("No route") or 20 s in, and only while there really is a settlement cut off to point at
@@ -63,4 +68,6 @@ export const RULES = Object.freeze({
   // Phase 7: K1 lives in the first Boon draft (never picked by a scene); L1 a Relic's region on the frontier, while no card or panel is open
   K1: () => false,
   L1: (c) => c.panelsClosed && !c.cardOpen && c.relicRegion >= 0,
+  // Phase 9: the Challenges hub has opened (the realm's first conquest beyond home), the HUD's gear on screen
+  J1: (c) => !!c.settingsBtn && c.panelsClosed && !c.cardOpen && !!c.challengesOpen,
 });

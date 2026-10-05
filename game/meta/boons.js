@@ -66,6 +66,7 @@ function ownedCount(state) {
  * tutorial fight), and from the first win in any later dynasty. conquer() asks BEFORE the region flips.
  */
 export function boonsUnlocked(state) {
+  if (state && state.challenge) return false; // PLAN-PHASE9: a challenge's Boons are fixed by its spec (no drafts)
   return !!state && (((state.dynasty && state.dynasty.level) || 1) > 1 || ownedCount(state) >= BOONS.unlockOwned);
 }
 

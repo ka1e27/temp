@@ -74,7 +74,9 @@ function main() {
   else next = html.replace('</script>\n</head>', `</script>\n${block}\n</head>`);
   const count = block.split('\n').length - 3;
   if (process.argv.includes('--check')) {
-    if (next !== html) { console.error(`index.html: the modulepreload block is out of date (${count} modules now): run node tools/modulepreload.mjs`); process.exit(1); }
+    // line-ending-insensitive: a Windows (CRLF) checkout holds the same content as CI's LF one (Phase 10B)
+    const lf = (t) => t.replace(/\r\n/g, '\n');
+    if (lf(next) !== lf(html)) { console.error(`index.html: the modulepreload block is out of date (${count} modules now): run node tools/modulepreload.mjs`); process.exit(1); }
     console.log(`index.html: modulepreload block up to date (${count} modules)`);
     return;
   }

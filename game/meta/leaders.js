@@ -188,12 +188,15 @@ export function createVoiceGate(config = {}) {
    * @returns {{ ok: boolean, reason: GateReason|null }}
    */
   function check(trigger, ctx) {
-    const { nowSec, enabled = true, tutorialVisible = false, scope = '' } = ctx;
+    const { nowSec, enabled = true, tutorialVisible = false, scope = '', early = false } = ctx;
     if (!enabled) return { ok: false, reason: 'disabled' };
     if (tutorialVisible) return { ok: false, reason: 'tutorial' };
     if (state.spoken[keyOf(trigger, scope)] !== undefined) return { ok: false, reason: 'repeat' };
+    // `early` (Phase 10A): a realm's first minutes speak at VOICE.earlyGapSec, and only VOICE.earlyGapExempt skips it
+    const gap = early ? Math.max(minGapSec, VOICE.earlyGapSec) : minGapSec;
+    const exempt = early ? VOICE.earlyGapExempt.includes(trigger) : gapExempt.has(trigger);
     // A clock that jumped backwards (page restored from the cache) counts as "long ago".
-    if (!gapExempt.has(trigger) && state.lastAt !== null && nowSec >= state.lastAt && nowSec - state.lastAt < minGapSec) {
+    if (!exempt && state.lastAt !== null && nowSec >= state.lastAt && nowSec - state.lastAt < gap) {
       return { ok: false, reason: 'gap' };
     }
     return { ok: true, reason: null };
@@ -260,6 +263,7 @@ export function createLeaderVoice({ getState, minGapSec, gapExempt }) {
       enabled: state.settings.leaderVoices !== false,
       tutorialVisible: !!ctx.tutorialVisible,
       scope: ctx.scope,
+      early: !!ctx.early,
     });
     if (!verdict.ok) return null;
     syncRng(state);
@@ -281,6 +285,7 @@ export function createLeaderVoice({ getState, minGapSec, gapExempt }) {
       enabled: state.settings.leaderVoices !== false,
       tutorialVisible: !!ctx.tutorialVisible,
       scope: ctx.scope,
+      early: !!ctx.early,
     });
   }
 

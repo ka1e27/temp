@@ -7,7 +7,7 @@ import { makeOpen } from './robustChecks.mjs';
 
 if (!process.env.CHROME_PATH && process.platform === 'win32') process.env.CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const { launch: rawLaunch } = await import('./cdp.js');
-const launch = async (o) => { const p = await rawLaunch(o); await p.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true;' }); return p; };
+const launch = async (o) => { const p = await rawLaunch(o); await p.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true; window.__HD_TEST_NO_PACING = true;' }); return p; };
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => { const [k, ...v] = a.slice(2).split('='); return [k, v.join('=') || 'true']; }));
 const BASE = flags.url || 'http://localhost:8080';
 const OUT = 'screenshots/phase8';

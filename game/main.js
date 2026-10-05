@@ -22,9 +22,9 @@ import { createGeneralsPanel, generalEmblem } from './ui/generalsPanel.js';
 import { createModal } from './ui/modal.js';
 import { recordChronicle } from './meta/chronicle.js';
 import { assign, generalById, freeGenerals } from './meta/generals.js';
-import { playerBattleStats } from './meta/progression.js';
+import { playerBattleStats, attackableFrontier } from './meta/progression.js';
 import { GENERALS } from './config/generals.js';
-import { onDialogChange } from './ui/dialogs.js';
+import { onDialogChange, dialogCount } from './ui/dialogs.js';
 import { announce } from './ui/live.js';
 import { createSettings } from './ui/settings.js';
 import { createCoach } from './ui/coach.js';
@@ -40,6 +40,9 @@ import { createStateContainer } from './app/stateContainer.js';
 import { createAutosave } from './app/autosave.js';
 import { createIdleTicker } from './app/idle.js';
 import { createTutorialController } from './app/tutorial.js';
+import { createPacer } from './app/pacer.js';
+import { PACING } from './config/pacing.js';
+import { VOICE } from './config/leaders.js';
 import { installDevHooks } from './app/devhooks.js';
 
 import { createSceneManager } from './scenes/flow.js';
@@ -59,12 +62,13 @@ import { createBoonDraft } from './ui/boonDraft.js';
 import { createDuoReveal } from './ui/duoReveal.js';
 import { createRelicClaim } from './ui/relicClaim.js';
 import { createBoons } from './app/boons.js';
+import { createChallengeMode } from './app/challengeMode.js';
 import { shortNumber } from './ui/format.js';
 import { dynastyStarText } from './app/perkInfo.js';
 import { FEATURES as MAP_FEATURES } from './config/features.js';
 import { FEATURES } from './app/features.js';
 import { PLAYER_OWNER } from './battle/owner.js';
-import { BOOT, WORLD_SCENE } from './scenes/timing.js';
+import { BOOT, WORLD_SCENE, TOASTS_DIGEST, HINT_PACE } from './scenes/timing.js';
 
 import { loadFrom, exportCode, importCode, SAVE_KEY } from './meta/save.js';
 import { offlineEarnings } from './meta/economy.js';
@@ -287,16 +291,17 @@ function boot() {
     if (frontierRef) frontierRef.reset();
     if (services && services.goals) services.goals.reset();
     if (services && services.boons) services.boons.reset();
+    pacer.reset(); // what this realm's save already shows counts as introduced
     bootBaked = true;
   }
 
   const autosave = createAutosave({
     storage,
-    getState: () => cur().state,
+    getState: () => container.main().state, // always the REALM: a challenge (Phase 9) is saved under its own key by app/challengeMode.js
     now: () => Date.now(),
     // Only a tab that has ENTERED a session (Continue or New Realm) ever writes: a tab idling on the title, booted from a save, must not overwrite the progress of
-    // the tab being played.
-    canSave: () => sessionStarted,
+    // the tab being played. While a challenge is played the parked realm is never written (its save stays byte-identical).
+    canSave: () => sessionStarted && !container.inSandbox,
     // another tab wrote a newer save: this tab stops saving for good and says so, persistently
     onConflict: () => showTabBanner(),
     // saving failed (storage full, private mode...): said once, in words
@@ -333,11 +338,16 @@ function boot() {
       ui.leaderBanner.hide();
       // the map's celebrations (a Deed, a fulfilled contract, a Trophy) leave as a battle opens: their close buttons would sit over the field (PLAN-PHASE4)
       for (const n of ui.toasts.el.querySelectorAll('.toast.is-deed, .toast.is-sealed')) ui.toasts.dismissId(n.dataset.id);
+      dropQueuedCelebrations(); // and the ones still waiting for a phone's banner to leave
       music.setScene('battle');
       sceneManager.goto('battle', battleScene, payload);
     },
   };
-  const tutorial = createTutorialController({ getState: () => cur().state });
+  // Phase 10A: new systems arrive one at a time (app/pacer.js); the tutorial's `intro` steps, the streak chip, the first Deeds and the board ask it
+  // (tools/check.mjs and tools/hints.mjs set window.__HD_TEST_NO_PACING in ?dev=1: their flows stage systems in seconds; tools/firstHour.mjs measures the pacing)
+  const noPacing = () => isDev && window.__HD_TEST_NO_PACING === true;
+  const pacer = createPacer({ getState: () => cur().state, gapSec: () => (noPacing() ? 0 : PACING.introGapSec) });
+  const tutorial = createTutorialController({ getState: () => cur().state, pacer, newHintGapSec: () => (noPacing() ? 0 : HINT_PACE.newHintGapSec) });
 
   function closeSettings() {
     ui.settings.el.hidden = true;
@@ -347,8 +357,13 @@ function boot() {
     ui.settings.update({
       sound: s.sound, reduceMotion: s.reduceMotion, hints: s.hints, slowBattles: !!s.slowBattles, leaderVoices: s.leaderVoices !== false,
       music: s.music !== false, musicVolume: s.musicVolume ?? 0.4, sfxVolume: s.sfxVolume ?? 1,
+      // Phase 9: the Challenges entry (not from inside a battle) and the banner styles, once the challenge kit has loaded
+      challengesUnlocked: !!services.challenge && services.challenge.unlocked() && sceneManager.name !== 'battle',
+      inChallenge: container.inSandbox,
+      ...(services.challenge && services.challenge.bannerList() ? { banners: services.challenge.bannerList() } : {}),
     });
     ui.settings.el.hidden = false;
+    if (services.challenge && !services.challenge.kit) services.challenge.loadKit().then(() => { if (!ui.settings.el.hidden) openSettings(); }).catch(() => {});
   }
 
   const ui = {
@@ -356,6 +371,7 @@ function boot() {
       onContinue: () => titleScene.onContinue(),
       onNewRealm: () => titleScene.onNewRealm(),
       onSettings: () => openSettings(),
+      onChallenges: () => services.challenge.openHub(),
     }),
     hud: createHud({
       onCouncil: () => worldScene.onCouncilOpen(),
@@ -483,10 +499,11 @@ function boot() {
         if (!v) ui.leaderBanner.hide();
         autosave.save();
       },
-      onExport: () => exportCode(cur().state),
+      onExport: () => exportCode(container.main().state),
       onImport: (code) => {
         const parsed = importCode(code);
         if (!parsed) return false;
+        if (container.inSandbox) services.challenge.leave({ silent: true }); // the import replaces the REALM: the challenge ends first
         if (!container.replaceState(parsed)) return false;
         sessionStarted = true;
         applyWorld();
@@ -496,7 +513,10 @@ function boot() {
         return true;
       },
       onCodex: () => openCodex(),
+      onChallenges: () => services.challenge.openHub(),
+      onBanner: (id) => { services.challenge.chooseBanner(id); openSettings(); },
       onReset: () => {
+        if (container.inSandbox) services.challenge.leave({ silent: true });
         try { storage.removeItem(SAVE_KEY); } catch { /* ignore */ }
         sessionStarted = false;
         container.newRealm(undefined, { keepGenerals: false }); // Reset wipes everything, the Generals too
@@ -608,11 +628,34 @@ function boot() {
       nowSec: performance.now() / 1000, // REAL time: works on the map and ignores 2x/3x/pause
       tutorialVisible: !ui.coach.el.hidden, // never speak over a hint
       scope,
+      early: !noPacing() && (Number(cur().state.stats.playSec) || 0) < VOICE.earlyMinutes * 60, // Phase 10A: the first minutes speak less
     });
     if (!line) return null;
-    ui.leaderBanner.update({ ...line, faction: world.factions[line.faction] });
+    const data = { ...line, faction: world.factions[line.faction] };
+    if (modalUp()) heldLine = { data, at: performance.now(), epoch: container.epoch }; // waits for the card (Phase 10B)
+    else ui.leaderBanner.update(data);
     return line;
   }
+  // No leader banner over a modal card (Phase 10B): while a dialog (the results card, a Boon draft, the challenge result...) or a claim / Duo moment is up,
+  // a new line waits and a banner already showing leaves; the waiting line is spoken once everything has closed, if it is still fresh and no hint is up.
+  const LINE_HOLD_MS = 8000;
+  let heldLine = null;
+  const modalUp = () => dialogCount() > 0 || ui.relicClaim.playing || ui.duoReveal.playing;
+  let modalSeenAt = -1e9;
+  /** Every frame (syncUiFlags): a claim / Duo moment sends a showing banner away; a waiting line is spoken 400 ms after the last card closed
+   *  (a post-battle queue hands over from one card to the next within that). */
+  function syncHeldLine() {
+    const up = modalUp();
+    if (up) { modalSeenAt = performance.now(); if (ui.leaderBanner.isShowing()) ui.leaderBanner.hide(); return; }
+    if (heldLine && performance.now() - modalSeenAt > 400) releaseHeldLine();
+  }
+  function releaseHeldLine() {
+    if (!heldLine || modalUp()) return;
+    const h = heldLine;
+    heldLine = null;
+    if (h.epoch === container.epoch && performance.now() - h.at < LINE_HOLD_MS && ui.coach.el.hidden && cur().state.settings.leaderVoices !== false) ui.leaderBanner.update(h.data);
+  }
+
   // The coach wins any clash: when a hint appears, a banner that is still up leaves at once.
   //
   // Reading time: a NEW hint never appears sooner than COACH_MIN_SHOW_MS after the previous hint first appeared. A
@@ -663,6 +706,11 @@ function boot() {
   const toastUpdate = ui.toasts.update;
   const toastQueue = []; // { toast, at }
   let toastTimer = 0;
+  /** goto.battle: a celebration still waiting behind a phone's leader banner is dropped with the ones on screen (it would come out over the field). */
+  function dropQueuedCelebrations() {
+    const keep = toastQueue.filter((q) => !(q.toast && (q.toast.seal || String(q.toast.className || '').includes('is-deed'))));
+    toastQueue.splice(0, toastQueue.length, ...keep);
+  }
   function flushToasts() {
     if (ui.leaderBanner.isShowing()) return;
     clearInterval(toastTimer);
@@ -670,7 +718,44 @@ function boot() {
     const now = performance.now();
     for (const q of toastQueue.splice(0)) if (now - q.at < 9000) toastUpdate(q.toast); // a stale one is no news
   }
+  // Phase 10A: the news a battle's end brings all at once (Renown, a General's level, a wound, Deeds, contracts, Plunderers...) is ONE toast. A toast
+  // posted with `digest: true` waits TOASTS_DIGEST.windowMs; everything flagged that arrives meanwhile joins it (" · " between the lines, the first sealed
+  // one's icon and seal, the longest duration plus a little per extra line). One item alone goes out unchanged; the merged toast answers `has(id)` for
+  // every id in it (ui/toasts.js `aliases`).
+  let digest = [];
+  let digestTimer = 0;
+  let digestSeq = 0;
+  function flushDigest() {
+    digestTimer = 0;
+    const items = digest.splice(0);
+    if (!items.length) return;
+    // the map's celebrations (a Deed, a fulfilled contract: sealed toasts) never land over a battle, where their close buttons would sit over the field
+    // (goto.battle sends them away): posted just before a battle opened, they wait for the map
+    if (sceneManager.name === 'battle' && items.some((t) => t.seal || String(t.className || '').includes('is-deed'))) {
+      digest = items.concat(digest);
+      digestTimer = setTimeout(flushDigest, 1000);
+      return;
+    }
+    if (items.length === 1) { postToast(items[0]); return; }
+    const lead = items.find((t) => t.seal) || items[0];
+    const longest = Math.max(...items.map((t) => t.duration ?? 4200));
+    postToast({
+      id: `digest-${++digestSeq}`, aliases: items.map((t) => t.id).filter((x) => x != null), type: items.some((t) => t.type === 'warning') ? 'warning' : lead.type || 'success',
+      icon: lead.icon, seal: lead.seal, className: lead.className, message: items.map((t) => t.message).join(' · '),
+      duration: Math.min(TOASTS_DIGEST.maxMs, longest + TOASTS_DIGEST.perExtraMs * (items.length - 1)),
+    });
+  }
   ui.toasts.update = (toast) => {
+    if (toast && toast.digest) {
+      const { digest: _, ...plain } = toast;
+      digest = digest.filter((t) => t.id == null || t.id !== plain.id); // the same news again: the newer words win
+      digest.push(plain);
+      if (!digestTimer) digestTimer = setTimeout(flushDigest, TOASTS_DIGEST.windowMs);
+      return;
+    }
+    postToast(toast);
+  };
+  function postToast(toast) {
     // an update to a toast already on screen (a raid's countdown) changes it in place: it adds nothing, so it never waits for the banner
     const live = toast && toast.id != null && [...ui.toasts.el.children].some((n) => n.dataset.id === String(toast.id) && !n.classList.contains('is-out'));
     if (!live && renderer.cssWidth < 768 && ui.leaderBanner.isShowing()) {
@@ -681,12 +766,12 @@ function boot() {
     toastUpdate(toast);
     // a toast that lands while a banner is already up (a scout: the leader speaks first) slides the banner below it instead of covering it
     ui.leaderBanner.reflow();
-  };
+  }
 
   const idleTicker = createIdleTicker({ getState: () => cur().state, getWorld: () => cur().world });
 
   const services = {
-    camera, renderer, ui, input, container, sfx, music, tutorial, goto, speak, voice,
+    camera, renderer, ui, input, container, sfx, music, tutorial, pacer, noPacing, goto, speak, voice,
     hideAllPanels, openSettings, closeSettings, isPhone: () => renderer.cssWidth < 768, isTouch, isKeyboardUser,
     hasSaveOnDisk, applyWorld, autosave,
     startSession: () => { sessionStarted = true; purgeStalePending(); applySettings(cur().state); }, // a new realm may have replaced the state: its settings (Reduce Motion, mute) apply now
@@ -709,18 +794,18 @@ function boot() {
   function onDeeds(out) {
     if (!out) return;
     const { state, world } = cur();
-    if (out.kind === 'attack' && out.result && services.goals && !out.quick) services.goals.onConquest(out.regionId, out.result); // the Bounty Board (PLAN-PHASE4 §4A); a Quick Conquest's meta already told it
+    if (out.kind === 'attack' && out.result && services.goals && !out.quick && !container.inSandbox) services.goals.onConquest(out.regionId, out.result); // the Bounty Board (PLAN-PHASE4 §4A); a Quick Conquest's meta already told it
     const renown = (out.crownAward && out.crownAward.renown || 0) + (out.result && out.result.renown || 0) + (out.reward && out.reward.renown || 0);
-    if (renown > 0) ui.toasts.update({ id: 'renown', type: 'success', icon: 'laurel', message: `+${renown} Renown`, duration: 3600 });
+    if (renown > 0) ui.toasts.update({ id: 'renown', type: 'success', icon: 'laurel', message: `+${renown} Renown`, duration: 3600, digest: true });
     const c = out.commander;
     if (c) {
       const g = generalById(state, c.id);
-      if (g && c.levels > 0) ui.toasts.update({ id: `level-${c.id}`, type: 'success', icon: 'star', message: `${g.name} reaches level ${c.level}${c.picks > 0 ? ': a new skill to choose in Generals' : ''}`, duration: 5200 });
-      if (g && c.wounded) ui.toasts.update({ id: `wound-${c.id}`, type: 'warning', icon: 'shield', message: `${g.name} is wounded and rests for a while (Renown heals at once)`, duration: 5200 });
+      if (g && c.levels > 0) ui.toasts.update({ id: `level-${c.id}`, type: 'success', icon: 'star', message: `${g.name} reaches level ${c.level}${c.picks > 0 ? ': a new skill to choose in Generals' : ''}`, duration: 5200, digest: true });
+      if (g && c.wounded) ui.toasts.update({ id: `wound-${c.id}`, type: 'warning', icon: 'shield', message: `${g.name} is wounded and rests for a while (Renown heals at once)`, duration: 5200, digest: true });
       if (c.levels > 0) tutorial.notify('generalLevelUp');
     }
-    // Phase 7: after a watched win the post-battle moments go one at a time (app/boons.js: Relic claim -> recruit -> Boon draft); otherwise at once
-    if (out.result && out.result.recruited) { const rid = out.result.recruited; if (!services.boons || !services.boons.holdMoment((done) => showRecruit(rid, out.regionId, done))) showRecruit(rid, out.regionId); }
+    // Phase 7: after a watched win the post-battle moments go one at a time (Phase 9: not inside a challenge, whose recruits stay in its sandbox) (app/boons.js: Relic claim -> recruit -> Boon draft); otherwise at once
+    if (out.result && out.result.recruited && !container.inSandbox) { const rid = out.result.recruited; if (!services.boons || !services.boons.holdMoment((done) => showRecruit(rid, out.regionId, done))) showRecruit(rid, out.regionId); }
     // a varied map (DESIGN 10.13): the Dragon slain gives the realm Dragonscale; a Duel's end goes in the Chronicle
     if (out.result && out.result.dragonscale) {
       ui.toasts.update({ id: 'dragonscale', type: 'success', icon: 'shield', message: `The Dragon is slain! ${MAP_FEATURES.copy.dragonscale}`, duration: 7000 });
@@ -738,8 +823,8 @@ function boot() {
   services.battles.on('finished', (id, out, snapshot) => {
     const bb = snapshot && snapshot.boons;
     if (!bb) return;
-    if (bb.plunder > 0) ui.toasts.update({ id: 'boon-plunder', type: 'success', icon: 'boonSack', message: `Plunderers: +${shortNumber(bb.plunder)} gold`, duration: 3600 });
-    if (bb.goldLost > 0) ui.toasts.update({ id: 'boon-fortune', type: 'warning', icon: 'boonDice', message: `Fortune Favours: the loss cost ${shortNumber(bb.goldLost)} gold`, duration: 5200 });
+    if (bb.plunder > 0) ui.toasts.update({ id: 'boon-plunder', type: 'success', icon: 'boonSack', message: `Plunderers: +${shortNumber(bb.plunder)} gold`, duration: 3600, digest: true });
+    if (bb.goldLost > 0) ui.toasts.update({ id: 'boon-fortune', type: 'warning', icon: 'boonDice', message: `Fortune Favours: the loss cost ${shortNumber(bb.goldLost)} gold`, duration: 5200, digest: true });
   });
 
   /** "Gorran Redhand, the Crimson Champion, joins your cause": a short card with the champion's line, and a Chronicle entry. */
@@ -783,7 +868,8 @@ function boot() {
       ? (won ? `${name} held: the attackers are beaten.` : `${name} has fallen.`)
       : (won ? `${name} is yours: your commander won the battle.` : `The attack on ${name} failed.`);
     ui.toasts.update({ type: won ? 'success' : 'warning', icon: won ? 'crown' : 'flag', message: msg, duration: 5200 });
-    if (won && out && out.kind !== 'duel') worldScene.onRemoteConquest(out);
+    // (a conquest only: a defense the steward won conquered nothing; it used to reach onRemoteConquest and throw on out.result, found by tools/firstHour.mjs)
+    if (won && out && out.kind !== 'duel' && run.kind !== 'defense') worldScene.onRemoteConquest(out);
     updateTray(true);
   });
 
@@ -826,8 +912,21 @@ function boot() {
   services.onQuickReady = () => { if (sceneManager.name === 'world') worldScene.devRefreshCard(); };
   services.sceneName = () => sceneManager.name;
   services.onGoalsChanged = (opts) => { if (sceneManager.name === 'world') worldScene.onGoalsChanged?.(opts); };
-  services.battles.on('finished', (id, out, snapshot) => services.goals.onFinished(snapshot, out));
-  prosperityHook = (ups) => services.goals.onProsperity(ups);
+  services.battles.on('finished', (id, out, snapshot) => { if (!container.inSandbox) services.goals.onFinished(snapshot, out); }); // no Bounty Board in a challenge
+  prosperityHook = (ups) => { if (!container.inSandbox) services.goals.onProsperity(ups); };
+  // Phase 9 (docs/PLAN-PHASE9.md): the Daily Challenge and the Scenarios, played on a sandboxed {state, world} the container points at
+  services.challenge = createChallengeMode({
+    storage, container, services, ui, goto, applyWorld, autosave,
+    sceneName: () => sceneManager.name,
+    isActive: () => sessionStarted && (sceneManager.name === 'world' || sceneManager.name === 'battle') && !document.hidden
+      && !services.battles.paused && !document.documentElement.hasAttribute('data-dialog'),
+    getSession: () => sessionStarted,
+    setSession: (on) => { sessionStarted = !!on; },
+    // ?dev=1&today=yyyymmdd pins "today" (checks and screenshots play a known Daily); otherwise the player's local date
+    ...(isDev && /^\d{8}$/.test(params.get('today') || '') ? { today: () => Number(params.get('today')) } : {}),
+    onEntryChange: () => { if (sceneManager.name === 'title') ui.title.update({ challenges: services.challenge.unlocked() }); },
+  });
+  services.inChallenge = () => container.inSandbox;
 
   /** A run's commander for its chip: the name, and the choices (free Generals + this one + the Militia Captain). */
   function trayCommander(r) {
@@ -893,7 +992,7 @@ function boot() {
   async function openCodex(topicId) {
     try {
       const c = await loadCodex();
-      c.ui.open(c.topics.codexData(cur().state), topicId, { revisit: !!revisitSnapshot });
+      c.ui.open(c.topics.codexData(container.main().state), topicId, { revisit: !!revisitSnapshot }); // the REALM's discoveries, even inside a challenge
       tutorial.notify('codexOpened');
     } catch (err) {
       console.warn('[codex] could not open:', err);
@@ -997,6 +1096,17 @@ function boot() {
       /** Dev/checks (Phase 5): grant Legacy points (for the Realm panel's tree). */
       grantLegacy: (n) => { const l = services.dynasty.devGrant(n); worldScene.onGoalsChanged?.(); return l; },
       get battlePhase() { return battleScene.phase; },
+      /** Dev/checks (Phase 9): app/challengeMode.js (play('daily', yyyymmdd) / play('scenario', id), leave(), retry(), openHub(), record, kit, dev.parkSig ...) */
+      get challenge() { return services.challenge; },
+      /** Dev/checks (Phase 9): the next region to attack in a challenge: the goal's target when it can be attacked, else the easiest attackable frontier region. */
+      challengeNext: () => {
+        const { state, world } = cur();
+        const ids = attackableFrontier(state, world);
+        const target = state.challenge && state.challenge.resolved ? state.challenge.resolved.target : null;
+        if (target != null && ids.includes(target)) return target;
+        ids.sort((a, b) => world.regions[a].tier - world.regions[b].tier || a - b);
+        return ids.length ? ids[0] : null;
+      },
       regionScreenPos: (id) => worldScene.regionScreenPos(id),
       regionHintBox: (id) => worldScene.regionHintBoxOf(id),
       hintOutline: () => worldScene.devHintOutline(),
@@ -1132,6 +1242,7 @@ function boot() {
     if (document.visibilityState !== 'visible') return;
     // an untouched realm shown behind the title is not being played: nothing was earned there while the tab was away
     if (!sessionStarted) return;
+    if (container.inSandbox) return; // a challenge earns nothing offline, and the parked realm is not touched (it is settled at its next load)
     const { state, world } = cur();
     if (!(state.lastSeen > 0)) state.lastSeen = Date.now();
     const awaySec = Math.max(0, (Date.now() - state.lastSeen) / 1000);
@@ -1154,7 +1265,7 @@ function boot() {
   applyWorld();
   mark('hd-baked');
   goto.title({});
-
+  services.challenge.preload(); // Phase 9: the challenge kit, once the boot's work is done
   // --- frame loop (ARCHITECTURE §9) ---------------------------------------------
   const clock = createClock();
   let tAccum = 0;
@@ -1169,6 +1280,7 @@ function boot() {
   const uiFlags = {};
   const setFlag = (name, on) => { if (uiFlags[name] === on) return; uiFlags[name] = on; uiRoot.toggleAttribute(`data-${name}`, on); };
   function syncUiFlags() {
+    syncHeldLine();
     const hudOn = !ui.hud.el.hidden;
     setFlag('hud', hudOn);
     setFlag('battle', !ui.battleHud.el.hidden);
@@ -1240,7 +1352,7 @@ function boot() {
       if (!ui.coach.el.hidden) tutorial.update(dt);
       // Prosperity is wall-clock, like income: it keeps ticking through battles, but only the world scene
       // celebrates. (Not on the title screen: nothing is being played there.)
-      if (sceneManager.name !== 'title' && nowMs - lastProsperityMs > 5000) {
+      if (sceneManager.name !== 'title' && !container.inSandbox && nowMs - lastProsperityMs > 5000) {
         lastProsperityMs = nowMs;
         const ups = runProsperity(cur().state, cur().world, Date.now());
         if (ups.length) services.pendingProsperity.push(...ups.map((u) => ({ ...u, epoch: container.epoch })));
@@ -1251,8 +1363,9 @@ function boot() {
       if (sceneManager.name !== 'title' && sessionStarted) services.battles.tick(dt);
       const m1 = performance.now();
       services.frontier.tick(dt);
-      services.events.tick(dt);
-      if (sceneManager.name !== 'title' && sessionStarted) services.goals.tick(dt);
+      if (!container.inSandbox) services.events.tick(dt); // no world events in a challenge (Phase 9)
+      services.challenge.tick(dt); // the challenge's clock, scripted raids, goal and tracker (inert outside one)
+      if (sceneManager.name !== 'title' && sessionStarted && !container.inSandbox) services.goals.tick(dt);
       if (sceneManager.name !== 'title' && sessionStarted) services.boons.tick(sceneManager.name);
       const m2 = performance.now();
       perf.battleMs = m1 - t0;

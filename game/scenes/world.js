@@ -493,9 +493,11 @@ export function createWorldScene(services) {
     }
     const shown = state.gold - (creditHold ? creditHold.amount : 0);
     const roster = ensureGenerals(state).roster;
+    const showRenown = FEATURES.frontier && (renownPoints(state) > 0 || (state.renown && state.renown.earned > 0) || state.stats.battlesWon > 0);
+    if (showRenown) services.pacer?.introduce('renown'); // Phase 10A: the first system (the first victory's laurel); the next waits its turn
     ui.hud.update({
       gold: shown, incomePerSec: incomePerSec(state, world), dynastyStars: state.dynasty.stars, pulse, quiet: !pulse,
-      renown: renownPoints(state), showRenown: FEATURES.frontier && (renownPoints(state) > 0 || (state.renown && state.renown.earned > 0) || state.stats.battlesWon > 0),
+      renown: renownPoints(state), showRenown,
       pendingPicks: roster.reduce((n, g) => n + pendingPicks(g), 0),
       eventPip: services.events ? services.events.closedOffer() : null, // a closed world-event offer can be reopened while it is open (PLAN-PHASE4 §4E)
       ...(services.goals ? services.goals.hudData() : {}), // the Conquest Streak's flame chip (PLAN-PHASE4 §4B)
@@ -545,7 +547,7 @@ export function createWorldScene(services) {
     const { state } = container.get();
     const { world } = container.get();
     ui.realm.update({
-      stats: state.stats, dynasty: { ...state.dynasty, starText: dynastyStarText() }, canFoundDynasty: canFoundDynasty(state, world), // the Dragon's Lair is optional (DESIGN 10.13)
+      stats: state.stats, dynasty: { ...state.dynasty, starText: dynastyStarText() }, canFoundDynasty: canFoundDynasty(state, world) && !services.inChallenge?.(), // the Dragon's Lair is optional (DESIGN 10.13); never inside a challenge (Phase 9)
       crowns: crownTotals(state, world),
       held: { owned: state.owner.filter((o) => o === PLAYER_FACTION).length, total: world.regions.length }, // this dynasty, beside the lifetime records
       boons: state.boons && state.boons.dragonscale ? [MAP_FEATURES.copy.dragonscale] : [], // Dragonscale (DESIGN 10.13)
@@ -949,7 +951,7 @@ export function createWorldScene(services) {
   let ceremonySeed = null;
   function onFoundDynasty() {
     const { state, world } = container.get();
-    if (!canFoundDynasty(state, world)) return;
+    if (!canFoundDynasty(state, world) || services.inChallenge?.()) return;
     ceremonySeed = container.nextSeed(); // the Edicts are drawn for this seed, and the new continent is made from it
     services.dynasty.beginSession(ceremonySeed);
     setSelected(null);
@@ -1364,21 +1366,30 @@ export function createWorldScene(services) {
       boardUnlocked: !!(state.bounties && state.bounties.unlocked), // Q1
       ashenRegion: ashenTutorialRegion(), // A1
       relicRegion: relicTutorialRegion(), // L1
+      challengesOpen: !!services.challenge && services.challenge.unlocked() && !services.inChallenge?.(), // J1 (Phase 9): the Challenges have opened
     };
     return slowFacts;
   }
 
+  // Phase 10A: how long the card has been open (W3 waits a moment) and how long the map has been quiet (`calm` steps)
+  let cardOpenAtMs = -1;
+  let busyAtMs = 0;
   function hintFacts(nowMs) {
     const { state, world } = container.get();
     const owned = state.owner.filter((o) => o === PLAYER_FACTION).length;
     const cardOpen = !ui.regionCard.dock.hidden && selectedRegionId != null;
+    if (!cardOpen) cardOpenAtMs = -1; else if (cardOpenAtMs < 0) cardOpenAtMs = nowMs;
+    const panelsClosed = ui.ceremony.el.hidden && ui.welcome.el.hidden && ui.settings.el.hidden && ui.council.el.hidden && ui.realm.el.hidden && ui.regions.el.hidden && nowMs - enteredAtMs > 900;
+    if (cardOpen || !panelsClosed || document.documentElement.hasAttribute('data-dialog') || !ui.generals.el.hidden) busyAtMs = nowMs;
     const action = cardOpen ? cardAction() : null;
     const scout = cardOpen ? cardScout() : null;
     return {
       scene: 'world',
       // nothing modal in the way, and the scene has had a moment (the hint waits for the mists and the first framing)
-      panelsClosed: ui.ceremony.el.hidden && ui.welcome.el.hidden && ui.settings.el.hidden && ui.council.el.hidden && ui.realm.el.hidden && ui.regions.el.hidden && nowMs - enteredAtMs > 900,
+      panelsClosed,
       cardOpen,
+      cardOpenSec: cardOpen ? (nowMs - cardOpenAtMs) / 1000 : 0,
+      calmSec: services.noPacing?.() ? Infinity : (nowMs - Math.max(busyAtMs, enteredAtMs)) / 1000, // (checks stage hints in seconds: always calm there)
       cardAttackable: isUp(action),
       cardUnscouted: isUp(scout) && !scout.disabled,
       ...slowHintFacts(nowMs, state, world, owned),
@@ -1959,6 +1970,7 @@ export function createWorldScene(services) {
     /** A battle nobody was watching was won (app/battles.js finished it): the map plays the conquest where it is, without moving the camera. */
     onRemoteConquest(out) {
       if (!out) return;
+      if (!out.result) { markDirty(); return; } // nothing was conquered (a defense): just redraw
       if (inWorld) applyConquestVisuals(out.regionId, out.beforeRevealed, out.result.bounty + out.crownAward.bonusGold, { oldOwner: out.oldOwner, frontierBefore: out.frontierBefore, keepCamera: true });
       else markDirty();
     },

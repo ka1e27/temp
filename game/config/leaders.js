@@ -73,6 +73,11 @@ export const VOICE = Object.freeze({
   // NEXT line). A keep usually falls 8-20 s after keepAssaulted spoke, so without this the payoff
   // lines were often swallowed by the 15 s gap (lead decision, DESIGN §3.6).
   gapExempt: ['keepLost', 'decapitation', 'vendetta'], // a Vendetta's oath must never be swallowed by the gap (PLAN-PHASE4 §4D)
+  // Phase 10A: a quieter rate in a realm's first minutes of play (the tutorial and the first systems are speaking then): a longer gap, and only
+  // the Vendetta's oath skips it
+  earlyMinutes: 10,
+  earlyGapSec: 60,
+  earlyGapExempt: ['vendetta'],
 });
 
 /**

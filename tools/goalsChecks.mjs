@@ -13,6 +13,7 @@
 //   9. the Realm panel: the Deeds grid; an earned Deed's toast
 //  10. the hint monitor's verdict on Q1 / Q2
 import { makeOpen } from './robustChecks.mjs';
+import { TOASTS_DIGEST } from '../game/scenes/timing.js';
 
 async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobile, name }) {
   const t = await open(`${BASE}/index.html?dev=1&seed=9`, { width, height, mobile });
@@ -134,7 +135,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
         return P.conquestBounty(window.__hd.state, window.__hd.world, id);
       }, target);
       await q((id) => window.__hd.conquerRegion(id, { hooks: true }), target);
-      ok(await t.waitFor(() => [...document.querySelectorAll('.toast.is-sealed')].some((n) => /contract complete/i.test(n.textContent)), 5000), tag('the completion toast wears the seal'));
+      ok(await t.waitFor(() => [...document.querySelectorAll('.toast.is-sealed')].some((n) => /contract complete/i.test(n.textContent)), 5000 + TOASTS_DIGEST.windowMs), tag('the completion toast wears the seal')); // (+ the post-battle digest window, Phase 10A)
       const gold1 = await q(() => window.__hd.state.gold);
       ok(gold1 - gold0 >= reward * 0.9 + conquest * 0.9, tag(`the contract paid (gold +${Math.round(gold1 - gold0)}, reward ~${Math.round(reward)} + conquest ${Math.round(conquest)})`));
       const slot = await q((s) => window.__g.slots()[s], typed.slot);
@@ -165,7 +166,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     await sleep(900);
     await t.clickText('.results-action', 'Continue');
     ok(await t.waitFor(() => window.__hd.scene === 'world', 15000), tag('back on the map'));
-    ok(await t.waitFor(() => [...document.querySelectorAll('.toast.is-sealed')].some((n) => /without using a power/i.test(n.textContent)), 6000), tag('"Win a battle without using a power" completes and pays'));
+    ok(await t.waitFor(() => [...document.querySelectorAll('.toast.is-sealed')].some((n) => /without using a power/i.test(n.textContent)), 6000 + TOASTS_DIGEST.windowMs), tag('"Win a battle without using a power" completes and pays'));
     ok(await q((g) => window.__hd.state.gold > g, gold2), tag('gold went up'));
     void fightId;
 

@@ -41,11 +41,12 @@ export function createAutosave({ storage, getState, now, canSave, onConflict, on
     if (onConflict) onConflict();
   }
 
-  function save() {
+  /** @param {{ force?: boolean }} [opts] force: write even when canSave says no (Phase 9: today's Daily paid the parked realm its Renown) */
+  function save(opts) {
     const state = getState();
     if (!state) return;
     if (conflicted) return; // another tab owns the save now
-    if (canSave && !canSave()) return;
+    if (canSave && !canSave() && !(opts && opts.force === true)) return;
     if (known === null) known = Math.max(0, Math.trunc(Number(state.saveSeq) || 0));
     const stored = readStored();
     if (stored > known) { conflict(); return; } // someone else wrote since we loaded: do NOT overwrite their progress

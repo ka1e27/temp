@@ -144,7 +144,35 @@ behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away rep
   49 -> 22 ms, Dragon 41 -> 23 ms, meta tick 0.54 ms, save 6.6 KB (worst offender: #ui:has() CSS restyling every frame; sprite/label
   caches; terrain bake off the title; generated modulepreload, A/B 2.2 vs 3.2 s). Codex: 34 topics, locked until met, revisit hints,
   "?" in every panel. 8C UI done. Gate green after re-runs. Lead asked: one stacking column for top toasts (the Deed toast covered
-  the leader banner) + make the generals tray-picker check deterministic, then re-run the gate. Rough edges: no leader lines for
+  the leader banner) + make the generals tray-picker check deterministic, then re-run the gate.
+- **Phase 8 READY TO DEPLOY:** top-notice lane (layoutTopLane, phone cap 2, a no-overlap assertion in hintMonitor, --only=toplane),
+  generals flake fixed (a focus race in the check). Snapshot scratchpad/p8snap (86 files, no Phase 9) passed the full gate: npm 1160,
+  full check.mjs, --base=temp. **Committed 9de1c05 from the snapshot and pushed to redesign + main** at the user's "deploy
+  Phase 8" (2026-10-05); the main tree was reset onto it with the Phase 9 WIP kept as diffs.
+  CI failed 9de1c05 on phase6 phone (the Gravewarden step picked a region that surrendered once the commander was credited);
+  fixed in 59475b7 and redeployed: **LIVE** (Pages run passed). Known: the phase6 "Firestorm burns the dead" step still flakes about 1 in 3 under load (burn present,
+  burned 0); assigned to the Phase 9 integration engineer. A Windows-only artifact: the modulepreload check fails in CRLF
+  worktrees (content identical); CI on Linux is fine.
+- **Phase 9 DONE + READY TO DEPLOY** (integration, gate green: npm 1180, full check.mjs 1658 ok, --base=temp ok, phase6 5/5): the
+  Challenges hub (title + Settings), sandboxed play (stateContainer enterSandbox/leaveSandbox; realm byte-identical), goal tracker,
+  result + share line, daily reward, banner styles, Codex group, hint J1, lazy-loaded kit. The phase6 Firestorm flake was a Relic
+  (the Gravewarden's Lantern) picked up earlier in the run; fixed. Snapshot scratchpad/p9snap (45 files on 59475b7).
+- **2026-10-05 PHASE 10 "Cohesion" STARTED** (user: "after phase 9 finishes continue working"): docs/PLAN-PHASE10.md. A first-hour
+  interruption audit (tools/firstHour.mjs, pacing targets) + a rough-edge sweep (1:37 vs 1:38, tracker wording, banner over modals,
+  galleries, a Cartographer check, Lantern text, CRLF-safe preload check). One engineer owns the whole tree.
+- **Phase 10 engineer pass (2026-10-05, uncommitted on top of the Phase 9 tree):** `tools/firstHour.mjs` (+ `firstHourProbe.js`, `firstHourBot.mjs`,
+  `firstHourReport.mjs`): a 60-min scripted new player (seed 7, desktop, real presses) with an interruption log. Before: busiest minute 11 (the tutorial),
+  14 systems unlocked in the first 8.5 min (12 spacing misses). Fixes: `app/pacer.js` (one new system per 150 play seconds (lead; was 190): intro hints, streak chip, first
+  Deed, board, first Boon, first event / Vendetta; the first raid is exempt (lead) but restarts the clock), hint pacing (`HINT_PACE`: 10 s between new steps, calm steps, W3 after 2.5 s, B2/B4/B5 to battle 2),
+  post-battle toast digest, a quieter leader rate in the first 10 min, no leader banner over modal cards. 10B: share time = result time (floor), "Capital
+  taken" tracker words, Lantern text, CRLF-safe preload check, Cartographer real-input check (phase5), Champion gallery frames, Phase 9 gallery retaken,
+  INTEGRATION-NOTES queue + pacing sections. Found by the audit: a steward-won defense threw in onRemoteConquest (fixed). Results in screenshots/phase10/.
+- **2026-10-04/05 PHASE 9 STARTED** (spec docs/PLAN-PHASE9.md): Daily Challenge, 6 Scenarios, banner cosmetics. Sim/meta (new files
+  first, now unlocked) + integration; both resumed after a usage limit.
+- **Sim/meta Phase 9 DONE** (1180/1180): sandbox createChallengeGame -> {state, world} (small 30x24 continent, challenge mods
+  through edictMods), dailySpec(yyyymmdd) with 4 rotating goals, 6 scenarios (bot: all 3 stars), lasting record under its own key
+  (results, streak, banners, claimDailyReward once per date). Bot: 30/30 dailies (median 4:35). Fixing: two 43-min conquer days
+  with several gated capitals -> cap the slowest daily at about 20 min. Rough edges: no leader lines for
   Plague/Merchant; an event toast closed with x cannot be reopened; phase3 gallery not re-shot after the gate/toast/plague fixes.
   - TODO: swarm calibration pass: Fair fights vs Amber won 98%, ceiling temporarily 0.98-0.99: 50 of 51 failed 0.98 (game/tests/balance.labels.test.js).
 - **Integration Phase 2 polish + Phase 3 UI DONE** (report pending lead review): laurel everywhere Renown shows, ability banner, emblem on the

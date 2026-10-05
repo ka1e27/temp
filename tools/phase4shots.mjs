@@ -8,7 +8,9 @@ import { mkdir } from 'node:fs/promises';
 import { makeOpen } from './robustChecks.mjs';
 
 if (!process.env.CHROME_PATH && process.platform === 'win32') process.env.CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const { launch } = await import('./cdp.js');
+const { launch: rawLaunch } = await import('./cdp.js');
+// the gallery stages the Phase 4 systems in seconds: the first-hour pacing (app/pacer.js) would hold the streak chip and the Deeds back
+const launch = async (opts) => { const page = await rawLaunch(opts); await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_PACING = true;' }); return page; };
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => { const [k, ...v] = a.slice(2).split('='); return [k, v.join('=') || 'true']; }));
 const BASE = (flags.url || 'http://localhost:8080').replace(/\/$/, '');
 const OUT = flags.out || 'screenshots/phase4';
@@ -99,14 +101,49 @@ async function run(variant) {
       await q(() => document.querySelector('.toast.is-vendetta .toast-action')?.click());
       await t.waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live', 40000);
       await t.waitFor(() => window.__hd.battle.squads.some((s) => s.champion), 15000);
-      await sleep(900);
-      // follow the Champion: the camera onto its squad
-      await q(() => { const hd = window.__hd; const b = hd.battle; const sq = b.squads.find((s) => s.champion); if (!sq) return; hd.battles.setPaused(true); });
-      await sleep(400);
+      // Phase 10B: a staged fight in which the Champion is seen. It marches out of the war band's camp as one big squad under its leader's
+      // swallow-tailed pennant: the battle is paused the moment it is on the field and the camera closes in on it. Then the defense is held
+      // standing (the war band is strong) and the Champion's squad dies on the keep's walls, with the camera on it when it falls.
+      // where the Champion is: its squad on the march, or the site it holds (a camp with no way in: it waits there)
+      const champ = () => q(async () => {
+        const hd = window.__hd; const b = hd.battle; if (!b) return null;
+        const sq = b.squads.find((s) => s.champion);
+        if (sq) {
+          const P = await import(new URL('game/battle/position.js', document.baseURI).href);
+          const p = P.squadPosition(b, sq);
+          const sp = hd.camera.worldToScreen(p.x, p.y);
+          return { x: p.x, y: p.y, sx: sp.x, sy: sp.y, count: Math.round(sq.count), state: sq.state };
+        }
+        const site = b.sites.find((s) => s.champion);
+        if (!site) return null;
+        const sp = hd.screenPosOfSite(site.id);
+        const w = hd.camera.screenToWorld(sp.x, sp.y);
+        return { x: w.x, y: w.y, sx: sp.x, sy: sp.y, site: site.id, count: Math.round(site.troops) };
+      });
+      const look = (p) => q((x, y) => window.__hd.camera.flyTo({ x, y, zoom: 200 }, 200), p.x, p.y); // clamped to the battle's own zoom limit
+      await t.waitFor(() => { const c = window.__hd.battle.champion; return !!c && c.launched; }, 20000);
+      await sleep(1600); // on the march (or settled in its camp)
+      await q(() => window.__hd.battles.setPaused(true));
+      const c0 = await champ();
+      if (c0) await look(c0);
+      await sleep(700);
+      console.log('  champion:', JSON.stringify(c0));
       await shot('champion');
-      // keep the defense standing for the rest of the pictures (the war band is strong), and strike the Champion down
       await q(() => { window.__p4hold = setInterval(() => { const b = window.__hd.battle; if (!b || b.result) return; for (const s of b.sites) if (s.owner === 0) s.troops = Math.max(s.troops, 1500); }, 300); });
-      await q(() => { const hd = window.__hd; hd.battles.setPaused(false); const b = hd.battle; const sq = b.squads.find((s) => s.champion); if (sq) sq.count = 0.01; });
+      await q(() => window.__hd.battles.setPaused(false));
+      // its fall, on camera: a marching Champion is struck down when it reaches the walls; one holding a site loses the site
+      for (let i = 0; i < 40; i++) {
+        const c = await champ();
+        if (!c) break;
+        await look(c);
+        if (c.site != null) {
+          // the camp it holds is overrun (staged: our troops take it outright; a marching Champion would die at the walls instead)
+          await q((id) => { const st = window.__hd.battle.sites[id]; st.owner = 0; st.troops = 60; }, c.site);
+          break;
+        }
+        if (c.state === 'fight' || i === 39) { await q(() => { const sq = window.__hd.battle.squads.find((s) => s.champion); if (sq) sq.count = 0.01; }); break; }
+        await sleep(400);
+      }
       await t.waitFor(() => { const b = document.querySelector('.battle-champion-banner'); return !!b && !b.hidden; }, 15000);
       await sleep(350);
       await shot('champion-fallen');

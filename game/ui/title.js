@@ -6,8 +6,11 @@ import { h } from './dom.js';
 /**
  * @param {{ onContinue?: () => void, onNewRealm?: () => void, onSettings?: () => void }} [callbacks]
  */
-export function createTitle({ onContinue, onNewRealm, onSettings } = {}) {
+export function createTitle({ onContinue, onNewRealm, onSettings, onChallenges } = {}) {
   const continueBtn = h('button.btn.btn-primary.btn-block.title-btn', { onClick: () => onContinue?.() }, 'Continue');
+  // Phase 9: the Daily and the Scenarios, once the realm has made its first conquest (shown when the challenge kit says so)
+  const challengesBtn = h('button.btn.btn-secondary.btn-block.title-btn.title-challenges', { onClick: () => onChallenges?.() }, 'Challenges');
+  challengesBtn.hidden = true;
   const versionEl = h('div.title-version', {}, '');
 
   const el = h('div.title-screen', {},
@@ -17,6 +20,7 @@ export function createTitle({ onContinue, onNewRealm, onSettings } = {}) {
     ),
     h('div.title-actions', {},
       continueBtn,
+      challengesBtn,
       h('button.btn.btn-secondary.btn-block.title-btn', { onClick: () => onNewRealm?.() }, 'New Realm'),
       h('button.btn.btn-secondary.btn-block.title-btn', { onClick: () => onSettings?.() }, 'Settings'),
     ),
@@ -28,6 +32,7 @@ export function createTitle({ onContinue, onNewRealm, onSettings } = {}) {
     if (!data) return;
     if (data.hasSave != null) continueBtn.hidden = !data.hasSave;
     if (data.version != null) versionEl.textContent = `v${data.version}`;
+    if (data.challenges != null) challengesBtn.hidden = !data.challenges;
   }
 
   function destroy() {}

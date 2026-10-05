@@ -50,6 +50,10 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
   let seenRelics = new Set(ownedIds());       // the Relics whose claim moment has played (or that were held before this session)
   let draftCtx = null;                        // { source, regionName, then } while the draft is open
   let missedNote = false;                     // the replaced-offer note, shown once on the next open
+  let heldUnseen = false;                     // Phase 10A: an offer held back by the pacer was never shown, so a newer one replacing it is no "missed" pick
+  // Phase 10A: the first Boon is a new system; it waits its turn (app/pacer.js). Once the Boons are known nothing waits.
+  const pacerHolds = () => !!services.pacer && !services.pacer.ready('boons');
+  const introduce = () => services.pacer?.introduce('boons');
   const claimQueue = [];
   let claimThen = null;
 
@@ -65,6 +69,7 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
     wasFoundBefore.clear();
     for (const id of foundIds()) wasFoundBefore.add(id);
     missedNote = false;
+    heldUnseen = false;
     claimQueue.length = 0;
     if (ui.boonDraft && ui.boonDraft.open) ui.boonDraft.hide();
     draftCtx = null;
@@ -89,7 +94,7 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
       regionName: draftCtx ? draftCtx.regionName : '',
       choices: p.choices.map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, cursed: !!c.cursed, icon: boonIcon(c.id, c.icon), text: c.text, duo: duoHintFor(c.id) })),
       reroll: { cost: r.cost, can: r.can, reason: r.can ? '' : `needs ${r.cost} Renown` },
-      note: missedNote || p.missed ? BOONS.copy.missed : '',
+      note: (missedNote || p.missed) && !heldUnseen && !firstDraft ? BOONS.copy.missed : '', // never on the very first draft (Phase 10A: an offer held by the pacer)
       // tutorial K1 (the first draft), a static line inside the dialog (the coach layer sits under dialogs, like D1 in the ceremony)
       hint: firstDraft && !(st.tutorial && st.tutorial.seen && st.tutorial.seen.K1) ? 'Your first Boon: pick the card that suits how you fight. It lasts the dynasty. Not now? Decide later from the Boon chip.' : '',
       laterLabel: draftCtx && draftCtx.then ? 'Decide later' : 'Later',
@@ -102,6 +107,8 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
     seenOffer = offerSig(getState());
     ui.boonDraft.update(d);
     ui.boonDraft.show();
+    introduce();
+    heldUnseen = false;
     sfx?.play('upgrade', { pitch: 0.8, volume: 0.5 });
     return true;
   }
@@ -183,6 +190,7 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
     const v = claimView(id);
     if (!v) { playNextClaim(); return; }
     sfx?.play('victory', { volume: 0.5, pitch: 1.2 });
+    services.pacer?.introduce('relics'); // Phase 10A: a claim never waits (it is the conquest's own moment); the next new system waits behind it
     ui.relicClaim.play(v);
     wasFoundBefore.add(id);
   }
@@ -221,9 +229,10 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
     for (const id of fresh) { seenRelics.add(id); claimQueue.push(id); }
     const goDraft = () => {
       const sig = offerSig(getState());
+      if (sig && sig !== before && pacerHolds()) { heldUnseen = true; seenOffer = ''; then?.(); return; } // it waits (no chip, no word); tick() tells it on the Boons' turn
       if (sig && sig !== before) {
         const p = getState().boons2.pending;
-        missedNote = !!p.missed;
+        missedNote = !!p.missed && !heldUnseen;
         openDraft({ source: 'victory', regionName, then });
       } else then?.();
     };
@@ -236,9 +245,13 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
     const st = getState();
     if (!st) return;
     const sig = offerSig(st);
-    if (sig && sig !== seenOffer && !draftCtx) {
+    // (lead decision: the first Boon is never announced over a battle; released there, it waits for the map)
+    if (sig && sig !== seenOffer && !draftCtx && (pacerHolds() || (scene !== 'world' && !services.pacer?.known('boons')))) heldUnseen = true;
+    else if (sig && sig !== seenOffer && !draftCtx) {
       seenOffer = sig;
-      if (st.boons2.pending.missed) missedNote = true;
+      introduce();
+      heldUnseen = false; // told now: a later offer replacing it is a missed pick again
+      if (st.boons2.pending.missed && !heldUnseen) missedNote = true;
       ui.toasts.update({ id: 'boon-pending', type: 'info', icon: 'boonCard', message: st.boons2.pending.source === 'champion' ? "The Champion's eye: a Rare-or-better Boon awaits. Tap the Boon chip." : 'A Boon awaits: tap the Boon chip to choose it.', duration: 5200 });
     }
     if (momentsOff()) seenRelics = new Set(ownedIds());
@@ -251,7 +264,7 @@ export function createBoons({ getState, getWorld, ui, services, sfx, tutorial })
   // --- plain data ------------------------------------------------------------------------------------------------------------------------------
   function hudData() {
     const p = pendingBoons(getState());
-    return { boonPending: p && !(ui.boonDraft && ui.boonDraft.open) ? { champion: p.source === 'champion' } : null };
+    return { boonPending: p && !(ui.boonDraft && ui.boonDraft.open) && !pacerHolds() ? { champion: p.source === 'champion' } : null };
   }
 
   function realmData() {

@@ -4,6 +4,7 @@
 // a Vendetta, Deed / contract / streak toasts with their real classes). Screenshots go to screenshots/phase8/ unless PHASE8_SHOTS=0.
 import { mkdir } from 'node:fs/promises';
 import { makeOpen } from './robustChecks.mjs';
+import { TOASTS_DIGEST } from '../game/scenes/timing.js';
 
 const OUT = 'screenshots/phase8';
 
@@ -36,8 +37,9 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(await t.atTitle(), tag('boots'));
     ok(await t.clickText('button', 'New Realm'), tag('New Realm'));
     ok(await t.waitFor(() => window.__hd.scene === 'world', 40000), tag('the world is up'));
-    await q(() => { const hd = window.__hd; hd.hideDev(true); hd.state.settings.hints = false; hd.conquerRegions(6); hd.grantGold(20000); });
-    await sleep(1200);
+    // (the rivals' own voices are off while the lane is staged: a first contact spoken as the mists part would take the banner's slot at a random moment)
+    await q(() => { const hd = window.__hd; hd.hideDev(true); hd.state.settings.hints = false; hd.state.settings.leaderVoices = false; hd.conquerRegions(6); hd.grantGold(20000); });
+    await sleep(1200 + TOASTS_DIGEST.windowMs); // the conquests' own news (a Deed) is on screen first: it now waits out the post-battle digest window (Phase 10A)
     // a toast first, then the leader speaks, then an event offer, a Vendetta, a Deed, a contract and a streak toast arrive
     await q(() => {
       const hd = window.__hd; const ui = hd.services.ui; const f = hd.world.factions.find((x) => x.id > 1 && !x.absent);
@@ -65,6 +67,20 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(b.lane[0] === 'event', tag('the event offer now leads'));
     if (mobile) ok(b.lane.length === 2, tag(`a phone shows two (${b.lane.length})`));
     await shot('02-after-banner');
+    // Phase 10B: no leader banner over a modal card. A line spoken while a dialog (the War Council here) is open waits behind it and is spoken once
+    // the card has closed; a banner already showing leaves when a card opens.
+    await q(() => { window.__hd.state.settings.leaderVoices = true; });
+    ok(await t.clickSel('.hud-btn[aria-label="War Council"]'), tag('a press opens the War Council'));
+    await sleep(500);
+    const spoke = await q(() => { const hd = window.__hd; const f = hd.world.factions.find((x) => x.id > 1 && !x.absent); const r = hd.world.regions.find((x) => hd.state.owner[x.id] === f.id) || hd.world.regions[0]; return !!hd.services.speak('vendetta', f.id, r.id, `tl-${Date.now()}`); });
+    await sleep(600);
+    const held = await q(() => document.querySelector('.leader-banner').dataset.state);
+    ok(spoke && held !== 'in', tag(`a line spoken over the open council waits (spoken ${spoke}, banner ${held})`));
+    await t.clickSel('.council-close');
+    ok(await t.waitFor(() => document.querySelector('.leader-banner').dataset.state === 'in' && !document.documentElement.hasAttribute('data-dialog'), 3000), tag('it is spoken once the council has closed'));
+    ok(await t.clickSel('.hud-btn[aria-label="War Council"]'), tag('the council again, with the banner up'));
+    ok(await t.waitFor(() => document.querySelector('.leader-banner').dataset.state !== 'in', 1500), tag('the banner leaves when a modal card opens'));
+    await t.clickSel('.council-close');
   } catch (e) {
     ok(false, tag(`unexpected error: ${e && e.stack}`));
   } finally {

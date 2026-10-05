@@ -2,7 +2,7 @@
 // the live per-frame overlays (banner, troop badge, hover/selection) drawn on
 // top of the cached bitmap, and screen-space hit testing (INTEGRATION-NOTES
 // "Input"). Browser only; no game-state mutation — callers pass plain data.
-import { drawSettlement, drawBanner, drawTroopBadge, drawSelectionRing, BANNER_ANCHOR } from './sprites.js';
+import { drawSettlement, drawBanner, drawTroopBadge, drawSelectionRing, BANNER_ANCHOR, bannerStyleVersion } from './sprites.js';
 import { ACCENTS, rgba } from './palette.js';
 import { nearestBucket } from '../scenes/timing.js';
 
@@ -55,7 +55,10 @@ export function createSiteSpriteCache() {
   const fastSprites = new Map(); // bucket -> type -> [factionId] -> entry
   const fastStrips = new Map(); // bucket -> [factionId] -> strip
 
+  let styleVer = bannerStyleVersion();
   function getBannerStrip(factionId, s) {
+    // Phase 9: the realm's banner style changed: every baked flag is rebaked (only the player's look differs, but it is a rare event)
+    if (styleVer !== bannerStyleVersion()) { styleVer = bannerStyleVersion(); bannerCache.clear(); fastStrips.clear(); }
     const bucket = bucketOf(s);
     const numeric = typeof factionId === 'number';
     let row = null;

@@ -57,10 +57,12 @@ export function edictMods(state) {
   const id = e && BY_ID.has(e.id) ? e.id : null;
   const ch = e && Array.isArray(e.challenges) ? e.challenges : [];
   const nodes = legacyNodes(state);
-  const key = `${id}|${ch.join(',')}|${Object.keys(nodes).join(',')}`;
+  const cm = state && state.challenge && state.challenge.mods && typeof state.challenge.mods === 'object' ? state.challenge.mods : null; // PLAN-PHASE9: a challenge sandbox's own mods
+  const key = `${id}|${ch.join(',')}|${Object.keys(nodes).join(',')}|${cm ? JSON.stringify(cm) : ''}`;
   if (key === memoKey) return memoVal;
   const out = { ...NEUTRAL };
   if (id) fold(out, BY_ID.get(id).mods);
+  if (cm) fold(out, cm);
   for (const c of cleanChallenges(ch)) fold(out, CH_BY_ID.get(c).mods);
   for (const n of Object.keys(nodes)) { const d = nodes[n] === true ? legacyNode(n) : null; if (d) fold(out, d.mods); }
   out.bountySlots += out.bountySlotsAdd;

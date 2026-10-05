@@ -87,6 +87,7 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
   }
 
   function onOffered(ev) {
+    services.pacer?.introduce('events');
     closedId = null;
     const world = getWorld();
     toastOffer(ev);
@@ -295,6 +296,9 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
     if (!FLAGS.frontier || !isActive() || inTutorial()) return;
     const state = getState();
     const world = getWorld();
+    // Phase 10A: the FIRST world event is a new system: once its grace has run, its clock holds until the pacer gives it its turn (app/pacer.js)
+    const pacer = services.pacer;
+    if (pacer && !pacer.known('events') && !pacer.ready('events') && !pendingEvent(state) && ensureWorldEvents(state).activeSec + Math.max(0, dtSec || 0) >= EVENTS.graceSec) return; // (this tick may cross the grace)
     const { offered, expired } = tickEvents(state, world, Date.now(), dtSec);
     if (expired) {
       ui.toasts.dismissId?.(TOAST_ID);

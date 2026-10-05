@@ -301,6 +301,72 @@ export function drawEmblem(ctx, emblem, x, y, size, color) {
 
 // ------------------------------------------------------------------- banner
 
+// Phase 9 (§9C): the realm's banner style, purely visual. Only the PLAYER's flags change (their cloth keeps the faction colour, so a
+// faction still reads at a glance): the hem, the finial and the emblem's tint. `bannerStyleVersion` rises on every change so the baked
+// banner strips (render/sites.js, the squad strips here) are rebaked.
+export const BANNER_STYLES = Object.freeze({
+  plain: null,
+  gilded: Object.freeze({ hem: '#f5c451', hem2: '#8a5a12', finial: '#ffd970', emblem: '#ffe9a8', fringe: null, glow: null }),
+  ember: Object.freeze({ hem: '#ff7a2f', hem2: '#5e1406', finial: '#ff5a1f', emblem: '#ffd2a1', fringe: '#ff9a3d', glow: 'rgba(255,110,40,0.35)' }),
+  frost: Object.freeze({ hem: '#d8f3ff', hem2: '#2d6f8f', finial: '#bfeaff', emblem: '#f1fbff', fringe: '#e9f9ff', glow: 'rgba(170,230,255,0.3)' }),
+  ashenBone: Object.freeze({ hem: '#e6dcc4', hem2: '#2c2b33', finial: '#e6dcc4', emblem: '#f3ecdc', fringe: '#cfc4aa', glow: null }),
+});
+let bannerStyleId = 'plain';
+let bannerStyleVer = 0;
+/** Sets the realm's banner style (an id of BANNER_STYLES; anything else is plain). */
+export function setBannerStyle(id) {
+  const next = Object.prototype.hasOwnProperty.call(BANNER_STYLES, id) ? id : 'plain';
+  if (next === bannerStyleId) return;
+  bannerStyleId = next;
+  bannerStyleVer += 1;
+}
+export function getBannerStyle() { return bannerStyleId; }
+export function bannerStyleVersion() { return bannerStyleVer; }
+function playerStyleOf(f) {
+  return bannerStyleId !== 'plain' && f && f.color === FACTIONS[0].color ? BANNER_STYLES[bannerStyleId] : null;
+}
+
+/** The style's trim over a drawn cloth: a glow, a two-tone hem and (ember, frost, bone) a fringe of points along the bottom edge. */
+function drawBannerTrim(ctx, st, top, bot, notchX, notchY, s) {
+  const segs = top.length - 1;
+  const outline = () => {
+    ctx.beginPath();
+    ctx.moveTo(top[0][0], top[0][1]);
+    for (let i = 1; i <= segs; i++) ctx.lineTo(top[i][0], top[i][1]);
+    ctx.lineTo(notchX, notchY);
+    for (let i = segs; i >= 0; i--) ctx.lineTo(bot[i][0], bot[i][1]);
+    ctx.closePath();
+  };
+  ctx.save();
+  ctx.lineJoin = 'round';
+  if (st.glow) { ctx.shadowColor = st.glow; ctx.shadowBlur = s * 0.35; }
+  outline();
+  ctx.strokeStyle = st.hem2;
+  ctx.lineWidth = Math.max(1.2, s * 0.16);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  outline();
+  ctx.strokeStyle = st.hem;
+  ctx.lineWidth = Math.max(0.8, s * 0.085);
+  ctx.stroke();
+  if (st.fringe) {
+    ctx.fillStyle = st.fringe;
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const a = bot[Math.min(segs, Math.floor((i / n) * segs * 0.86))];
+      const b2 = bot[Math.min(segs, Math.floor(((i + 1) / n) * segs * 0.86))];
+      const mx = (a[0] + b2[0]) / 2;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(mx, (a[1] + b2[1]) / 2 + s * 0.13);
+      ctx.lineTo(b2[0], b2[1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
 /**
  * A waving banner on a pole, planted with its base at (x, y), with the
  * faction emblem stamped on the cloth. `t` is seconds (or any monotonic
@@ -311,6 +377,7 @@ export function drawEmblem(ctx, emblem, x, y, size, color) {
  */
 export function drawBanner(ctx, x, y, s, faction, t, opts = {}) {
   const f = resolveFaction(faction);
+  const style = playerStyleOf(f);
   const time = typeof t === 'number' ? t : now() / 1000;
   const poleH = s * 1.7;
   const topY = y - poleH;
@@ -322,9 +389,9 @@ export function drawBanner(ctx, x, y, s, faction, t, opts = {}) {
   ctx.moveTo(x, y);
   ctx.lineTo(x, topY);
   ctx.stroke();
-  ctx.fillStyle = ACCENTS.gold;
+  ctx.fillStyle = style ? style.finial : ACCENTS.gold;
   ctx.beginPath();
-  ctx.arc(x, topY - s * 0.04, s * 0.06, 0, Math.PI * 2);
+  ctx.arc(x, topY - s * 0.04, s * (style ? 0.1 : 0.06), 0, Math.PI * 2);
   ctx.fill();
 
   // a bigger cloth and emblem (colour-blind players tell factions apart by the emblem as much as by the colour: DESIGN 7.5a)
@@ -366,13 +433,14 @@ export function drawBanner(ctx, x, y, s, faction, t, opts = {}) {
   for (let i = segs; i >= 0; i--) ctx.lineTo(bot[i][0], bot[i][1]);
   ctx.closePath();
   ctx.fill();
+  if (style) drawBannerTrim(ctx, style, top, bot, notchX, notchY, s);
 
   const emx = x + w * 0.4;
   const midT = top[Math.round(segs * 0.4)][1];
   const midB = bot[Math.round(segs * 0.4)][1];
   const emy = (midT + midB) / 2;
   drawEmblem(ctx, f.emblem, emx, emy + s * 0.02, s * 0.66, 'rgba(24,16,8,0.6)'); // a dark under-stroke: the cream emblem must read on pale cloth too
-  drawEmblem(ctx, f.emblem, emx, emy, s * 0.6, ACCENTS.cream);
+  drawEmblem(ctx, f.emblem, emx, emy, s * 0.6, style ? style.emblem : ACCENTS.cream);
 }
 
 // -------------------------------------------------------------- troop badge
@@ -477,7 +545,7 @@ export function drawSquad(ctx, x, y, count, faction, s, t, dirX, dirY, opts = {}
   const dpr = opts.live ? 1 : ctxScale(ctx);
   const fkey = `${f.color}|${f.colorDark}|${f.emblem}`;
   const strip = opts.live || typeof opts.phase !== 'number' || typeof t !== 'number' ? null
-    : bannerStrip(`squad|${fkey}`, quant(s * 0.5 * dpr), (bctx, ox, oy, sb, tt) => drawBanner(bctx, ox, oy, sb, f, tt, { phase: 0 }));
+    : bannerStrip(`squad|${fkey}|${playerStyleOf(f) ? bannerStyleId : ''}`, quant(s * 0.5 * dpr), (bctx, ox, oy, sb, tt) => drawBanner(bctx, ox, oy, sb, f, tt, { phase: 0 }));
   if (strip) blitStrip(ctx, strip, bannerX, bannerY, dpr, s * 0.5 * dpr, t, opts.phase);
   else drawBanner(ctx, bannerX, bannerY, s * 0.5, f, t, { phase: opts.phase });
   const fig = opts.live ? null : bake(`soldier|${fkey}`, quant(s * dpr), (q) => ({ w: q * 0.4 + 4, h: q * 0.46 + 4, ox: q * 0.2 + 2, oy: q * 0.21 + 2 }), (bctx, ox, oy, q) => {

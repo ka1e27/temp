@@ -52,15 +52,18 @@ export function createGoals({ getState, getWorld, ui, services }) {
   function flushDeeds() {
     // never over a battle: a toast's close button there sits over the field (it covered a War Camp on a phone); the news waits for the map
     if (services.sceneName && services.sceneName() === 'battle') return;
+    // Phase 10A: the first Deed is a new system: its news waits (kept, not lost) until the pacer gives the Deeds their turn
+    const pacer = services.pacer;
+    if (pacer && !pacer.ready('deeds')) return;
     let news = [];
     try { news = drainDeedNews(getState()); } catch { news = []; }
     for (const d of news) {
       const message = `${DEED_COPY.earned.replace('{name}', d.name).replace('{tier}', d.tierName)}: ${d.reward}`;
-      ui.toasts.update({ id: `deed-${d.id}`, type: 'success', icon: iconOk(d.icon), className: 'is-deed', seal: iconOk(d.icon), message, duration: 6000 });
+      ui.toasts.update({ id: `deed-${d.id}`, type: 'success', icon: iconOk(d.icon), className: 'is-deed', seal: iconOk(d.icon), message, duration: 6000, digest: true });
       chronicle(`The realm earned a Deed: ${d.name}, ${d.tierName}.`, { hl: d.tier >= 3 });
       services.sfx?.play('upgrade', { pitch: 1.2, volume: 0.7 });
     }
-    if (news.length) changed();
+    if (news.length) { pacer?.introduce('deeds'); changed(); }
   }
 
   /** The Realm panel's grid: every deed, its tier, the bar toward the next goal and what that tier grants. */
@@ -76,7 +79,11 @@ export function createGoals({ getState, getWorld, ui, services }) {
   function streakData() {
     if (edictMods(getState()).streak === false) return null; // Bounty Hunters (PLAN-PHASE5 §5A): no Conquest Streak, no chip
     const s = streakInfo(getState());
-    return s.visible ? { count: s.count, mult: s.mult, remainingSec: s.remainingSec, windowSec: s.windowSec } : null;
+    if (!s.visible) return null;
+    const pacer = services.pacer; // Phase 10A: the chip is a new system; it waits its turn (the streak itself counts all along)
+    if (pacer && !pacer.ready('streak')) return null;
+    pacer?.introduce('streak');
+    return { count: s.count, mult: s.mult, remainingSec: s.remainingSec, windowSec: s.windowSec };
   }
 
   /** The words the Retreat confirmation adds while a streak is alive (PLAN-PHASE4 §4B), or ''. */
@@ -104,7 +111,11 @@ export function createGoals({ getState, getWorld, ui, services }) {
     if (!force && nowMs - boardAtMs < BOARD_EVERY_MS) return;
     boardAtMs = nowMs;
     const state = getState();
+    // Phase 10A: the board's opening is a new system; until the pacer gives it its turn it stays shut (ensureBounties is what opens it)
+    // (never the first system: it opens at the first conquest, the same moment as the first victory's Renown laurel, which goes first)
+    if (!bountiesUnlocked(state) && force !== 'dev' && services.pacer && ((!services.pacer.known('renown') && !services.noPacing?.()) || !services.pacer.ready('board'))) return;
     try { ensureBounties(state, getWorld()); } catch (err) { console.warn('[bounties] ensureBounties failed:', err); return; }
+    if (bountiesUnlocked(state)) services.pacer?.introduce('board');
     const unlocked = bountiesUnlocked(state);
     if (wasUnlocked === null) {
       // first look this session: a board already open counts as seen (no dot after a reload); one that opens later lights the dot
@@ -193,7 +204,7 @@ export function createGoals({ getState, getWorld, ui, services }) {
       const parts = [`+${shortNumber(c.reward.gold || 0)} gold`];
       if (c.reward.renown > 0) parts.push(`+${c.reward.renown} Renown`);
       if (c.reward.xp > 0 && res.general) parts.push(`+${c.reward.xp} XP`);
-      ui.toasts.update({ id: `bounty-${c.id}`, type: 'success', icon: 'bounty', seal: 'bounty', message: `${BOUNTIES.copy.completed.replace('{text}', text)}! ${parts.join(', ')}`, duration: 5600 });
+      ui.toasts.update({ id: `bounty-${c.id}`, type: 'success', icon: 'bounty', seal: 'bounty', message: `${BOUNTIES.copy.completed.replace('{text}', text)}! ${parts.join(', ')}`, duration: 5600, digest: true });
       chronicle(`A contract was fulfilled: ${text}.`);
     }
     if (res.claimed.length) {
@@ -343,7 +354,7 @@ export function createGoals({ getState, getWorld, ui, services }) {
   function devBounty(kind) {
     const state = getState();
     const world = getWorld();
-    refreshBoard(true);
+    refreshBoard('dev'); // a check's contract: the board opens now, whatever the pacer says
     if (!bountiesUnlocked(state)) return null;
     const b = state.bounties;
     const have = slotsOf().findIndex((c) => c && !c.done && c.kind === kind);

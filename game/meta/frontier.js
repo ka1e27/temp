@@ -369,9 +369,11 @@ function processArrivals(state, world, t, arrived) {
  * @param {import('../world/generate.js').World} world
  * @param {number} nowMs wall clock (the scheduler runs on active seconds; militia fill for target choice is read at nowMs)
  * @param {number} activeDt active seconds since the last call
+ * @param {{ holdRaids?: boolean, holdVendettas?: boolean }} [opts] Phase 10A (the shell's pacer): no NEW raid / Vendetta sets out while held (the first of
+ *   each waits for its turn among the first hour's new systems); everything else (arrivals, Grudges, the streak) runs as usual
  * @returns {{ announced: import('./frontierState.js').Raid[], arrived: import('./frontierState.js').Raid[] }}
  */
-export function tickFrontier(state, world, nowMs, activeDt) {
+export function tickFrontier(state, world, nowMs, activeDt, opts = {}) {
   const f = ensureFrontier(state);
   const announced = [];
   const arrived = [];
@@ -381,8 +383,8 @@ export function tickFrontier(state, world, nowMs, activeDt) {
     f.activeSec = at;
     tickGrudges(state, world); // PLAN-PHASE4 §4D: Grudges cool with active time; a Vendetta whose target fell is called off
     processArrivals(state, world, at, arrived);
-    if (edictMods(state).raids) swearVendettas(state, world, at, announced); // Peace of the Crowns: no Vendettas either
-    rollRaids(state, world, at, announced, nowMs);
+    if (edictMods(state).raids && !opts.holdVendettas) swearVendettas(state, world, at, announced); // Peace of the Crowns: no Vendettas either
+    if (!opts.holdRaids) rollRaids(state, world, at, announced, nowMs);
     f.nextCheckAt = at + FRONTIER.checkSec;
   }
   if (f.nextCheckAt <= end) f.nextCheckAt = end + FRONTIER.checkSec;

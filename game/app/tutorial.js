@@ -3,15 +3,22 @@
 // to `pick`; it is marked seen when the player does the thing (`notify`), dismisses it, or its timeout runs out while it is on screen.
 // One step is current at a time and it stays current until it is seen or its rule stops holding. This file touches only `state.tutorial` and
 // `state.settings.hints`, never the DOM: scenes turn the step's `anchor` into a target and feed the coach (game/ui/coach.js).
-import { TUTORIAL_STEPS } from '../scenes/timing.js';
+import { TUTORIAL_STEPS, HINT_PACE } from '../scenes/timing.js';
 import { RULES } from './tutorialRules.js';
 
 /**
- * @param {{ getState: () => import('../meta/state.js').GameState }} deps
+ * @param {{ getState: () => import('../meta/state.js').GameState, pacer?: ReturnType<import('./pacer.js').createPacer> }} deps
+ *   pacer (Phase 10A): a step with an `intro` waits until its system may be introduced, and introduces it when it becomes current
+ *   newHintGapSec (Phase 10A; a number or a function read live): play seconds between two NEW steps (0: no wait)
  */
-export function createTutorialController({ getState }) {
+export function createTutorialController({ getState, pacer = null, newHintGapSec = 0 }) {
   let current = null;
   let sinceShownSec = 0;
+  // Phase 10A: a NEW step (never current before) waits newHintGapSec of play after the previous new one; urgent steps never wait
+  const started = new Set();
+  let lastNewAt = -Infinity;
+  const playSec = () => { const s = getState(); return (s && s.stats && Number(s.stats.playSec)) || 0; };
+  const hintGap = () => (typeof newHintGapSec === 'function' ? newHintGapSec() : newHintGapSec);
 
   const seenMap = () => {
     const state = getState();
@@ -39,7 +46,10 @@ export function createTutorialController({ getState }) {
     if (def.needs && !facts.features[def.needs]) return false;
     if (def.after && !def.after.every(isSeen)) return false;
     const rule = RULES[def.id];
-    return !!rule && !!rule(facts);
+    if (!rule || !rule(facts)) return false;
+    // Phase 10A: a `calm` step waits for a quiet moment on the map (facts.calmSec; a scene that does not report it is always calm)
+    if (def.calm && facts.calmSec != null && facts.calmSec < HINT_PACE.calmSec) return false;
+    return !(def.intro && pacer && !pacer.ready(def.intro)); // one new system at a time (the current step keeps its turn: ready() holds once introduced)
   }
 
   /**
@@ -50,9 +60,12 @@ export function createTutorialController({ getState }) {
     if (!hintsOn()) { current = null; return null; }
     const f = { features: {}, ...facts, seen: isSeen };
     if (current && eligible(current, f)) return current;
-    const next = TUTORIAL_STEPS.find((def) => eligible(def, f)) || null;
+    let next = TUTORIAL_STEPS.find((def) => eligible(def, f)) || null;
+    if (next && !started.has(next.id) && !next.urgent && playSec() - lastNewAt < hintGap()) next = null; // its turn comes a little later
+    if (next && !started.has(next.id)) { started.add(next.id); lastNewAt = playSec(); }
     if (next !== current) sinceShownSec = 0;
     current = next;
+    if (current && current.intro && pacer) pacer.introduce(current.intro);
     return current;
   }
 
@@ -101,6 +114,7 @@ export function createTutorialController({ getState }) {
     const state = getState();
     state.tutorial = { seen: {}, done: false };
     state.settings.hints = true;
+    started.clear();
     current = null;
     sinceShownSec = 0;
   }

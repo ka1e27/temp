@@ -122,6 +122,30 @@ export function createStateContainer({ storage, now }) {
     return { state, world };
   }
 
+  // Phase 9 (docs/briefs/phase9-hookup.md §1): a challenge is an ordinary {state, world} pair. While one is played the container POINTS at it, and the
+  // realm's pair waits here untouched (never read or written by the sandbox); leaving points back at the very same objects.
+  let parked = null; // { state, world } of the realm while a challenge is played
+  /** Plays `pair` (a challenge) in place of the realm. A second call replaces the challenge (Retry); the realm stays parked. */
+  function enterSandbox(pair) {
+    if (!pair || !pair.state || !pair.world) return false;
+    if (!parked) parked = { state, world };
+    state = pair.state;
+    world = pair.world;
+    epoch += 1;
+    return true;
+  }
+  /** Back to the realm, exactly as it was parked. */
+  function leaveSandbox() {
+    if (!parked) return false;
+    state = parked.state;
+    world = parked.world;
+    parked = null;
+    epoch += 1;
+    return true;
+  }
+  /** The realm's pair, whether or not a challenge is being played (Settings, the Codex, the Daily reward read it). */
+  function main() { return parked || { state, world }; }
+
   /** For save-import (settings "Import"): swap in a validated GameState and
    *  regenerate its world from `newState.seed`. Returns false (no-op) if that
    *  seed's world fails to generate, so a bad/foreign code can never brick play. */
@@ -140,6 +164,8 @@ export function createStateContainer({ storage, now }) {
 
   return {
     boot, newRealm, restart, reseed, tryFoundDynasty, nextSeed, get, replaceState,
+    enterSandbox, leaveSandbox, main,
+    get inSandbox() { return !!parked; },
     get epoch() { return epoch; },
   };
 }

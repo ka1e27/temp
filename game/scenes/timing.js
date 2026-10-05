@@ -37,6 +37,20 @@ export const WORLD_SCENE = Object.freeze({
   welcomeBackMinSec: 60,
 });
 
+// Phase 10A: when hints may speak (game/app/tutorial.js, game/app/tutorialRules.js; facts from game/scenes/world.js)
+export const HINT_PACE = Object.freeze({
+  attackHintDelaySec: 2.5, // W3 "Attack!" only once the card has been open this long: a player who presses Attack on their own never needs it
+  calmSec: 6,              // a `calm` step waits for this long on the map with no card, panel or dialog open (not on top of a return from battle)
+  newHintGapSec: 10,       // a NEW step becomes current at most once per this many play seconds (urgent steps excepted): no hint storms
+});
+
+// Phase 10A: post-battle news posted with `digest: true` within this window is merged into one toast (main.js flushDigest)
+export const TOASTS_DIGEST = Object.freeze({
+  windowMs: 900,       // a battle's end posts its Renown, levels, Deeds and contracts within a few hundred ms of each other
+  perExtraMs: 1500,    // each merged line adds this much reading time ...
+  maxMs: 9000,         // ... up to this
+});
+
 export const BATTLE_ENTER = Object.freeze({
   cardSlideOutMs: 200,
   flyMs: 900,
@@ -78,6 +92,9 @@ export const DEFEAT = Object.freeze({
  * @typedef {Object} TutorialStep
  * @property {string} id
  * @property {'world'|'battle'} scene
+ * @property {boolean} [urgent]  a war band, an offer, a battle twist: never waits for HINT_PACE.newHintGapSec (Phase 10A)
+ * @property {boolean} [calm]  waits for HINT_PACE.calmSec of quiet on the map (Phase 10A)
+ * @property {string} [intro]  the system this step introduces: it waits its turn (game/app/pacer.js, PACING.introGapSec; Phase 10A)
  * @property {string} text          the hint on a desktop
  * @property {string} [textTouch]   the hint for touch (tap, pinch, long-press instead of click, scroll, shift-drag)
  * @property {string} [textAim]     B5 only: what it says once Rally is armed and the player has to pick the target
@@ -131,26 +148,26 @@ export const TUTORIAL_STEPS = Object.freeze([
     text: 'Right-click or Esc clears your selection.',
     textTouch: 'Tap an empty spot to clear your selection.',
   },
-  { id: 'M1', scene: 'world', text: 'Spend gold in the War Council to grow stronger.', anchor: 'council', seenOn: ['councilOpened'] },
-  { id: 'M2', scene: 'world', text: 'Scout a region to see its garrisons and weak point.', anchor: 'scout', after: ['M1'], seenOn: ['scouted'] },
-  { id: 'M3', scene: 'world', text: 'Build Works in your regions: Barracks and Stables help the battles next to them.', anchor: 'worksRegion', after: ['M1'], seenOn: ['workBuilt'], needs: 'works' },
+  { id: 'M1', scene: 'world', calm: true, text: 'Spend gold in the War Council to grow stronger.', anchor: 'council', seenOn: ['councilOpened'] },
+  { id: 'M2', scene: 'world', intro: 'scout', text: 'Scout a region to see its garrisons and weak point.', anchor: 'scout', after: ['M1'], seenOn: ['scouted'] },
+  { id: 'M3', scene: 'world', calm: true, intro: 'works', text: 'Build Works in your regions: Barracks and Stables help the battles next to them.', anchor: 'worksRegion', after: ['M1'], seenOn: ['workBuilt'], needs: 'works' },
   { id: 'M4', scene: 'world', text: 'Found a Dynasty: start again, stronger, on a new continent.', anchor: 'realm', seenOn: ['realmOpened'] },
   // the Living Frontier (DESIGN 10.1, 10.3, 10.5): a war band is coming (on the map, or while you fight elsewhere); two battles at once; fortify the border
   {
-    id: 'F1', scene: 'world', anchor: 'raidGo', seenOn: ['raidGo', 'defenseStarted'], needs: 'frontier',
+    id: 'F1', scene: 'world', urgent: true, anchor: 'raidGo', seenOn: ['raidGo', 'defenseStarted'], needs: 'frontier',
     text: 'A war band is coming! Press Go to defend it yourself, or let your Captain hold it.',
   },
   {
-    id: 'F2', scene: 'battle', anchor: 'raidGo', seenOn: ['raidGo', 'defenseStarted'], needs: 'frontier',
+    id: 'F2', scene: 'battle', urgent: true, anchor: 'raidGo', seenOn: ['raidGo', 'defenseStarted'], needs: 'frontier',
     text: 'A war band is coming! Press Go to defend it yourself, or let your Captain hold it.',
   },
   {
-    id: 'F3', scene: 'battle', anchor: 'tray', seenOn: ['battleSwitched'],
+    id: 'F3', scene: 'battle', urgent: true, anchor: 'tray', seenOn: ['battleSwitched'],
     text: 'Two battles at once: press Tab or pick one in the tray to switch. The other keeps going.',
     textTouch: 'Two battles at once: tap one in the tray to switch. The other keeps going.',
   },
   {
-    id: 'F4', scene: 'world', anchor: 'fortRegion', seenOn: ['fortBuilt'], needs: 'frontier',
+    id: 'F4', scene: 'world', calm: true, intro: 'fortify', anchor: 'fortRegion', seenOn: ['fortBuilt'], needs: 'frontier',
     text: 'Fortify your border: Arrow Towers and Walls defend a region when it is attacked.',
   },
   // Generals and Renown (DESIGN 10.11, 10.12)
@@ -160,32 +177,35 @@ export const TUTORIAL_STEPS = Object.freeze([
     text: 'Your Marshal commands here: press G or tap the ability once per battle.',
     textTouch: 'Your Marshal commands here: tap the ability once per battle.',
   },
-  { id: 'G2', scene: 'world', anchor: 'generalsBtn', seenOn: ['generalsOpened', 'skillPicked'], needs: 'frontier', timeoutSec: 12, text: 'A General grew stronger: open Generals to choose a skill.' },
-  { id: 'R1', scene: 'world', anchor: 'festivalRegion', after: ['M1'], seenOn: ['festival'], needs: 'frontier', timeoutSec: 12, text: 'You have the Renown for a Festival: it raises a region’s prosperity at once.' },
+  { id: 'G2', scene: 'world', calm: true, intro: 'generals', anchor: 'generalsBtn', seenOn: ['generalsOpened', 'skillPicked'], needs: 'frontier', timeoutSec: 12, text: 'A General grew stronger: open Generals to choose a skill.' },
+  { id: 'R1', scene: 'world', calm: true, intro: 'festival', anchor: 'festivalRegion', after: ['M1'], seenOn: ['festival'], needs: 'frontier', timeoutSec: 12, text: 'You have the Renown for a Festival: it raises a region’s prosperity at once.' },
   // A varied map (DESIGN 10.13; phase3-hookup §5): the first typed or twisted region on the frontier, the first Siege, the first Raid, the Dragon's
   // first warning and the first world event. Each steps aside after a few seconds on screen.
-  { id: 'V1', scene: 'world', anchor: 'featureRegion', after: ['M1'], seenOn: ['featureCardOpened'], needs: 'frontier', timeoutSec: 10, text: 'Some regions hold a treasure or a twist: the icon by the name says which. Open one to see.' },
-  { id: 'V2', scene: 'battle', anchor: 'gate', seenOn: ['gateTaken'], needs: 'frontier', timeoutSec: 10, text: 'Take the Gate to open the keep.' },
-  { id: 'V3', scene: 'battle', anchor: 'shrine', seenOn: ['shrinesHeld'], needs: 'frontier', timeoutSec: 10, text: `Hold all three Shrines for ${SHRINE_HOLD_SEC} s to win.` },
-  { id: 'V4', scene: 'battle', anchor: 'telegraph', seenOn: ['bulwark'], needs: 'frontier', timeoutSec: 6, text: 'Bulwark the target!' },
-  { id: 'V5', scene: 'world', anchor: 'eventToast', seenOn: ['eventAnswered'], needs: 'frontier', timeoutSec: 12, text: 'A world event: answer it before its time runs out.' },
+  { id: 'V1', scene: 'world', calm: true, intro: 'variety', anchor: 'featureRegion', after: ['M1'], seenOn: ['featureCardOpened'], needs: 'frontier', timeoutSec: 10, text: 'Some regions hold a treasure or a twist: the icon by the name says which. Open one to see.' },
+  { id: 'V2', scene: 'battle', urgent: true, anchor: 'gate', seenOn: ['gateTaken'], needs: 'frontier', timeoutSec: 10, text: 'Take the Gate to open the keep.' },
+  { id: 'V3', scene: 'battle', urgent: true, anchor: 'shrine', seenOn: ['shrinesHeld'], needs: 'frontier', timeoutSec: 10, text: `Hold all three Shrines for ${SHRINE_HOLD_SEC} s to win.` },
+  { id: 'V4', scene: 'battle', urgent: true, anchor: 'telegraph', seenOn: ['bulwark'], needs: 'frontier', timeoutSec: 6, text: 'Bulwark the target!' },
+  { id: 'V5', scene: 'world', urgent: true, anchor: 'eventToast', seenOn: ['eventAnswered'], needs: 'frontier', timeoutSec: 12, text: 'A world event: answer it before its time runs out.' },
   // Goals and Rivals (PLAN-PHASE4): the Bounty Board the moment it opens (after M1, so it never crowds the first lessons), and the first Vendetta's warning.
   // Last in the list: an earlier step that is due always goes first.
-  { id: 'Q1', scene: 'world', anchor: 'regionsBtn', after: ['M1'], seenOn: ['boardOpened'], needs: 'frontier', timeoutSec: 12, text: 'New: the Bounty Board. Open Regions for three contracts that pay extra.' },
-  { id: 'Q2', scene: 'world', anchor: 'vendettaGo', seenOn: ['vendettaGo', 'defenseStarted'], needs: 'frontier', timeoutSec: 12, text: 'A Vendetta! Their leader comes in person with a Champion. Beat it for a Trophy: press Go.' },
+  { id: 'Q1', scene: 'world', calm: true, intro: 'board', anchor: 'regionsBtn', after: ['M1'], seenOn: ['boardOpened'], needs: 'frontier', timeoutSec: 12, text: 'New: the Bounty Board. Open Regions for three contracts that pay extra.' },
+  { id: 'Q2', scene: 'world', urgent: true, anchor: 'vendettaGo', seenOn: ['vendettaGo', 'defenseStarted'], needs: 'frontier', timeoutSec: 12, text: 'A Vendetta! Their leader comes in person with a Champion. Beat it for a Trophy: press Go.' },
   // Dynasties that change the rules (PLAN-PHASE5): D1 is drawn INSIDE the founding ceremony (ui/ceremony.js setEdictHint; its rule is always false, so the coach never
   // picks it), the first time it opens; D2 points at Quick Conquest the first time an open card offers it (after M1, last in the list: never crowds earlier steps).
   { id: 'D1', scene: 'world', anchor: 'edicts', seenOn: ['edictPicked'], text: 'Your first Edict: pick the card that suits how you like to play. It lasts until the next founding, and the Realm panel always shows it.' },
-  { id: 'D2', scene: 'world', anchor: 'quickBtn', after: ['M1'], seenOn: ['quickConquest'], timeoutSec: 12, afterDone: true, text: 'New: Quick Conquest. Your commander takes this Easy region at once, for the Victory crown.' },
+  { id: 'D2', scene: 'world', intro: 'quick', anchor: 'quickBtn', after: ['M1'], seenOn: ['quickConquest'], timeoutSec: 12, afterDone: true, text: 'New: Quick Conquest. Your commander takes this Easy region at once, for the Victory crown.' },
   // The Ashen Host (PLAN-PHASE6 §6B): the first time one of its regions is on the frontier (Dynasty 2 on, so `afterDone`). Last in the list and after M1:
   // every earlier step that is due goes first; it steps aside after 12 s and is seen once its card is opened.
-  { id: 'A1', scene: 'world', anchor: 'ashenRegion', after: ['M1'], seenOn: ['ashenCardOpened'], timeoutSec: 12, afterDone: true, text: ASHEN.copy.hint },
+  { id: 'A1', scene: 'world', calm: true, intro: 'ashen', anchor: 'ashenRegion', after: ['M1'], seenOn: ['ashenCardOpened'], timeoutSec: 12, afterDone: true, text: ASHEN.copy.hint },
   // Phase 7 (PLAN-PHASE7): K1 lives inside the first Boon draft (a static line: the coach layer sits under dialogs, like D1); L1 is the first Relic on
   // the frontier (its label and chest), last in the list and after M1 like A1, so every earlier step that is due goes first; it steps aside after 12 s
   { id: 'K1', scene: 'world', anchor: 'boonDraft', seenOn: ['boonPicked'], text: 'Your first Boon: pick the card that suits how you fight. It lasts the dynasty.' },
-  { id: 'L1', scene: 'world', anchor: 'relicRegion', after: ['M1'], seenOn: ['relicCardOpened'], timeoutSec: 12, afterDone: true, text: 'A Relic lies in this region: conquer it to claim it for your dynasty. Click it to see what it does.', textTouch: 'A Relic lies in this region: conquer it to claim it for your dynasty. Tap it to see what it does.' },
+  { id: 'L1', scene: 'world', calm: true, intro: 'relics', anchor: 'relicRegion', after: ['M1'], seenOn: ['relicCardOpened'], timeoutSec: 12, afterDone: true, text: 'A Relic lies in this region: conquer it to claim it for your dynasty. Click it to see what it does.', textTouch: 'A Relic lies in this region: conquer it to claim it for your dynasty. Tap it to see what it does.' },
   // Phase 8 (§8B): after the first battle, once the first-session steps have had their turn (last in the table, so any earlier step that is due wins)
-  { id: 'H1', scene: 'world', anchor: 'settingsBtn', after: ['M1'], seenOn: ['codexOpened'], timeoutSec: 10, text: 'Forgot how something works? Settings has a Codex that explains every system.' },
+  { id: 'H1', scene: 'world', calm: true, intro: 'codex', anchor: 'settingsBtn', after: ['M1'], seenOn: ['codexOpened'], timeoutSec: 10, text: 'Forgot how something works? Settings has a Codex that explains every system.' },
+  // Phase 9: the Challenges open after the first conquest beyond home; the hint waits for the Codex hint (table order: H1 first) and is last in the table, so every
+  // earlier step that is due goes first; it steps aside after 10 s and is seen once the hub is opened
+  { id: 'J1', scene: 'world', calm: true, intro: 'challenges', anchor: 'settingsBtn', after: ['M1'], seenOn: ['challengesOpened'], timeoutSec: 10, afterDone: true, text: 'New: Challenges. A Daily puzzle everyone shares and handcrafted Scenarios, in Settings.' },
 ]);
 
 /** The live send arrow: saturated green when the send would capture, red when it would not (gold otherwise), grey when there is no route (front lines). Read by battle.js and tools/check.mjs. */

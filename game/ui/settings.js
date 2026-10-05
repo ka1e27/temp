@@ -41,7 +41,7 @@ function toggleRow({ label, iconOn, iconOff, checked, onToggle }) {
  */
 export function createSettings({
   onToggleSound, onToggleReduceMotion, onToggleHints, onToggleSlowBattles, onToggleLeaderVoices, onToggleMusic, onMusicVolume, onSfxVolume,
-  onReplayTutorial, onExport, onImport, onReset, onClose, onCodex,
+  onReplayTutorial, onExport, onImport, onReset, onClose, onCodex, onChallenges, onBanner,
 } = {}) {
   const soundRow = toggleRow({
     label: 'Sound', iconOn: 'sound-on', iconOff: 'sound-off', checked: true,
@@ -123,14 +123,56 @@ export function createSettings({
 
   const resetBtn = h('button.btn.btn-danger.btn-block', { onClick: () => confirmReset() }, icon('flame', 16), 'Reset Save');
 
+  // Phase 9: the Challenges (the Daily and the Scenarios) and the realm's banner style (§9C, purely visual). Both arrive as data once the
+  // challenge kit has loaded; a locked style shows how it is earned.
+  const challengesBtn = h('button.btn.btn-secondary.settings-challenges', { onClick: () => onChallenges?.() }, icon('trophy', 16), 'Challenges');
+  challengesBtn.hidden = true;
+  const bannerGroup = h('div.settings-banners', { role: 'radiogroup', 'aria-label': 'Banner style' });
+  const bannerSection = h('section.settings-section.settings-banner-section', {},
+    h('h3.settings-subtitle', {}, 'Banner style'),
+    h('p.settings-note', {}, 'How your flags look on the map. Purely for show.'),
+    bannerGroup);
+  bannerSection.hidden = true;
+  let bannerSig = '';
+  function renderBanners(list) {
+    const sig = JSON.stringify(list);
+    if (sig === bannerSig) return;
+    bannerSig = sig;
+    clear(bannerGroup);
+    for (const b of list) {
+      const opt = h('button.settings-banner', {
+        type: 'button', role: 'radio', 'aria-checked': String(!!b.selected), 'aria-disabled': String(!b.unlocked),
+        'data-banner': b.id, title: b.unlocked ? b.name : `${b.name}: ${b.text}`,
+        onClick: () => { if (b.unlocked && !b.selected) onBanner?.(b.id); },
+      },
+      h('span.settings-banner-swatch', { 'aria-hidden': 'true' }, h('span.settings-banner-cloth')),
+      h('span.settings-banner-name', {}, b.name),
+      h('span.settings-banner-rule', {}, b.unlocked ? (b.selected ? 'In use' : 'Unlocked') : b.text),
+      b.unlocked ? null : icon('lock', 14));
+      opt.classList.toggle('is-locked', !b.unlocked);
+      opt.classList.toggle('is-selected', !!b.selected);
+      bannerGroup.appendChild(opt);
+    }
+  }
+  const saveSection = h('section.settings-section.settings-save-section', {});
+  const resetSection = h('section.settings-section.settings-reset-section', {}, resetBtn);
+  const challengeNote = h('p.settings-note.settings-challenge-note', {}, 'You are playing a challenge. Your realm and its save wait untouched; the save code is back when you return.');
+  challengeNote.hidden = true;
+
   const el = h('div.settings.glass-panel', {},
     h('div.settings-header', {},
       h('h2.settings-title', {}, 'Settings'),
       h('button.btn-icon.settings-close', { onClick: () => onClose?.(), 'aria-label': 'Close' }, icon('close', 16)),
     ),
     h('div.settings-body.scroll-y', {},
-      h('section.settings-section', {}, soundRow, musicRow, volumeRow, sfxRow, motionRow, slowRow, hintsRow, helpRow, voicesRow),
-      h('section.settings-section', {},
+      h('section.settings-section', {}, soundRow, musicRow, volumeRow, sfxRow, motionRow, slowRow, hintsRow, helpRow, voicesRow, challengesBtn),
+      bannerSection,
+      challengeNote,
+      saveSection,
+      resetSection,
+    ),
+  );
+  saveSection.append(
         h('h3.settings-subtitle', {}, 'Save code'),
         exportArea,
         h('div.settings-import-row', {},
@@ -151,9 +193,6 @@ export function createSettings({
           }, 'Import'),
           importMsg,
         ),
-      ),
-      h('section.settings-section', {}, resetBtn),
-    ),
   );
 
   // a dialog while it is visible: focus moves in, Tab is trapped, Escape closes, focus returns to the Settings button (ui/dialogs.js)
@@ -182,6 +221,13 @@ export function createSettings({
     if (data.music != null) { musicRow.setToggle(data.music); volumeRow.classList.toggle('is-off', !data.music); }
     if (data.musicVolume != null) volumeInput.value = String(Math.round(data.musicVolume * 100));
     if (data.sfxVolume != null) sfxInput.value = String(Math.round(data.sfxVolume * 100));
+    if (data.challengesUnlocked != null) challengesBtn.hidden = !data.challengesUnlocked;
+    if (Array.isArray(data.banners)) { renderBanners(data.banners); bannerSection.hidden = false; }
+    if (data.inChallenge != null) {
+      saveSection.hidden = !!data.inChallenge;
+      resetSection.hidden = !!data.inChallenge;
+      challengeNote.hidden = !data.inChallenge;
+    }
   }
 
   function destroy() {

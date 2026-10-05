@@ -16,7 +16,7 @@ const { launch: rawLaunch } = await import('./cdp.js');
 // these tools an offer waits on the HUD chip instead (app/boons.js reads this flag in ?dev=1 only). tools/phase7Checks.mjs turns the moments back on.
 const launch = async (opts) => {
   const page = await rawLaunch(opts);
-  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true;' });
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true; window.__HD_TEST_NO_PACING = true;' });
   return page;
 };
 

@@ -148,6 +148,47 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       ok(await t.waitFor((id) => /is yours: Victory crown/.test(document.querySelector('.toasts').textContent) || window.__hd.services.ui.toasts.has(`quick-${id}`), 8000, easy), tag('the toast says so'));
     }
 
+    // 8. Cartographer (Phase 10B): with the Boon, a FAIR region offers Quick Conquest too, and a real press resolves it
+    await sleep(1500);
+    const fair = await q(async () => {
+      const hd = window.__hd;
+      const Q = await import(new URL('game/meta/quick.js', document.baseURI).href);
+      const PR = await import(new URL('game/meta/progression.js', document.baseURI).href);
+      // a Fair region that Quick Conquest refuses for its label alone (no surrender on offer); deeper regions read harder, so the realm grows until one shows
+      const fit = (r) => PR.difficulty(hd.state, hd.world, r.id).label === 'Fair' && !PR.difficulty(hd.state, hd.world, r.id).surrender
+        && Q.canQuickConquer(hd.state, hd.world, r.id, {}).reason === 'label';
+      // step 7 made the army so strong that the whole frontier reads Easy: back to a plain army (its upgrades undone), then stronger a level at a
+      // time (and now and then one more region) until some frontier region reads Fair
+      const U = await import(new URL('game/meta/upgrades.js', document.baseURI).href);
+      for (const k of Object.keys(hd.state.upgrades || {})) hd.state.upgrades[k] = 0;
+      const seen = [];
+      for (let i = 0; i < 40; i++) {
+        const r = hd.world.regions.find(fit);
+        if (r) {
+          hd.grantBoons(['cartographer']);
+          return { id: r.id, before: 'label', after: Q.canQuickConquer(hd.state, hd.world, r.id, {}).ok };
+        }
+        const labels = hd.world.regions.filter((x) => Q.canQuickConquer(hd.state, hd.world, x.id, {}).reason === 'label').map((x) => PR.difficulty(hd.state, hd.world, x.id).label);
+        seen.push(labels.join(''));
+        if (labels.length && labels.every((l) => l === 'Easy')) hd.conquerRegions(1); // too strong for what is in reach: reach further
+        else for (const u of Object.keys(U.UPGRADES)) U.buy(hd.state, u); // too weak: a level of everything
+      }
+      return { id: null, seen: seen.slice(-6) };
+    });
+    ok(!!fair && fair.id != null, tag(`a Fair region Quick Conquest refuses without the Cartographer (${fair && fair.id != null ? fair.id : `none: ${JSON.stringify(fair && fair.seen)}`})`));
+    if (fair && fair.id != null) {
+      ok(fair.after === true, tag('with the Cartographer Boon it qualifies (canQuickConquer ok)'));
+      await sleep(600);
+      await q((id) => { window.__hd.flyToRegion(id, undefined, 1); window.__hd.selectRegion(id); }, fair.id);
+      ok(await t.waitFor(() => { const b = document.querySelector('.region-card-quick'); return !!b && !b.hidden && b.getAttribute('aria-disabled') !== 'true'; }, 4000), tag('the Fair region\'s card shows Quick Conquest'));
+      ok(await pressSel('.region-card-quick'), tag('a real press on Quick Conquest (Fair)'));
+      ok(await t.waitFor(() => { const o = document.querySelector('.quick-overlay'); return !!o && !o.hidden; }, 1500), tag('the overlay shows'));
+      // a Fair march can be lost: "resolves" is the overlay gone with the region ours, or the "march failed" card
+      ok(await t.waitFor((id) => document.querySelector('.quick-overlay').hidden && (window.__hd.state.owner[id] === 0 || !!document.querySelector('.modal-backdrop.is-quick-loss')), 20000, fair.id), tag('it resolves (conquered, or the march-failed card)'));
+      const lossCard = await q(() => !!document.querySelector('.modal-backdrop.is-quick-loss'));
+      if (lossCard) await pressSel('.modal-backdrop.is-quick-loss .btn-secondary');
+    }
+
     const errs = t.unexpected();
     ok(errs.length === 0, tag(`no console errors${errs.length ? `: ${errs[0]}` : ''}`));
     allErrors.push(...errs);

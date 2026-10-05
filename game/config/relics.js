@@ -18,7 +18,7 @@ export const RELIC_LIST = Object.freeze([
   { id: 'emberHeart', name: 'Ember Heart', icon: 'flame', mods: { firestormMult: 1.4 },
     text: 'Firestorm +{pct:firestormMult} damage' },
   { id: 'gravewardensLantern', name: "Gravewarden's Lantern", icon: 'lantern', mods: { lanternRadius: 5 }, requires: 'ashen',
-    text: 'The Fallen Rise never happens within {lanternRadius} hexes of your War Camp' },
+    text: 'The Fallen Rise never happens within {lanternRadius} hexes of your War Camp, so Firestorm finds no dead to burn there' }, // Phase 10B: confirmed as intended; the text says so
   // Phase 8 (PLAN-PHASE8 §8C): four more, so the Reliquary (12) takes several dynasties to fill at 4 a continent
   { id: 'merchantsScale', name: "Merchant's Scale", icon: 'scale', mods: { merchantPriceMult: 0.7 },
     text: "The Merchant's deals cost {pct:merchantPriceMult} less" },

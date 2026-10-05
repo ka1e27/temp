@@ -130,21 +130,27 @@ test('tutorial controller: a set of seen steps, the right step for the facts, ev
   assert.equal(tut.pick({ ...world, cardOpen: true, cardAttackable: true }).id, 'W3');
   tut.notify('battleStart');
   assert.equal(tut.pick({ ...world, cardOpen: true, cardAttackable: true }), null, 'nothing else on the map before the first victory');
-  // a battle: B1 first, then B2 (send size), B3 after the size hint or the first capture (and only while it is shown)
-  const battle = { scene: 'battle', live: true, t: 3, battlesBefore: 0, ownSites: 1, enemySites: 3, captured: 0, rallyReady: false, firestormReady: false, selectedCount: 0, noRouteSeen: false };
-  assert.equal(tut.pick(battle).id, 'B1');
-  assert.equal(tut.pick({ ...battle, scene: 'world' }), null, 'a battle step is silent on the map');
-  assert.equal(tut.pick(battle).id, 'B1');
+  // the tutorial battle: B1 first, then B3 on the first capture (and only while it is shown); B2 (send size) and B4 (multi-select) wait for the
+  // second battle (Phase 10A: four hints in the tutorial battle's first 10 s)
+  const battle0 = { scene: 'battle', live: true, t: 3, battlesBefore: 0, ownSites: 1, enemySites: 3, captured: 0, rallyReady: false, firestormReady: false, selectedCount: 0, noRouteSeen: false };
+  assert.equal(tut.pick(battle0).id, 'B1');
+  assert.equal(tut.pick({ ...battle0, scene: 'world' }), null, 'a battle step is silent on the map');
+  assert.equal(tut.pick(battle0).id, 'B1');
   tut.dismiss();
   assert.ok(state.tutorial.seen.B1, 'the x marks the current step seen');
-  assert.equal(tut.pick(battle).id, 'B2');
-  tut.notify('sizeChanged');
-  assert.equal(tut.pick(battle).id, 'B3');
+  assert.equal(tut.pick(battle0), null, 'no send-size hint in the tutorial battle');
+  assert.equal(tut.pick({ ...battle0, captured: 1, ownSites: 2 }).id, 'B3', 'the first capture explains captures and the keep');
   tut.notify('capture');
   assert.ok(state.tutorial.seen.B3, 'a capture while B3 is on screen marks it seen');
+  assert.equal(tut.pick({ ...battle0, captured: 1, ownSites: 2 }), null, 'no multi-select hint in the tutorial battle either');
+  // the second battle
+  const battle = { ...battle0, battlesBefore: 1 };
+  assert.equal(tut.pick(battle).id, 'B2');
+  tut.notify('sizeChanged');
   assert.equal(tut.pick({ ...battle, ownSites: 2 }).id, 'B4');
   tut.notify('multiSend');
-  assert.equal(tut.pick({ ...battle, ownSites: 2, t: 10, rallyReady: true }), null, 'Rally waits for 15 s');
+  assert.equal(tut.pick({ ...battle0, ownSites: 2, t: 16, rallyReady: true }), null, 'no Rally hint in the tutorial battle');
+  assert.equal(tut.pick({ ...battle, ownSites: 2, t: 6, rallyReady: true }), null, 'Rally waits for 15 s');
   assert.equal(tut.pick({ ...battle, ownSites: 2, t: 16, rallyReady: true }).id, 'B5');
   tut.notify('rally');
   // steps that need a feature stay silent until it is on; Firestorm only when it is ready
@@ -176,7 +182,7 @@ test('tutorial controller: a set of seen steps, the right step for the facts, ev
   assert.equal(tut.pick(world).id, 'W0');
   state.tutorial.done = true;
   assert.equal(tut.pick(world), null, 'done switches every hint off');
-  assert.equal(TUTORIAL_STEPS.map((x) => x.id).join(' '), 'W0 W1 W2 W3 B1 B2 B3 B4 B5 C1 C2 C3 P1 P2 M1 M2 M3 M4 F1 F2 F3 F4 G1 G2 R1 V1 V2 V3 V4 V5 Q1 Q2 D1 D2 A1 K1 L1 H1');
+  assert.equal(TUTORIAL_STEPS.map((x) => x.id).join(' '), 'W0 W1 W2 W3 B1 B2 B3 B4 B5 C1 C2 C3 P1 P2 M1 M2 M3 M4 F1 F2 F3 F4 G1 G2 R1 V1 V2 V3 V4 V5 Q1 Q2 D1 D2 A1 K1 L1 H1 J1');
 });
 
 test('pickLandTile resolves tile centres (and mountain faces) to the tile drawn there', () => {

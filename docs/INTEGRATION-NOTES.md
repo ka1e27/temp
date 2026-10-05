@@ -1041,3 +1041,123 @@ Deserters offer, a Vendetta, a Deed and a contract and asserts no overlap, the o
 **The generals check's tray-picker flake** (failed 1 of 9 runs): the world scene's first frame moves focus to the map canvas when nothing visible holds it;
 when the tray painted before that frame, the check's `focus()` on the picker was undone and ArrowDown went to the map (diagnosed: activeElement CANVAS).
 The check now waits two frames, focuses the picker and asserts it holds focus before the key.
+
+## Phase 9: the Daily Challenge and Scenarios (2026-10-04)
+Spec: `docs/PLAN-PHASE9.md`. Pure API: `docs/briefs/phase9-hookup.md`.
+
+**Sandbox = the container points elsewhere.** `app/stateContainer.js` gained `enterSandbox(pair)`, `leaveSandbox()`, `main()` and `inSandbox`. While a challenge is
+played `container.get()` returns the challenge's own `{state, world}` (so the battle manager, the frontier loop, crowns, Boons, the world scene... run on it
+unchanged) and the realm's pair waits parked; `leaveSandbox` points back at the very same objects. Both bump the epoch (stale welcome / idle pops are dropped;
+`challengeMode` re-stamps the parked welcome card and prosperity cheers on the way back). Rules while `inSandbox`:
+- autosave: `getState` is always `container.main().state` and `canSave` is false, so the realm's save is never written; the ONE exception is today's Daily
+  paying its +1 Renown (`claimDailyReward`), saved at once with `autosave.save({ force: true })`. The realm is saved right before it is parked, so its save
+  equals the parked state (the check compares both).
+- skipped: the world-events loop, the Bounty Board hooks (`goals.tick`, `onConquest`, `onFinished`, `onProsperity`), prosperity ticks, offline earnings on
+  `visibilitychange`, Found a Dynasty (hidden; `onFoundDynasty` refuses), a champion's recruitment card. The Codex and Settings > Export read the REALM.
+- settings: the challenge state's `settings` IS the realm's object (a change made in a challenge is the player's); Settings hides the save code and Reset
+  inside a challenge (an import or a reset leaves the challenge first).
+
+**Modules.** `app/challengeMode.js` (boot graph, small): the entry, the run (play / resume / retry / leave), the loop (`tick` from main.js after the frontier:
+`tickChallenge` on active time, the same `isActive` as raids), the battle log (`'ended'` stashes the run, `'finished'` calls `recordChallengeBattle`,
+`'events'` -> `noteChallengeEvents`), the result, the record (`hexdominion.v2.record`) and the challenge save (`hexdominion.v2.challenge`, every 5 s and after
+each battle; removed when a run ends; the hub offers "Resume" for one left by a reload). `app/challengeKit.js` (lazy, `import()` ~2.5 s after boot in an idle
+moment, or on first use): re-exports the pure API and words it for the UI (`hubData`, `trackerData`, `resultData`, `starMarkText`); `ui/challengeHub.js`
+(tabs Daily / Scenarios / Calendar / Banners, a `watchDialog`), `ui/challengeResult.js` (time, crowns, attempts, streak, stars, the share line with Copy:
+`navigator.clipboard`, falling back to a selected textarea), `ui/goalTracker.js` (mounted in `ui.hud.tabsEl`, so the top lane already makes room). All
+three are lazy and listed in `hd-lazy` (index.html) for the service worker. Boot graph: 246 -> 248 modules (`challengeMode.js`, `config/challenges.js`).
+- "Today" is `localToday()` (the local date); `?dev=1&today=yyyymmdd` pins it. Abandon / Retry record the run as it stands (an attempt) only when it was
+  actually played (>= 1 s of active time or a battle): opening a Daily and leaving at once does not burn the first try.
+- Entry: the title's Challenges button and Settings > Challenges (not from inside a battle), once `challengesUnlocked(realm)`. Back returns to where the hub
+  was opened (the title, or the realm's map with `freshRealm`).
+- The result waits for the watched battle's own results card and for any open dialog.
+
+**Banner styles (§9C).** `render/sprites.js`: `BANNER_STYLES`, `setBannerStyle(id)`, `getBannerStyle()`, `bannerStyleVersion()`. Only the player's flags
+(cloth colour = the player's azure) change: a two-tone hem, a bigger finial, a tinted emblem, a glow (ember, frost) and a fringe (ember, frost, bone). The
+baked strips are rebaked when the version changes (`render/sites.js` clears its banner cache; the squad strips key on the style). The boot reads the stored
+record's choice raw (`bannerOfRaw`) so the first frame already flies it. Chosen in Settings (and the hub's Banners tab); a locked style shows its rule.
+
+**Codex and tutorial.** Codex group "Challenges" with `daily` and `scenarios` (numbers from `config/challenges.js` / `config/scenarios.js`); the hub's "?"
+opens `daily`. Tutorial J1 (last in `TUTORIAL_STEPS`, after M1, `afterDone`, 10 s, the HUD gear, seen on `challengesOpened`): table order lets H1 (the
+Codex) go first.
+
+**Checks and gallery.** `check.mjs --only=challenges` (`tools/challengeChecks.mjs`). Dev hooks: `__hd.challenge` (play('daily', d) / play('scenario', id),
+leave(), retry(), openHub(tab), record, kit, `dev.parkSig` / `dev.unparkSig` / `dev.lastOutcome`) and `__hd.challengeNext()`. Gallery: `screenshots/phase9/`
+(the check's shots plus `tools/phase9shots.mjs`).
+
+**The phase6 "Firestorm burns the dead" flake (step 5; found in the Phase 9 pass).** Not timing and not the sim: the Gravewarden's Lantern. A trace of a
+failing run showed the burn covering the target the whole window, the assault trading (our squads dying) and `battle.fallen.acc[target]` never created,
+i.e. `onAssaultTrade` never reached The Fallen Rise branch; by elimination `lanternGuards` (no rise, so no burn either, within 5 hexes of the War Camp).
+The Relics a run holds by step 5 depend on which regions its earlier steps happened to conquer (logged: `[]`, `["dragonBanner"]`,
+`["gravewardensLantern"]` across six runs), and the step's target (the Ashen settlement nearest a site of ours) sits inside the Lantern's radius. The
+step now turns the Lantern off for its window and restores it after (`info` line prints the Relics held). Same pass: the A1 step read `hintFacts()` once
+right after its dev conquests (the realm-wide facts are cached 250 ms), so it now waits for a fresh `ashenRegion`. `tools/hintMonitor.js` maps J1's text
+to the HUD gear.
+
+## Shared infrastructure: the post-battle queue and the top lane (Phase 10, 2026-10-05)
+Every system since Phase 4 reaches the player through one of two queues. New moments and notices must go through them, never around them.
+
+**The post-battle queue (modal moments, one at a time).** Owner: `app/boons.js`. A watched win's results card `Continue` (`battle.js onResultsContinue`)
+applies the win at once (`manager.finish`, so any offer exists), then `boons.afterBattle({ before, regionName }, go)` plays, in this fixed order:
+1. the Relic claim (`ui.relicClaim`, a veil, not a dialog; click or 3.6 s),
+2. HELD moments: anything that would pop a modal while the battle is being finished. `battle.js` calls `boons.beginSequence()` BEFORE `finish`; while it
+   collects, a caller passes `fn(done)` to `boons.holdMoment(fn)` (returns false when nothing is collecting: show it at once). Today: a capital's recruit card
+   (main.js `onDeeds` -> `showRecruit`). `fn` MUST call `done()` exactly once when its card closes, or the queue stops,
+3. the Boon draft, if this battle made a new offer (`offerSig` before/after),
+4. `go()`: the fade and the map's conquest choreography.
+Off screen (a surrender, a Quick Conquest, a battle nobody watched) `boons.tick(scene)` turns a new offer into ONE toast plus the HUD chip, and plays a new
+Relic's claim on the map only while no dialog is open. Under `check.mjs` / `hints.mjs` (`?dev=1`) `window.__HD_TEST_NO_BOON_MOMENTS` parks the claim and the
+draft on the chip. `tools/firstHourReport.mjs` treats results > relic > recruit > draft > duo that follow each other within 4 s as ONE moment (the only exception to
+"20 s of play between two modal moments").
+
+**Dialogs hold the rest.** `ui/dialogs.js` keeps the stack (`watchDialog` panels, `createModal` popups); `onDialogChange(count)` drives: the toasts' hold
+(`toasts.setHeld`: new toasts queue, the ones on screen step back into the queue, out one by one 250 / 450 ms after the last dialog closes; same id or same words
+merge, cap 4), the battles' hold (`battles.setDialogHold`), and, since Phase 10, the leader banner: while a dialog or a claim / Duo moment is up (`modalUp()` in
+main.js) a new line waits (`heldLine`) and a banner already showing leaves; the waiting line is spoken 400 ms after the last card closed if it is younger than
+`LINE_HOLD_MS` (8 s) and no hint is up (`syncHeldLine`, called from `syncUiFlags` every frame).
+
+**The top lane (notices, never overlapping).** Owner: main.js `layoutTopLane()` (inside `syncUiFlags`, before the coach measures). One column under the top
+chrome: the leader banner first (placed by `leaderBanner.js`'s `below` rule), then the toasts (event offers first via `order: -1`, then everything else in
+arrival order). The toast column is pushed below the banner's layout box while it is in or fading out; it never moves UP under a pointer or while a toast
+with a button is on screen (THE CLICK RULE). Phones (< 768 px): at most two notices (`toasts.setMaxVisible`: 1 while the banner is in, else 2); a toast that
+fires while the banner is up waits in main.js's `toastQueue` (dropped after 9 s); urgent toasts (an action button or `is-event`) take the slot of the newest
+ordinary toast. Callers `speak()` BEFORE `toasts.update()`. A toast with an `id` already on screen updates in place (no new notice).
+`tools/hintMonitor.js` fails any frame where two top notices intersect or a phone shows more than two; `check.mjs --only=toplane` stages the mix.
+
+**The hint lane.** One coach bubble (`tutorial.pick` returns one step); a NEW hint waits `COACH_MIN_SHOW_MS` after the previous one first appeared (main.js
+`ui.coach.update` wrapper); the coach wins a clash with the banner (it hides it); `speak` refuses while a hint is up.
+
+**Measuring it.** `tools/firstHour.mjs` (Phase 10) plays the first hour as a new player and logs every hint, toast, leader line, modal moment and system
+unlock (`tools/firstHourProbe.js` in the page); `tools/firstHourReport.mjs` prints the minute table, the unlock timeline and the targets.
+
+## Phase 10: the first hour's pacing (2026-10-05)
+Spec: `docs/PLAN-PHASE10.md`. Measured by `tools/firstHour.mjs` (before / after: `screenshots/phase10/firstHour-{before,after}.{json,txt,log}`).
+
+**One new system at a time: `app/pacer.js`** (`services.pacer`, config `PACING.introGapSec` = 152 play seconds (lead: 150, +2 s for clock drift; was 190) in `config/pacing.js`). A system's FIRST appearance asks
+`pacer.ready(name)` and, when it shows, calls `pacer.introduce(name)`; the next new system waits `introGapSec` of play (`state.stats.playSec`) behind it. In memory only:
+`pacer.reset()` (from `applyWorld`) counts what the save already shows (`systemsInState`: Renown earned, the board open, Boons owned, a told Deed, a streak, the
+tutorial steps already seen) as introduced, so a reload never holds anything back. Who asks:
+- tutorial steps with `intro: '<system>'` (M2 scout, M3 works, F4 fortify, G2 generals, R1 festival, V1 variety, Q1 board, D2 quick, A1 ashen, L1 relics, H1 codex,
+  J1 challenges): the controller (`app/tutorial.js`) skips them while the pacer waits and introduces the system when one becomes current;
+- `app/goals.js`: the streak chip (`streakData` returns null; the streak itself counts all along), the first Deed toast (`flushDeeds` keeps the news), the board's
+  opening (`refreshBoard` does not call `ensureBounties` while it waits; `devBounty` passes `'dev'` and always opens it);
+- `app/boons.js`: the first Boon offer is held with no chip, toast or draft (`pacerHolds`); `tick()` announces it on the Boons' turn ("A Boon awaits"), and a newer
+  offer replacing a held one shows no "missed" note (`heldUnseen`);
+- `app/eventsLoop.js`: the first world event's clock holds once its grace is over; `app/frontierLoop.js`: `tickFrontier(..., { holdVendettas })` (new pure
+  option; `holdRaids` exists too but is not used) keeps the first Vendetta from setting out. The FIRST RAID is exempt (lead decision: core gameplay): it comes
+  on its own grace (FRONTIER.graceSec 20 active min, minRegions 4) and only restarts the clock;
+- the first Boon's "A Boon awaits" toast is never shown over a battle: released there, it waits for the map;
+- never waiting, but introducing: the Renown laurel (`scenes/world.js` HUD), a Relic claim, a raid's or Vendetta's announcement, an event offer.
+Under `?dev=1` with `window.__HD_TEST_NO_PACING` (set by `tools/check.mjs`, `tools/hints.mjs` and the gallery tools, whose flows stage systems in seconds) the gap is 0,
+`calmSec` is Infinity, the hint gap is 0 and leader lines use the normal gap (`services.noPacing()`).
+
+**Hints** (`HINT_PACE` in `scenes/timing.js`): a NEW step becomes current at most once per `newHintGapSec` (10) of play, except `urgent` steps (F1-F3, V2-V5, Q2);
+`calm` steps (M1 and the map's system hints) wait for `calmSec` (6) of quiet on the map (no card, panel or dialog; world facts `calmSec`); W3 "Attack!" waits until the
+card has been open `attackHintDelaySec` (2.5: a player who presses Attack on their own never sees it); B2 (send size), B4 (multi-select) and B5 (Rally) moved to the
+second battle (the tutorial battle teaches the drag and the keep).
+
+**Toasts**: a toast posted with `digest: true` (Renown, a General's level / wound, Deeds, contracts, Plunderers / Fortune Favours) waits `TOASTS_DIGEST.windowMs` (900)
+and merges with the others into one toast (" · " between the lines; `aliases` keep `toasts.has(id)` / `dismissId(id)` working for every merged id). Sealed ones never
+land over a battle: they wait for the map, and `goto.battle` also drops celebrations still queued behind a phone's banner (`dropQueuedCelebrations`).
+
+**Leader lines**: in a realm's first `VOICE.earlyMinutes` (10) of play the gate uses `earlyGapSec` (60) and only `earlyGapExempt` (the Vendetta's oath) skips it
+(`createVoiceGate.check(..., { early })`); and no banner over a modal card (see the shared-infrastructure section above).

@@ -386,3 +386,15 @@ test('purity: leaders.js and config/leaders.js never touch DOM, time, randomness
     }
   }
 });
+
+test('voice gate (Phase 10A): a realm\'s first minutes speak at the early gap, and only the Vendetta\'s oath skips it', async () => {
+  const { createVoiceGate } = await import('../meta/leaders.js');
+  const g = createVoiceGate();
+  assert.equal(VOICE.earlyGapSec > VOICE.minGapSec, true);
+  assert.equal(g.request('firstContact', { nowSec: 0, early: true }), true);
+  assert.equal(g.check('raidLaunched', { nowSec: VOICE.minGapSec + 1, early: true }).reason, 'gap', 'the usual gap is not enough early on');
+  assert.equal(g.check('keepLost', { nowSec: 5, early: true }).reason, 'gap', 'keepLost is no longer exempt early on');
+  assert.equal(g.check('vendetta', { nowSec: 5, early: true }).ok, true, 'the oath always speaks');
+  assert.equal(g.check('raidLaunched', { nowSec: VOICE.earlyGapSec, early: true }).ok, true);
+  assert.equal(g.check('raidLaunched', { nowSec: VOICE.minGapSec + 1 }).ok, true, 'later, the usual gap');
+});

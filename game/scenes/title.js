@@ -116,7 +116,7 @@ export function createTitleScene(services) {
 
     services.hideAllPanels();
     ui.title.el.hidden = false;
-    ui.title.update({ hasSave: services.hasSaveOnDisk(), version });
+    ui.title.update({ hasSave: services.hasSaveOnDisk(), version, challenges: !!services.challenge && services.challenge.unlocked() });
   }
 
   function exit() {

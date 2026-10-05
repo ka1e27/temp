@@ -82,6 +82,7 @@ export function createFrontierLoop({ getState, getWorld, manager, ui, services, 
   }
 
   function onAnnounce(raid) {
+    services.pacer?.introduce(raid.vendetta ? 'vendetta' : 'raids'); // Phase 10A: urgent, never waits; the next new system waits behind it
     const world = getWorld();
     try {
       const reserved = new Set(commanderFor.values());
@@ -143,7 +144,11 @@ export function createFrontierLoop({ getState, getWorld, manager, ui, services, 
     if (!isActive()) return;
     const state = getState();
     const world = getWorld();
-    const res = tickFrontier(state, world, Date.now(), dtSec);
+    // Phase 10A: the first Vendetta is a new system: it does not set out until the pacer gives it its turn (app/pacer.js). The first raid is core
+    // gameplay (lead decision): it comes on its own grace and only restarts the pacer's clock (onAnnounce)
+    const p = services.pacer;
+    const hold = (name) => !!p && !p.known(name) && !p.ready(name);
+    const res = tickFrontier(state, world, Date.now(), dtSec, { holdVendettas: hold('vendetta') });
     const { announced, arrived } = res;
     for (const raid of announced) onAnnounce(raid);
     for (const raid of arrived) onArrive(raid);

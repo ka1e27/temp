@@ -95,6 +95,7 @@ export function installHintMonitor() {
     // The Living Frontier (F1-F4): the raid toast's Go; the tray chip of a battle you are not watching; the region to fortify, its Fortifications Build, the Arrow Tower row
     // Goals and Rivals (Q1, Q2): the Regions button (the Bounty Board lives in its panel); a Vendetta banner's Go
     if (/has a codex/i.test(text)) return list(sel('.hud .btn-icon[aria-label="Settings"]')); // Phase 8 (H1)
+    if (/^new: challenges/i.test(text)) return list(sel('.hud .btn-icon[aria-label="Settings"]')); // Phase 9 (J1)
     if (/the bounty board/i.test(text)) return list(sel('.hud-regions'));
     if (/a vendetta!/i.test(text)) {
       const btns = [...document.querySelectorAll('.toasts > .toast.is-vendetta:not(.is-out) .toast-action')].filter(isVisible);

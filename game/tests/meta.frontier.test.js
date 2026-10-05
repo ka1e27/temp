@@ -483,3 +483,13 @@ test('the campaign tool plays raids end to end, deterministically (tools/campaig
   assert.ok(a.raids.defenses.every((d) => d.atSec >= FRONTIER.graceSec), 'never during the grace');
   assert.equal(runCampaign(5, { maxRegions: 14, raids: 'off' }).raids, null);
 });
+
+test('Phase 10A: holdRaids keeps any new raid from setting out (the first raid waits its turn), and lifting it lets them come', () => {
+  const { world, state } = realm(5, 2);
+  let held = 0;
+  for (let i = 0; i < 3600; i++) held += tickFrontier(state, world, 0, 1, { holdRaids: true, holdVendettas: true }).announced.length;
+  assert.equal(held, 0, 'an hour of active play: none while held');
+  let got = 0;
+  for (let i = 0; i < 3600 && !got; i++) got += tickFrontier(state, world, 0, 1).announced.length;
+  assert.ok(got > 0, 'they come once released');
+});
