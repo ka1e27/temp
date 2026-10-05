@@ -45,7 +45,7 @@ export const DEEDS = Object.freeze([
   { id: 'builder', name: 'Builder', icon: 'tower', key: 'fortLevels', tiers: [10, 40], stat: 'fortCostMult', per: -0.03, text: 'Fortifications {v}% cheaper' },
   { id: 'duellist', name: 'Duellist', icon: 'swords', key: 'duel', tiers: [1, 5], stat: 'renownPerDuel', per: 1, text: '+{v} Renown per Duel won' },
   // PLAN-PHASE7 §7B: the Reliquarian. A convenience reward (Renown), outside the +10% power budget
-  { id: 'reliquarian', name: 'Reliquarian', icon: 'chest', key: 'relics', tiers: [1, 4, 8], stat: 'renownPerRelic', per: 1, text: '+{v} Renown for each Relic claimed' },
+  { id: 'reliquarian', name: 'Reliquarian', icon: 'chest', key: 'relics', tiers: [1, 6, 12], stat: 'renownPerRelic', per: 1, text: '+{v} Renown for each Relic claimed' },
   { id: 'nemesis', name: 'Nemesis', icon: 'skull', key: 'vendetta', tiers: [1, 3], stat: 'vsVendetta', per: 0.05, text: '+{v}% strength against Vendetta war bands' },
 ].map((d) => Object.freeze({ ...d, tiers: Object.freeze(d.tiers) })));
 

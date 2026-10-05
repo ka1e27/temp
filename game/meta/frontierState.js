@@ -176,6 +176,7 @@ export function sanitizeFrontier(raw) {
         announcedAt: num(r.announcedAt, out.activeSec), arriveAt: num(r.arriveAt, out.activeSec),
         strength: Math.max(0, num(r.strength, 0)), depth: Math.max(0, num(r.depth, 1)), first: r.first === true,
       };
+      if (r.deserted === true) raid.deserted = true; // Phase 8: the Deserters event weakened this raid
       // a Vendetta (PLAN-PHASE4 §4D) keeps its flag: { faction, leader }
       if (r.vendetta && typeof r.vendetta === 'object' && r.vendetta.faction === r.faction) {
         raid.vendetta = { faction: r.faction, leader: typeof r.vendetta.leader === 'string' ? r.vendetta.leader.slice(0, 60) : '' };

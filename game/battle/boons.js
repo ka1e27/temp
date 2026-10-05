@@ -50,17 +50,59 @@ function trigger(battle, t, ev, gapKey = null) {
 
 // --- Squads ------------------------------------------------------------------------------------------------------------------------
 
-/** Warlord's Mark (squads.js sendFromSite): every Nth squad the player sends is doubled. Returns the extra troops added. */
-export function onPlayerSend(battle, squad) {
-  const n = boonsOf(battle).warlordEvery;
-  if (!(n > 0) || squad.owner !== PLAYER_OWNER) return 0;
+/**
+ * A squad the player just sent (squads.js sendFromSite; `opts.auto`: a supply line sent it). In order: Vanguard (the battle's first
+ * squad), Thunder Charge (the first after a power cast), Supply Wagons and Siege Train (a supply squad), Warlord's Mark (every Nth
+ * doubled). Returns the extra troops added.
+ */
+export function onPlayerSend(battle, squad, opts = null) {
+  const b = boonsOf(battle);
+  if (b === NONE || squad.owner !== PLAYER_OWNER) return 0;
   const fx = boonFx(battle);
-  fx.sent += 1;
-  if (fx.sent % n !== 0) return 0;
-  const extra = squad.count;
-  squad.count += extra;
-  trigger(battle, battle.t, { boon: 'warlordsMark', squad: squad.id, count: extra, site: squad.from, ...at(battle, battle.sites[squad.from]) });
-  return extra;
+  const before = squad.count;
+  const pop = (boon, extra) => trigger(battle, battle.t, { boon, squad: squad.id, count: Math.round(extra), site: squad.from, ...at(battle, battle.sites[squad.from]) });
+  if (b.vanguardMult > 1 && !fx.vanguard) {
+    fx.vanguard = true;
+    const extra = squad.count * (b.vanguardMult - 1);
+    squad.count += extra;
+    pop('vanguard', extra);
+  }
+  if (b.drumVanguardMult > 1 && fx.drumCharge) {
+    fx.drumCharge = false;
+    const extra = squad.count * (b.drumVanguardMult - 1);
+    squad.count += extra;
+    pop('thunderCharge', extra);
+  }
+  if (opts && opts.auto) {
+    if (b.supplyBonus > 0) {
+      const extra = squad.count * b.supplyBonus;
+      squad.count += extra;
+      trigger(battle, battle.t, { boon: 'supplyWagons', squad: squad.id, count: Math.round(extra), site: squad.from, ...at(battle, battle.sites[squad.from]) }, `sw${squad.from}`);
+    }
+    if (b.supplyNoArrows) squad.noArrows = true; // Siege Train: the raid skill's flag (combat.js resolveTowerVolleys skips it)
+  }
+  const n = b.warlordEvery;
+  if (n > 0) {
+    fx.sent += 1;
+    if (fx.sent % n === 0) {
+      const extra = squad.count;
+      squad.count += extra;
+      pop('warlordsMark', extra);
+    }
+  }
+  return squad.count - before;
+}
+
+/** War Drums and Thunder Charge (powers.js applyPower, after a cast took effect). */
+export function onPowerCast(battle, owner, t) {
+  const b = boonsOf(battle);
+  if (b === NONE || owner !== PLAYER_OWNER) return;
+  if (b.drumVanguardMult > 1) boonFx(battle).drumCharge = true;
+  if (b.drumsSec > 0 && b.drumsMult > 1) {
+    battle.effects.drumsUntil = t + b.drumsSec;
+    const camp = battle.sites.find((s) => s.type === 'camp' && s.owner === PLAYER_OWNER);
+    trigger(battle, t, { boon: 'warDrums', until: battle.effects.drumsUntil, ...at(battle, camp) });
+  }
 }
 
 /** A player squad's strength multiplier from Boons in a fight: Phalanx (a big squad), Ambushers (a clash on a road), Martyr's Crown. */
@@ -101,7 +143,10 @@ export function moveCost(battle, squad, tile) {
 export function marchBoonMult(battle, squad, t) {
   if (squad.owner !== PLAYER_OWNER) return 1;
   const b = boonsOf(battle);
-  return b.hitRunMult > 1 && t < ((battle.effects && battle.effects.hitRunUntil) || 0) ? b.hitRunMult : 1;
+  const fx = battle.effects || {};
+  const hit = b.hitRunMult > 1 && t < (fx.hitRunUntil || 0) ? b.hitRunMult : 1;
+  const drums = b.drumsMult > 1 && t < (fx.drumsUntil || 0) ? b.drumsMult : 1; // War Drums (PLAN-PHASE8)
+  return hit * drums;
 }
 
 // --- Towers ------------------------------------------------------------------------------------------------------------------------
@@ -115,6 +160,42 @@ export function towerIntervalMult(battle, site) {
 /** Night Raiders: in a Night battle an enemy tower does not shoot the player's squads. */
 export function towerIgnores(battle, site, squad) {
   return squad.owner === PLAYER_OWNER && site.owner !== PLAYER_OWNER && !!boonsOf(battle).nightRaiders && twistOf(battle) === 'night';
+}
+
+/**
+ * Tower Sappers (combat.js resolveTowerVolleys): an enemy tower within sapperHexes of a site the player holds shoots sapperRangeMult as
+ * far. The first time a tower is sapped in a battle, a boonTriggered pops on it. Returns the range multiplier.
+ */
+export function towerRangeBoonMult(battle, site, t) {
+  const b = boonsOf(battle);
+  if (!(b.sapperHexes > 0) || site.type !== 'tower' || site.owner === PLAYER_OWNER) return 1;
+  const p = tileAt(battle, site.tile);
+  if (!p) return 1;
+  const reach = hexRadiusToWorld(b.sapperHexes);
+  let near = false;
+  for (const s of battle.sites) {
+    if (s.owner !== PLAYER_OWNER) continue;
+    const q = tileAt(battle, s.tile);
+    if (q && worldDist(p, q) <= reach) { near = true; break; }
+  }
+  if (!near) return 1;
+  const fx = boonFx(battle);
+  if (!fx.sapped) fx.sapped = {};
+  if (!fx.sapped[site.id]) { fx.sapped[site.id] = true; trigger(battle, t, { boon: 'towerSappers', site: site.id, x: p.x, y: p.y }); }
+  return b.sapperRangeMult;
+}
+
+/**
+ * A garrison's defence multiplier from Boons (resolve.js, per assault step): Last Stand, the player's keep in a defense below
+ * lastStandShare of its cap (a boonTriggered the first time it holds the line).
+ */
+export function garrisonBoonMult(battle, site, t) {
+  const b = boonsOf(battle);
+  if (!(b.lastStandShare > 0) || battle.mode !== 'defense' || site.owner !== PLAYER_OWNER) return 1;
+  if (site.id !== battle.arena.keepSite || !(site.troops < b.lastStandShare * site.cap)) return 1;
+  const fx = boonFx(battle);
+  if (!fx.lastStand) { fx.lastStand = true; trigger(battle, t, { boon: 'lastStand', site: site.id, ...at(battle, site) }); }
+  return b.lastStandDefMult;
 }
 
 /** Tower arrows: Phalanx cuts the kills on a big player squad; Fire Arrows sets an enemy squad hit by a player tower ablaze. */

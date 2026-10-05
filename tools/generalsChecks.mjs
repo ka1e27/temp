@@ -93,13 +93,18 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(await pressSel('.battle-map'), `generals ${name}: Map (the battle keeps going)`);
     ok(await t.waitFor(() => window.__hd.scene === 'world' && !!document.querySelector('.tray-commander:not([hidden])'), 8000), `generals ${name}: the tray chip has a commander picker`);
     ok(await q(() => /commanded by .*Marshal/i.test(document.querySelector('.tray-chip').getAttribute('aria-label'))), `generals ${name}: the chip names the commander`);
-    await q(() => document.querySelector('.tray-commander').focus());
+    // the world scene's first frame hands focus to the map when nothing visible holds it (scenes/world.js enter): let that happen first, then focus the
+    // picker and make sure it holds focus before the key (this race made the check flaky: ArrowDown once landed on the map canvas)
+    await q(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    ok(await t.waitFor(() => { const s = document.querySelector('.tray-commander'); s.focus(); return document.activeElement === s; }, 3000), `generals ${name}: the tray picker takes focus`);
     await key('ArrowDown', 'ArrowDown', 40);
     // a touch phone opens its own native picker, which CDP cannot drive: there the choice is made on the select itself (value + change, as the picker does)
     if (mobile && !(await t.waitFor(() => window.__hd.battles.list()[0].commander === null, 800))) {
       await q(() => { const s = document.querySelector('.tray-commander'); s.value = ''; s.dispatchEvent(new Event('change', { bubbles: true })); });
     }
-    ok(await t.waitFor(() => window.__hd.battles.list()[0].commander === null, 2000), `generals ${name}: the tray picker hands the battle to the Militia Captain`);
+    const handed = await t.waitFor(() => window.__hd.battles.list()[0].commander === null, 2000);
+    if (!handed) console.log('  diag tray picker:', JSON.stringify(await q(() => { const s = document.querySelector('.tray-commander'); return { active: document.activeElement && (document.activeElement.className || document.activeElement.tagName), value: s && s.value, options: s && [...s.options].map((o) => o.value), commander: window.__hd.battles.list()[0].commander, dialog: document.documentElement.dataset.dialog || null, scene: window.__hd.scene, toasts: [...document.querySelectorAll('.toast')].map((x) => x.dataset.id) }; })));
+    ok(handed, `generals ${name}: the tray picker hands the battle to the Militia Captain`);
     if (mobile) await q(() => { const s = document.querySelector('.tray-commander'); s.value = 'marshal'; s.dispatchEvent(new Event('change', { bubbles: true })); });
     else await key('ArrowUp', 'ArrowUp', 38);
     ok(await t.waitFor(() => window.__hd.battles.list()[0].commander === 'marshal', 2000), `generals ${name}: and back to the Marshal`);

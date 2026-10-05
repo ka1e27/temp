@@ -20,7 +20,7 @@ import { icon } from '../ui/icons.js';
 import { shortNumber } from '../ui/format.js';
 
 const TOAST_ID = 'world-event';
-const ICONS = { merchant: 'coin', plague: 'candle', duel: 'sword' };
+const ICONS = { merchant: 'coin', plague: 'candle', duel: 'sword', deserters: 'flag', harvest: 'wheat' };
 
 /**
  * @param {{ getState: () => object, getWorld: () => object, manager: object, ui: object, services: object, isActive: () => boolean,
@@ -36,7 +36,13 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
   function offerText(ev) {
     const title = EVENTS.copy.titles[ev.kind] || 'News';
     const left = secondsLeft(ev);
-    if (ev.kind === 'merchant') return `${title}: ${ev.text.replace(/^A merchant offers /, 'offers ')} Or a fortification level at half price. ${left} s.`;
+    if (ev.kind === 'merchant') {
+      // the fortification deal's discount comes from the event (the Merchant's Scale Relic changes it), never typed
+      const fort = (ev.deals || []).find((d) => d.deal === 'fort');
+      const off = fort && Number.isFinite(fort.priceShare) ? Math.round((1 - fort.priceShare) * 100) : null;
+      return `${title}: ${ev.text.replace(/^A merchant offers /, 'offers ')}${off != null ? ` Or a fortification level at ${off}% off.` : ''} ${left} s.`;
+    }
+    if (ev.kind === 'harvest') return `${title}: ${ev.text} ${left} s.`;
     if (ev.kind === 'plague') return `${ev.text}`;
     return `${ev.text} ${left} s to answer.`;
   }
@@ -44,6 +50,7 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
   function toastOffer(ev) {
     if (closedId === ev.id && !ui.toasts.has?.(TOAST_ID)) return;
     const plague = ev.kind === 'plague';
+    if (ev.kind === 'deserters' || ev.kind === 'harvest') { toastChoice(ev); return; }
     ui.toasts.update({
       id: TOAST_ID, className: 'is-event', type: plague ? 'warning' : 'info', icon: ICONS[ev.kind] || 'bell', message: offerText(ev),
       duration: plague ? 12000 : (secondsLeft(ev) + 2) * 1000,
@@ -51,6 +58,27 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
       action: plague ? { label: 'OK', ariaLabel: 'Dismiss the news of the Plague', onClick: () => answer(ev.id, 'decline') }
         : { label: ev.kind === 'merchant' ? 'See deals' : 'Accept', ariaLabel: ev.kind === 'merchant' ? 'See the merchant’s deals' : 'Accept the duel', onClick: () => answer(ev.id, 'accept') },
       secondary: plague ? undefined : { label: 'Decline', ariaLabel: `Decline the ${ev.kind === 'merchant' ? 'merchant' : 'duel'}`, onClick: () => answer(ev.id, 'decline') },
+    });
+  }
+
+  /** Phase 8: Deserters (two choices: weaken their next raid, or muster everywhere) and the Harvest Festival (opt-in, priced). */
+  function toastChoice(ev) {
+    const c = EVENTS.copy;
+    const dur = (secondsLeft(ev) + 2) * 1000;
+    const base = { id: TOAST_ID, className: 'is-event', type: 'info', icon: ICONS[ev.kind], message: offerText(ev), duration: dur };
+    if (ev.kind === 'deserters') {
+      ui.toasts.update({
+        ...base,
+        action: { label: c.desertersMuster, ariaLabel: `Deserters: ${c.desertersMuster}`, onClick: () => answer(ev.id, 'muster') },
+        secondary: { label: c.desertersRaid, ariaLabel: `Deserters: ${c.desertersRaid}`, onClick: () => answer(ev.id, 'raid') },
+      });
+      return;
+    }
+    const short = getState().gold < ev.gold;
+    ui.toasts.update({
+      ...base,
+      action: { label: `${c.harvestAccept} · ${shortNumber(ev.gold)}`, ariaLabel: `${c.harvestAccept} for ${shortNumber(ev.gold)} gold${short ? ' (not enough gold yet)' : ''}`, onClick: () => answer(ev.id, 'accept') },
+      secondary: { label: 'Decline', ariaLabel: 'Decline the Harvest Festival', onClick: () => answer(ev.id, 'decline') },
     });
   }
 
@@ -71,6 +99,12 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
       try { services.speak?.('plague', ev.faction, undefined, `plague-${ev.id}`); } catch { /* a leader line is a nicety */ } // the plagued leader complains (PLAN-PHASE4 §4E)
       chronicle(`Plague swept the lands of the ${world.factions[ev.faction] ? world.factions[ev.faction].name : 'rivals'}.`);
       services.markMapDirty?.();
+    } else if (ev.kind === 'deserters') {
+      // the rival whose troops left; acceptEvent writes the Chronicle line itself (docs/briefs/phase8-hookup.md §4)
+      try { services.speak?.('deserters', ev.faction, undefined, `deserters-${ev.id}`); } catch { /* a nicety */ }
+    } else if (ev.kind === 'harvest') {
+      const grumbler = merchantGrumbler();
+      if (grumbler != null) { try { services.speak?.('harvest', grumbler, undefined, `harvest-${ev.id}`); } catch { /* a nicety */ } }
     } else {
       const grumbler = merchantGrumbler();
       if (grumbler != null) { try { services.speak?.('merchant', grumbler, undefined, `merchant-${ev.id}`); } catch { /* a nicety */ } } // a neighbour grumbles about the caravan
@@ -107,6 +141,35 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
     }
     if (ev.kind === 'merchant') { openMerchant(ev); return true; }
     if (ev.kind === 'duel') return startDuel(ev);
+    if (ev.kind === 'deserters') {
+      const res = acceptEvent(state, getWorld(), { choice: choice === 'raid' ? 'raid' : 'muster' }, Date.now());
+      if (!res) return false;
+      ui.toasts.dismissId?.(TOAST_ID);
+      const fname = getWorld().factions[res.faction] ? getWorld().factions[res.faction].name : 'rival';
+      ui.toasts.update({ type: 'success', icon: 'flag', message: res.choice === 'raid' ? `The deserters thin the ${fname}'s next raid.` : `${res.regions} militias stand full.` });
+      services.sfx?.play('levy', { volume: 0.7 });
+      services.tutorial?.notify('eventAnswered');
+      services.markMapDirty?.();
+      services.autosave?.save();
+      return true;
+    }
+    if (ev.kind === 'harvest') {
+      const res = acceptEvent(state, getWorld(), {}, Date.now());
+      if (!res) {
+        services.sfx?.play('error', { volume: 0.6 });
+        ui.toasts.update({ id: 'harvest-short', type: 'warning', icon: 'coin', message: `The festival costs ${shortNumber(ev.gold)} gold.`, duration: 2600 });
+        closedId = null;
+        setTimeout(() => { const e2 = pendingEvent(getState()); if (e2 && e2.id === ev.id) toastOffer(e2); }, 2700);
+        return false;
+      }
+      ui.toasts.dismissId?.(TOAST_ID);
+      ui.toasts.update({ type: 'success', icon: 'wheat', message: `The Harvest Festival begins: prosperity grows ${res.event.mult}× as fast for ${Math.round(res.event.durationSec / 60)} minutes.` });
+      services.sfx?.play('coin');
+      services.tutorial?.notify('eventAnswered');
+      services.onEventAccepted?.(res);
+      services.autosave?.save();
+      return true;
+    }
     acceptEvent(state, getWorld(), {}, Date.now());
     return true;
   }
@@ -236,7 +299,7 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
     if (expired) {
       ui.toasts.dismissId?.(TOAST_ID);
       if (merchantModal) { merchantModal.destroy(); merchantModal = null; }
-      if (expired.kind !== 'plague') ui.toasts.update({ type: 'info', icon: ICONS[expired.kind], message: expired.kind === 'merchant' ? 'The merchant caravan moved on.' : 'The challenge lapsed.', duration: 2600 });
+      if (expired.kind !== 'plague') ui.toasts.update({ type: 'info', icon: ICONS[expired.kind], message: { merchant: 'The merchant caravan moved on.', deserters: 'The deserters went their way.', harvest: 'The harvest was gathered without a festival.' }[expired.kind] || 'The challenge lapsed.', duration: 2600 });
     }
     if (offered) onOffered(offered);
     // the countdown in the offer's toast, once a second (only while the player has not closed it)

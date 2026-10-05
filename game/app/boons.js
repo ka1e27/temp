@@ -22,12 +22,16 @@ const BOON_ICONS = {
   scorchedEarth: 'boonScorched', turncoats: 'boonTurncoat', ambushers: 'boonAmbush', siegecraft: 'boonSiege', dragonbane: 'boonDragonbane',
   gravebreaker: 'boonGravebreaker', secondWind: 'boonSecondWind', phalanx: 'boonPhalanx', bloodPrice: 'boonBlood', martyrsCrown: 'boonMartyr',
   warlordsMark: 'boonWarlord', kingslayer: 'boonKingslayer', oathkeeper: 'boonOath',
+  vanguard: 'boonVanguard', supplyWagons: 'boonWagon', rearguard: 'boonRetreat', warDrums: 'boonDrum', towerSappers: 'boonSapper',
+  spoilsOfWar: 'boonSpoils', lastStand: 'boonLastStand', cartographer: 'boonCartographer',
   // Duos
   fireArrows: 'boonFireArrows', ghostLegion: 'boonGhost', lightningWar: 'boonLightning', gildedBanners: 'boonGilded',
+  thunderCharge: 'boonThunder', siegeTrain: 'boonSiegeTrain',
 };
 const RELIC_ICONS = {
   dragonBanner: 'relicDragonBanner', crownOfReeve: 'relicReeve', sundial: 'relicSundial', hornOfAges: 'relicHorn', seersLens: 'relicLens',
   blackPennant: 'relicPennant', emberHeart: 'relicEmber', gravewardensLantern: 'relicLantern',
+  merchantsScale: 'relicScale', wardensBell: 'relicBell', twinCrowns: 'relicTwinCrowns', sealOfMargrave: 'relicSeal',
 };
 const known = new Set(ICON_NAMES);
 export function boonIcon(id, cfgIcon) { return BOON_ICONS[id] || (known.has(cfgIcon) ? cfgIcon : 'boonCard'); }

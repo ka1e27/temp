@@ -47,7 +47,7 @@ export function sendFromSite(battle, fromSiteId, toSiteId, fraction, opts = null
   }
   battle.squads.push(squad);
   if (squad.owner === PLAYER_OWNER) battle.stats.sent += count;
-  onPlayerSend(battle, squad); // Warlord's Mark (PLAN-PHASE7): every Nth squad doubled
+  onPlayerSend(battle, squad, opts); // Warlord's Mark (PLAN-PHASE7); Vanguard, Supply Wagons, Siege Train, Thunder Charge (PLAN-PHASE8)
   const event = {
     type: 'send', owner: squad.owner, from: fromSiteId, to: toSiteId, count, squad: squad.id,
   };

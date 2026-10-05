@@ -15,8 +15,7 @@
   transition: top var(--dur-med) var(--ease-out);
 }
 .leader-banner * { pointer-events: none; }
-/* The toast lane (top: 84px) shares this spot: while a toast is up, glide below its first row. */
-#ui:has(.toasts > .toast) .leader-banner { --leader-banner-top: 148px; }
+/* The top lane: the banner sits first under the top chrome (leaderBanner.js `below`), the toasts are pushed below it (main.js layoutTopLane). */
 
 .leader-card {
   --leader-color: #9a927f;

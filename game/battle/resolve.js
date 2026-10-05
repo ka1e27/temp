@@ -12,7 +12,7 @@ import { checkShrines } from './features.js';
 import { damageDragon } from './dragon.js';
 import { onAssaultTrade, onClash } from './fallen.js';
 import {
-  boonsOf, squadStrengthMult, assaultStrengthMult, onCapture, secondWind, besiegedGrowthMult,
+  boonsOf, squadStrengthMult, assaultStrengthMult, onCapture, secondWind, besiegedGrowthMult, garrisonBoonMult,
 } from './boons.js';
 
 function isTargetRegionKeep(battle, site) {
@@ -117,7 +117,7 @@ export function resolveCombat(battle, dt, t) {
     const boons = boonsOf(battle); // PLAN-PHASE7: Phalanx / Martyr's Crown on the assault, Siegecraft on a Gate (1 without Boons)
     const atkPerTroop = squadPerTroopStrength(attackerOwner, player, arena.enemyFaction, enemy) * assaultStrengthMult(battle, attackerOwner, atkTotal, t);
     const gateCut = site.type === 'gate' && attackerOwner === PLAYER_OWNER && boons.gateDefMult ? boons.gateDefMult : 1;
-    const defPerTroop = garrisonPerTroopStrength(site, site.owner, player, arena.enemyFaction, enemy, t) * gateCut;
+    const defPerTroop = garrisonPerTroopStrength(site, site.owner, player, arena.enemyFaction, enemy, t) * gateCut * garrisonBoonMult(battle, site, t); // Last Stand (PLAN-PHASE8)
     const beforeDef = site.troops;
     const traded = applyStrengthTrade({
       atkTroops: atkTotal, atkPerTroop, defTroops: site.troops, defPerTroop, dt,

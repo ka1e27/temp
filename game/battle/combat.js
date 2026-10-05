@@ -6,7 +6,7 @@ import { worldDist, hexRadiusToWorld } from './geom.js';
 import { squadPosition } from './position.js';
 import { PLAYER_OWNER, FREE_FOLK_OWNER } from './owner.js';
 import { towerRangeMult } from './features.js';
-import { towerIntervalMult, towerIgnores, onArrow } from './boons.js';
+import { towerIntervalMult, towerIgnores, onArrow, towerRangeBoonMult } from './boons.js';
 
 export { PLAYER_OWNER, FREE_FOLK_OWNER };
 
@@ -139,7 +139,7 @@ export function resolveTowerVolleys(battle, runtime, t) {
     if (t < site.nextVolley) continue;
     const towerTile = runtime.byIndex.get(site.tile);
     if (!towerTile) continue;
-    const rangeWorld = hexRadiusToWorld(cfg.range * towerRangeMult(battle)); // Night: half as far (DESIGN §10.13)
+    const rangeWorld = hexRadiusToWorld(cfg.range * towerRangeMult(battle) * towerRangeBoonMult(battle, site, t)); // Night: half as far (DESIGN §10.13); Tower Sappers (PLAN-PHASE8)
     let best = null;
     let bestDist = Infinity;
     for (const squad of battle.squads) {

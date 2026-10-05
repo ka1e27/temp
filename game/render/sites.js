@@ -47,11 +47,26 @@ export function createSiteSpriteCache() {
   const BANNER_SPEED = 2.1; // drawBanner's flutter speed (rad/s)
   const bannerCache = new Map(); // `${factionId}:${bucket}` -> { canvas, fw, fh, ox, oy, bucket }
 
+  // Phase 8 perf: a few hundred settlements a frame ask for their sprite and banner at the same zoom: the bucket is worked out once per zoom and
+  // numeric factions are looked up in plain arrays (no key string built per call)
+  let lastS = -1;
+  let lastBucket = 0;
+  const bucketOf = (s) => { if (s !== lastS) { lastS = s; lastBucket = nearestBucket(s * dpr); } return lastBucket; };
+  const fastSprites = new Map(); // bucket -> type -> [factionId] -> entry
+  const fastStrips = new Map(); // bucket -> [factionId] -> strip
+
   function getBannerStrip(factionId, s) {
-    const bucket = nearestBucket(s * dpr);
-    const key = `${factionId}:${bucket}`;
+    const bucket = bucketOf(s);
+    const numeric = typeof factionId === 'number';
+    let row = null;
+    if (numeric) {
+      row = fastStrips.get(bucket);
+      if (!row) { row = []; fastStrips.set(bucket, row); }
+      if (row[factionId]) return row[factionId];
+    }
+    const key = `${numeric ? factionId : factionId && (factionId.id ?? factionId.color)}:${bucket}`;
     let e = bannerCache.get(key);
-    if (e) return e;
+    if (e) { if (row) row[factionId] = e; return e; }
     const sb = bucket * 0.46;
     const fw = Math.ceil(1.8 * sb) + 2;
     const fh = Math.ceil(2.2 * sb) + 2;
@@ -67,14 +82,23 @@ export function createSiteSpriteCache() {
     }
     e = { canvas, fw, fh, ox, oy, bucket };
     bannerCache.set(key, e);
+    if (row) row[factionId] = e;
     return e;
   }
 
   function getSprite(type, factionId, s) {
-    const bucket = nearestBucket(s * dpr); // device px per world unit
-    const key = `${type}:${factionId}:${bucket}`;
+    const bucket = bucketOf(s); // device px per world unit
+    let row = null;
+    if (typeof factionId === 'number') {
+      let byType = fastSprites.get(bucket);
+      if (!byType) { byType = new Map(); fastSprites.set(bucket, byType); }
+      row = byType.get(type);
+      if (!row) { row = []; byType.set(type, row); }
+      if (row[factionId]) return row[factionId];
+    }
+    const key = typeof factionId === 'object' ? `${type}:${factionId && (factionId.id ?? factionId.color)}:${bucket}` : `${type}:${factionId}:${bucket}`;
     let entry = cache.get(key);
-    if (entry) return entry;
+    if (entry) { if (row) row[factionId] = entry; return entry; }
 
     const { bs } = footprintOf(type, bucket);
     const size = Math.ceil(bs * 3.2);
@@ -85,6 +109,7 @@ export function createSiteSpriteCache() {
     drawSettlement(ctx, type, cx, cy, bucket, factionId, {});
     entry = { canvas, size, cx, cy, bucket };
     cache.set(key, entry);
+    if (row) row[factionId] = entry;
     return entry;
   }
 
@@ -107,9 +132,9 @@ export function createSiteSpriteCache() {
     if (opts.badgeOnly) { drawBadgePart(ctx, screenX, screenY, s, troops, factionId, t, opts); return; }
     const sprite = getSprite(type, factionId, s);
     const scale = s / sprite.bucket;
-    const { bs, baseY, footprint } = footprintOf(type, s);
 
     if (opts.highlight) {
+      const { bs, baseY, footprint } = footprintOf(type, s);
       const g = ctx.createRadialGradient(screenX, screenY + baseY - bs * 0.3, 0, screenX, screenY + baseY - bs * 0.3, footprint * 1.6);
       g.addColorStop(0, rgba(ACCENTS.gold, 0.3));
       g.addColorStop(1, rgba(ACCENTS.gold, 0));
@@ -121,16 +146,18 @@ export function createSiteSpriteCache() {
       ctx.restore();
     }
 
-    ctx.save();
-    if (opts.dim) ctx.globalAlpha *= 0.42;
+    // (no save/restore unless it is dimmed: a few hundred settlements a frame, Phase 8 perf)
+    const a0 = ctx.globalAlpha;
+    if (opts.dim) ctx.globalAlpha = a0 * 0.42;
     ctx.drawImage(
       sprite.canvas,
       screenX - sprite.cx * scale, screenY - sprite.cy * scale,
       sprite.size * scale, sprite.size * scale,
     );
-    ctx.restore();
+    if (opts.dim) ctx.globalAlpha = a0;
 
     if (opts.selected) {
+      const { bs, baseY, footprint } = footprintOf(type, s);
       drawSelectionRing(ctx, screenX, screenY + baseY + bs * 0.06, footprint * 1.15, ACCENTS.gold, t);
     }
 
@@ -142,15 +169,15 @@ export function createSiteSpriteCache() {
     // `bannerDrop` 0..1: the flag sinks down its pole and fades (a defeated War Camp).
     const drop = Math.max(0, Math.min(1, opts.bannerDrop || 0));
     if (drop < 1) {
-      ctx.save();
-      if (drop > 0) ctx.globalAlpha *= 1 - drop * 0.85;
+      const b0 = ctx.globalAlpha;
+      if (drop > 0) ctx.globalAlpha = b0 * (1 - drop * 0.85);
       ctx.drawImage(
         strip.canvas, frame * strip.fw, 0, strip.fw, strip.fh,
         screenX + anchor.dx * s - strip.ox * k,
         screenY + anchor.dy * s - strip.oy * k + drop * s * 1.15,
         strip.fw * k, strip.fh * k,
       );
-      ctx.restore();
+      if (drop > 0) ctx.globalAlpha = b0;
     }
 
     if (!opts.hideBadge) drawBadgePart(ctx, screenX, screenY, s, troops, factionId, t, opts);
@@ -220,7 +247,7 @@ export function createSiteSpriteCache() {
   }
 
   /** Sprites bake at device resolution so hi-dpi screens stay sharp. */
-  function setPixelRatio(v) { dpr = v; }
+  function setPixelRatio(v) { if (v !== dpr) { dpr = v; lastS = -1; fastSprites.clear(); fastStrips.clear(); } }
 
   return { getSprite, drawSite, drawThreatChips, setPixelRatio };
 }

@@ -206,8 +206,15 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     if (raid) {
       ok(await t.waitFor(() => { const n = document.querySelector('.toast.is-vendetta:not(.is-out)'); return !!n && /swears vengeance/i.test(n.textContent) && !!n.querySelector('.toast-action'); }, 12000), tag('the red Vendetta banner with Go'));
       ok(await t.waitFor(() => /a vendetta!/i.test(window.__g.coach()), 12000), tag('Q2: the first Vendetta hint shows'));
+      await q(() => { window.__clk = []; const go = () => { const g = document.querySelector('.toast.is-vendetta .toast-action'); const r = g && g.getBoundingClientRect(); return r ? `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}` : 'none'; };
+        const bub = () => { const b = document.querySelector('.coach-bubble'); const r = b && b.getBoundingClientRect(); return r && r.width ? `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}` : 'none'; };
+        window.__clkPre = { go: go(), bubble: bub(), banner: document.querySelector('.leader-banner').dataset.state, push: document.querySelector('.toasts').style.marginTop };
+        document.addEventListener('pointerdown', (e) => window.__clk.push({ down: `${e.clientX},${e.clientY}`, target: String(e.target.className && e.target.className.baseVal === undefined ? e.target.className : e.target.tagName), go: go(), bubble: bub(), banner: document.querySelector('.leader-banner').dataset.state, push: document.querySelector('.toasts').style.marginTop }), true);
+        document.addEventListener('click', (e) => window.__clk.push(`click ${(e.target.className && e.target.className.baseVal === undefined ? e.target.className : e.target.tagName)} @${e.clientX},${e.clientY}`), true); });
       ok(await pressSel('.toast.is-vendetta .toast-action'), tag('a real press on Go'));
-      ok(await t.waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live' && !!window.__hd.battle?.champion, 40000), tag('the defense opens on arrival, with a Champion'));
+      const opened = await t.waitFor(() => window.__hd.scene === 'battle' && window.__hd.battlePhase === 'live' && !!window.__hd.battle?.champion, 40000);
+      if (!opened) console.log('  diag vendetta go:', JSON.stringify(await q(() => ({ pre: window.__clkPre, clicks: window.__clk, scene: window.__hd.scene, phase: window.__hd.battlePhase, runs: window.__hd.battles.list().map((r) => ({ kind: r.kind, raidId: r.raidId, champ: !!(r.battle && r.battle.champion) })), incoming: (window.__hd.state.frontier.incoming || []).map((x) => x.id), dialog: document.documentElement.dataset.dialog || null, banner: document.querySelector('.leader-banner').dataset.state, toasts: [...document.querySelectorAll('.toasts > .toast')].map((x) => x.dataset.id) }))));
+      ok(opened, tag('the defense opens on arrival, with a Champion'));
       ok(await t.waitFor(() => window.__hd.battle.squads.some((s) => s.champion), 15000), tag('the Champion squad marches'));
       // the Champion falls (its squad is struck down): the moment
       await q(() => { const b = window.__hd.battle; const sq = b.squads.find((s) => s.champion); if (sq) sq.count = 0.01; for (const s of b.sites) if (s.owner === 0) s.troops = Math.max(s.troops, 2000); });

@@ -19,6 +19,9 @@
 //   merchant       -> any neighbouring rival leader, grumbling when the Merchant arrives
 //   duelWon        -> the challenger, when the PLAYER won the Duel
 //   duelLost       -> the challenger, when the PLAYER lost the Duel
+// Phase 8 (PLAN-PHASE8 §8C):
+//   deserters      -> the leader whose troops deserted, when the Deserters event is offered
+//   harvest        -> any neighbouring rival leader, grumbling when the Harvest Festival is offered (like merchant)
 // Free Folk have no capital region, so their capitalBattleStart and decapitation lines are
 // written for completeness (and future worlds) but never fire in the current world contract.
 //
@@ -56,6 +59,9 @@ export const LEADER_TRIGGERS = Object.freeze([
   'merchant',
   'duelWon',
   'duelLost',
+  // Phase 8 (PLAN-PHASE8 §8C)
+  'deserters',
+  'harvest',
 ]);
 
 export const VOICE = Object.freeze({
@@ -241,6 +247,18 @@ export const LEADER_LINES = Object.freeze({
       'Go on home. Tell them a farmer bested you.',
       "That's a duel won and the hay still in. Lovely day.",
     ],
+    deserters: [
+      "Half my lads walked off to your side. Said your food was better.",
+      "Deserters! Over a bit of rain and a missed supper. Honestly.",
+      "Gone over to you, have they? Keep 'em. They snore.",
+      "Who left the gate open? Half the militia's wandered off.",
+    ],
+    harvest: [
+      "A harvest festival without us? Our pies are the best for miles.",
+      "Your bonfires keep the cows awake. Thanks ever so much.",
+      "Smells like roast pig over there. Not that anyone asked us.",
+      "Fine harvest you have. Ours was mostly turnips. Again.",
+    ],
   },
 
   // --- Crimson Legion (Warlord): boasts and threatens ------------------------------------
@@ -372,6 +390,18 @@ export const LEADER_LINES = Object.freeze({
       'My champion yawned through that. Bring a real fighter.',
       'Down you go. Mind the blood, it stains.',
       'A duel to the Legion. Write it under the other forty.',
+    ],
+    deserters: [
+      "Deserters. I will find every one and remember every face.",
+      "Cowards slip away in the night. The Legion is better without them.",
+      "Take my runaways. They will run from you too.",
+      "{name} does not forgive desertion. Nor those who welcome it.",
+    ],
+    harvest: [
+      "Feast while you can. Full granaries burn brightest.",
+      "A festival. How soft. The Legion feasts on victories.",
+      "Dance by your bonfires. I will be watching from the hills.",
+      "Fat harvests make fat targets, neighbour.",
     ],
   },
 
@@ -505,6 +535,18 @@ export const LEADER_LINES = Object.freeze({
       'Fate holds the blade. Today it did not hold yours.',
       'You lost the duel. The candles did a small dance.',
     ],
+    deserters: [
+      "They fled my temples for your tents. I foresaw it. Mostly.",
+      "Deserters. The omens called them faithless. The omens were right.",
+      "Keep them. A follower who doubts the stars is no follower.",
+      "The candles gutter when acolytes run. Several guttered tonight.",
+    ],
+    harvest: [
+      "You celebrate a harvest the stars granted. Do say thank you.",
+      "Your bonfires blot out my constellations. Most inconsiderate.",
+      "A feast of plenty. The omens say indigestion follows.",
+      "I read your harvest in the wheat. It read smug.",
+    ],
   },
 
   // --- Amber Horde (Khan): jeers and taunts ------------------------------------------------
@@ -636,6 +678,18 @@ export const LEADER_LINES = Object.freeze({
       'That was quick! Want to go again? We have snacks.',
       'Duel over! Horde wins! Somebody play the drums!',
       "You fell over. We all saw. We're telling everyone.",
+    ],
+    deserters: [
+      "Some riders went to you? Chasing a goat, probably. They'll be back.",
+      "Deserters! Fine. More loot for those who stayed.",
+      "Hey! Those were my second-best riders! Give them back!",
+      "They left? Rude. Didn't even return the horses.",
+    ],
+    harvest: [
+      "A festival? With food? Why weren't we invited?",
+      "We smell your feast from here. Our stomachs are jealous.",
+      "Save us some of that bread. Or we'll come and get it.",
+      "Nice party! We might drop by. Uninvited, as usual.",
     ],
   },
   5: ASHEN_LINES, // the Pale Margrave (PLAN-PHASE6): dry, ancient, patient

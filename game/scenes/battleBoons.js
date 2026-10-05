@@ -29,8 +29,15 @@ const WORDS = {
   secondWind: (ev) => (ev.count > 0 ? `Holds! +${Math.round(ev.count)}` : 'Holds!'),
   martyrsCrown: () => "Martyr's Crown",
   bannerBearer: () => 'Ability ready',
+  // Phase 8 (docs/briefs/phase8-hookup.md §2)
+  vanguard: (ev) => (ev.count > 0 ? `Vanguard +${Math.round(ev.count)}` : 'Vanguard'),
+  thunderCharge: (ev) => (ev.count > 0 ? `Charge +${Math.round(ev.count)}` : 'Charge'),
+  supplyWagons: (ev) => (ev.count > 0 ? `+${Math.round(ev.count)}` : null),
+  warDrums: () => 'War Drums',
+  towerSappers: () => 'Sapped',
+  lastStand: () => 'Last Stand',
 };
-const COLORS = { bloodPrice: '#ff8a9a', martyrsCrown: '#ff9ab8', scorchedEarth: '#ffb070', fireArrows: '#ffb070' };
+const COLORS = { bloodPrice: '#ff8a9a', martyrsCrown: '#ff9ab8', scorchedEarth: '#ffb070', fireArrows: '#ffb070', lastStand: '#a8d8ff', towerSappers: '#e8c79a' };
 
 /** An icon as a canvas image (white glyph), built once per name from the UI kit's SVG. */
 const images = new Map();

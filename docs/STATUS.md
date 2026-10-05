@@ -132,7 +132,19 @@ behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away rep
   ok. Lead asked: make that step deterministic, queue recruit card vs draft, chest 1.5x, INTEGRATION-NOTES Phase 7, then re-run the gate.
 - **Phase 7 READY TO DEPLOY** (uncommitted): flake root-caused to check staging (phase6 7/7 green), post-battle moments queued
   (conquest > Relic claim > recruit > Boon draft > map), chest 24-44 px; deploy gate passed (npm 1139, full check.mjs 1491 ok,
-  --base=temp 421 ok). Waiting on the user to deploy. Rough edges: no leader lines for
+  --base=temp 421 ok).
+- **Phase 7 committed 6560e5f** and verified on a clean worktree (full check.mjs + --base=temp passed; npm 1139 on a re-run, the
+  generateWorld timing test flakes in parallel runs), pushed to redesign + main at the user's "deploy Phase 7". **LIVE** (Pages run passed).
+- **2026-10-04 PHASE 8 STARTED** (spec docs/PLAN-PHASE8.md): performance (tools/perf.mjs, budgets, fixes), an in-game Codex, and
+  content (+8 Boons, +2 Duos, +4 Relics, +2 events, robust generateWorld timing test). Content (sim) + perf/Codex (integration).
+- **Content Phase 8 DONE** (uncommitted): 32 Boons, 6 Duos, 12 Relics, Deserters + Harvest Festival (x3 for 10 min, 60 s of income),
+  Reliquarian tiers [1,6,12], War Drums +15 %/6 s, generateWorld test takes the best of 3. D1 1.30 h / D2 1.49 h / D3 1.28 h,
+  14.5 Boons at the end of D1. npm 1158/1160 (2 icon tests wait on integration).
+- **Perf + Codex Phase 8 DONE** (uncommitted): tools/perf.mjs; title 4.2 -> 2.2 s, map 5.4 -> 3.5 s, big battle p95 41 -> 25 ms, Ashen
+  49 -> 22 ms, Dragon 41 -> 23 ms, meta tick 0.54 ms, save 6.6 KB (worst offender: #ui:has() CSS restyling every frame; sprite/label
+  caches; terrain bake off the title; generated modulepreload, A/B 2.2 vs 3.2 s). Codex: 34 topics, locked until met, revisit hints,
+  "?" in every panel. 8C UI done. Gate green after re-runs. Lead asked: one stacking column for top toasts (the Deed toast covered
+  the leader banner) + make the generals tray-picker check deterministic, then re-run the gate. Rough edges: no leader lines for
   Plague/Merchant; an event toast closed with x cannot be reopened; phase3 gallery not re-shot after the gate/toast/plague fixes.
   - TODO: swarm calibration pass: Fair fights vs Amber won 98%, ceiling temporarily 0.98-0.99: 50 of 51 failed 0.98 (game/tests/balance.labels.test.js).
 - **Integration Phase 2 polish + Phase 3 UI DONE** (report pending lead review): laurel everywhere Renown shows, ability banner, emblem on the

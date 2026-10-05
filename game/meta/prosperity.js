@@ -18,6 +18,7 @@ import { PROSPERITY } from '../config/prosperity.js';
 import { PLAYER_FACTION } from './state.js';
 import { recordDeed } from './deeds.js';
 import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Grand Festival halves natural growth
+import { harvestBonusMs, harvestReachAt } from './eventsState.js'; // the leaf (PLAN-PHASE8): Harvest Festivals add tenure
 
 /** Tenure counts x this (Grand Festival 0.5). */
 function rate(state) {
@@ -44,6 +45,11 @@ export function levelForTenure(tenureMs) {
   return Math.min(level, PROSPERITY.maxLevel);
 }
 
+/** Effective tenure (ms) from `at` to `now`: wall time plus the Harvest Festivals' extra, x the Grand Festival's rate. */
+function tenure(state, at, now) {
+  return (now - at + harvestBonusMs(state, at, now)) * rate(state);
+}
+
 function owned(state, regionId) {
   return state.owner != null && state.owner[regionId] === PLAYER_FACTION;
 }
@@ -60,7 +66,7 @@ export function prosperityLevel(state, regionId, now) {
   if (!owned(state, regionId)) return 0;
   const at = state.conqueredAt ? state.conqueredAt[regionId] : null;
   if (at == null || !Number.isFinite(at)) return 0;
-  return levelForTenure((now - at) * rate(state));
+  return levelForTenure(tenure(state, at, now));
 }
 
 function sanitize(v) {
@@ -153,12 +159,12 @@ export function nextProsperityAt(state, regionId, now) {
   const th = PROSPERITY.thresholdsMs;
   let level;
   if (now != null) {
-    level = Math.max(levelForTenure((now - at) * rate(state)), heldLevel(state, regionId)); // never below what is already credited
+    level = Math.max(levelForTenure(tenure(state, at, now)), heldLevel(state, regionId)); // never below what is already credited
   } else {
     level = Array.isArray(state.prosperity) ? sanitize(state.prosperity[regionId]) : 0;
   }
   if (level >= PROSPERITY.maxLevel || level >= th.length) return null;
-  return at + th[level] / rate(state);
+  return harvestReachAt(state, at, th[level] / rate(state)); // = at + th / rate with no Harvest Festival
 }
 
 /**

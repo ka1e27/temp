@@ -88,6 +88,8 @@ export function createGoals({ getState, getWorld, ui, services }) {
   }
 
   function streakEnded(res) {
+    // Phase 8: Rearguard keeps the streak through a retreat (onStreakBroken returns kept: true)
+    if (res && res.kept) { ui.toasts.update({ id: 'streak-end', type: 'info', icon: 'boonRetreat', message: 'Rearguard: the streak holds.', duration: 2800 }); return; }
     if (!res || !(res.was >= 2)) return;
     const word = STREAK.copy.broken[res.reason] || STREAK.copy.broken.lost;
     ui.toasts.update({ id: 'streak-end', type: 'info', icon: 'flame', message: `${word}: ${res.was} conquests in a row.`, duration: 3200 });

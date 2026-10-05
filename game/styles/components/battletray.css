@@ -56,17 +56,17 @@ html.reduce-motion .tray-row.is-threatened .tray-chip { animation: none; box-sha
 .tray-auto.is-on { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: transparent; }
 
 /* in a battle (desktop): top left, clear of the timer pill in the middle and the buttons on the right */
-#ui:has(.battle-hud:not([hidden])) .battle-tray { top: var(--sp-3); }
+#ui[data-battle][data-battle] .battle-tray { top: var(--sp-3); }
 @media (max-width: 640px) {
   .battle-tray { left: var(--sp-2); right: var(--sp-2); top: 76px; max-width: none; }
   .battle-tray-list { flex-direction: row; overflow-x: auto; }
   .tray-row { flex: 1 1 0; min-width: 150px; }
   .tray-chip { padding: 4px 8px; }
   /* phone battle: a strip under the timer pill; toasts start under it */
-  #ui:has(.battle-hud:not([hidden])) .battle-tray { top: 116px; }
-  #ui:has(.battle-hud:not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 172px; }
+  #ui[data-battle][data-battle] .battle-tray { top: 116px; }
+  #ui[data-battle][data-battle][data-tray][data-tray] .toasts { top: 172px; }
 }
 /* on a phone map the tray takes the strip under the HUD: toasts start beneath it */
 @media (max-width: 640px) {
-  #ui:has(.hud:not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 140px; }
+  #ui[data-hud][data-hud][data-tray][data-tray] .toasts { top: 140px; }
 }

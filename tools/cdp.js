@@ -24,12 +24,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * kind of failure that makes a passing check meaningless. Random port PLUS a
  * loud runtime check that the tab we got is actually OUR tab, not a hitchhiker.
  */
-export async function launch({ url, port, width = 1440, height = 900 } = {}) {
+// `gpu: true` keeps the GPU (tools/perf.mjs: canvas frame times on a software rasteriser are meaningless); `args` adds flags.
+export async function launch({ url, port, width = 1440, height = 900, gpu = false, args = [] } = {}) {
   const debugPort = port ?? (20000 + Math.floor(Math.random() * 20000));
   const proc = spawn(CHROME, [
     '--headless=new',
     '--no-sandbox',
-    '--disable-gpu',
+    ...(gpu ? [] : ['--disable-gpu']),
+    ...args,
     '--disable-dev-shm-usage',
     '--hide-scrollbars',
     `--remote-debugging-port=${debugPort}`,

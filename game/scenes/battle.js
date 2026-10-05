@@ -1377,6 +1377,7 @@ export function createBattleScene(services) {
 
   /** The Go button of the newest incoming raid's toast (tutorial F2), or null. */
   function raidGoButton() {
+    if (!ui.toasts.el.firstElementChild) return null;
     const btns = [...document.querySelectorAll('.toasts > .toast:not(.is-out) .toast-action')].filter((b) => b.getClientRects().length && /^raid-/.test(b.closest('.toast').dataset.id || ''));
     return btns.length ? btns[btns.length - 1] : null;
   }
@@ -1496,7 +1497,7 @@ export function createBattleScene(services) {
 
   function updateCoach(nowMs) {
     if (!battle) { hideCoach(); return; }
-    const def = tutorial.pick(hintFacts());
+    const def = tutorial.anyPending('battle') ? tutorial.pick(hintFacts()) : null; // Phase 8 perf: no facts gathered when nothing is left to teach
     if (!def) {
       // outside the tutorial's own hints the coach only ever says "Stuck?" (and otherwise stays hidden)
       if (!updateStuckHint(nowMs, false)) hideCoach();

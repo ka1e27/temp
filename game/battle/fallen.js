@@ -145,9 +145,15 @@ export function onFirestormLanded(battle, p, t) {
   }
 }
 
+/** The Rising's interval: ASHEN.rising.everySec, x risingIntervalMult with the Seal of the Margrave Relic (PLAN-PHASE8). */
+export function risingEverySec(battle) {
+  const k = battle.player && battle.player.boons && battle.player.boons.risingIntervalMult;
+  return ASHEN.rising.everySec * (k > 0 ? k : 1);
+}
+
 function risingState(battle) {
   const f = fallenState(battle);
-  if (!f.rising) f.rising = { nextAt: ASHEN.rising.everySec, warned: false, cancelled: false, done: false };
+  if (!f.rising) f.rising = { nextAt: risingEverySec(battle), warned: false, cancelled: false, done: false };
   return f.rising;
 }
 
@@ -174,7 +180,7 @@ export function processRising(battle, t) {
   }
   if (t + 1e-9 < rising.nextAt) return;
   const cancelled = rising.cancelled;
-  rising.nextAt += ASHEN.rising.everySec;
+  rising.nextAt += risingEverySec(battle);
   rising.warned = false;
   rising.cancelled = false;
   if (cancelled) return;

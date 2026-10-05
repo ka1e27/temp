@@ -69,9 +69,9 @@ test('leaderFor: the four leaders of one continent never share a name', () => {
 
 test('config: every faction has 4-6 lines for every trigger, and no strays', () => {
   assert.deepEqual([...LEADER_FACTIONS], [1, 2, 3, 4, 5]);
-  assert.equal(LEADER_TRIGGERS.length, 19);
+  assert.equal(LEADER_TRIGGERS.length, 21); // Phase 8: + deserters, harvest
   assert.ok(LEADER_TRIGGERS.includes('scouted') && LEADER_TRIGGERS.includes('sabotaged'), 'DESIGN §5.7 triggers');
-  for (const t of ['grudge', 'vendetta', 'vendettaWon', 'vendettaLost', 'plague', 'merchant', 'duelWon', 'duelLost']) {
+  for (const t of ['grudge', 'vendetta', 'vendettaWon', 'vendettaLost', 'plague', 'merchant', 'duelWon', 'duelLost', 'deserters', 'harvest']) {
     assert.ok(LEADER_TRIGGERS.includes(t), `PLAN-PHASE4 trigger ${t}`);
   }
   assert.deepEqual(Object.keys(LEADER_LINES).map(Number).sort(), [1, 2, 3, 4, 5]);

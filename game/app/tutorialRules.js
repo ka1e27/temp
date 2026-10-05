@@ -27,6 +27,7 @@ export const RULES = Object.freeze({
   P1: (c) => c.live && c.firestormReady,
   P2: (c) => c.live && c.selectedCount >= 2,
   M1: (c) => c.panelsClosed && c.battlesWon >= 1,
+  H1: (c) => !!c.settingsBtn && c.panelsClosed && c.battlesWon >= 1 && !c.cardOpen, // Phase 8: the Codex, after the first battle (the HUD's gear on screen)
   M2: (c) => c.panelsClosed && c.cardOpen && c.cardUnscouted && c.battlesWon >= 1,
   // after the third conquest, while no Work has ever been built, and only while some owned region has a free slot and a hostile border to point at
   M3: (c) => c.panelsClosed && c.conquests >= 3 && c.ownedFrontierCount > 0 && c.worksDue && c.worksRegion >= 0,

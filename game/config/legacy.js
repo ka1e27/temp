@@ -53,6 +53,7 @@ export const LEGACY = Object.freeze({
 export const QUICK = Object.freeze({
   bountyShare: 0.75,               // the bounty a Quick Conquest pays (no Swift or Unbroken crowns either)
   label: 'Easy',                   // only regions whose card reads this
+  cartographerLabels: Object.freeze(['Fair']), // ... and these too with the Cartographer Boon (PLAN-PHASE8 §8C)
   excludedTypes: Object.freeze(['bandit', 'dragon']), // Bandit Holds and the Dragon's Lair are peaks: fought by hand
   excludeCapitals: true,           // so are the throne rooms
   captainStyle: 'stalwart',       // the Steward style with no General (only with driver 'steward')

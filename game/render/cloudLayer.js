@@ -181,8 +181,22 @@ export function createCloudLayer(world) {
     const fh = Math.max(1, Math.ceil(camera.viewH * FOG_RES));
     if (!fog || fog.w !== fw || fog.h !== fh) {
       const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(fw, fh) : Object.assign(document.createElement('canvas'), { width: fw, height: fh });
-      fog = { canvas, ctx: canvas.getContext('2d'), w: fw, h: fh };
+      fog = { canvas, ctx: canvas.getContext('2d'), w: fw, h: fh, sig: '', at: -1e9 };
     }
+    // Phase 8 perf: the banks drift a hair a second, so while the camera holds still (and nothing is parting) the composed buffer is reused for 120 ms
+    let hs = 0;
+    for (const id of hiddenRegionIds) hs = (hs * 31 + id + 1) | 0;
+    const sig = `${camera.x},${camera.y},${camera.zoom},${fw},${fh},${fade},${hs}`;
+    const reuse = revealTransitions.size === 0 && fog.sig === sig && nowMs >= fog.at && nowMs - fog.at < 120;
+    if (!reuse) { fog.sig = sig; fog.at = nowMs; composeFog(camera, hiddenRegionIds, t, nowMs, fade, vb, fw, fh); }
+    mainCtx.save();
+    mainCtx.imageSmoothingEnabled = true;
+    mainCtx.imageSmoothingQuality = 'medium';
+    mainCtx.drawImage(fog.canvas, 0, 0, fw, fh, 0, 0, camera.viewW, camera.viewH);
+    mainCtx.restore();
+  }
+
+  function composeFog(camera, hiddenRegionIds, t, nowMs, fade, vb, fw, fh) {
     const ctx = fog.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, fw, fh);
@@ -190,11 +204,6 @@ export function createCloudLayer(world) {
     ps = FOG_RES;
     drawBanks(ctx, camera, hiddenRegionIds, t, nowMs, fade, vb);
     ps = dpr;
-    mainCtx.save();
-    mainCtx.imageSmoothingEnabled = true;
-    mainCtx.imageSmoothingQuality = 'medium';
-    mainCtx.drawImage(fog.canvas, 0, 0, fw, fh, 0, 0, camera.viewW, camera.viewH);
-    mainCtx.restore();
   }
 
   function drawBanks(ctx, camera, hiddenRegionIds, t, nowMs, fade, vb) {

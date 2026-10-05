@@ -1338,6 +1338,36 @@ export function createWorldScene(services) {
     return best;
   }
 
+  // The realm-wide hint facts (which region a step would point at, the counts) walk every region and some ask the meta modules (Forts, Renown spends):
+  // they are recomputed at most every 250 ms (Phase 8 perf); what the player just did on screen (a card, a panel, a toast) is read every frame.
+  let slowFacts = null;
+  let slowFactsAt = -1e9;
+  function slowHintFacts(nowMs, state, world, owned) {
+    if (slowFacts && nowMs - slowFactsAt < 250 && nowMs >= slowFactsAt) return slowFacts;
+    slowFactsAt = nowMs;
+    slowFacts = {
+      frontierCount: derived.frontier.length,
+      battlesWon: state.stats.battlesWon,
+      conquests: Math.max(0, owned - 1),
+      realmComplete: canFoundDynasty(state, world),
+      ownedFrontierCount: world.regions.filter((r) => state.owner[r.id] === PLAYER_FACTION && r.neighbors.some((n) => state.owner[n] !== PLAYER_FACTION)).length,
+      // M3 (PLAYFEEL §4): after the third conquest, while no Work has been built; it points at the owned region that borders the most enemy land
+      worksDue: FEATURES.works && owned - 1 >= 3 && worksTutorialDue(state),
+      worksRegion: FEATURES.works && owned - 1 >= 3 ? worksTutorialRegion(state, world) : -1,
+      // the Living Frontier's steps (F1, F4)
+      incoming: (state.frontier && state.frontier.incoming || []).length,
+      raids: state.frontier && state.frontier.stats ? state.frontier.stats.raids : 0,
+      fortRegion: FEATURES.frontier ? fortTutorialRegion() : -1,
+      pendingPicks: ensureGenerals(state).roster.reduce((n, g) => n + pendingPicks(g), 0),
+      festivalRegion: FEATURES.frontier ? festivalTutorialRegion() : -1,
+      featureRegion: FEATURES.frontier ? featureTutorialRegion() : -1, // V1
+      boardUnlocked: !!(state.bounties && state.bounties.unlocked), // Q1
+      ashenRegion: ashenTutorialRegion(), // A1
+      relicRegion: relicTutorialRegion(), // L1
+    };
+    return slowFacts;
+  }
+
   function hintFacts(nowMs) {
     const { state, world } = container.get();
     const owned = state.owner.filter((o) => o === PLAYER_FACTION).length;
@@ -1351,28 +1381,12 @@ export function createWorldScene(services) {
       cardOpen,
       cardAttackable: isUp(action),
       cardUnscouted: isUp(scout) && !scout.disabled,
-      frontierCount: derived.frontier.length,
-      battlesWon: state.stats.battlesWon,
-      conquests: Math.max(0, owned - 1),
-      realmComplete: canFoundDynasty(state, world),
-      ownedFrontierCount: world.regions.filter((r) => state.owner[r.id] === PLAYER_FACTION && r.neighbors.some((n) => state.owner[n] !== PLAYER_FACTION)).length,
-      // M3 (PLAYFEEL §4): after the third conquest, while no Work has been built; it points at the owned region that borders the most enemy land
-      worksDue: FEATURES.works && owned - 1 >= 3 && worksTutorialDue(state),
-      worksRegion: FEATURES.works && owned - 1 >= 3 ? worksTutorialRegion(state, world) : -1,
-      // the Living Frontier's steps (F1, F4)
-      incoming: (state.frontier && state.frontier.incoming || []).length,
+      ...slowHintFacts(nowMs, state, world, owned),
       raidToast: !!raidGoButton(),
-      raids: state.frontier && state.frontier.stats ? state.frontier.stats.raids : 0,
-      fortRegion: FEATURES.frontier ? fortTutorialRegion() : -1,
-      pendingPicks: ensureGenerals(state).roster.reduce((n, g) => n + pendingPicks(g), 0),
-      festivalRegion: FEATURES.frontier ? festivalTutorialRegion() : -1,
-      featureRegion: FEATURES.frontier ? featureTutorialRegion() : -1, // V1
       eventToast: !!eventToastEl(), // V5
-      boardUnlocked: !!(state.bounties && state.bounties.unlocked), // Q1
       vendettaToast: !!vendettaGoButton(), // Q2
       quickReady: cardOpen && !!quickBtnReady(), // D2
-      ashenRegion: ashenTutorialRegion(), // A1
-      relicRegion: relicTutorialRegion(), // L1
+      settingsBtn: isUp(ui.hud.el.querySelector('.btn-icon[aria-label="Settings"]')), // H1 (Phase 8)
       features: FEATURES,
     };
   }
@@ -1385,6 +1399,7 @@ export function createWorldScene(services) {
 
   /** Tutorial Q2: the Go button of a Vendetta's banner (a raid toast with the class is-vendetta), or null. */
   function vendettaGoButton() {
+    if (!ui.toasts.el.firstElementChild) return null;
     const btns = [...document.querySelectorAll('.toasts > .toast.is-vendetta:not(.is-out) .toast-action')].filter((b) => b.getClientRects().length);
     return btns.length ? btns[btns.length - 1] : null;
   }
@@ -1429,12 +1444,14 @@ export function createWorldScene(services) {
 
   /** Tutorial V5: the open world event's toast (its first button), or null. */
   function eventToastEl() {
+    if (!ui.toasts.el.firstElementChild) return null;
     const t = [...document.querySelectorAll('.toasts > .toast:not(.is-out)')].find((n) => n.dataset.id === 'world-event' && n.getClientRects().length);
     return t ? t.querySelector('.toast-action:not(.toast-secondary)') || t : null;
   }
 
   /** The Go button of the newest incoming raid's toast (tutorial F1), or null. */
   function raidGoButton() {
+    if (!ui.toasts.el.firstElementChild) return null;
     const btns = [...document.querySelectorAll('.toasts > .toast:not(.is-out) .toast-action')].filter((b) => b.getClientRects().length);
     const raid = btns.filter((b) => /^raid-/.test(b.closest('.toast').dataset.id || ''));
     return raid.length ? raid[raid.length - 1] : null;
@@ -1500,6 +1517,7 @@ export function createWorldScene(services) {
         return { target: { find: cardScout }, prefer: room ? 'above' : 'left', slot: room ? 'scout' : false };
       }
       case 'realm': return { target: { find: () => hudBtn('Realm') } };
+      case 'settingsBtn': return { target: { find: () => ui.hud.el.querySelector('.btn-icon[aria-label="Settings"]') }, key: 'settingsBtn' };
       case 'worksRegion': {
         // Three stages, each following its target: the label of the owned region at the edge of the realm; once its card is open, the Build button;
         // once the chooser is open, Barracks. A card on a region with no free slot has nothing to point at, so the hint hides.
@@ -1609,6 +1627,12 @@ export function createWorldScene(services) {
 
   function updateCoach(nowMs) {
     watchPanZoom();
+    // nothing left to teach here (every step seen, or hints off): no facts to gather at all
+    if (!tutorial.anyPending('world')) {
+      hintOutlineRegion = -1;
+      if (coachSig !== 'off') { coachSig = 'off'; ui.regionCard.setHintSpace(0); ui.coach.update({ visible: false }); }
+      return;
+    }
     const facts = hintFacts(nowMs);
     const def = tutorial.pick(facts);
     if (!def || def.id !== 'W2') w2Framed = false;

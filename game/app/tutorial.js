@@ -56,6 +56,22 @@ export function createTutorialController({ getState }) {
     return current;
   }
 
+  /**
+   * Could any step of `scene` still show (hints on, unseen, its `after` steps seen)? Rules are not asked: this is the cheap gate a scene checks before it
+   * gathers its facts every frame (Phase 8 perf: a veteran's map has nothing left to teach).
+   * @param {string} scene
+   */
+  function anyPending(scene) {
+    if (!hintsOn()) return false;
+    for (const def of TUTORIAL_STEPS) {
+      if (def.scene !== scene || isSeen(def.id) || !allowed(def)) continue;
+      if (def.after && !def.after.every(isSeen)) continue;
+      return true;
+    }
+    if (current) current = null;
+    return false;
+  }
+
   /** @param {number} dtSec  (counted while the hint is on screen; the shell only calls it then) */
   function update(dtSec) {
     if (!current || current.timeoutSec == null || !allowed(current)) return;
@@ -90,7 +106,7 @@ export function createTutorialController({ getState }) {
   }
 
   return {
-    pick, update, notify, dismiss, replay, isSeen, markSeen,
+    pick, update, notify, dismiss, replay, isSeen, markSeen, anyPending,
     get current() { return current; },
     currentStepDef: () => current,
   };

@@ -7,6 +7,12 @@ import { drawCrownPips } from './crownPips.js';
 import { drawSabotageMark } from './intelMarks.js';
 import { DIFFICULTY_COLORS, WORLD_SCENE } from '../scenes/timing.js';
 import { drawTypeIcon, drawTwistGlyph, drawPlagueMark } from './featureGlyphs.js';
+import { bake, blit, ctxScale } from './spriteCache.js';
+
+// Phase 8 perf: a region's name (outlined, an owned one with a soft shadow) and its difficulty chip are baked once per look and size and blitted while
+// the zoom holds still; during a zoom they are drawn live (every frame a new size: a bake would be wasted).
+let lastFontPx = 0;
+let stableFrames = 0;
 
 function labelAlpha(zoom) {
   const { labelFadeStartZoom: a, labelFadeEndZoom: b } = WORLD_SCENE;
@@ -175,6 +181,9 @@ export function drawRegionLabels(ctx, camera, labelData, opts = {}) {
     out.push({ c, dy: chosen.dy });
   }
 
+  if (fontPx === lastFontPx) stableFrames += 1; else { lastFontPx = fontPx; stableFrames = 0; }
+  const useBakes = stableFrames >= 2;
+  const dpr = useBakes ? ctxScale(ctx) : 1;
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
@@ -183,53 +192,76 @@ export function drawRegionLabels(ctx, camera, labelData, opts = {}) {
   for (const { c, dy } of out) {
     const { d } = c;
     const y = c.baseY + dy;
-    ctx.font = nameFont;
-    // a region of yours sits on the blue-green owned tint, where cream text needs more than the usual outline (it read poorly zoomed in): a heavier, darker
-    // stroke and a soft shadow behind the name
-    const owned = d.kind === 3;
-    ctx.lineWidth = Math.max(2, fontPx * (owned ? 0.34 : 0.22));
-    ctx.strokeStyle = owned ? 'rgba(6,20,38,0.92)' : 'rgba(20,16,10,0.75)';
-    if (owned) { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = Math.max(2, fontPx * 0.3); }
-    ctx.strokeText(d.name, c.x, y);
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = 'transparent';
-    ctx.fillStyle = d.priority === 0 ? ACCENTS.goldSoft : ACCENTS.cream;
-    ctx.fillText(d.name, c.x, y);
-
+    const nameBake = useBakes ? bake(`label|${d.name}|${d.kind === 3 ? 1 : 0}|${d.priority === 0 ? 1 : 0}|${nameFont}`, dpr, () => {
+      const pad = fontPx * 0.8 + 4;
+      return { w: (c.nameW + pad * 2) * dpr, h: (fontPx * 1.5 + pad * 2) * dpr, ox: (c.nameW / 2 + pad) * dpr, oy: (fontPx * 1.05 + pad) * dpr };
+    }, (bctx, ox, oy) => {
+      bctx.scale(dpr, dpr);
+      bctx.textAlign = 'center';
+      bctx.textBaseline = 'alphabetic';
+      bctx.lineJoin = 'round';
+      drawName(bctx, d, ox / dpr, oy / dpr, fontPx, nameFont);
+    }) : null;
+    if (nameBake) blit(ctx, nameBake, c.x, y, dpr, dpr);
+    else drawName(ctx, d, c.x, y, fontPx, nameFont);
     if (c.hasPips) drawCrownPips(ctx, c.x, y + fontPx * 0.35 + pipPx * 0.4, d.crowns, pipPx);
-
-    if (d.sabotage > 0) drawSabotageMark(ctx, c.x + c.nameW / 2 + fontPx * 0.8, y - fontPx * 0.32, fontPx * 1.15, opts.time);
-
-    if (d.plague) drawPlagueMark(ctx, c.x + c.nameW / 2 + fontPx * (0.8 + (d.sabotage > 0 ? 1.3 : 0) + (d.occupied ? 1.3 : 0)), y - fontPx * 0.36, fontPx * 1.15);
-    if (d.occupied) drawOccupiedBadge(ctx, c.x + c.nameW / 2 + fontPx * (d.sabotage > 0 ? 2.1 : 0.8), y - fontPx * 0.32, fontPx * 1.05, d.occupied);
-
-    if (d.isCapital) {
-      drawCrown(ctx, c.x - c.nameW / 2 - fontPx * 0.75, y - fontPx * 0.32, fontPx * 0.9, ACCENTS.gold);
-    }
-
-    if (d.type) drawTypeIcon(ctx, d.type, c.x - c.nameW / 2 - fontPx * (d.isCapital ? 2.05 : 0.8), y - fontPx * 0.34, fontPx * 1.1);
-
+    drawMarks(ctx, c, d, y, fontPx, opts);
     if (c.hasChip) {
-      const chipY = y + fontPx * 0.5;
-      const label = d.difficulty.label;
-      const color = DIFFICULTY_COLORS[label] || ACCENTS.muted;
-      ctx.font = chipFontStr;
-      const chipW = c.chipW;
-      roundRect(ctx, c.x - chipW / 2, chipY, chipW, chipH, chipH / 2);
-      ctx.fillStyle = 'rgba(10,12,18,0.6)';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.textBaseline = 'middle';
-      const glyphW = d.twist ? chipFont * 1.25 : 0;
-      if (d.twist) drawTwistGlyph(ctx, d.twist, c.x - chipW / 2 + chipFont * 0.55 + glyphW / 2 - chipFont * 0.1, chipY + chipH / 2, chipFont * 1.15);
-      ctx.fillStyle = color;
-      ctx.fillText(label, c.x + glyphW / 2, chipY + chipH / 2 + 0.5);
-      ctx.textBaseline = 'alphabetic';
+      const chipBake = useBakes ? bake(`chip|${d.difficulty.label}|${d.twist || ''}|${chipFontStr}|${c.chipW}`, dpr, () => ({ w: (c.chipW + 6) * dpr, h: (chipH + 6) * dpr, ox: (c.chipW / 2 + 3) * dpr, oy: 3 * dpr }), (bctx, ox, oy) => {
+        bctx.scale(dpr, dpr);
+        drawChip(bctx, c, d, ox / dpr, oy / dpr, chipFont, chipFontStr, chipH);
+      }) : null;
+      if (chipBake) blit(ctx, chipBake, c.x, y + fontPx * 0.5, dpr, dpr);
+      else drawChip(ctx, c, d, c.x, y + fontPx * 0.5, chipFont, chipFontStr, chipH);
     }
   }
   ctx.restore();
   return placed; // the screen boxes the labels took ({ x0, x1, y0, y1 }): later map marks keep off them (war-band badges)
+}
+
+/** The region's name, centred on (x, y) at its baseline: outlined, an owned region's with a heavier, darker stroke and a soft shadow. */
+function drawName(ctx, d, x, y, fontPx, nameFont) {
+  ctx.font = nameFont;
+  // a region of yours sits on the blue-green owned tint, where cream text needs more than the usual outline (it read poorly zoomed in): a heavier, darker
+  // stroke and a soft shadow behind the name
+  const owned = d.kind === 3;
+  ctx.lineWidth = Math.max(2, fontPx * (owned ? 0.34 : 0.22));
+  ctx.strokeStyle = owned ? 'rgba(6,20,38,0.92)' : 'rgba(20,16,10,0.75)';
+  if (owned) { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = Math.max(2, fontPx * 0.3); }
+  ctx.strokeText(d.name, x, y);
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = d.priority === 0 ? ACCENTS.goldSoft : ACCENTS.cream;
+  ctx.fillText(d.name, x, y);
+}
+
+/** What travels beside the name: the sabotage torch, the plague mark, the occupied badge, a capital's crown, the region type's badge. */
+function drawMarks(ctx, c, d, y, fontPx, opts) {
+  if (d.sabotage > 0) drawSabotageMark(ctx, c.x + c.nameW / 2 + fontPx * 0.8, y - fontPx * 0.32, fontPx * 1.15, opts.time);
+  if (d.plague) drawPlagueMark(ctx, c.x + c.nameW / 2 + fontPx * (0.8 + (d.sabotage > 0 ? 1.3 : 0) + (d.occupied ? 1.3 : 0)), y - fontPx * 0.36, fontPx * 1.15);
+  if (d.occupied) drawOccupiedBadge(ctx, c.x + c.nameW / 2 + fontPx * (d.sabotage > 0 ? 2.1 : 0.8), y - fontPx * 0.32, fontPx * 1.05, d.occupied);
+  if (d.isCapital) drawCrown(ctx, c.x - c.nameW / 2 - fontPx * 0.75, y - fontPx * 0.32, fontPx * 0.9, ACCENTS.gold);
+  if (d.type) drawTypeIcon(ctx, d.type, c.x - c.nameW / 2 - fontPx * (d.isCapital ? 2.05 : 0.8), y - fontPx * 0.34, fontPx * 1.1);
+}
+
+/** The difficulty chip (with the twist's glyph at its front), its top edge centred on (x, chipY). */
+function drawChip(ctx, c, d, x, chipY, chipFont, chipFontStr, chipH) {
+  const label = d.difficulty.label;
+  const color = DIFFICULTY_COLORS[label] || ACCENTS.muted;
+  ctx.font = chipFontStr;
+  const chipW = c.chipW;
+  roundRect(ctx, x - chipW / 2, chipY, chipW, chipH, chipH / 2);
+  ctx.fillStyle = 'rgba(10,12,18,0.6)';
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const glyphW = d.twist ? chipFont * 1.25 : 0;
+  if (d.twist) drawTwistGlyph(ctx, d.twist, x - chipW / 2 + chipFont * 0.55 + glyphW / 2 - chipFont * 0.1, chipY + chipH / 2, chipFont * 1.15);
+  ctx.fillStyle = color;
+  ctx.fillText(label, x + glyphW / 2, chipY + chipH / 2 + 0.5);
+  ctx.textBaseline = 'alphabetic';
 }

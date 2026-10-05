@@ -387,5 +387,6 @@
 .toast.is-event .toast-secondary { margin-left: 26px; }
 .toast.is-event .toast-action { flex: 1 1 0; }
 .toast.is-event .toast-close { position: absolute; top: 4px; right: 4px; }
-#ui:has(.toast.is-event) .leader-banner { --leader-banner-top: 84px; }
-#ui:has(.toast.is-event):has(.leader-banner[data-state='in']) .toasts { top: 168px; }
+/* the top lane (main.js layoutTopLane): event offers lead the toast column, right under the leader banner */
+.toasts > .toast.is-event { order: -1; }
+/* (no transition on the column's push: mid-slide the toasts would pass under the banner) */

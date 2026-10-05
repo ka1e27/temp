@@ -246,8 +246,14 @@ export function createTerrainCache(world) {
    * @param {number[]} [showLevels] region id -> prosperity level to show; omitted = keep the last levels
    *   (the battle scene draws the same map without passing them)
    */
-  function draw(ctx, camera, owners, showLevels) {
+  // `opts.newBakeMs` (the title only, Phase 8 perf): chunks never baked before are baked for at most this many ms a frame (at least one); the rest
+  // wait for the next frames and the sea shows there meanwhile. The title is under the fading boot splash then, and a slow phone shows it a second sooner.
+  function draw(ctx, camera, owners, showLevels, opts) {
+    const newBakeMs = opts && opts.newBakeMs > 0 ? opts.newBakeMs : Infinity;
+    let newSpent = 0;
+    let newBakes = 0;
     if (showLevels) levels = showLevels; // BEFORE the loop computes chunkSig
+    if (owners !== undefined) drawOwners = owners;
     frameNo++;
     const now = performance.now();
     lastNow = now;
@@ -281,7 +287,11 @@ export function createTerrainCache(world) {
         let entry = baked.get(key);
         const sig = chunkSig(desc, owners);
         if (!entry) {
+          if (newBakes > 0 && newSpent >= newBakeMs) continue;
+          const t0 = performance.now();
           entry = bake(desc, curBucket, owners, sig);
+          newSpent += performance.now() - t0;
+          newBakes += 1;
         } else if (entry.sig !== sig && (ownerRebakes === 0 || ownerBudgetLeft > 0)) {
           // Ownership changed: re-bake at the chunk's OWN bucket so the change shows within a
           // frame or two (the bucket upgrade happens later). Time-boxed, but always at least one
@@ -306,8 +316,36 @@ export function createTerrainCache(world) {
     evictIfNeeded(frameNo);
   }
 
+  // Phase 8 perf: the boot no longer bakes every chunk before the title shows. `schedulePrebake` queues the land chunks (the ones on screen bake in
+  // draw, as always) and `prebakeStep(ms)` bakes the rest a few at a time from the frame loop, so a later pan finds them ready.
+  let pendingPrebake = [];
+  let drawOwners = null;
+  function schedulePrebake(devScale, owners, showLevels) {
+    if (showLevels) levels = showLevels;
+    curBucket = pickBucket(devScale, 0);
+    drawOwners = owners;
+    pendingPrebake = [];
+    for (let cy = 0; cy < chunkRows; cy++) for (let cx = 0; cx < chunkCols; cx++) if (descriptorFor(cx, cy).hasLand) pendingPrebake.push([cx, cy]);
+    return pendingPrebake.length;
+  }
+  /** Bakes queued chunks for up to `budgetMs` (at least one); returns how many are still queued. */
+  function prebakeStep(budgetMs) {
+    if (!pendingPrebake.length) return 0;
+    const t0 = performance.now();
+    while (pendingPrebake.length) {
+      const [cx, cy] = pendingPrebake.shift();
+      const key = cy * chunkCols + cx;
+      if (baked.has(key)) continue;
+      const desc = descriptorFor(cx, cy);
+      bake(desc, curBucket, drawOwners, chunkSig(desc, drawOwners));
+      if (performance.now() - t0 >= budgetMs) break;
+    }
+    return pendingPrebake.length;
+  }
+
   /** Bake every chunk at `bucket` up front (boot: avoids first-view hitches). */
   function prebakeAll(devScale, owners, showLevels) {
+    pendingPrebake = [];
     if (showLevels) levels = showLevels;
     curBucket = pickBucket(devScale, 0);
     let n = 0;
@@ -355,6 +393,8 @@ export function createTerrainCache(world) {
     draw,
     drawGlints,
     prebakeAll,
+    schedulePrebake,
+    prebakeStep,
     setPixelRatio,
     invalidateAll,
     bakedChunkCount: () => baked.size,

@@ -87,6 +87,41 @@ export function createToasts() {
     }
   }
 
+  // A cap on how many toasts show at once (the shell sets it: a phone's top lane holds two notices, the leader banner counting as one). A new toast past
+  // the cap waits in the same queue and comes out when one leaves; event offers jump that queue (they have a countdown).
+  let maxVisible = Infinity;
+  // a toast that asks for a decision against a clock (a world event's offer, a raid's or a Vendetta's Go) never waits behind news
+  const urgent = (t) => !!(t && (t.action || String(t.className || '').includes('is-event')));
+  const urgentNode = (n) => n.classList.contains('is-event') || !!n.querySelector('.toast-action');
+  const showing = () => [...el.children].filter((n) => n.isConnected && !n.classList.contains('is-out'));
+  function pump() {
+    clearTimeout(pumpTimer);
+    if (held || !queue.length || showing().length >= maxVisible) return;
+    const i = queue.findIndex(urgent);
+    const next = queue.splice(i >= 0 ? i : 0, 1)[0];
+    update(next);
+    if (queue.length) pumpTimer = setTimeout(pump, 300);
+  }
+  let pumpTimer = 0;
+  /** @param {number} n at most this many toasts on screen (Infinity = no cap); the newest beyond it step back into the queue */
+  function setMaxVisible(n) {
+    const cap = n > 0 ? n : 0;
+    if (cap === maxVisible) return;
+    maxVisible = cap;
+    const live = showing();
+    // the newest toasts that are not event offers step back first
+    const extra = live.length - maxVisible;
+    if (extra > 0) {
+      const order = live.filter((x) => !urgentNode(x)).reverse().concat(live.filter(urgentNode).reverse());
+      for (const node of order.slice(0, extra)) {
+        const left = (node._dueMs ?? DEFAULT_DURATION_MS) - (node._held ? 0 : Date.now() - (node._armedAt ?? Date.now()));
+        if (left > 1200 && node._data) enqueue({ ...node._data, message: node.dataset.message, duration: Math.max(2500, left) });
+        clearTimeout(node._toastTimer);
+        node.remove();
+      }
+    } else pump();
+  }
+
   /** @param {ToastData} toast */
   function update(toast) {
     if (!toast || !toast.message) return;
@@ -101,6 +136,15 @@ export function createToasts() {
         if (live._held) { live._dueMs = toast.duration ?? DEFAULT_DURATION_MS; } else arm(live, toast.duration ?? DEFAULT_DURATION_MS);
         return;
       }
+    }
+    if (showing().length >= maxVisible) {
+      // an urgent toast (an offer, a Go) takes the slot of the newest ordinary toast, which steps back into the queue
+      const bump = urgent(toast) ? showing().filter((n) => !urgentNode(n)).pop() : null;
+      if (!bump) { enqueue(toast); return; }
+      const left = (bump._dueMs ?? DEFAULT_DURATION_MS) - (bump._held ? 0 : Date.now() - (bump._armedAt ?? Date.now()));
+      if (left > 1200 && bump._data) enqueue({ ...bump._data, message: bump.dataset.message, duration: Math.max(2500, left) });
+      clearTimeout(bump._toastTimer);
+      bump.remove();
     }
     const type = toast.type || 'info';
     const actionBtn = toast.action ? h('button.btn.btn-primary.toast-action', {
@@ -146,10 +190,12 @@ export function createToasts() {
     node.classList.remove('is-in');
     node.classList.add('is-out');
     setTimeout(() => node.remove(), 260);
+    if (queue.length) pumpTimer = setTimeout(pump, 280); // the next one waiting for room
   }
 
   function destroy() {
     clearTimeout(flushTimer);
+    clearTimeout(pumpTimer);
     queue = [];
     for (const node of [...el.children]) clearTimeout(node._toastTimer);
     el.replaceChildren();
@@ -166,5 +212,5 @@ export function createToasts() {
     return queue.some((q) => q.id === id) || [...el.children].some((n) => n.dataset.id === String(id) && n.isConnected && !n.classList.contains('is-out'));
   }
 
-  return { el, update, destroy, dismissId, has, setHeld, isHeld: () => held, queued: () => queue.length };
+  return { el, update, destroy, dismissId, has, setHeld, setMaxVisible, isHeld: () => held, queued: () => queue.length };
 }

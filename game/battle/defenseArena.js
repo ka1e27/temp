@@ -201,6 +201,7 @@ export function canBuildDefenseArena(world, owners, regionId, attacker) {
  * @param {number} [opts.militiaCapMult] scales the player's caps on the militia sites (default 1)
  * @param {{regions:Set<number>, sites:Set<string>}} [opts.busy] what other battles hold (see busyKey)
  * @param {number} [opts.siegeSec] the siege timer (default FRONTIER.siegeSecByTier by the region's tier)
+ * @param {number} [opts.siegeSecMult] x the default siege timer (the Warden's Bell Relic); ignored with an explicit siegeSec
  * @param {{faction:number, leader:string}|boolean} [opts.vendetta] a Vendetta: adds `arena.vendetta` and `arena.champion`
  *   ({ troops, power, launchSec }: the Champion squad, GRUDGES.vendetta.champion)
  * @returns {object} Arena with `mode: 'defense'`, `siegeSec`, `fromRegionId`, `campSite` (0), `keepSite`
@@ -294,7 +295,7 @@ export function buildDefenseArena(world, owners, regionId, opts = {}) {
   };
   const siegeTable = FRONTIER.siegeSecByTier;
   const siegeSec = opts.siegeSec ?? siegeTable[Math.min(Math.max(0, region.tier), siegeTable.length - 1)]
-    * (region.isCapital ? FRONTIER.capitalSiegeMult : 1);
+    * (region.isCapital ? FRONTIER.capitalSiegeMult : 1) * (opts.siegeSec == null && opts.siegeSecMult > 0 ? opts.siegeSecMult : 1); // the Warden's Bell (PLAN-PHASE8)
   const arena = {
     mode: 'defense', regionId, enemyFaction: attacker, fromRegionId, tiles, sites, focus,
     marches: placed.strip.length ? [{ to: keepSite, tiles: placed.strip.map((t) => t.i), approach: true }] : [],

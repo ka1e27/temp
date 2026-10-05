@@ -158,10 +158,13 @@ export function boonSimStats(state) {
   return out;
 }
 
-/** Fills `{key}` / `{pct:key}` from a mods object (config/boons.js header); a key the object lacks reads its neutral value. */
-export function fillBoonText(text, mods) {
+/**
+ * Fills `{key}` / `{pct:key}` from a mods object (config/boons.js header); a key the object lacks reads its neutral value. `extra`
+ * supplies derived numbers a mods object cannot hold (the Seal of the Margrave's seconds), read first.
+ */
+export function fillBoonText(text, mods, extra = null) {
   return String(text).replace(/\{(?:(pct):)?(\w+)\}/g, (_, pct, k) => {
-    const v = mods[k] !== undefined ? mods[k] : NEUTRAL[k];
+    const v = extra && extra[k] !== undefined ? extra[k] : mods[k] !== undefined ? mods[k] : NEUTRAL[k];
     if (typeof v !== 'number') return '';
     if (pct) return `${Math.round(Math.abs(k.endsWith('Mult') ? v - 1 : v) * 100)}%`;
     return String(+v.toFixed(2));

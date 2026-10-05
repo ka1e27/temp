@@ -148,6 +148,7 @@ import { onStreakBroken } from '../game/meta/streak.js';
 import { deedProgress } from '../game/meta/deeds.js';
 import { edictChoices, worldOptsFor } from '../game/meta/edicts.js';
 import * as Quick from '../game/meta/quick.js';
+import { militiaFill } from '../game/meta/militia.js';
 import { legacyPointsForFounding, legacyInfo, legacyTree } from '../game/meta/legacy.js';
 import { resetRegions } from '../game/meta/state.js';
 import * as Boons from '../game/meta/boons.js';
@@ -494,14 +495,15 @@ function fightRaid(state, world, raid, nowMs, inPerson, log) {
 function eventsTick(state, world, endSec, dt, ctx) {
   const { offered } = Events.tickEvents(state, world, endSec * 1000, dt);
   if (!offered) return;
-  const log = ctx.log.events || (ctx.log.events = { merchant: 0, plague: 0, duel: 0, duelsWon: 0, accepted: 0 });
-  log[offered.kind] += 1;
+  const log = ctx.log.events || (ctx.log.events = { merchant: 0, plague: 0, duel: 0, deserters: 0, harvest: 0, duelsWon: 0, accepted: 0 });
+  log[offered.kind] = (log[offered.kind] || 0) + 1;
+  const nowMs = endSec * 1000;
   if (offered.kind === 'merchant') {
     const deal = offered.deals.find((d) => d.deal === 'renown');
-    if (deal && state.gold >= 3 * deal.gold && Events.acceptEvent(state, world, { deal: 'renown' })) log.accepted += 1;
+    if (deal && state.gold >= 3 * deal.gold && Events.acceptEvent(state, world, { deal: 'renown' }, nowMs)) log.accepted += 1;
     else Events.declineEvent(state);
   } else if (offered.kind === 'duel') {
-    Events.acceptEvent(state, world);
+    Events.acceptEvent(state, world, {}, nowMs);
     log.accepted += 1;
     let run;
     try { run = Events.duelRunFor(state, world, offered, null, { nowMs: endSec * 1000 }); } catch { return; }
@@ -513,6 +515,14 @@ function eventsTick(state, world, endSec, dt, ctx) {
       step(b, TICK_SEC);
     }
     if (Events.duelReward(state, world, run, b.result).renown > 0) log.duelsWon += 1;
+  } else if (offered.kind === 'deserters') {
+    // PLAN-PHASE8: the Muster when some militia is below half (the realm was raided lately), else weaken the rival's next raid
+    const low = world.regions.some((r) => state.owner[r.id] === 0 && militiaFill(state, r.id, nowMs) < 0.5);
+    if (Events.acceptEvent(state, world, { choice: low ? 'muster' : 'raid' }, nowMs)) log.accepted += 1;
+  } else if (offered.kind === 'harvest') {
+    // PLAN-PHASE8: the festival when it costs at most a third of the gold in hand (the Merchant's rule)
+    if (state.gold >= 3 * offered.gold && Events.acceptEvent(state, world, {}, nowMs)) log.accepted += 1;
+    else Events.declineEvent(state);
   } else {
     Events.declineEvent(state); // the Plague applies by itself
   }
@@ -753,6 +763,8 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
   const battle = createBattle(arena, player, enemy);
   const tracker = trackerOf(battle); // crowns (DESIGN §4.8): fed after EVERY step, exactly as the battle scene does
   const botMemo = {};
+  // PLAN-PHASE8: a player holding Supply Wagons uses supply lines (the bot's 'overflow' habit: only sites about to waste growth)
+  if (state.boons2 && state.boons2.owned.includes('supplyWagons')) botMemo.supply = 'overflow';
   const capSec = patienceFor(region, state.dynasty.level);
   while (!battle.result && battle.t < capSec) {
     for (const cmd of think(battle, battle.t)) issue(battle, cmd);
@@ -1509,6 +1521,8 @@ function printDynasties(seeds, flags) {
     const edicts = d > 0 ? all.map((a) => (a[d - 1] && a[d - 1].founding ? a[d - 1].founding.edict || '-' : '-')) : [];
     if (d > 0) console.log(`      phase 5: Edicts ${edicts.join(' ')}; Legacy bought ${all[0][d - 1] && all[0][d - 1].founding ? all[0][d - 1].founding.legacyBuys.join('+') || '-' : '-'} (seed ${seeds[0]}); Quick Conquests ${q.won}/${q.n}`);
     if (rs[0] && rs[0].boons) console.log(`      phase 7: Boons owned ${med((r) => r.boons.owned.length)} per seed (picks ${med((r) => r.boons.picks.length)}, duos ${rs.reduce((a, r) => a + r.boons.picks.filter((p) => p.duo).length, 0)}, champion's eye ${rs.reduce((a, r) => a + r.boons.champEye, 0)}), Relics ${med((r) => r.boons.relics.length)} per seed, Reliquary ${med((r) => r.boons.reliquary)}; plunder ${Math.round(med((r) => r.boons.plunder))}g, Fortune lost ${Math.round(med((r) => r.boons.goldLost))}g; battles won ${pct(rs, (b) => b.won)}, mean battle ${Math.round(mean(rs.flatMap((r) => r.battleDurations.map((b) => b.sec))))} s`);
+    const ev = rs.reduce((acc, r) => { const e = r.raids && r.raids.events; if (e) for (const k of Object.keys(e)) acc[k] = (acc[k] || 0) + e[k]; return acc; }, {});
+    console.log(`      phase 8: events ${['merchant', 'plague', 'duel', 'deserters', 'harvest'].map((k) => k + ' ' + (ev[k] || 0)).join(', ')} (accepted ${ev.accepted || 0}); Boon drafts end with ${med((r) => r.boons ? r.boons.owned.length : 0)} owned`);
     console.log(`      goals: contracts ${med((r) => r.goals.bounties.completed)} per seed (${Math.round(med((r) => r.goals.bounties.gold))}g), best streak ${med((r) => r.goals.bestStreak)}, vendettas ${v.n} (won ${v.won}, champion fell ${v.fell}), trophies ${med((r) => r.goals.trophies)}, deed tiers ${med((r) => r.goals.deedTiers)}; by kind ${Object.entries(kinds).map(([k, n]) => k + ' ' + n).join(', ')}`);
   }
   return all;

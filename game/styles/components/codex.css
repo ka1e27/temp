@@ -1,0 +1,81 @@
+/* ============================== codex.js (Phase 8 §8B) ==============================
+   The Codex: list + page side by side from 640 px, one at a time below (a 360 px phone). Above every other panel: it opens from their "?". */
+.codex {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: calc(var(--z-modal) + 2);
+  width: min(760px, calc(100vw - 24px));
+  height: min(560px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--panel-shadow-lg);
+  pointer-events: auto;
+}
+.codex[hidden] { display: none; }
+.codex-header { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.codex-title { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-lg); margin: 0 auto 0 0; color: var(--gold-bright); }
+.codex-count { font-size: var(--fs-xs); color: var(--text-dim); font-weight: 700; }
+.codex-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(200px, 250px) 1fr; }
+.codex-list { overflow-y: auto; padding: var(--sp-2) var(--sp-2) var(--sp-3); border-right: 1px solid rgba(255, 255, 255, 0.08); touch-action: pan-y; }
+.codex-group + .codex-group { margin-top: var(--sp-2); }
+.codex-group-title { margin: var(--sp-2) var(--sp-2) 4px; font-family: var(--font-ui); font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.codex-group ul { list-style: none; margin: 0; padding: 0; }
+.codex-topic {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 40px; padding: 6px var(--sp-2);
+  border: 1px solid transparent; border-radius: var(--panel-radius-sm); background: none; color: var(--text); font: inherit; font-weight: 700; font-size: var(--fs-sm);
+  text-align: left; cursor: pointer;
+}
+.codex-topic .icon { flex-shrink: 0; color: var(--gold); }
+.codex-topic:hover { background: rgba(255, 255, 255, 0.06); }
+.codex-topic[aria-current="true"] { background: rgba(245, 196, 81, 0.12); border-color: rgba(245, 196, 81, 0.45); }
+.codex-topic.is-locked { color: var(--text-dim); font-weight: 600; font-style: italic; }
+.codex-topic.is-locked .icon { color: var(--text-dim); opacity: 0.7; }
+.codex-page { overflow-y: auto; padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); touch-action: pan-y; }
+.codex-page-head { display: flex; align-items: center; gap: var(--sp-3); }
+.codex-page-icon { display: grid; place-items: center; width: 56px; height: 56px; flex-shrink: 0; border-radius: 14px; color: var(--gold-bright);
+  background: radial-gradient(circle at 50% 35%, rgba(245, 196, 81, 0.22), rgba(0, 0, 0, 0.3)); border: 1px solid rgba(245, 196, 81, 0.4); }
+.codex-page.is-locked .codex-page-icon { color: var(--text-dim); border-color: rgba(255, 255, 255, 0.15); background: rgba(0, 0, 0, 0.3); }
+.codex-page-title { margin: 0; font-size: var(--fs-lg); outline: none; }
+html[data-input='keyboard'] .codex-page-title:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
+.codex-page-text p { margin: 0 0 var(--sp-2); line-height: 1.5; font-size: var(--fs-sm); color: var(--text); }
+.codex-numbers { display: grid; grid-template-columns: auto 1fr; gap: 6px var(--sp-3); margin: 0; padding: var(--sp-3); border-radius: var(--panel-radius-sm);
+  background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.08); font-size: var(--fs-sm); }
+.codex-numbers[hidden] { display: none; }
+.codex-numbers dt { color: var(--text-muted); font-weight: 700; }
+.codex-numbers dd { margin: 0; color: var(--gold-bright); font-weight: 800; }
+.codex-back { display: none; align-self: flex-start; min-height: 36px; }
+.codex-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-top: 1px solid rgba(255, 255, 255, 0.08); font-size: var(--fs-sm); font-weight: 700; }
+
+/* the "?" in a panel header */
+.codex-help { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border-radius: 999px; line-height: 1;
+  border: 1px solid rgba(245, 196, 81, 0.45); background: rgba(245, 196, 81, 0.08); color: var(--gold-bright); font: 800 15px/1 var(--font-ui); cursor: pointer; flex-shrink: 0; }
+.codex-help:hover { background: rgba(245, 196, 81, 0.18); }
+/* beside the close button, whatever else the header holds (the headers are space-between rows) */
+.codex-help { margin-left: auto; margin-right: var(--sp-2); }
+
+@media (max-width: 639px) {
+  .codex { width: calc(100vw - 16px); height: calc(100vh - 16px); height: calc(100dvh - 16px); }
+  .codex-main { grid-template-columns: 1fr; }
+  .codex-list { border-right: none; }
+  .codex.is-page .codex-list { display: none; }
+  .codex:not(.is-page) .codex-page { display: none; }
+  .codex-back { display: inline-flex; }
+  .codex-count { display: none; }
+  .codex-numbers { grid-template-columns: 1fr; gap: 2px; }
+  .codex-numbers dd { margin-bottom: 6px; }
+  .codex-foot { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-xs); }
+}
+
+/* touch: 44 px hit areas (the look stays) */
+@media (pointer: coarse), (max-width: 640px) {
+  .codex-help { position: relative; }
+  .codex-help::after { content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  .codex-topic { min-height: 44px; }
+  .codex-back, .codex-close { min-height: 44px; min-width: 44px; }
+}
+
+/* Settings > Codex: under Replay tutorial and Controls, full width */
+.settings-help-row { flex-wrap: wrap; }
+.settings-help-row .settings-codex { flex-basis: 100%; }
+@media (pointer: coarse), (max-width: 640px) { .codex-foot { min-height: 52px; } }

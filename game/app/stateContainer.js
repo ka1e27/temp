@@ -28,8 +28,8 @@ export function createStateContainer({ storage, now }) {
   // prosperity cheers, an idle coin pop) carries the epoch it was made in and is dropped when it no longer matches.
   let epoch = 0;
 
-  /** Loads the save if one exists and its world regenerates cleanly; else starts a fresh realm. */
-  function boot() {
+  /** Loads the save if one exists and its world regenerates cleanly; else starts a fresh realm (on `freshSeed` when given: ?dev=1&seed=N). */
+  function boot(freshSeed) {
     let loaded = null;
     try {
       loaded = loadFrom(storage);
@@ -53,7 +53,7 @@ export function createStateContainer({ storage, now }) {
         // fall through to a fresh realm rather than leaving the player stuck on a blank map.
       }
     }
-    newRealm();
+    newRealm(freshSeed);
     return { state, world, resumed: false };
   }
 

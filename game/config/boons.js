@@ -27,6 +27,13 @@ export const BOON_NEUTRAL = Object.freeze({
   freeFolkSurrender: 0,     // Free Folk regions surrender from this card ratio (0 = ECONOMY.surrenderRatio); the lowest source wins
   scoutAll: false,          // every region counts as scouted (intel.isScoutedOrFree, the card's Night reading)
   raidTroopMult: 1,         // incoming war bands (frontier.raidEnemyStats)
+  // Phase 8 (PLAN-PHASE8 §8C), meta:
+  quickFair: false,         // Cartographer: Quick Conquest also takes regions whose card reads Fair (quick.canQuickConquer)
+  rearguard: false,         // Rearguard: retreating from an attack keeps the Conquest Streak alive (streak.onStreakBroken)
+  crownProsperity: 0,       // Spoils of War: a three-crown win starts the region at this Prosperity level (crowns.awardCrowns)
+  merchantPriceMult: 1,     // Relic: the Merchant's deals cost x this (events.js)
+  siegeSecMult: 1,          // Relic: a raid defense's siege timer x this (frontier.defenseRunFor / estimateDefense)
+  swiftParAdd: 0,           // Relic: Swift's par + this many seconds (crowns.parFor)
   // --- Sim (copied into PlayerStats.boons; read by game/battle/*) ---
   scorchSec: 0,             // Firestorm leaves burning ground this long ...
   scorchDps: 0,             // ... burning this many troops a second from every enemy squad standing in it
@@ -62,18 +69,30 @@ export const BOON_NEUTRAL = Object.freeze({
   rallyCdMult: 1,           // Relic: Rally's cooldown
   sundial: false,           // Relic: power cooldowns tick while the battle is paused and during the entry flight (battle/boons.js)
   lanternRadius: 0,         // Relic: no Fallen rise at settlements within this many hexes of your War Camp
+  // Phase 8 (PLAN-PHASE8 §8C), sim:
+  vanguardMult: 1,          // Vanguard: the first squad you send in a battle carries x this troops
+  supplyBonus: 0,           // Supply Wagons: a squad your supply line sends carries +this share of extra troops
+  sapperHexes: 0,           // Tower Sappers: an enemy tower within this many hexes of a site you hold ...
+  sapperRangeMult: 1,       // ... shoots this much as far
+  drumsSec: 0,              // War Drums: every power you cast makes your squads march drumsMult faster for this long
+  drumsMult: 1,
+  lastStandShare: 0,        // Last Stand: in a defense, your keep below this share of its cap ...
+  lastStandDefMult: 1,      // ... defends this much harder
+  drumVanguardMult: 1,      // Duo (Thunder Charge): the first squad you send after each power cast carries x this troops
+  supplyNoArrows: false,    // Duo (Siege Train): squads your supply lines send ride through enemy arrows
+  risingIntervalMult: 1,    // Relic: the Barrow Keep's Rising comes this much less often (x its interval)
 });
 
 export const BOON_MAX_KEYS = Object.freeze(['scorchSec', 'scorchDps', 'hitRunSec', 'hitRunMult', 'abilityRechargeSec', 'secondWindTroops',
   'secondWindCampShare', 'warlordEvery', 'phalanxMin', 'martyrSurge', 'martyrSec', 'fireArrowsDps', 'fireArrowsSec', 'ghostShare',
   'lightningWarSec', 'lanternRadius', 'titheEvery', 'titheRenown', 'plunderSec', 'hoardStepSec', 'hoardStep', 'hoardMax', 'turncoatShare',
-  'captureBleed', 'lossGoldShare', 'dragonTelegraphAdd']);
+  'captureBleed', 'lossGoldShare', 'dragonTelegraphAdd', 'crownProsperity', 'supplyBonus', 'sapperHexes', 'drumsSec', 'lastStandShare']);
 export const BOON_MINPOS_KEYS = Object.freeze(['freeFolkSurrender']);
 export const BOON_SIM_KEYS = Object.freeze(Object.keys(BOON_NEUTRAL).slice(Object.keys(BOON_NEUTRAL).indexOf('scorchSec')));
 
 // The pool (PLAN-PHASE7 §7A table). `requires` keeps a Boon out of a draft where it could do nothing this dynasty:
 //   powers (not Iron Will) · ability (a General may command: not Lone Banner) · raids (raids happen) · ashen (the Ashen hold land)
-//   night / siege / dragon (an unconquered region with that twist / a Lair still stands)
+//   night / siege / dragon (an unconquered region with that twist / a Lair still stands) · quick (Quick Conquest is unlocked) · streak (the Conquest Streak exists)
 // Deviations from the PLAN table (see docs/briefs/phase7-hookup.md): War Chest is "Royal Hoard" (the Legacy tree already has a War
 // Chest node) and is measured in seconds of income, not 1K gold (gold grows 100x over three dynasties); Blood Price bleeds a share of
 // every site instead of 3 troops (3 troops is no drawback past the first ring); Martyr's Crown's drawback is a smaller War Camp.
@@ -130,6 +149,27 @@ export const BOON_LIST = Object.freeze([
     text: "The enemy keep's garrison starts {pct:enemyKeepTroopMult} lower in every battle" },
   { id: 'oathkeeper', name: 'Oathkeeper', rarity: 'legendary', icon: 'trophy', mods: { noChampion: true, trophyMult: 2 }, requires: 'raids',
     text: 'Vendettas against you come without their Champion, and Trophies give double' },
+  // --- Phase 8 (PLAN-PHASE8 §8C): eight more, each a new rule. Deviations from the PLAN ideas (docs/briefs/phase8-hookup.md):
+  //   Supply Wagons ADDS troops to a supply squad (a bigger share sent would only empty the source sooner); Rearguard keeps the
+  //   streak (a retreat leaves no troops "in the field" to keep: battles start fresh); Spoils of War grants Prosperity I on a
+  //   three-crown win (crowns already pay Renown, so +1 Renown a crown would be a flat number); Tower Sappers reads "near"
+  //   (sapperHexes) for "adjacent" (sites are not a graph).
+  { id: 'vanguard', name: 'Vanguard', rarity: 'common', icon: 'spear', mods: { vanguardMult: 1.5 },
+    text: 'The first squad you send in every battle carries +{pct:vanguardMult} troops' },
+  { id: 'supplyWagons', name: 'Supply Wagons', rarity: 'common', icon: 'wagon', mods: { supplyBonus: 0.25 },
+    text: 'Squads your supply lines send carry +{pct:supplyBonus} extra troops' },
+  { id: 'rearguard', name: 'Rearguard', rarity: 'common', icon: 'retreat', mods: { rearguard: true }, requires: 'streak',
+    text: 'Retreating from an attack no longer breaks your Conquest Streak' },
+  { id: 'warDrums', name: 'War Drums', rarity: 'common', icon: 'drum', mods: { drumsSec: 6, drumsMult: 1.15 }, requires: 'powers', // coordinator: +10% for 5 s was too mild to feel
+    text: 'Every power you cast makes your squads march +{pct:drumsMult} faster for {drumsSec} s' },
+  { id: 'towerSappers', name: 'Tower Sappers', rarity: 'rare', icon: 'pick', mods: { sapperHexes: 3, sapperRangeMult: 0.7 },
+    text: 'Enemy towers within {sapperHexes} hexes of a site you hold shoot {pct:sapperRangeMult} shorter' },
+  { id: 'spoilsOfWar', name: 'Spoils of War', rarity: 'rare', icon: 'sack', mods: { crownProsperity: 1 },
+    text: 'A three-crown victory starts the region at Prosperity I' },
+  { id: 'lastStand', name: 'Last Stand', rarity: 'rare', icon: 'keep', mods: { lastStandShare: 0.25, lastStandDefMult: 1.4 }, requires: 'raids',
+    text: 'In a defense your keep defends +{pct:lastStandDefMult} harder below {pct:lastStandShare} of its troops' },
+  { id: 'cartographer', name: 'Cartographer', rarity: 'rare', icon: 'compass', mods: { quickFair: true }, requires: 'quick',
+    text: 'Quick Conquest also takes regions labelled Fair' },
 ].map((b) => Object.freeze({ cursed: false, requires: null, ...b, mods: Object.freeze(b.mods) })));
 
 // Duo Boons: holding both parts unlocks a free bonus (a reveal moment: pickBoon returns `duo`).
@@ -143,6 +183,11 @@ export const DUO_LIST = Object.freeze([
   // PLAN: "Plunderers' gold also counts for War Chest at x2". The Hoard reads gold in hand, so the spirit is kept more simply:
   { id: 'gildedBanners', name: 'Gilded Banners', parts: ['hoard', 'plunderers'], icon: 'coin', mods: { plunderSec: 10, hoardMax: 0.3 },
     text: 'Plunderers pay {plunderSec} s of income per capture, and the Hoard rises to +{pct:hoardMax}' },
+  // Phase 8 (PLAN-PHASE8 §8C):
+  { id: 'thunderCharge', name: 'Thunder Charge', parts: ['vanguard', 'warDrums'], icon: 'drum', mods: { drumVanguardMult: 1.25 },
+    text: 'The first squad you send after each power you cast carries +{pct:drumVanguardMult} troops' },
+  { id: 'siegeTrain', name: 'Siege Train', parts: ['supplyWagons', 'towerSappers'], icon: 'wagon', mods: { supplyNoArrows: true },
+    text: 'Squads your supply lines send ride through enemy arrows' },
 ].map((d) => Object.freeze({ ...d, parts: Object.freeze(d.parts), mods: Object.freeze(d.mods) })));
 
 export const BOONS = Object.freeze({

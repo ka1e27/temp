@@ -140,7 +140,9 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(await t.waitFor(() => { const d = document.querySelector('.boon-strip-detail'); return !!d && !d.hidden && d.textContent.length > 10; }, 2000), tag('its line shows under the strip'));
     await shot('05-boons-strip');
     const rel = await q(() => [...document.querySelectorAll('.reliquary-slot')].map((s) => ({ relic: s.dataset.relic, found: s.classList.contains('is-found'), owned: s.classList.contains('is-owned') })));
-    ok(rel.length === 8 && rel.some((s) => s.relic === 'sundial' && s.found && s.owned) && rel.filter((s) => !s.found).length === 7, tag('the Reliquary: the Sundial found and held, seven unknown slots'));
+    // one slot per Relic in config (Phase 8 grew the pool), the Sundial found and held, every other slot unknown
+    const relicTotal = await q(() => import(new URL('game/config/relics.js', document.baseURI).href).then((m) => m.RELIC_LIST.length));
+    ok(rel.length === relicTotal && rel.some((s) => s.relic === 'sundial' && s.found && s.owned) && rel.filter((s) => !s.found).length === relicTotal - 1, tag(`the Reliquary: ${relicTotal} slots, the Sundial found and held, ${relicTotal - 1} unknown`));
     await q(() => { const s = document.querySelector('.reliquary'); if (s) s.scrollIntoView({ block: 'start' }); });
     await sleep(300);
     await shot('06-reliquary');

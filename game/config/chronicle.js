@@ -45,6 +45,9 @@ export const CHRONICLE = Object.freeze({
     halfway: Object.freeze({ icon: 'map', minor: false, highlight: false }),
     continent: Object.freeze({ icon: 'castle', minor: false, highlight: 'always' }),
     dynasty: Object.freeze({ icon: 'trophy', minor: false, highlight: 'always' }),
+    // Phase 8 (PLAN-PHASE8 §8C): world events the player chose to take (meta/events.js acceptEvent records them)
+    deserters: Object.freeze({ icon: 'flag', minor: true, highlight: false }),
+    harvest: Object.freeze({ icon: 'wheat', minor: true, highlight: false }),
   }),
 
   // Factions whose name is plural ({yields} becomes "yield"): the Free Folk.
@@ -106,6 +109,19 @@ export const CHRONICLE = Object.freeze({
     dynasty: Object.freeze([
       'Dynasty {dynasty} is founded: {stars} stars carried into a new age, and a new continent awaits.',
       'A new age begins: Dynasty {dynasty}, with {stars} stars and a continent to win.',
+    ]),
+    // `data.variant` picks `kind.variant` when it exists (Deserters: 'raid' reads the plain kind, 'muster' its own lines)
+    deserters: Object.freeze([
+      'Deserters from {rival} bring word of the next raid: it will come weaker.',
+      'Soldiers of the {faction} lay down their spears at your border, and their next raid thins.',
+    ]),
+    'deserters.muster': Object.freeze([
+      'Deserters from {rival} swell the militia of every region.',
+      'Soldiers of the {faction} change banners; your militias stand full.',
+    ]),
+    harvest: Object.freeze([
+      'A Harvest Festival: bonfires in every village, and the realm grows richer for it.',
+      'The granaries overflow and the realm holds a Harvest Festival.',
     ]),
   }),
 

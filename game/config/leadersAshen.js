@@ -132,4 +132,16 @@ export const ASHEN_LINES = Object.freeze({
     'Yield, little champion. There is no shame in dust.',
     'Done. Shall I send for a stretcher, or a shovel?',
   ],
+  deserters: [
+    "A few of my living soldiers fled. The others cannot.",
+    "Deserters. They will come back to me eventually. Everyone does.",
+    "Let them run. I keep the ones that stay. Forever.",
+    "The living are so fickle. That is why I prefer the other kind.",
+  ],
+  harvest: [
+    "A harvest festival. I remember those. Vaguely. Centuries ago.",
+    "Feast, little realm. The barrows can wait for the leftovers.",
+    "Your bonfires warm nothing of mine. Nothing of mine is warm.",
+    "Enjoy your bread. The grave has a much simpler menu.",
+  ],
 });

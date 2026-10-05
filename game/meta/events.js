@@ -4,6 +4,7 @@
 //
 //   tickEvents(state, world, nowMs, activeDt) -> { offered, expired }   every frame of active play (like tickFrontier)
 //   acceptEvent(state, world, choice, nowMs)  -> the result, or false     Merchant: { deal: 'fort', regionId, type } | { deal: 'renown' }
+//                                                                          Deserters: { choice: 'raid'|'muster' }; Harvest: {} (pays gold)
 //   declineEvent(state)                                                    Plague: acknowledged; Duel: then duelRunFor
 //   duelRunFor(state, world, event, stats, opts) -> BattleRun (kind 'duel'); duelReward(state, world, run, result) -> { renown }
 import { EVENTS } from '../config/events.js';
@@ -17,10 +18,14 @@ import { borderingRivals, raidDepth, raidEnemyStats, busyFromState } from './fro
 import { fortsOf, fortCost, fortMaxLevel, buildFort, upgradeFort, fortBuildRefusal } from './forts.js';
 import { buildDefenseArena, canBuildDefenseArena } from '../battle/defenseArena.js';
 import { createBattle } from '../battle/sim.js';
-import { militiaGarrisons, militiaCapMult } from './militia.js';
+import { militiaGarrisons, militiaCapMult, refillMilitia } from './militia.js';
 import { playerBattleStats } from './progression.js';
 import { addGrudge } from './grudges.js';
 import { recordDeed, deedBonuses } from './deeds.js';
+import { boonMods } from './boonsState.js';
+import { edictMods } from './edicts.js';
+import { activeHarvest } from './eventsState.js';
+import { recordChronicle } from './chronicle.js';
 
 export * from './eventsState.js';
 
@@ -43,7 +48,7 @@ function pickKind(state) {
   return entries[0][0];
 }
 
-function makeEvent(state, world, kind, t) {
+function makeEvent(state, world, kind, t, nowMs) {
   const e = ensureWorldEvents(state);
   const base = { id: e.seq++, kind, offeredAt: t, expiresAt: t + EVENTS.offerSec };
   const rivals = borderingRivals(state, world);
@@ -64,9 +69,29 @@ function makeEvent(state, world, kind, t) {
       text: EVENTS.copy.duel.replace('{leader}', leader ? leader.fullName : 'A rival').replace('{faction}', world.factions[o.faction].name)
         .replace('{region}', world.regions[o.to].name).replace('{renown}', String(EVENTS.duel.renown)) };
   }
-  // the Merchant: two deals priced now
-  const gold = Math.round(incomePerSec(state, world) * EVENTS.merchant.renownIncomeSec);
-  return { ...base, deals: [{ deal: 'fort', priceShare: EVENTS.merchant.fortPriceShare }, { deal: 'renown', renown: EVENTS.merchant.renown, gold }],
+  if (kind === 'deserters') {
+    if (edictMods(state).raids === false) return null; // Peace of the Crowns: no raids to weaken, no militia to need
+    // a bordering rival the player has not already turned (the one with the most land next to the realm, ties by a seeded roll)
+    const turned = e.deserters ? e.deserters.faction : null;
+    const list = rivals.filter((r) => r.faction !== turned).sort((a, b) => b.pairs.length - a.pairs.length || a.faction - b.faction);
+    if (!list.length) return null;
+    const target = list[0];
+    const leader = leaderFor(state.seed ?? 0, state.dynasty ? state.dynasty.level : 1, target.faction);
+    return { ...base, faction: target.faction, leader: leader ? leader.fullName : '', raidMult: EVENTS.deserters.raidMult,
+      text: EVENTS.copy.deserters.replace('{faction}', world.factions[target.faction].name)
+        .replace('{pct}', `${Math.round((1 - EVENTS.deserters.raidMult) * 100)}%`) };
+  }
+  if (kind === 'harvest') {
+    const wall = Number.isFinite(nowMs) && nowMs > 0 ? nowMs : Number.isFinite(state.lastSeen) ? state.lastSeen : 0;
+    if (e.harvests.some((h) => h.until > wall)) return null; // one festival at a time
+    const hgold = Math.round(incomePerSec(state, world) * EVENTS.harvest.priceIncomeSec);
+    return { ...base, gold: hgold, durationSec: EVENTS.harvest.durationSec, mult: EVENTS.harvest.rateMult,
+      text: EVENTS.copy.harvest.replace('{gold}', String(hgold)).replace('{mult}', String(EVENTS.harvest.rateMult))
+        .replace('{min}', String(Math.round(EVENTS.harvest.durationSec / 60))) };
+  }
+  // the Merchant: two deals priced now (the Merchant's Scale Relic: x merchantPriceMult)
+  const gold = Math.round(incomePerSec(state, world) * EVENTS.merchant.renownIncomeSec * boonMods(state).merchantPriceMult);
+  return { ...base, deals: [{ deal: 'fort', priceShare: EVENTS.merchant.fortPriceShare * boonMods(state).merchantPriceMult }, { deal: 'renown', renown: EVENTS.merchant.renown, gold }],
     text: EVENTS.copy.merchantRenown.replace('{renown}', String(EVENTS.merchant.renown)).replace('{gold}', String(gold)) };
 }
 
@@ -76,7 +101,6 @@ function makeEvent(state, world, kind, t) {
  * @returns {{ offered: object|null, expired: object|null }}
  */
 export function tickEvents(state, world, nowMs, activeDt) {
-  void nowMs;
   const e = ensureWorldEvents(state);
   e.activeSec += Math.max(0, Number.isFinite(activeDt) ? activeDt : 0);
   const t = e.activeSec;
@@ -88,7 +112,7 @@ export function tickEvents(state, world, nowMs, activeDt) {
     e.nextAt = t + EVENTS.meanSec * (1 + EVENTS.jitter * (2 * rand(state) - 1));
     if (t >= EVENTS.graceSec && ownedCount(state) >= EVENTS.minRegions) {
       const kind = pickKind(state);
-      const ev = makeEvent(state, world, kind, t) || (kind !== 'merchant' ? makeEvent(state, world, 'merchant', t) : null);
+      const ev = makeEvent(state, world, kind, t, nowMs) || (kind !== 'merchant' ? makeEvent(state, world, 'merchant', t, nowMs) : null);
       if (ev) {
         e.pending = ev;
         e.log[ev.kind] += 1;
@@ -110,7 +134,7 @@ export function merchantFortPrice(state, world, regionId, type) {
   const f = fortsOf(state, regionId).find((x) => x.type === type);
   const level = f ? f.level + 1 : 1;
   if (f && f.level >= fortMaxLevel(type)) return Infinity;
-  return Math.round(fortCost(state, world, regionId, type, level) * EVENTS.merchant.fortPriceShare);
+  return Math.round(fortCost(state, world, regionId, type, level) * EVENTS.merchant.fortPriceShare * boonMods(state).merchantPriceMult); // the Merchant's Scale
 }
 
 /**
@@ -150,8 +174,46 @@ export function acceptEvent(state, world, choice = {}, nowMs = 0) {
     }
     return false;
   }
+  const wall = Number.isFinite(nowMs) && nowMs > 0 ? nowMs : Number.isFinite(state.lastSeen) ? state.lastSeen : 0;
+  if (ev.kind === 'deserters') {
+    // { choice: 'raid' } weakens that rival's next raid (frontier.announce); { choice: 'muster' } (the default) fills every militia
+    const pick = choice.choice === 'raid' ? 'raid' : 'muster';
+    let regions = 0;
+    if (pick === 'raid') e.deserters = { faction: ev.faction };
+    else for (let id = 0; id < state.owner.length; id++) if (state.owner[id] === PLAYER_FACTION) { refillMilitia(state, id, wall); regions += 1; }
+    e.pending = null;
+    eventChronicle(state, world, ev, wall, pick);
+    return { kind: 'deserters', choice: pick, faction: ev.faction, regions, event: ev };
+  }
+  if (ev.kind === 'harvest') {
+    if (!(state.gold >= ev.gold)) return false;
+    state.gold -= ev.gold;
+    e.harvests.push({ from: wall, until: wall + ev.durationSec * 1000, mult: ev.mult });
+    e.harvests = e.harvests.slice(-EVENTS.harvest.keep);
+    e.pending = null;
+    eventChronicle(state, world, ev, wall, null);
+    return { kind: 'harvest', gold: ev.gold, until: wall + ev.durationSec * 1000, event: ev };
+  }
   e.pending = null;
   return { kind: ev.kind, event: ev };
+}
+
+/** The Chronicle line of an accepted Deserters / Harvest Festival (config/chronicle.js kinds 'deserters', 'harvest'). */
+function eventChronicle(state, world, ev, t, variant) {
+  if (!(t > 0)) return;
+  const data = {};
+  if (ev.faction != null) {
+    data.factionId = ev.faction;
+    if (world.factions[ev.faction]) data.faction = world.factions[ev.faction].name;
+    if (ev.leader) data.leader = ev.leader;
+  }
+  if (variant) data.variant = variant;
+  recordChronicle(state, { kind: ev.kind, t, data });
+}
+
+/** True while a Harvest Festival runs at `nowMs` (the map / Realm panel may show it). */
+export function harvestActive(state, nowMs) {
+  return !!activeHarvest(state, nowMs);
 }
 
 /** Declines (or dismisses) the pending offer. A Plague already applies. */

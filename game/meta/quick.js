@@ -17,6 +17,7 @@ import { onBattleEnd, onConquest, claimCompleted } from './bounties.js';
 import { onStreakBroken } from './streak.js';
 import { edictMods, commanderFor } from './edicts.js';
 import { boonBattleEnd } from './boons.js';
+import { boonMods } from './boonsState.js';
 
 function busyHas(busy, regionId) {
   if (!busy) return false;
@@ -38,7 +39,8 @@ export function canQuickConquer(state, world, regionId, opts = {}) {
   if (QUICK.excludeCapitals && region.isCapital) return { ok: false, reason: 'capital' };
   if (!attackable(state, world, regionId)) return { ok: false, reason: 'attack' };
   const commander = commanderFor(state, opts.commander ?? null);
-  if (difficulty(state, world, regionId, commander ? { commander } : {}).label !== QUICK.label) return { ok: false, reason: 'label' };
+  const label = difficulty(state, world, regionId, commander ? { commander } : {}).label;
+  if (label !== QUICK.label && !(boonMods(state).quickFair && QUICK.cartographerLabels.includes(label))) return { ok: false, reason: 'label' }; // Cartographer (PLAN-PHASE8)
   return { ok: true };
 }
 

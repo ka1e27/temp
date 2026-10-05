@@ -34,6 +34,7 @@ import { createWelcome } from './ui/welcome.js';
 import { createDevPanel } from './ui/devpanel.js';
 import { createTooltip } from './ui/tooltip.js';
 import { createLeaderBanner } from './ui/leaderBanner.js';
+import { addHelpButton } from './ui/codexHelp.js';
 
 import { createStateContainer } from './app/stateContainer.js';
 import { createAutosave } from './app/autosave.js';
@@ -119,7 +120,10 @@ function levelsOf(state) {
   return state.owner.map((o, i) => (o === PLAYER_FACTION ? prosperity[i] | 0 : 0));
 }
 
+// Boot timeline marks (tools/perf.mjs prints them): every module evaluated, the world generated, the render caches baked, the first frame.
+const mark = (name) => { try { performance.mark(name); } catch { /* old browsers */ } };
 function boot() {
+  mark('hd-modules');
   const params = new URLSearchParams(location.search);
   const isDev = params.get('dev') === '1';
   // Touch or mouse? The last pointer the player used decides the wording of the hints (tap, pinch and long-press against click, scroll and shift-drag);
@@ -149,10 +153,10 @@ function boot() {
   const storage = getStorage();
 
   const container = createStateContainer({ storage, now: () => Date.now() });
-  let { state: bootState, world: bootWorld, resumed } = container.boot();
-  // ?dev=1&seed=N: a reproducible continent for screenshots and bug reports (never overrides a save).
+  // ?dev=1&seed=N: a reproducible continent for screenshots and bug reports (never overrides a save). Handed to boot, so only one world is generated.
   const seedParam = isDev ? params.get('seed') : null;
-  if (seedParam != null && !resumed) ({ state: bootState, world: bootWorld } = container.newRealm(Number(seedParam)));
+  let { state: bootState, world: bootWorld, resumed } = container.boot(seedParam != null ? Number(seedParam) : undefined);
+  mark('hd-world');
 
   // Welcome-back is a celebration of gold already granted (DESIGN §5.1) —
   // credit it once, right at boot, regardless of which scene shows first.
@@ -262,22 +266,28 @@ function boot() {
   }
 
   /** (Re)build the world-shaped render caches for the container's current world. */
+  let bootBaked = false; // the first applyWorld (the boot) defers most chunk bakes until the title is up (Phase 8 perf)
   function applyWorld() {
     const { state, world } = cur();
     renderer.setWorld(world);
+    if (!bootBaked) mark('hd-setworld');
     music.setSeed(state.seed); // boot, import, reset and a new dynasty all re-key the score
     const fit = camera.fitZoom(world.bounds, 40);
-    renderer.terrain.prebakeAll(fit * 1.25 * renderer.dpr, state.owner, levelsOf(state));
+    if (bootBaked || globalThis.__HD_BOOT_BAKE_ALL) renderer.terrain.prebakeAll(fit * 1.25 * renderer.dpr, state.owner, levelsOf(state));
+    else renderer.terrain.schedulePrebake(fit * 1.25 * renderer.dpr, state.owner, levelsOf(state)); // the chunks on screen bake in the first frame
+    if (!bootBaked) mark('hd-chunks');
     applySettings(state);
     // The living layers: pre-populate the roads so the very first frame is already alive, and bake the sprites of the
     // framing zoom now, behind the boot splash (a few tens of ms), instead of as a hitch on the first pan.
     renderer.ambient.rebuild({ owner: state.owner, prosperity: state.prosperity });
-    renderer.ambient.prewarm(fit * 1.25);
+    // (not at boot: there the sprites bake lazily within the ambient layer's per-frame budget, so the title shows sooner; Phase 8 perf)
+    if (bootBaked) renderer.ambient.prewarm(fit * 1.25);
     purgeStalePending(); // the realm was replaced (import, reset, new dynasty, reseed): nothing queued for the old one may show in the new one
     if (battlesRef) battlesRef.reset(); // so were its running battles (state.battles): forget the old runtimes
     if (frontierRef) frontierRef.reset();
     if (services && services.goals) services.goals.reset();
     if (services && services.boons) services.boons.reset();
+    bootBaked = true;
   }
 
   const autosave = createAutosave({
@@ -485,6 +495,7 @@ function boot() {
         goto.world({ freshRealm: true, imported: true });
         return true;
       },
+      onCodex: () => openCodex(),
       onReset: () => {
         try { storage.removeItem(SAVE_KEY); } catch { /* ignore */ }
         sessionStarted = false;
@@ -862,6 +873,64 @@ function boot() {
     });
   }
 
+  // --- the Codex (PLAN-PHASE8 §8B) ---------------------------------------------------------------------------------------------------------
+  // Loaded on first use (import(): nothing of it is in the boot graph). Settings > Codex opens it at its first page, a panel's "?" at that panel's topic.
+  // "Revisit the tutorial hints" clears the seen hints (and remembers them, so turning it off again restores them).
+  let codex = null;
+  let codexLoading = null;
+  let revisitSnapshot = null; // { seen, done } before the hints were reset this session
+  async function loadCodex() {
+    if (codex) return codex;
+    if (!codexLoading) {
+      codexLoading = Promise.all([import('./ui/codex.js'), import('./app/codexTopics.js')]).then(([ui0, topics]) => {
+        codex = { ui: ui0.createCodex({ onClose: () => {}, onRevisitHints: (on) => revisitHints(on) }), topics };
+        document.body.appendChild(codex.ui.el);
+        return codex;
+      });
+    }
+    return codexLoading;
+  }
+  async function openCodex(topicId) {
+    try {
+      const c = await loadCodex();
+      c.ui.open(c.topics.codexData(cur().state), topicId, { revisit: !!revisitSnapshot });
+      tutorial.notify('codexOpened');
+    } catch (err) {
+      console.warn('[codex] could not open:', err);
+      ui.toasts.update({ type: 'warning', icon: 'scroll', message: 'The Codex could not be opened (offline?).', duration: 4000 });
+    }
+  }
+  function revisitHints(on) {
+    const st = cur().state;
+    if (on) {
+      if (!revisitSnapshot) revisitSnapshot = { seen: { ...(st.tutorial.seen || {}) }, done: !!st.tutorial.done };
+      tutorial.replay();
+      ui.settings.update({ hints: true });
+    } else {
+      const snap = revisitSnapshot;
+      revisitSnapshot = null;
+      const seen = { ...(snap ? snap.seen : {}), ...(st.tutorial.seen || {}) };
+      st.tutorial = { seen, done: snap ? snap.done : st.tutorial.done };
+    }
+    autosave.save();
+  }
+  services.openCodex = openCodex;
+  // the "?" in every panel's header
+  const PANEL_HELP = [
+    [ui.council.el, '.council-header', '.council-close', 'council', 'the War Council'],
+    [ui.realm.el, '.realm-header', '.realm-close', 'income', 'your realm'],
+    [ui.regions.el, '.regions-header', '.regions-close', 'bounties', 'the Bounty Board'],
+    [ui.generals.el, '.generals-header', '.generals-close', 'generals', 'Generals'],
+    [ui.boonDraft.el, '.boon-draft-head', null, 'boons', 'Boons'],
+    [ui.ceremony.el, '.ceremony-header', null, 'founding', 'founding a dynasty'],
+  ];
+  for (const [root, hs, cs, topic, label] of PANEL_HELP) {
+    const header = root && root.querySelector(hs);
+    if (!header) continue;
+    const close = cs ? header.querySelector(cs) : header.querySelector(':scope > button:last-child');
+    addHelpButton(header, close, label, () => openCodex(topic));
+  }
+
   titleScene = createTitleScene(services);
   worldScene = createWorldScene(services);
   battleScene = createBattleScene(services);
@@ -869,8 +938,10 @@ function boot() {
   // --- dev hooks (?dev=1 only: DESIGN §8) ---------------------------------------
   let devSpeedX8 = false;
   let qualityLock = null; // dev: pin the ambient quality (the adaptive rule would thin it on a software rasteriser)
-  const perf = { cpuMs: 0, frameMs: 16.7, worstMs: 0 };
-  const acc = { n: 0, cpu: 0, cpuMax: 0, dt: 0, dtMax: 0 };
+  // metaMs: the realm's own per-frame work (autosave, idle income, prosperity, the frontier, events, goals, Boons), timed apart from the battles and the scene
+  // (tools/perf.mjs reads it; PLAN-PHASE8 8A budget: under 2 ms on average at 4x CPU slowdown in a late Dynasty II)
+  const perf = { cpuMs: 0, frameMs: 16.7, worstMs: 0, metaMs: 0, battleMs: 0 };
+  const acc = { n: 0, cpu: 0, cpuMax: 0, dt: 0, dtMax: 0, meta: 0, metaMax: 0 };
   if (isDev) {
     const devCtx = {
       get state() { return cur().state; },
@@ -959,19 +1030,30 @@ function boot() {
         goto.world({ freshRealm: true });
       },
       startNewRealm: () => titleScene.onNewRealm(),
+      /** Dev/perf (Phase 8): founds the next dynasty at once on `seed` (no ceremony), then enters its continent. */
+      foundDynasty: (choice = {}) => {
+        const res = container.tryFoundDynasty({ seed: choice.seed ?? container.nextSeed(), edict: choice.edict ?? null, challenges: choice.challenges || [] });
+        if (!res) return false;
+        sessionStarted = true;
+        applyWorld();
+        goto.world({ freshRealm: true, newWorld: true });
+        return true;
+      },
       hideUI: (on = true) => { uiRoot.style.visibility = on ? 'hidden' : ''; },
       hideDev: (on = true) => {
         for (const el of uiRoot.querySelectorAll('.devpanel, .hd-perf')) el.style.display = on ? 'none' : '';
       },
       /** Averages CPU ms per frame and the real rAF interval over `ms`. */
       perfSample: (ms = 2000) => new Promise((resolve) => {
-        acc.n = 0; acc.cpu = 0; acc.cpuMax = 0; acc.dt = 0; acc.dtMax = 0;
+        acc.n = 0; acc.cpu = 0; acc.cpuMax = 0; acc.dt = 0; acc.dtMax = 0; acc.meta = 0; acc.metaMax = 0;
         setTimeout(() => resolve({
           frames: acc.n,
           cpuAvgMs: +(acc.cpu / Math.max(1, acc.n)).toFixed(2),
           cpuMaxMs: +acc.cpuMax.toFixed(2),
           frameAvgMs: +(acc.dt / Math.max(1, acc.n)).toFixed(2),
           frameMaxMs: +acc.dtMax.toFixed(2),
+          metaAvgMs: +(acc.meta / Math.max(1, acc.n)).toFixed(3),
+          metaMaxMs: +acc.metaMax.toFixed(2),
         }), ms);
       }),
     };
@@ -1070,6 +1152,7 @@ function boot() {
   });
 
   applyWorld();
+  mark('hd-baked');
   goto.title({});
 
   // --- frame loop (ARCHITECTURE §9) ---------------------------------------------
@@ -1080,6 +1163,62 @@ function boot() {
   let lastProsperityMs = 0;
   let qualityAtMs = 0;
 
+  // Layout flags on #ui for the CSS (Phase 8 perf): the panels used to be placed by `#ui:has(...)` rules, and ANY change inside #ui (the gold counter, a
+  // badge) made the browser re-match them and restyle the toasts, the tray and the leader banner every frame. These attributes carry the same facts and are
+  // written only when one changes; the rules keep their old specificity (one attribute per selector part they replaced).
+  const uiFlags = {};
+  const setFlag = (name, on) => { if (uiFlags[name] === on) return; uiFlags[name] = on; uiRoot.toggleAttribute(`data-${name}`, on); };
+  function syncUiFlags() {
+    const hudOn = !ui.hud.el.hidden;
+    setFlag('hud', hudOn);
+    setFlag('battle', !ui.battleHud.el.hidden);
+    setFlag('tray', !ui.tray.el.hidden);
+    const tabs = ui.hud.tabsEl;
+    let tabOn = false;
+    if (hudOn && tabs) for (const c of tabs.children) if (!c.hidden) { tabOn = true; break; }
+    setFlag('tabs', tabOn);
+    const toasts = ui.toasts.el;
+    const anyToast = !!toasts.querySelector(':scope > .toast');
+    setFlag('toast', anyToast);
+    setFlag('event-toast', anyToast && !!toasts.querySelector('.toast.is-event'));
+    setFlag('banner-in', ui.leaderBanner.el.dataset.state === 'in');
+    layoutTopLane();
+  }
+  // The top lane (2026-10-04, lead): every top-centre notice in ONE column, each in its own slot, never overlapping. Order: the leader banner (placed
+  // under the HUD / tabs / tray / battle top by its own `below` rule), then the toasts (event offers first: `.toast.is-event { order: -1 }`, then Deeds,
+  // contracts, Trophies, streak and Vendetta toasts in arrival order). The toast column is pushed below the banner while the banner is on screen (fading
+  // out included). A phone shows at most two notices: the banner counts as one, further toasts wait in the toasts' queue (ui/toasts.js setMaxVisible).
+  let lanePush = 0;
+  // THE CLICK RULE for the lane: a button must not move under a pointer. When the banner leaves, the column does NOT close up while a pointer is down or
+  // while a toast with a button (an offer, a raid's or a Vendetta's Go) is on screen: the gap stays until it is safe (the press went to the hint bubble that
+  // slid into the Go's place: goals check, Vendetta). Moving DOWN for a new banner happens at once (or the two would overlap).
+  let lanePointerDown = false;
+  window.addEventListener('pointerdown', () => { lanePointerDown = true; }, { capture: true, passive: true });
+  for (const ev of ['pointerup', 'pointercancel']) window.addEventListener(ev, () => { lanePointerDown = false; }, { capture: true, passive: true });
+  function layoutTopLane() {
+    const banner = ui.leaderBanner.el;
+    const bannerUp = banner.dataset.state === 'in' || banner.dataset.state === 'out';
+    const phone = renderer.cssWidth < 768;
+    ui.toasts.setMaxVisible(phone ? (banner.dataset.state === 'in' ? 1 : 2) : Infinity);
+    let push = 0;
+    if (bannerUp) {
+      ui.leaderBanner.reflow();
+      // layout boxes, not the card's slide-in transform (both are absolutely placed in #ui)
+      const card = banner.firstElementChild || banner;
+      if (card.offsetHeight > 0) {
+        const bannerBottom = banner.offsetTop + card.offsetTop + card.offsetHeight;
+        const toastsTop = ui.toasts.el.offsetTop - lanePush; // where the column sits on its own
+        push = Math.max(0, Math.ceil(bannerBottom + 8 - toastsTop));
+      }
+    }
+    if (push < lanePush && (lanePointerDown || ui.toasts.el.querySelector('.toast:not(.is-out) .toast-action'))) push = lanePush;
+    if (Math.abs(push - lanePush) > 0.5) {
+      lanePush = push;
+      ui.toasts.el.style.marginTop = push ? `${push}px` : '';
+    }
+  }
+  let overlayAt = 0;
+
   function frame(nowMs) {
     const dt = clock.tick(nowMs);
     const rawDt = lastNowMs ? Math.min(2, Math.max(0, (nowMs - lastNowMs) / 1000)) : 0;
@@ -1089,6 +1228,7 @@ function boot() {
     services.time.nowMs = nowMs;
 
     try {
+      const m0 = performance.now();
       autosave.tick(dt);
       // Idle income is wall-clock: use the unclamped gap (capped at 2 s; longer
       // gaps are settled by the visibility handler / offline earnings).
@@ -1109,12 +1249,17 @@ function boot() {
       const t0 = performance.now();
       // battles run whatever scene is up, but never behind the title (a saved battle waits for Continue, as it always did)
       if (sceneManager.name !== 'title' && sessionStarted) services.battles.tick(dt);
+      const m1 = performance.now();
       services.frontier.tick(dt);
       services.events.tick(dt);
       if (sceneManager.name !== 'title' && sessionStarted) services.goals.tick(dt);
       if (sceneManager.name !== 'title' && sessionStarted) services.boons.tick(sceneManager.name);
+      const m2 = performance.now();
+      perf.battleMs = m1 - t0;
+      perf.metaMs = (t0 - m0) + (m2 - m1);
       sceneManager.frame(dt, tAccum, nowMs);
       updateTray();
+      syncUiFlags(); // BEFORE the coach measures: a toast or the tray moving with a flag must be where the hint looks for it this frame
       ui.coach.tick(); // the hint follows its target: placed against this frame's final camera
       for (const fn of afterFrame) fn(); // dev: per-frame monitors (tools/hintMonitor.js) measure the finished frame
       perf.cpuMs = performance.now() - t0;
@@ -1128,6 +1273,7 @@ function boot() {
 
     if (rawDt > 0) {
       acc.n++; acc.cpu += perf.cpuMs; acc.cpuMax = Math.max(acc.cpuMax, perf.cpuMs);
+      acc.meta += perf.metaMs; acc.metaMax = Math.max(acc.metaMax, perf.metaMs);
       acc.dt += rawDt * 1000; acc.dtMax = Math.max(acc.dtMax, rawDt * 1000);
       perf.frameMs += (rawDt * 1000 - perf.frameMs) * 0.06;
       perf.worstMs = Math.max(perf.worstMs * 0.995, rawDt * 1000);
@@ -1137,7 +1283,9 @@ function boot() {
         else if (perf.frameMs < 17.5) { renderer.ambient.setQuality(1); qualityAtMs = nowMs; }
       }
     }
-    if (services.devOverlayEl) {
+    // the dev overlay is text in the DOM: four times a second is plenty, and never while it is hidden (perf runs hide it)
+    if (services.devOverlayEl && nowMs - overlayAt > 250 && services.devOverlayEl.style.display !== 'none') {
+      overlayAt = nowMs;
       const st = renderer.terrain ? renderer.terrain.stats() : { chunks: 0, megapixels: 0, bucket: 0 };
       const fps = 1000 / Math.max(1, perf.frameMs);
       services.devOverlayEl.dataset.warn = perf.frameMs > 24 ? '2' : perf.frameMs > 18 ? '1' : '0';
@@ -1147,6 +1295,8 @@ function boot() {
     }
 
     removeBootSplash();
+    // the boot's deferred chunk bakes, a few ms a frame once the first frames are out (Phase 8 perf)
+    if (bootRemoved && renderer.terrain && renderer.terrain.prebakeStep) renderer.terrain.prebakeStep(4);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);

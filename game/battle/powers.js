@@ -14,7 +14,7 @@ import { sendFromSite } from './squads.js';
 import { canRoute } from './routing.js';
 import { powersBlocked, firestormMult } from './features.js';
 import { onFirestormLanded } from './fallen.js';
-import { boonsOf, onFirestorm, firestormBoonMult, powerCooldownBoonMult } from './boons.js';
+import { boonsOf, onFirestorm, firestormBoonMult, powerCooldownBoonMult, onPowerCast } from './boons.js';
 
 /** Only the player can act as a caster today (see file header). */
 function statsFor(battle, owner) {
@@ -130,6 +130,7 @@ export function applyPower(battle, command, t) {
 
   battle.cooldowns[power] = t + cooldownSeconds(power, level, stats.cooldownMult) * powerCooldownBoonMult(battle, power); // the Horn of Ages (PLAN-PHASE7)
   battle.events.push({ type: 'power', owner, power, x: pos.x, y: pos.y, target: appliedTarget });
+  onPowerCast(battle, owner, t); // War Drums, Thunder Charge (PLAN-PHASE8)
 }
 
 /**

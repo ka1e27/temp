@@ -48,6 +48,8 @@ const { goalsChecks } = await import('./goalsChecks.mjs');
 const { phase5Checks } = await import('./phase5Checks.mjs');
 const { phase6Checks } = await import('./phase6Checks.mjs');
 const { phase7Checks } = await import('./phase7Checks.mjs');
+const { codexChecks } = await import('./codexChecks.mjs');
+const { topLaneChecks } = await import('./topLaneChecks.mjs');
 
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
   const [k, ...v] = a.slice(2).split('=');
@@ -1064,10 +1066,17 @@ const watchdog = setTimeout(() => {
   process.exit(1);
 }, (SUBPATH ? 20 : 32) * 60 * 1000); // the main flow grew (supply lines, Works, front lines, robustness, keepsakes); a loaded machine needs the room
 
-// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|phase7|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
+// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|phase7|codex|toplane|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
 // plain mode only: they do not depend on the deployed shape, so --base=... runs the two variants and the deploy checks.
 const only = flags.only;
 const wants = (name) => !only || only === name;
+// Phase 8: index.html's modulepreload block must list exactly the boot's module graph (tools/modulepreload.mjs writes it)
+{
+  const { execFileSync } = await import('node:child_process');
+  let fresh = true;
+  try { execFileSync(process.execPath, ['tools/modulepreload.mjs', '--check'], { cwd: new globalThis.URL('..', import.meta.url), stdio: 'pipe' }); } catch { fresh = false; }
+  ok(fresh, 'index.html: the modulepreload block matches the boot module graph (node tools/modulepreload.mjs)');
+}
 if (wants('desktop')) await variant('desktop', { width: 1440, height: 900, mobile: false });
 if (wants('phone')) await variant('phone', { width: 390, height: 844, mobile: true });
 if (!SUBPATH && wants('robust')) await robustChecks({ launch, BASE, ok, sleep, allErrors });
@@ -1080,6 +1089,8 @@ if (!SUBPATH && wants('goals')) await goalsChecks({ launch, BASE, ok, sleep, all
 if (!SUBPATH && wants('phase5')) await phase5Checks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('phase6')) await phase6Checks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('phase7')) await phase7Checks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('codex')) await codexChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('toplane')) await topLaneChecks({ launch, BASE, ok, sleep, allErrors });
 if (SUBPATH && wants('deploy')) await deployChecks();
 clearTimeout(watchdog);
 stopServer();

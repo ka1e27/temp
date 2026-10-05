@@ -3,7 +3,7 @@
 // dynasty (conquer() calls claimRelic), and the lasting Reliquary remembers every Relic ever found (the "Reliquarian" deed).
 // Effects fold into the one modifier source, meta/boonsState.js boonMods. Pure: no DOM, no Date.now, no Math.random, no storage.
 import { RELIC_LIST, RELICS } from '../config/relics.js';
-import { ASHEN_FACTION } from '../config/ashen.js';
+import { ASHEN_FACTION, ASHEN } from '../config/ashen.js';
 import { hash32 } from '../core/rng.js';
 import { RELIC_BY_ID, ensureRelics, ensureReliquary, fillBoonText } from './boonsState.js';
 import { edictMods } from './edicts.js';
@@ -17,7 +17,8 @@ const PLAYER = 0;
 export function relicInfo(id) {
   const r = RELIC_BY_ID.get(id);
   if (!r) return null;
-  return { id: r.id, name: r.name, icon: r.icon, text: fillBoonText(r.text, r.mods) };
+  const extra = { risingBase: ASHEN.rising.everySec, rising: +(ASHEN.rising.everySec * (r.mods.risingIntervalMult || 1)).toFixed(1) };
+  return { id: r.id, name: r.name, icon: r.icon, text: fillBoonText(r.text, r.mods, extra) };
 }
 
 function relevant(state, world, r) {

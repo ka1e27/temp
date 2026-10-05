@@ -37,11 +37,11 @@ function toggleRow({ label, iconOn, iconOff, checked, onToggle }) {
  * @param {{ onToggleSound?: (v: boolean) => void, onToggleReduceMotion?: (v: boolean) => void,
  *   onToggleHints?: (v: boolean) => void, onToggleSlowBattles?: (v: boolean) => void, onToggleLeaderVoices?: (v: boolean) => void,
  *   onToggleMusic?: (v: boolean) => void, onMusicVolume?: (v: number, final: boolean) => void, onSfxVolume?: (v: number, final: boolean) => void, onReplayTutorial?: () => void, onExport?: () => string, onImport?: (code: string) => boolean,
- *   onReset?: () => void, onClose?: () => void }} [callbacks]
+ *   onReset?: () => void, onClose?: () => void, onCodex?: () => void }} [callbacks]  onCodex: Settings > Codex (Phase 8)
  */
 export function createSettings({
   onToggleSound, onToggleReduceMotion, onToggleHints, onToggleSlowBattles, onToggleLeaderVoices, onToggleMusic, onMusicVolume, onSfxVolume,
-  onReplayTutorial, onExport, onImport, onReset, onClose,
+  onReplayTutorial, onExport, onImport, onReset, onClose, onCodex,
 } = {}) {
   const soundRow = toggleRow({
     label: 'Sound', iconOn: 'sound-on', iconOff: 'sound-off', checked: true,
@@ -85,7 +85,8 @@ export function createSettings({
   // Replay the tutorial (every hint unseen again) and read every control
   const helpRow = h('div.settings-row.settings-help-row', {},
     h('button.btn.btn-secondary.settings-replay', { onClick: () => onReplayTutorial?.() }, icon('star', 16), 'Replay tutorial'),
-    h('button.btn.btn-secondary.settings-controls', { onClick: () => showControls() }, icon('scroll', 16), 'Controls'));
+    h('button.btn.btn-secondary.settings-controls', { onClick: () => showControls() }, icon('scroll', 16), 'Controls'),
+    onCodex ? h('button.btn.btn-secondary.settings-codex', { onClick: () => onCodex() }, icon('map', 16), 'Codex') : null);
 
   const voicesRow = toggleRow({
     label: 'Leader voices', checked: true,

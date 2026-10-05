@@ -650,6 +650,71 @@ const ICONS = {
     circle(12, 10.8, 1.5, { fill: '#fff', 'fill-opacity': 0.35 }),
   ],
 
+  // --- Phase 8 Boons (PLAN-PHASE8 §8C) ---
+  // Vanguard: a spear thrust forward with a pennon (the first squad leads)
+  boonVanguard: () => [
+    group([rect(-1, -6, 2, 17, { rx: 0.6 }), polygon([[-2.8, -6], [2.8, -6], [0, -11.6]]), path('M1 -4.6h5.4l-1.6 2 1.6 2H1Z', { 'fill-opacity': 0.7 })], { transform: 'translate(11 12.6) rotate(35)' }),
+  ],
+  // Supply Wagons: a covered wagon
+  boonWagon: () => [
+    path('M4.4 13.4c0-5 3.4-8.4 7.6-8.4s7.6 3.4 7.6 8.4Z', { 'fill-opacity': 0.7 }),
+    rect(2.6, 13, 18.8, 3, { rx: 0.8 }),
+    circle(7, 18.6, 2.6), circle(17, 18.6, 2.6),
+    circle(7, 18.6, 0.9, { fill: '#000', 'fill-opacity': 0.45 }), circle(17, 18.6, 0.9, { fill: '#000', 'fill-opacity': 0.45 }),
+    path('M9 6.2v6.8M15 6.2v6.8', { stroke: '#000', 'stroke-opacity': 0.3, 'stroke-width': 1.2 }),
+  ],
+  // Rearguard: a shield with a curved arrow turning back
+  boonRetreat: () => [
+    path('M12 3 19 5.6v6c0 4.6-3 8-7 9.6-4-1.6-7-5-7-9.6v-6Z', { 'fill-opacity': 0.55 }),
+    path('M15.6 9.4a4.4 4.4 0 1 0 .2 4.6', { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
+    polygon([[13.4, 6.6], [17.6, 8.2], [14.6, 11.4]]),
+  ],
+  // War Drums: a war drum with crossed sticks
+  boonDrum: () => [
+    ellipse(12, 9.4, 8, 3),
+    path('M4 9.4v7.2c0 1.7 3.6 3 8 3s8-1.3 8-3V9.4c0 1.7-3.6 3-8 3s-8-1.3-8-3Z', { 'fill-opacity': 0.7 }),
+    path('M5.6 12.6 9 18.4l3-6 3 6 3.4-5.8', { fill: 'none', stroke: '#000', 'stroke-opacity': 0.35, 'stroke-width': 1.2 }),
+    path('M6 2.6 11 8.2M18 2.6 13 8.2', { stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round' }),
+  ],
+  // Tower Sappers: a pick biting into a tower's foot
+  boonSapper: () => [
+    path('M13 21V8.4l1.4-1.6V4h2v1.6h1.4V4h2v1.6h1.4V8.4L21 21Z', { 'fill-opacity': 0.6 }),
+    group([rect(-0.8, -2, 1.6, 12, { rx: 0.5 }), path('M-6 -1.8C-3 -4 3 -4 6 -1.8L4.8 -.6C2.6 -1.8-2.6 -1.8-4.8 -.6Z')], { transform: 'translate(8 11) rotate(-30)' }),
+  ],
+  // Spoils of War: a sack of loot under a small crown
+  boonSpoils: () => [
+    path('M9 9.4h6l-1 1.8c3.2 1.4 5.4 4.2 5.4 7.2 0 2-1.8 3.4-4.2 3.4H8.8c-2.4 0-4.2-1.4-4.2-3.4 0-3 2.2-5.8 5.4-7.2Z'),
+    path('M6.6 7.6 6 2.6l3 2.4L12 1.6l3 3.4 3-2.4-.6 5Z', { 'fill-opacity': 0.75 }),
+    circle(12, 16.6, 2.2, { fill: '#000', 'fill-opacity': 0.3 }),
+  ],
+  // Last Stand: a keep behind a raised shield
+  boonLastStand: () => [
+    path('M3 21V8h2.4V5.6h2V8h2.2V5.6h2V8H14V21Z', { 'fill-opacity': 0.55 }),
+    path('M16 8.6 21.6 10.6v4.6c0 3.4-2.4 5.6-5.6 6.8-3.2-1.2-5.6-3.4-5.6-6.8v-4.6Z'),
+    path('M16 11.4v7', { stroke: '#000', 'stroke-opacity': 0.35, 'stroke-width': 1.3, 'stroke-linecap': 'round' }),
+  ],
+  // Cartographer: a folded map with a compass needle
+  boonCartographer: () => [
+    path('M2.6 5.4 8.6 3.4l6.8 2.2 6-2v15l-6 2-6.8-2.2-6 2Z', { 'fill-opacity': 0.5 }),
+    path('M8.6 3.4v15M15.4 5.6v15', { stroke: '#000', 'stroke-opacity': 0.3, 'stroke-width': 1.1 }),
+    polygon([[12, 6.4], [13.6, 12], [12, 17.6], [10.4, 12]]),
+    polygon([[12, 6.4], [13.6, 12], [10.4, 12]], { fill: '#fff', 'fill-opacity': 0.4 }),
+  ],
+  // Thunder Charge (Duo): a drum struck by lightning
+  boonThunder: () => [
+    ellipse(9.4, 12.4, 6.6, 2.4),
+    path('M2.8 12.4v5.4c0 1.4 3 2.6 6.6 2.6s6.6-1.2 6.6-2.6v-5.4c0 1.4-3 2.6-6.6 2.6s-6.6-1.2-6.6-2.6Z', { 'fill-opacity': 0.7 }),
+    path('M17.6 1.6 12.8 8.6h3.4l-1.6 5.6 6-7.6h-3.4Z'),
+  ],
+  // Siege Train (Duo): a wagon carrying a ram
+  boonSiegeTrain: () => [
+    rect(2.6, 12.4, 18.8, 3.2, { rx: 0.8 }),
+    rect(4, 8, 15, 3, { rx: 1.4, 'fill-opacity': 0.75 }),
+    path('M19 7.4h2.4v4.2H19Z'),
+    circle(7, 18.4, 2.6), circle(17, 18.4, 2.6),
+    path('M8 8V5.2h7V8', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }),
+  ],
+
   // --- Relics (PLAN-PHASE7 §7B) ----------------------------------------------------------------------------------------------------------------
   // the chest a region holding a Relic shows (map glint, card line, claim); also an unknown Reliquary slot's shape
   chest: () => [
@@ -714,6 +779,33 @@ const ICONS = {
     rect(7.4, 8, 9.2, 10.4, { rx: 1.6, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }),
     path('M12 9.8c1.3 1.6 2.4 2.8 2.4 4.4a2.4 2.4 0 0 1-4.8 0c0-1.6 1.1-2.8 2.4-4.4Z'),
     path('M8.4 18.4h7.2l-1 2H9.4Z'),
+  ],
+  // --- Phase 8 Relics ---
+  // Merchant's Scale: a balance with two pans
+  relicScale: () => [
+    rect(11, 4, 2, 15, { rx: 0.7 }), rect(7, 19, 10, 2, { rx: 0.8 }), circle(12, 3.6, 1.6),
+    path('M3.6 6.6h16.8', { stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' }),
+    path('M2 13.4h6.4L5.2 7.2Z', { 'fill-opacity': 0.45 }), path('M2 13.4c.4 2 1.6 3 3.2 3s2.8-1 3.2-3Z'),
+    path('M15.6 13.4H22l-3.2-6.2Z', { 'fill-opacity': 0.45 }), path('M15.6 13.4c.4 2 1.6 3 3.2 3s2.8-1 3.2-3Z'),
+  ],
+  // Warden's Bell: a great bell on its yoke
+  relicBell: () => [
+    rect(4, 3, 16, 2.2, { rx: 1 }),
+    path('M12 5.2c-3.6 0-5.6 2.8-5.6 6.4v3.6L4.4 18h15.2l-2-2.8v-3.6c0-3.6-2-6.4-5.6-6.4Z'),
+    circle(12, 20, 1.8, { 'fill-opacity': 0.8 }),
+    path('M9.2 9.6c.4-1.2 1.4-2 2.8-2.2', { fill: 'none', stroke: '#fff', 'stroke-opacity': 0.4, 'stroke-width': 1.2, 'stroke-linecap': 'round' }),
+  ],
+  // Twin Crowns: two crowns, one behind the other
+  relicTwinCrowns: () => [
+    path('M8.6 13 8 5.4l3 2.4 3-4 3 4 3-2.4-.6 7.6Z', { 'fill-opacity': 0.55 }),
+    path('M2.6 20 2 11.6l3.4 2.6L9 9.6l3.6 4.6L16 11.6l-.6 8.4Z'),
+    rect(2.6, 20.2, 12.8, 1.6, { rx: 0.6 }),
+  ],
+  // Seal of the Margrave: a wax seal with a skull-crown impressed
+  relicSeal: () => [
+    path('M12 2.6l2.2 1.6 2.7-.3 1.1 2.5 2.5 1.1-.3 2.7 1.6 2.2-1.6 2.2.3 2.7-2.5 1.1-1.1 2.5-2.7-.3L12 21.4l-2.2-1.6-2.7.3L6 17.6l-2.5-1.1.3-2.7L2.2 11.6l1.6-2.2-.3-2.7L6 5.6l1.1-2.5 2.7.3Z'),
+    path('M8.4 10.6 8 7.8l2 1.4 2-2 2 2 2-1.4-.4 2.8Z', { fill: '#000', 'fill-opacity': 0.45 }),
+    circle(12, 14, 3, { fill: '#000', 'fill-opacity': 0.45 }),
   ],
 };
 

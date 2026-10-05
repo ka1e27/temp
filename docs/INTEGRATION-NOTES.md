@@ -932,3 +932,112 @@ lowest-tier frontier region holding a Relic, after M1, `afterDone`, 12 s, seen o
 (`?dev=1` only) `window.__HD_TEST_NO_BOON_MOMENTS` makes the claim and the post-battle draft wait on the chip, so the older flows' "Continue -> map"
 still holds; phase7Checks turns it off. Dev hooks: `__hd.boons`, `offerBoons(ids | 'champion', source)`, `grantBoons(ids)`, `placeRelic(regionId,
 relicId)`, `boonFxInfo()`.
+
+## Phase 8: fast, clear, a bit more to find (2026-10-04)
+Spec: `docs/PLAN-PHASE8.md`. Pure API of the content top-up: `docs/briefs/phase8-hookup.md`.
+
+**Measuring: `tools/perf.mjs`** (CDP, no dependencies; `--only=load,frames,meta,save`, `--runs=N`, `--json=`, `--label=`, `--root=<dir>` to measure another copy
+of the game, `--proto=h1`). It serves the repo the way Pages does (`tools/perfServer.js`: `/temp/`, gzip, HTTP/2 over TLS with a self-signed certificate made
+once by openssl; Chrome runs with `--ignore-certificate-errors`). Over plain HTTP/1.1 Chrome opens 6 connections per host, so ~250 modules at a 165 ms round
+trip queue for seconds no real visitor waits; `--proto=h1` shows that case. Load: a cold profile per run, Fast 4G (165 ms, 8.1 / 1.35 Mb/s) and 4x CPU;
+"title" = the first frame with New Realm on screen and the splash gone, then the tool presses it at once and "map" = the second world frame (both from
+navigation start, in the page). Frames: 4x CPU, 1440x900 DPR 1, **the GPU on** (`cdp.js launch({ gpu: true, args })`; frame times under `--disable-gpu`
+are software-raster numbers), rAF interval median / p95 plus the frame's CPU work, on the map (a slow pan), a 14-squad battle, an Ashen fight with
+wisps (Dynasty II, seed 7001) and a Dragon fight (seed 9). Meta: `perf.metaMs` (main.js now times autosave + idle + prosperity + frontier + events +
+goals + Boons apart from the battles and the scene; `__hd.perfSample()` also returns `metaAvgMs`). Boot marks (`performance.mark`): `hd-modules`,
+`hd-world`, `hd-setworld`, `hd-chunks`, `hd-baked`, `hd-first-frame`. In-page stages: `tools/perfStages.js`. New dev hook: `__hd.foundDynasty({ seed })`
+(no ceremony). Measure on a quiet machine: the 4x throttle is relative to the host, and the same build measured 2x apart in one afternoon.
+
+**What was slow and what changed**
+- **`#ui:has(...)` rules restyled the UI every frame** (any text change inside `#ui`, e.g. the gold counter, re-matched them and restyled the toasts, the tray
+  and the leader banner: ~4.6 ms a frame at 4x). main.js `syncUiFlags()` now sets `#ui[data-hud|battle|tray|tabs|toast|event-toast|banner-in]`, written only
+  when one changes; the CSS rules use them with the SAME specificity (one repeated attribute per class/attribute of the old `:has()` argument). Smaller
+  `:has()` rules scoped to one panel stay. **Never add a `#ui:has()` rule.**
+- **Hint facts every frame:** `tutorial.anyPending(scene)` (steps left to show?) gates `hintFacts` in both scenes (a veteran's map gathers nothing), and the
+  world's region-wide facts (Forts, Renown spends, every region) are recomputed at most every 250 ms (`slowHintFacts`). Toast lookups return early with no toast.
+- **Squads** (`render/sprites.js`): the soldier figure (shadow + two dots) and a squad's banner are baked (`render/spriteCache.js`: device px, half-pixel
+  quantised, capped 700, emptied when the web fonts arrive) and blitted; a still troop badge (pills on squads and settlements) is baked per label, colours
+  and size, a pulsing one is drawn live (`opts.live` forces the old path). `drawSite` no longer save/restores per settlement.
+- **Labels** (`render/labels.js`): the name (stroke, owned shadow, fill) and the difficulty chip are baked per look and size and blitted while the zoom
+  holds still for 2 frames; during a zoom they are drawn live. Marks (torch, crown, type badge, pips) stay live.
+- **Fog** (`render/cloudLayer.js`): the half-resolution fog buffer is reused for 120 ms while the camera (x, y, zoom, size), the hidden set and the fade
+  are unchanged and nothing is parting.
+- **Boot:** `<link rel="modulepreload">` for the whole boot graph (246 modules) in index.html, written by `tools/modulepreload.mjs` between two markers
+  (`--check` fails when stale; check.mjs runs it). The browser fetches everything at once instead of level by level. The same block holds
+  `<meta name="hd-lazy">`: the import() targets (the Codex, Quick Conquest, the bot), which index.html adds to the service worker's precache list so a lazily
+  loaded module works offline after one visit. Dev `?seed=N` no longer generates two worlds (`container.boot(seed)`). The sea field
+  (`render/seaField.js`) smooths each lattice row on first use with a table-driven Gaussian (was: the whole lattice, ~19 exp() per sample, at boot).
+  The boot no longer bakes every chunk before the title (`terrain.schedulePrebake` + `prebakeStep(4 ms)` per frame after the first) nor prewarms the
+  ambient sprites (they bake in the ambient layer's budget); the title draws with `terrain.draw(..., { newBakeMs: 30 })`, so its chunks fill in over a few
+  frames under the fading splash. New Realm, a dynasty and an import still `prebakeAll` behind their fades.
+
+**Before / after** (`node tools/perf.mjs`, HEAD = the Phase 7 commit served from a `git archive` copy with `--root`, measured back to back with the Phase 8
+tree on 2026-10-04; HEAD's dev `?seed=` boot generated two worlds, about 0.2 s of its title time; the Ashen row's "before" is the first session's run,
+since HEAD has no `foundDynasty` hook):
+
+| measure (Fast 4G, 4x CPU, cold / 4x CPU, GPU on) | before | after | budget |
+|---|---|---|---|
+| title interactive | 4183 ms | 2204 ms | < 3500 |
+| map playable (New Realm pressed at once) | 5383 ms | 3537 ms | < 6000 |
+| map, slow pan: median / p95 | 19.8 / 32.8 ms | 14.8 / 24.7 ms | < 20 / 33 |
+| big battle (14 squads): median / p95 | 22.5 / 41.0 ms | 13.6 / 25.0 ms | < 20 / 33 |
+| Ashen fight with wisps: median / p95 | 35.4 / 49.2 ms | 11.8 / 21.7 ms | < 20 / 33 |
+| Dragon fight: median / p95 | 24.2 / 40.8 ms | 12.5 / 23.0 ms | < 20 / 33 |
+| meta tick, late Dynasty II (avg) | 0.89 ms | 0.54 ms | < 2 |
+| save, late Dynasty III (mid-battle) | 6.5 KB | 6.6 KB (11.9 KB) | < 200 |
+
+**Preload scope (lead's question):** the block is the STATIC import graph of `game/main.js` only, i.e. exactly the modules the boot evaluates before the
+title anyway (they were all fetched at HEAD too, just level by level). The `import()` targets (the Codex, `codexTopics`, `meta/quick.js`, `battle/bot.js`:
+56 KB) are not preloaded. The post-boot panels the plan names as lazy candidates (ceremony, Boon draft, Duo reveal, Relic claim, Quick overlay, welcome,
+Generals panel) are still static imports constructed at boot; making them lazy would take 7 modules / 50 KB out of 2532 KB (2%). A/B, same tree, back to
+back, 3 cold runs each: with the preload block title 2190 ms / map 3918 ms; without it title 3218 ms / map 4849 ms.
+
+**The Codex (§8B)**
+- `game/app/codexTopics.js`: `CODEX_GROUPS` (the plan's nine), `CODEX_TOPICS` (34 pages: id, group, title, icon, 1-3 plain sentences, `numbers` built from
+  config at load, and `seen(state)`, a defensive read of the save that never writes), `PANEL_TOPICS`, `codexData(state)` -> `{ groups, unlocked, total }`
+  (a locked topic carries no text or numbers). Any number on a page is a config value through `pct`, `secs`, `mins`, ... (never typed).
+- `game/ui/codex.js` (`createCodex({ onClose, onRevisitHints })`, `open(data, topicId?, { revisit })`): a `watchDialog` panel appended to `document.body`,
+  above every other panel (`z-index: --z-modal + 2`), so a panel's "?" opens it on top and Escape returns to that panel. The list is grouped buttons
+  (`aria-current` on the open page, locked ones named "X: not yet discovered", arrows / Home / End move through it), the page has the icon, the title
+  (focused when a topic is chosen from the list), the sentences and a `<dl>` of numbers. Below 640 px list and page take turns ("‹ All topics").
+  Footer: the "Seen it before? Revisit the tutorial hints" switch (main.js `revisitHints`: on = `tutorial.replay()` after remembering the seen set, off =
+  restores it).
+- Entry points: Settings > Codex (`createSettings({ onCodex })`), and a "?" (`ui/codexHelp.js addHelpButton`, `.codex-help`) that main.js puts into the
+  headers of the War Council (council), Realm (income), Regions (bounties), Generals, the Boon draft (boons) and the founding ceremony (founding).
+  `services.openCodex(topicId)`. Both modules load on first use (`import()`); offline after one visit through `hd-lazy`.
+- Tutorial H1 (last in `TUTORIAL_STEPS`, after M1, 10 s): "Forgot how something works? Settings has a Codex that explains every system." pointing at the
+  HUD gear (`settingsBtn` anchor and fact), seen on `codexOpened`. Earlier steps always win (table order). `integration.app.test.js` lists the step order.
+- Checks: `check.mjs --only=codex` (`tools/codexChecks.mjs`, desktop 1440x900 and a 360x740 phone): Settings > Codex by real presses, dialog semantics
+  and focus, a locked topic with no numbers, Rally's numbers against `POWERS` read in the page, the arrows and Enter, fits 360 px, Back, revisit on/off,
+  Escape back to Settings, the Council's "?" opens the Council page, the other panels carry a "?". Shots `screenshots/phase8/codex-*`.
+
+**8C content UI** (`docs/briefs/phase8-hookup.md`)
+- Icons (`ui/icons.js`, mapped in `app/boons.js`): Boons `boonVanguard` (spear), `boonWagon`, `boonRetreat`, `boonDrum`, `boonSapper` (pick at a tower),
+  `boonSpoils` (sack under a crown), `boonLastStand` (keep behind a shield), `boonCartographer`; Duos `boonThunder`, `boonSiegeTrain`; Relics
+  `relicScale`, `relicBell`, `relicTwinCrowns`, `relicSeal`.
+- Events (`app/eventsLoop.js`): Deserters' toast offers both choices ("Muster everywhere" primary, "Weaken their next raid" secondary; the × just closes
+  it, it lapses); the Harvest Festival's button carries its price and a refusal for want of gold says so and re-offers. Leader lines `deserters` (that
+  rival) and `harvest` (the Merchant's grumbler). No `chronicle()` call for either (`acceptEvent` records them). The Merchant's fortification discount is
+  read from `ev.deals[].priceShare` (the Merchant's Scale changes it).
+- `scenes/battleBoons.js` pops for `vanguard`, `thunderCharge`, `supplyWagons` (+N), `warDrums`, `towerSappers` ("Sapped"), `lastStand`.
+- Rearguard: `goals.js` toasts "Rearguard: the streak holds." when `onStreakBroken` returns `kept`.
+- Gallery: `tools/phase8shots.mjs` -> `screenshots/phase8/` (event toasts, drafts of new Boons, the Realm strip and Reliquary, battle pops).
+
+**The top lane (lead, after the Phase 8 review).** All top-centre notices share ONE column, each in its own slot: the leader banner first (placed under
+the HUD / tabs / tray / battle top by `leaderBanner.js`'s `below` rule), then the toasts, event offers first (`.toasts > .toast.is-event { order: -1 }`),
+then Deeds, contracts, Trophies, streak and Vendetta toasts in arrival order. main.js `layoutTopLane()` (inside `syncUiFlags`, before the coach measures)
+pushes the toast column below the banner's layout box (`margin-top`, transitioned) while the banner is in or fading out. The old fixed offsets
+(`#ui[data-toast] .leader-banner { 148px }`, `#ui[data-event-toast] ...`) are gone: they overlapped whenever the column was taller than one row.
+A phone (< 768 px) shows at most two notices: `toasts.setMaxVisible(n)` (1 while the banner is in, else 2); toasts past the cap wait in the toasts' queue
+and come out as others leave, and an event offer (it has a countdown) takes the slot of the newest ordinary toast, which steps back into the queue.
+The column never moves UP under a pointer (THE CLICK RULE): when the banner leaves, the gap is kept while a pointer is down or a toast with a button (an offer,
+a raid's or a Vendetta's Go) is on screen, and closes once it is safe; moving down for a new banner is immediate. The push is not transitioned (mid-slide
+the toasts passed under the banner). Found by the goals check: the banner's fade ended mid-press, the column jumped ~100 px and the press on the
+Vendetta's Go landed on the hint bubble that slid into its place. Urgent toasts (an action button or `is-event`) also take a phone slot from the newest
+ordinary toast. Checks: `tools/hintMonitor.js` fails any frame in which two top notices' layout boxes intersect, or a phone shows more than two (so every check.mjs
+variant and hints.mjs watch it), and `check.mjs --only=toplane` (`tools/topLaneChecks.mjs`, desktop and phone) stages a toast, a leader line, a
+Deserters offer, a Vendetta, a Deed and a contract and asserts no overlap, the order, the phone cap and the queue, before and after the banner leaves.
+
+**The generals check's tray-picker flake** (failed 1 of 9 runs): the world scene's first frame moves focus to the map canvas when nothing visible holds it;
+when the tray painted before that frame, the check's `focus()` on the picker was undone and ArrowDown went to the map (diagnosed: activeElement CANVAS).
+The check now waits two frames, focuses the picker and asserts it holds focus before the key.

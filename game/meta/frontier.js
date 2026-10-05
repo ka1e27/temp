@@ -41,6 +41,7 @@ import { leaderFor } from './leaders.js';
 import { boonMods } from './boonsState.js'; // the leaf (PLAN-PHASE7): Oathkeeper, the Black Pennant
 import { offerChampionEye } from './boons.js';
 import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Iron Frontier, Peace of the Crowns, Overrun
+import { EVENTS } from '../config/events.js';
 
 export * from './frontierState.js';
 export { busyKey };
@@ -179,6 +180,7 @@ export function raidEnemyStats(state, world, raid) {
     * (raid.vendetta ? GRUDGES.vendetta.warBandMult : 1) // a Vendetta (PLAN-PHASE4 §4D): the leader comes in person, x1.5
     * edictMods(state).raidTroopMult // the Overrun Challenge (PLAN-PHASE5): war bands x1.4 too
     * boonMods(state).raidTroopMult // the Black Pennant Relic (PLAN-PHASE7): x0.75
+    * (raid.deserted ? EVENTS.deserters.raidMult : 1) // the Deserters event (PLAN-PHASE8): x0.7
     * (Number.isFinite(raid.mult) ? raid.mult : 1); // tools and tests only: a stronger or weaker war band
   const done = Math.max(0, ((state.dynasty && state.dynasty.level) || 1) - 1);
   const dynastyMult = done === 0 ? 1 : DYNASTY.enemyMultFirst * Math.pow(DYNASTY.enemyMultPerDynasty, done - 1);
@@ -246,6 +248,9 @@ function announce(state, world, faction, pair, t) {
     announcedAt: t, arriveAt: t + FRONTIER.telegraphSec + warn,
     strength: 0, depth: raidDepth(state, world, pair.to), first: f.stats.raids === 0,
   };
+  // the Deserters event (PLAN-PHASE8): this rival's next raid comes smaller, once
+  const we = state.worldEvents;
+  if (we && we.deserters && we.deserters.faction === faction) { raid.deserted = true; we.deserters = null; }
   raid.strength = Math.round(raidEnemyStats(state, world, raid).campTroops);
   f.incoming.push(raid);
   f.cooldown[pair.to] = raid.arriveAt + FRONTIER.regionCooldownSec;
@@ -422,6 +427,7 @@ export function defenseRunFor(state, world, raid, stats, opts = {}) {
     busy: opts.busy ? normalizeBusy(opts.busy) : busyFromState(state, world),
     vendetta: raid.vendetta || null,
     noChampion: boonMods(state).noChampion, // Oathkeeper (PLAN-PHASE7)
+    siegeSecMult: boonMods(state).siegeSecMult, // the Warden's Bell (PLAN-PHASE8)
   });
   const battle = createBattle(arena, player, enemy, { mode: 'defense', siegeSec: arena.siegeSec });
   const f = ensureFrontier(state);
@@ -539,6 +545,7 @@ export function estimateDefense(state, world, regionId, raid, opts = {}) {
       busy: opts.busy ? normalizeBusy(opts.busy) : null,
       vendetta: r.vendetta || null, // the Champion counts in the odds
       noChampion: boonMods(state).noChampion, // Oathkeeper (PLAN-PHASE7)
+    siegeSecMult: boonMods(state).siegeSecMult, // the Warden's Bell (PLAN-PHASE8)
     });
   } catch {
     return fallback;

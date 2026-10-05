@@ -184,6 +184,8 @@ export const TUTORIAL_STEPS = Object.freeze([
   // the frontier (its label and chest), last in the list and after M1 like A1, so every earlier step that is due goes first; it steps aside after 12 s
   { id: 'K1', scene: 'world', anchor: 'boonDraft', seenOn: ['boonPicked'], text: 'Your first Boon: pick the card that suits how you fight. It lasts the dynasty.' },
   { id: 'L1', scene: 'world', anchor: 'relicRegion', after: ['M1'], seenOn: ['relicCardOpened'], timeoutSec: 12, afterDone: true, text: 'A Relic lies in this region: conquer it to claim it for your dynasty. Click it to see what it does.', textTouch: 'A Relic lies in this region: conquer it to claim it for your dynasty. Tap it to see what it does.' },
+  // Phase 8 (§8B): after the first battle, once the first-session steps have had their turn (last in the table, so any earlier step that is due wins)
+  { id: 'H1', scene: 'world', anchor: 'settingsBtn', after: ['M1'], seenOn: ['codexOpened'], timeoutSec: 10, text: 'Forgot how something works? Settings has a Codex that explains every system.' },
 ]);
 
 /** The live send arrow: saturated green when the send would capture, red when it would not (gold otherwise), grey when there is no route (front lines). Read by battle.js and tools/check.mjs. */

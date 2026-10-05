@@ -93,8 +93,8 @@
   .battle-tray-list { flex-direction: column; overflow: visible; }
   .tray-row { min-width: 0; }
   .tray-commander { max-width: 96px; }
-  #ui:has(.battle-hud:not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 240px; }
-  #ui:has(.hud:not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 190px; }
+  #ui[data-battle][data-battle][data-tray][data-tray] .toasts { top: 240px; }
+  #ui[data-hud][data-hud][data-tray][data-tray] .toasts { top: 190px; }
   /* the ability button: its icon only (its name is in its accessible name and title) */
   .battle-ability .battle-ability-label { display: none; }
   .battle-ability { padding: 0; width: var(--touch-target); min-width: var(--touch-target); flex-shrink: 0; justify-content: center; }
@@ -115,7 +115,7 @@
 @keyframes ability-banner-still { 0% { opacity: 0; } 15% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
 html.reduce-motion .battle-ability-banner.is-in { animation-name: ability-banner-still; }
 @media (max-width: 840px) { .battle-ability-banner { top: 118px; } }
-@media (max-width: 640px) { #ui:has(.battle-tray:not([hidden])) .battle-ability-banner { top: 236px; } }
+@media (max-width: 640px) { #ui[data-tray][data-tray] .battle-ability-banner { top: 236px; } }
 /* both skill choices the same height, whatever the length of their words */
 .general-skill-choice { align-items: stretch; }
 .general-skill-option { height: 100%; display: flex; align-items: center; }

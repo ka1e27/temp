@@ -8,6 +8,7 @@
 // Who calls what: conquer() calls onStreakConquest itself (and conquestBounty already prices the NEXT conquest with the streak it
 // would make), defenseReward() calls onStreakDefenseWon on a win, tickFrontier() calls tickStreak. Integration calls
 // onStreakBroken(state, 'lost' | 'retreat') when an ATTACK is lost or retreated (no meta function sees those).
+import { boonMods } from './boonsState.js';
 import { STREAK } from '../config/streak.js';
 import { deedBonuses, recordDeed } from './deeds.js';
 import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Bounty Hunters has no Conquest Streak
@@ -96,6 +97,8 @@ export function onStreakDefenseWon(state) {
  * @returns {{ was:number, reason:string }}
  */
 export function onStreakBroken(state, reason = 'lost') {
+  // Rearguard (PLAN-PHASE8): a retreat keeps the streak; `was: 0` so no "streak broken" toast fires, `kept` says why
+  if (reason === 'retreat' && boonMods(state).rearguard) return { was: 0, reason, kept: true };
   const s = ensureStreak(state);
   const was = alive(state, s) ? s.count : 0;
   s.count = 0;

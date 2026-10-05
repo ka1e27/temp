@@ -136,7 +136,7 @@ export function createTitleScene(services) {
     const { state, world } = container.get();
     const { ctx } = renderer;
     renderer.beginFrame(camera);
-    renderer.terrain.draw(ctx, camera, state.owner);
+    renderer.terrain.draw(ctx, camera, state.owner, undefined, { newBakeMs: 30 }); // the boot's chunks fill in over a few frames under the splash (Phase 8 perf)
     renderer.terrain.drawGlints(ctx, camera, tm);
     renderer.clouds.drawShadows(ctx, camera, tm);
     siteDrawer.draw(ctx, renderer, camera, state.owner, tm);

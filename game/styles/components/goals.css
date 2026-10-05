@@ -279,11 +279,11 @@ html.reduce-motion .battle-champion-banner.is-in { animation-name: champion-bann
 }
 
 /* ------------------------------------------------------------------ room for the hanging tabs: the map's tray and toast lane step down while they show */
-#ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])) .battle-tray { top: 132px; }
+#ui[data-tabs][data-tabs][data-tabs][data-tabs] .battle-tray { top: 132px; }
 @media (max-width: 640px) {
-  #ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])) .battle-tray { top: 116px; }
-  #ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])) .toasts { top: 124px; }
-  #ui:has(.hud:not([hidden]) .hud-tabs > :not([hidden])):has(.battle-tray:not([hidden])) .toasts { top: 230px; }
+  #ui[data-tabs][data-tabs][data-tabs][data-tabs] .battle-tray { top: 116px; }
+  #ui[data-tabs][data-tabs][data-tabs][data-tabs] .toasts { top: 124px; }
+  #ui[data-tabs][data-tabs][data-tabs][data-tabs][data-tray][data-tray] .toasts { top: 230px; }
 }
 
 /* A 360-380 px phone: the bar's five 44 px buttons and the gold did not fit (the gear poked out of the bar); tighter gaps and a slightly smaller number make room */

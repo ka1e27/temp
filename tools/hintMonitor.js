@@ -94,6 +94,7 @@ export function installHintMonitor() {
     if (/only attack where your land/i.test(text)) return list(...sites.filter((s) => s.owner !== 0).map(siteT));
     // The Living Frontier (F1-F4): the raid toast's Go; the tray chip of a battle you are not watching; the region to fortify, its Fortifications Build, the Arrow Tower row
     // Goals and Rivals (Q1, Q2): the Regions button (the Bounty Board lives in its panel); a Vendetta banner's Go
+    if (/has a codex/i.test(text)) return list(sel('.hud .btn-icon[aria-label="Settings"]')); // Phase 8 (H1)
     if (/the bounty board/i.test(text)) return list(sel('.hud-regions'));
     if (/a vendetta!/i.test(text)) {
       const btns = [...document.querySelectorAll('.toasts > .toast.is-vendetta:not(.is-out) .toast-action')].filter(isVisible);
@@ -232,6 +233,25 @@ export function installHintMonitor() {
           if (overlapArea(tb, db, 0) > 0) note('(toasts)', 'a toast overlaps an open dialog', `"${t.textContent.trim().slice(0, 40)}" at ${Math.round(tb.x)},${Math.round(tb.y)} over ${(d.className || d.tagName).toString().slice(0, 30)}`);
         }
       }
+    }
+    // the top lane (main.js layoutTopLane): the leader banner and the toasts never overlap, and a phone shows at most two of them. Layout boxes (offsets in #ui),
+    // so a notice's slide-in transform does not count.
+    {
+      const ui = document.getElementById('ui');
+      const lane = [];
+      const banner = document.querySelector('.leader-banner');
+      const card = banner && banner.firstElementChild;
+      if (banner && banner.dataset.state === 'in' && card && card.offsetHeight > 0) lane.push({ name: 'leader banner', x: banner.offsetLeft + card.offsetLeft, y: banner.offsetTop + card.offsetTop, w: card.offsetWidth, h: card.offsetHeight });
+      const col = document.querySelector('.toasts');
+      if (col && ui) for (const t of col.children) {
+        if (t.classList.contains('is-out') || !t.offsetHeight) continue;
+        lane.push({ name: `toast "${t.textContent.trim().slice(0, 30)}"`, x: col.offsetLeft + t.offsetLeft, y: col.offsetTop + t.offsetTop, w: t.offsetWidth, h: t.offsetHeight });
+      }
+      for (let i = 0; i < lane.length; i++) for (let j = i + 1; j < lane.length; j++) {
+        const a = lane[i]; const b = lane[j];
+        if (a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5) note('(top lane)', 'two top notices overlap', `${a.name} and ${b.name}`);
+      }
+      if (innerWidth < 768 && lane.length > 2) note('(top lane)', 'more than two top notices on a phone', lane.map((x) => x.name).join(' | '));
     }
     const coaches = [...document.querySelectorAll('.coach')].filter((c) => !c.hidden);
     if (coaches.length === 0) return;

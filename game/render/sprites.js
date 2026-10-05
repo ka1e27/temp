@@ -11,6 +11,7 @@ import {
   ACCENTS, FACTIONS, roofColor as roofColorFor, factionColorDark, shade, rgba,
 } from './palette.js';
 import { buildSettlement } from './sprites-buildings.js';
+import { bake, blit, bannerStrip, blitStrip, quant, ctxScale } from './spriteCache.js';
 
 function resolveFaction(f) {
   if (f == null) {
@@ -388,6 +389,18 @@ function shortNum(n) {
   return `${sign}${x.toFixed(digits)}${units[u]}`;
 }
 
+let measureCtx = null;
+/** The width of a badge's numerals at `fontPx` (a scratch context; bakes need it before they draw). */
+function measureBadgeText(label, fontPx) {
+  if (!measureCtx) {
+    const c = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(4, 4) : (globalThis.document ? globalThis.document.createElement('canvas') : null);
+    measureCtx = c ? c.getContext('2d') : null;
+  }
+  if (!measureCtx) return label.length * fontPx * 0.62;
+  measureCtx.font = `800 ${fontPx}px Nunito, system-ui, sans-serif`;
+  return measureCtx.measureText(label).width;
+}
+
 /**
  * Rounded troop-count pill, owner colour, bold white numerals with a dark
  * outline — legible over any terrain (DESIGN §7.2).
@@ -399,6 +412,21 @@ export function drawTroopBadge(ctx, x, y, count, faction, s, opts = {}) {
   const h = Math.max(10, s * 0.62);
   const phase = typeof opts.pulse === 'number' ? opts.pulse : (opts.pulse ? now() / 1000 : null);
   const pulse = phase != null ? 1 + Math.sin(phase * 6) * 0.07 : 1;
+  // Phase 8 perf: a still badge is the same drawing baked once per (label, colours, size) and blitted; a pulsing one is drawn live
+  if (pulse === 1 && !opts.live) {
+    const dpr = ctxScale(ctx);
+    const want = h * dpr;
+    const b = bake(`badge|${label}|${f.color}|${f.colorDark}`, quant(want), (q) => {
+      const hc = q / dpr; // the badge height in CSS px the bake is drawn at
+      const w = Math.max(hc * 1.2, measureBadgeText(label, Math.round(hc * 0.6)) + hc * 0.85);
+      const W = (w * 1.2 + hc * 0.2 + 4) * dpr;
+      return { w: W, h: (hc * 1.5 + 6) * dpr, ox: W / 2, oy: (hc * 0.6 + 3) * dpr };
+    }, (bctx, ox, oy, q) => {
+      bctx.scale(dpr, dpr);
+      drawTroopBadge(bctx, ox / dpr, oy / dpr, label, f, q / dpr / 0.62, { live: true });
+    });
+    if (b) { blit(ctx, b, x, y, dpr, want); return; }
+  }
 
   ctx.save();
   ctx.font = `800 ${Math.round(h * 0.6)}px Nunito, system-ui, sans-serif`;
@@ -445,7 +473,24 @@ export function drawSquad(ctx, x, y, count, faction, s, t, dirX, dirY, opts = {}
 
   const bannerX = x + dx * s * 1.05;
   const bannerY = y + dy * s * 1.05;
-  drawBanner(ctx, bannerX, bannerY, s * 0.5, f, t, { phase: opts.phase });
+  // Phase 8 perf: the banner's flutter and the soldier figure are baked (render/spriteCache.js) and blitted; `opts.live` draws them as before
+  const dpr = opts.live ? 1 : ctxScale(ctx);
+  const fkey = `${f.color}|${f.colorDark}|${f.emblem}`;
+  const strip = opts.live || typeof opts.phase !== 'number' || typeof t !== 'number' ? null
+    : bannerStrip(`squad|${fkey}`, quant(s * 0.5 * dpr), (bctx, ox, oy, sb, tt) => drawBanner(bctx, ox, oy, sb, f, tt, { phase: 0 }));
+  if (strip) blitStrip(ctx, strip, bannerX, bannerY, dpr, s * 0.5 * dpr, t, opts.phase);
+  else drawBanner(ctx, bannerX, bannerY, s * 0.5, f, t, { phase: opts.phase });
+  const fig = opts.live ? null : bake(`soldier|${fkey}`, quant(s * dpr), (q) => ({ w: q * 0.4 + 4, h: q * 0.46 + 4, ox: q * 0.2 + 2, oy: q * 0.21 + 2 }), (bctx, ox, oy, q) => {
+    groundShadow(bctx, ox, oy + q * 0.14, q * 0.17, q * 0.08, 0.28);
+    bctx.fillStyle = f.colorDark;
+    bctx.beginPath();
+    bctx.arc(ox, oy + q * 0.03, q * 0.15, 0, Math.PI * 2);
+    bctx.fill();
+    bctx.fillStyle = f.color;
+    bctx.beginPath();
+    bctx.arc(ox, oy - q * 0.07, q * 0.12, 0, Math.PI * 2);
+    bctx.fill();
+  });
 
   const slots = [];
   let row = 0;
@@ -461,6 +506,7 @@ export function drawSquad(ctx, x, y, count, faction, s, t, dirX, dirY, opts = {}
     const bob = Math.sin((t || 0) * 3.4 + idx * 0.9) * s * 0.045;
     const bx = x - dx * p.row * spacing + rx * p.side * spacing;
     const by = y - dy * p.row * spacing + ry * p.side * spacing + bob;
+    if (fig) { blit(ctx, fig, bx, by, dpr, s * dpr); continue; }
     groundShadow(ctx, bx, by + s * 0.14, s * 0.17, s * 0.08, 0.28);
     ctx.fillStyle = f.colorDark;
     ctx.beginPath();

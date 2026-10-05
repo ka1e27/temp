@@ -23,10 +23,12 @@ function timeIt(fn) {
   return { result, ms: Date.now() - start };
 }
 
-test('generateWorld runs in well under 300ms at the default size', () => {
+// The best of 3 runs per seed: about 90 ms alone, but `npm test` runs files in parallel and one slow run on a loaded machine (GC, a
+// sibling process) is noise, not a regression. A real slowdown makes every run slow, so the minimum still catches it.
+test('generateWorld runs in well under 300ms at the default size (best of 3 runs)', () => {
   for (const seed of [1, 2, 3]) {
-    const { ms } = timeIt(() => generateWorld(seed));
-    assert.ok(ms < 300, `seed ${seed} took ${ms}ms`);
+    const ms = Math.min(...[0, 1, 2].map(() => timeIt(() => generateWorld(seed)).ms));
+    assert.ok(ms < 300, `seed ${seed} took ${ms}ms at best of 3`);
   }
 });
 

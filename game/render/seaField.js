@@ -148,8 +148,22 @@ export function createSeaField(world, extentY) {
   const gw = gx1 - gx0 + 1;
   const gh = gy1 - gy0 + 1;
   const field = new Float32Array(gw * gh);
-
-  for (let j = 0; j < gh; j++) {
+  // Phase 8 perf: the lattice used to be smoothed in full at boot (a quarter of a million samples, 19 exp() each: ~80 ms, ~320 ms on a slow phone).
+  // Rows are now smoothed the first time a chunk bake needs them, and the Gaussian weight comes from a table (linear interpolation, error < 1e-6:
+  // the same colours). A function of world position only, as before, so chunks still agree exactly.
+  const rowDone = new Uint8Array(gh);
+  const LUT_N = 4096;
+  const LUT_MAX = 26; // squared distance: every neighbour within two hex steps lies inside
+  const lut = new Float32Array(LUT_N + 2);
+  for (let k = 0; k <= LUT_N + 1; k++) lut[k] = Math.exp(-((k / LUT_N) * LUT_MAX) / SIGMA2X2);
+  const weight = (d2) => {
+    if (d2 >= LUT_MAX) return Math.exp(-d2 / SIGMA2X2);
+    const x = (d2 / LUT_MAX) * LUT_N;
+    const k = x | 0;
+    return lut[k] + (lut[k + 1] - lut[k]) * (x - k);
+  };
+  function smoothRow(j) {
+    rowDone[j] = 1;
     const wy = (gy0 + j) / RES;
     for (let i = 0; i < gw; i++) {
       const wx = (gx0 + i) / RES;
@@ -164,7 +178,7 @@ export function createSeaField(world, extentY) {
           const r = c.r + dr;
           const dx = SQ3 * (q + r / 2) - wx;
           const dy = 1.5 * r - wy;
-          const w = Math.exp(-(dx * dx + dy * dy) / SIGMA2X2);
+          const w = weight(dx * dx + dy * dy);
           const col = q + (r - (r & 1)) / 2;
           num += (extIn(col, r) ? eExt[extIdx(col, r)] : SEA_DEEP_E) * w;
           den += w;
@@ -174,6 +188,7 @@ export function createSeaField(world, extentY) {
     }
   }
 
+  if (globalThis.__HD_EAGER_SEA) for (let j = 0; j < gh; j++) smoothRow(j);
   const yRange = Math.max(1, extentY.maxY - extentY.minY);
   const rgb = [0, 0, 0];
   let scratch = null; // { canvas, ctx, img, w, h } reused across chunk bakes
@@ -207,6 +222,7 @@ export function createSeaField(world, extentY) {
       const wy = gj / RES;
       const yn = Math.max(0, Math.min(1, (wy - extentY.minY) / yRange));
       const gjc = Math.max(0, Math.min(gh - 1, gj - gy0));
+      if (!rowDone[gjc]) smoothRow(gjc);
       for (let i = 0; i < nw; i++) {
         const gi = i0 + i;
         const gic = Math.max(0, Math.min(gw - 1, gi - gx0));

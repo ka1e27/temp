@@ -17,6 +17,9 @@ import { RENOWN } from '../config/renown.js';
 import { PLAYER_FACTION } from './state.js';
 import { bounty } from './economy.js';
 import { recordDeed } from './deeds.js';
+import { boonMods } from './boonsState.js';
+import { PROSPERITY } from '../config/prosperity.js';
+import { edictMods } from './edicts.js';
 
 /**
  * @typedef {import('./state.js').RegionCrowns} RegionCrowns
@@ -67,7 +70,7 @@ export function parFor(world, regionId, state) {
   const id = parBandOf(world, regionId);
   const base = id === 'capital' ? PAR.capitalSec : PAR.bands.find((b) => b.id === id).parSec;
   const dynasty = state && state.dynasty ? Math.max(1, state.dynasty.level) : 1;
-  return base + PAR.perDynastySec * (dynasty - 1);
+  return base + PAR.perDynastySec * (dynasty - 1) + (state ? boonMods(state).swiftParAdd : 0); // Twin Crowns (PLAN-PHASE8)
 }
 
 /**
@@ -322,7 +325,16 @@ export function awardCrowns(state, world, regionId, crowns, baseBounty) {
   state.stats.crownsEarned = (state.stats.crownsEarned || 0) + count;
   const renown = earnRenown(state, count * RENOWN.earn.crown, 'crown'); // each crown pays Renown (DESIGN §10.12)
   recordDeed(state, 'crowns', count); // the Crowned deed (PLAN-PHASE4 §4C)
-  return { bonusGold, count, renown };
+  const out = { bonusGold, count, renown };
+  // Spoils of War (PLAN-PHASE8): a three-crown win starts the region at Prosperity crownProsperity (its tenure clock jumps there, as a
+  // Festival's does); updateProsperity then reports the level-up as usual. `out.spoils` = the level granted.
+  const lvl = Math.min(PROSPERITY.maxLevel, boonMods(state).crownProsperity);
+  if (lvl > 0 && count === CROWN_KEYS.length && state.conqueredAt && Number.isFinite(state.conqueredAt[regionId])) {
+    const back = PROSPERITY.thresholdsMs[lvl - 1] / edictMods(state).prosperityRateMult;
+    state.conqueredAt[regionId] = Math.min(state.conqueredAt[regionId], state.conqueredAt[regionId] - back);
+    out.spoils = lvl;
+  }
+  return out;
 }
 
 /**

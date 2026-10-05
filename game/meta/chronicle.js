@@ -303,6 +303,7 @@ function variantKey(entry) {
   const d = entry.data || {};
   if (d.surrender && CHRONICLE.templates[`${entry.kind}.surrender`]) return `${entry.kind}.surrender`;
   if (entry.kind === 'tripleCrown' && d.streak >= 3 && CHRONICLE.templates['tripleCrown.streak']) return 'tripleCrown.streak';
+  if (typeof d.variant === 'string' && CHRONICLE.templates[`${entry.kind}.${d.variant}`]) return `${entry.kind}.${d.variant}`;
   return entry.kind;
 }
 

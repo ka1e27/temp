@@ -19,6 +19,15 @@ export const RELIC_LIST = Object.freeze([
     text: 'Firestorm +{pct:firestormMult} damage' },
   { id: 'gravewardensLantern', name: "Gravewarden's Lantern", icon: 'lantern', mods: { lanternRadius: 5 }, requires: 'ashen',
     text: 'The Fallen Rise never happens within {lanternRadius} hexes of your War Camp' },
+  // Phase 8 (PLAN-PHASE8 §8C): four more, so the Reliquary (12) takes several dynasties to fill at 4 a continent
+  { id: 'merchantsScale', name: "Merchant's Scale", icon: 'scale', mods: { merchantPriceMult: 0.7 },
+    text: "The Merchant's deals cost {pct:merchantPriceMult} less" },
+  { id: 'wardensBell', name: "Warden's Bell", icon: 'bell', mods: { siegeSecMult: 0.8 }, requires: 'raids',
+    text: 'You hold out {pct:siegeSecMult} shorter in every defense: the siege timer runs out sooner' },
+  { id: 'twinCrowns', name: 'Twin Crowns', icon: 'crowns', mods: { swiftParAdd: 20 },
+    text: "Swift's par is {swiftParAdd} s longer" },
+  { id: 'sealOfMargrave', name: 'Seal of the Margrave', icon: 'seal', mods: { risingIntervalMult: 1.5 }, requires: 'ashen',
+    text: "The Barrow Keep's dead rise every {rising} s instead of every {risingBase} s" },
 ].map((r) => Object.freeze({ requires: null, ...r, mods: Object.freeze(r.mods) })));
 
 export const RELICS = Object.freeze({

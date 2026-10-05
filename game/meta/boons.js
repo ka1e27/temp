@@ -88,6 +88,8 @@ export function boonRelevant(state, world, b) {
   if (req === 'powers') return !em.noPowers;
   if (req === 'ability') return !em.forceCaptain && !em.noAbility;
   if (req === 'raids') return em.raids !== false;
+  if (req === 'streak') return em.streak !== false; // Rearguard: not under Bounty Hunters
+  if (req === 'quick') return !!em.quickConquest; // Cartographer: only once the Quick Conquest Legacy is bought
   if (!world || !Array.isArray(world.regions)) return true;
   const open = (r) => state.owner[r.id] !== PLAYER;
   if (req === 'ashen') return rivalsInWorld(world).includes(ASHEN_FACTION);

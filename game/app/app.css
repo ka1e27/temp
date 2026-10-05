@@ -123,12 +123,12 @@
 
 /* Desktop battles: the top pill (region name, tug-of-war bar, timer) runs from y = 12 to ~88, so toasts start a little beneath it
    instead of touching it (the playtest flagged the 4 px overlap of the Rally toast). */
-#ui:has(.battle-hud:not([hidden])) .toasts { top: 100px; }
+#ui[data-battle][data-battle] .toasts { top: 100px; }
 
 /* Phone battles: the mission chip drops below the button row, so toasts start beneath it instead
    of covering the progress bar (the desktop offset already clears it). */
 @media (max-width: 840px) {
-  #ui:has(.battle-hud:not([hidden])) .toasts { top: 120px; }
+  #ui[data-battle][data-battle] .toasts { top: 120px; }
 }
 
 /* "Open in another tab": a persistent bar over everything (it is an alert, not a dialog: the game stays playable, it just no longer saves). */

@@ -50,9 +50,9 @@ test('boonMods: neutral with nothing, every Boon and Relic folds, Duos need both
   for (const r of RELIC_LIST) for (const k of Object.keys(r.mods)) assert.ok(k in BOON_NEUTRAL, `${r.id}.${k}`);
 });
 
-test('the pool: 24 Boons, rarities and cursed ones, copy filled from config numbers', () => {
-  assert.equal(BOON_LIST.length, 24);
-  assert.equal(new Set(BOON_LIST.map((b) => b.id)).size, 24);
+test('the pool: 32 Boons (24 + Phase 8), rarities and cursed ones, copy filled from config numbers', () => {
+  assert.equal(BOON_LIST.length, 32);
+  assert.equal(new Set(BOON_LIST.map((b) => b.id)).size, 32);
   assert.ok(BOON_LIST.filter((b) => b.cursed).length >= 3);
   for (const r of ['common', 'rare', 'legendary']) assert.ok(BOON_LIST.some((b) => b.rarity === r));
   for (const info of allBoons()) {
@@ -189,8 +189,8 @@ test('Relics: 4 per continent, seeded, Ruins first, deep, never the tutorial rin
   s.generals.reliquary.found = Object.values(s.relics.placed);
   placeRelics(s, W);
   const now = Object.values(s.relics.placed);
-  // 8 Relics, 4 found, the Lantern needs the Ashen: the 3 undiscovered ones that can appear are all placed, plus one found
-  assert.equal(now.filter((id) => !s.generals.reliquary.found.includes(id)).length, 3, 'undiscovered Relics are placed first');
+  // 12 Relics (Phase 8), 4 found, the Lantern and the Seal need the Ashen: 6 undiscovered can appear, so all 4 placed are new ones
+  assert.equal(now.filter((id) => !s.generals.reliquary.found.includes(id)).length, 4, 'undiscovered Relics are placed first');
   assert.equal(relicOnFrontier(fresh(), W) === null || typeof relicOnFrontier(fresh(), W) === 'number', true);
   const q = reliquary(s);
   assert.equal(q.total, RELIC_LIST.length);
