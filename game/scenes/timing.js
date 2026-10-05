@@ -35,6 +35,7 @@ export const WORLD_SCENE = Object.freeze({
   idlePopMaxSec: 4,
   autosaveIntervalSec: 5,
   welcomeBackMinSec: 60,
+  cardPressSettleMs: 250, // a hint's room in the region card never opens or closes while a press is on the card, nor this long after it lifts (world.js hintRoom)
 });
 
 // Phase 10A: when hints may speak (game/app/tutorial.js, game/app/tutorialRules.js; facts from game/scenes/world.js)

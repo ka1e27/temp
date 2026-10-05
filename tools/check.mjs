@@ -25,7 +25,7 @@
 //   6. the dev hook winBattle() -> victory card -> a real click on Continue -> the region is ours
 //   7. reload: the save persisted (Continue is offered, the region is still ours)
 // It never uses frame times as a pass/fail criterion (headless Chrome here rasterises on the CPU).
-import { DRAG_ARROW, NO_ROUTE_TEXT } from '../game/scenes/timing.js';
+import { DRAG_ARROW, NO_ROUTE_TEXT, HINT_PACE } from '../game/scenes/timing.js';
 
 if (!process.env.CHROME_PATH && process.platform === 'win32') {
   process.env.CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
@@ -33,9 +33,14 @@ if (!process.env.CHROME_PATH && process.platform === 'win32') {
 const { launch: rawLaunch } = await import('./cdp.js');
 // Phase 7: the Relic claim moment and the Boon draft that follow a win would stand in front of every older check's "Continue -> back on the map"; under
 // these tools an offer waits on the HUD chip instead (app/boons.js reads this flag in ?dev=1 only). tools/phase7Checks.mjs turns the moments back on.
+// --cpu=N throttles every page's CPU N-fold and --tz=Zone overrides its timezone (opt-in, to reproduce a slow 2-core CI
+// runner in UTC locally: `node tools/check.mjs --only=desktop --cpu=4 --tz=UTC`). Off by default.
 const launch = async (opts) => {
   const page = await rawLaunch(opts);
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true; window.__HD_TEST_NO_PACING = true;' });
+  const cpu = Number(flags.cpu);
+  if (cpu > 1) await page.send('Emulation.setCPUThrottlingRate', { rate: cpu });
+  if (flags.tz && flags.tz !== 'true') await page.send('Emulation.setTimezoneOverride', { timezoneId: flags.tz });
   return page;
 };
 const { robustChecks } = await import('./robustChecks.mjs');
@@ -173,13 +178,14 @@ async function variant(name, { width, height, mobile }) {
       await page.mouse('mouseReleased', x, y, 'left', 0);
     }
   };
-  /** A real press whose pointerdown and pointerup are `holdMs` apart, with `during()` run between them. */
-  const slowPress = async (x, y, holdMs, during) => {
+  /** A real press whose pointerdown and pointerup are `holdMs` apart, with `during()` run between them and `beforeUp()` just before the release. */
+  const slowPress = async (x, y, holdMs, during, beforeUp) => {
     if (mobile) {
       await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
       await sleep(holdMs * 0.3);
       if (during) await during();
       await sleep(holdMs * 0.7);
+      if (beforeUp) await beforeUp();
       await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     } else {
       await page.mouse('mouseMoved', x, y, 'none', 0);
@@ -188,6 +194,7 @@ async function variant(name, { width, height, mobile }) {
       await sleep(holdMs * 0.3);
       if (during) await during();
       await sleep(holdMs * 0.7);
+      if (beforeUp) await beforeUp();
       await page.mouse('mouseReleased', x, y, 'left', 0);
     }
   };
@@ -224,9 +231,13 @@ async function variant(name, { width, height, mobile }) {
   const dragTo = async (a, b, onHold, releaseAt) => {
     if (mobile) {
       await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: a.x, y: a.y, id: 1 }] });
+      // the first move already clears the tap threshold, as a finger that sets off on a drag does: a slow page (a CI runner, --cpu) handles one touchmove
+      // per frame, and three short ones could outlast the 450 ms long-press (which on our own settlement arms a supply line instead of a send)
+      const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
       for (let i = 1; i <= 14; i++) {
+        const f = Math.max(i / 14, Math.min(1, 16 / dist));
         await page.send('Input.dispatchTouchEvent', {
-          type: 'touchMove', touchPoints: [{ x: a.x + ((b.x - a.x) * i) / 14, y: a.y + ((b.y - a.y) * i) / 14, id: 1 }],
+          type: 'touchMove', touchPoints: [{ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, id: 1 }],
         });
         await sleep(16);
       }
@@ -249,7 +260,18 @@ async function variant(name, { width, height, mobile }) {
     }
   };
   /** Real click on an element, asserting the click really lands on it. */
-  const clickReal = async (sel, txt, label) => {
+  const clickReal = async (sel, txt, label, { stable = false } = {}) => {
+    // `stable`: aim only once the element has stopped moving (two samples 150 ms apart agree), like a player who aims at a button where it IS:
+    // a phone's bottom sheet grows upward when a hint opens room in it (the Attack hint waits HINT_PACE.attackHintDelaySec), moving every button
+    if (stable) {
+      let prev = null;
+      for (let i = 0; i < 20; i++) {
+        const c0 = await centerOf(sel, txt);
+        if (c0 && prev && Math.abs(c0.x - prev.x) < 0.5 && Math.abs(c0.y - prev.y) < 0.5) break;
+        prev = c0;
+        await sleep(150);
+      }
+    }
     const c = await centerOf(sel, txt);
     if (!ok(!!c, `${label}: element exists`)) return false;
     ok(c.hit, `${label}: the click point is ON the element (elementFromPoint)${c.hit ? '' : `, covered by ${c.cover}`}`);
@@ -292,8 +314,12 @@ async function variant(name, { width, height, mobile }) {
     ok(amb0.smoke > 0 && amb0.boats >= 0, `the world has chimneys to smoke (${amb0.smoke} sources)`);
     // The click above was the first gesture: it must have unlocked audio and started the score (a touch only
     // counts as an activation when it ENDS, so this is what proves the phone unlock).
-    ok(await waitFor(() => { const m = window.__hd.music.getDebug(); return m.started && m.activeVoices > 0 && m.errors === 0; }, 8000),
-      'the first click unlocked audio and the music is playing (voices > 0, no errors)');
+    {
+      // a voice has sounded (peakVoices): the live count drops to 0 between notes, and a slow page (--cpu, a CI runner) polls seldom enough to miss every note
+      const playing = await waitFor(() => { const m = window.__hd.music.getDebug(); return m.started && !m.paused && m.peakVoices > 0 && m.errors === 0; }, 8000);
+      const dbg = playing ? '' : `: ${JSON.stringify(await page.eval(() => { const m = window.__hd.music.getDebug(); return { started: m.started, paused: m.paused, peakVoices: m.peakVoices, activeVoices: m.activeVoices, errors: m.errors }; }))}`;
+      ok(playing, `the first click unlocked audio and the music is playing (voices > 0, no errors)${dbg}`);
+    }
 
     // 2b. touch: a pinch that starts on the game's chrome must not zoom the PAGE (the viewport stays user-scalable; the chrome is `touch-action: pan-x pan-y`)
     if (mobile) {
@@ -329,10 +355,16 @@ async function variant(name, { width, height, mobile }) {
       const ids = world.regions.filter((r) => state.owner[r.id] !== 0 && r.neighbors.some((n) => state.owner[n] === 0)).map((r) => r.id);
       const id = ids.find((i) => !difficulty(state, world, i).surrender) ?? ids[0];
       const keep = world.tiles[world.settlements[world.regions[id].keep].tile];
-      const p = camera.worldToScreen(keep.x, keep.y);
-      return { id, name: world.regions[id].name, x: p.x, y: p.y + 6 };
+      // the keep, unless a hint's bubble (W2 points at this very region) sits over it right now: then the region's nearest uncovered tile, like a player
+      const onMap = (q) => q.x > 8 && q.y > 8 && q.x < innerWidth - 8 && q.y < innerHeight - 8 && document.elementFromPoint(q.x, q.y)?.id === 'world';
+      const pts = [keep, ...world.regions[id].tiles.map((i) => world.tiles[i]).sort((a, b) => Math.hypot(a.x - keep.x, a.y - keep.y) - Math.hypot(b.x - keep.x, b.y - keep.y))]
+        .map((t, k) => { const q = camera.worldToScreen(t.x, t.y); return { x: q.x, y: q.y + (k === 0 ? 6 : 0) }; });
+      const p = pts.find(onMap) || pts[0];
+      return { id, name: world.regions[id].name, x: p.x, y: p.y };
     });
     const target = await frontierTarget();
+    // the page's own clock at the first frame the card is up (the Attack hint counts from there; see 3b)
+    await page.eval(() => { window.__cardUpAt = null; const poll = () => { const d = document.querySelector('.hd-dock'); if (d && !d.hidden && d.getClientRects().length) window.__cardUpAt = performance.now(); else requestAnimationFrame(poll); }; poll(); });
     await tap(target.x, target.y);
     ok(await waitFor(() => { const d = document.querySelector('.hd-dock'); return d && !d.hidden && d.getClientRects().length > 0; }, 8000),
       'clicking a frontier region opens its card');
@@ -366,8 +398,6 @@ async function variant(name, { width, height, mobile }) {
         'the desktop card label quotes the crown bonus from config (BOUNTY_FRACTION_PER_CROWN)');
     }
 
-    await pressAudit('.hud-btn[aria-label="War Council"]', 'HUD War Council');
-
     // 3b. Scout and Sabotage through real clicks ------------------------------------------------------
     const scrollTo = async (sel) => {
       await page.eval((q) => document.querySelector(q)?.scrollIntoView({ block: 'nearest' }), sel);
@@ -383,22 +413,46 @@ async function variant(name, { width, height, mobile }) {
     // wait for the button to be enabled, instead of hoping 400 ms happens to span a refresh (it flaked once Scout cost more than the start gold).
     await page.eval(() => { window.__hd.grantGold(200000); window.__hd.refreshCard(); });
     ok(await waitFor(() => { const b = document.querySelector('.intel-scout-btn'); return !!b && !b.disabled; }, 4000), 'the Scout button enables once the gold is there');
-    await clickReal('.intel-scout-btn', null, 'Scout');
+    // The Attack hint speaks once the card has been open HINT_PACE.attackHintDelaySec, and the room it opens above Attack lifts a phone's whole bottom
+    // sheet (Scout with it). Landing between a press and its release, it moved the button out from under the finger and the tap hit whatever slid under
+    // it instead (CI, 2-core runner: every run). Hold a real press on Scout ACROSS that moment: the card must keep the room shut while the press is on it
+    // (world.js hintRoom), and the release must still scout. (A machine too slow to get here in time aims at a button that has stopped moving instead.)
+    const hintLeft = () => page.eval((delay) => (window.__cardUpAt == null ? -1 : window.__cardUpAt + delay - performance.now()), HINT_PACE.attackHintDelaySec * 1000);
+    const roomOpen = () => page.eval(() => [...document.querySelectorAll('.region-card-hintslot')].some((r) => r.dataset.px && r.dataset.px !== '0'));
+    if ((await hintLeft()) > 700 && !(await roomOpen())) {
+      const c = await centerOf('.intel-scout-btn');
+      ok(!!c && c.hit, 'Scout: the press point is ON the element (elementFromPoint)');
+      const yBefore = c.y;
+      let shut = true;
+      let yDuring = yBefore;
+      await slowPress(c.x, c.y, Math.max(600, (await hintLeft()) + 700), null, async () => {
+        shut = !(await roomOpen());
+        yDuring = (await centerOf('.intel-scout-btn'))?.y ?? -1;
+      });
+      ok(shut, 'the room for the hint stays shut while a press is on the card');
+      ok(Math.abs(yDuring - yBefore) < 2, `Scout did not move under the finger (${yBefore.toFixed(1)} -> ${yDuring.toFixed(1)})`);
+      ok(await waitFor(() => [...document.querySelectorAll('.region-card-hintslot')].some((r) => r.dataset.px && r.dataset.px !== '0'), 4000), 'the Attack hint opens its room once the press is over');
+    } else {
+      console.log(`  note: the Attack hint was due in ${Math.round(await hintLeft())} ms; the press-across-the-hint path was not exercised`);
+      await sleep(Math.max(0, (await hintLeft()) + 300));
+      await clickReal('.intel-scout-btn', null, 'Scout', { stable: true });
+    }
     ok(await waitFor((id) => window.__hd.state.intel[id]?.scouted === true, 4000, target.id), 'a real click on Scout records the scouting');
     ok(await waitFor(() => document.querySelectorAll('.intel-chip').length >= 2, 4000), 'the scouted card reveals the garrison chips');
     await sleep(700);
     await scrollTo('.intel-sabotage-btn');
-    await clickReal('.intel-sabotage-btn', null, 'Sabotage (1st)');
+    await clickReal('.intel-sabotage-btn', null, 'Sabotage (1st)', { stable: true });
     ok(await waitFor((id) => window.__hd.state.intel[id]?.sabotage === 1, 4000, target.id), 'the first Sabotage step lands (level 1)');
     await sleep(900);
     await scrollTo('.intel-sabotage-btn');
-    await clickReal('.intel-sabotage-btn', null, 'Sabotage (2nd)');
+    await clickReal('.intel-sabotage-btn', null, 'Sabotage (2nd)', { stable: true });
     ok(await waitFor((id) => window.__hd.state.intel[id]?.sabotage === 2, 4000, target.id), 'the second Sabotage step lands (maxed at level 2)');
     ok(await waitFor(() => { const b = document.querySelector('.intel-sabotage-btn'); return !!b && b.disabled && /already weakened/i.test(b.textContent); }, 3000),
       'the Sabotage button is disabled and says the garrisons are already weakened');
     // the card never outgrows the screen: a phone's sheet is capped at 62% (76% while the tutorial's Attack bubble has opened room above the button), the desktop column at the screen minus the HUD; its body scrolls inside
     ok(await page.eval((phone) => { const d = document.querySelector('.hd-dock'); const open = [...document.querySelectorAll('.region-card-hintslot')].some((r) => r.dataset.px && r.dataset.px !== '0'); return d.getBoundingClientRect().height <= (phone ? innerHeight * (open ? 0.77 : 0.63) : innerHeight - 88); }, mobile), 'the card stays within its height cap (its body scrolls inside)');
     await sleep(600);
+    await pressAudit('.hud-btn[aria-label="War Council"]', 'HUD War Council'); // (after Scout: the press on Scout above must start before the Attack hint)
 
     // 4. Attack, pressed SLOWLY while gold ticks and the card refreshes ------------------------------
     // The card used to rebuild its buttons on every refresh: one landing between pointerdown and pointerup

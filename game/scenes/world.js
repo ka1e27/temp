@@ -463,6 +463,30 @@ export function createWorldScene(services) {
   let inWorld = false; // this scene is the one on screen (a battle nobody watches may end meanwhile)
   let hintOutlineRegion = -1; // the region the open hint points at: it gets a bright pulsing outline
   let hintSlotPx = 84; // the room the card opens above Attack for the "Attack!" bubble (grows to the bubble's real height)
+  // Opening or closing that room moves every button of a phone's bottom sheet (it grows upward). Never while a finger or the mouse is down on the card,
+  // nor in the moment after it lifts (a touch's click is dispatched after touchend): the press would land on whatever slid under it and be swallowed.
+  // The change waits (hintRoom) and is applied on the first frame after the press (flushHintRoom, every frame from updateCoach).
+  let cardPressDown = false;
+  let cardPressUpAt = -1e9;
+  ui.regionCard.dock.addEventListener('pointerdown', () => { cardPressDown = true; }, true);
+  const pressEnd = () => { if (cardPressDown) { cardPressDown = false; cardPressUpAt = performance.now(); } };
+  window.addEventListener('pointerup', pressEnd, true);
+  window.addEventListener('pointercancel', pressEnd, true);
+  let hintRoomWant = null;
+  let hintRoomKey = '0|footer'; // the room as applied
+  function flushHintRoom() {
+    if (!hintRoomWant || cardPressDown || performance.now() - cardPressUpAt < WORLD_SCENE.cardPressSettleMs) return;
+    ui.regionCard.setHintSpace(hintRoomWant.px, hintRoomWant.where);
+    hintRoomKey = hintRoomWant.key;
+    hintRoomWant = null;
+  }
+  /** Asks for the room; returns false while the change is held back by a press (the bubble that needs it waits too). */
+  function hintRoom(px, where = 'footer') {
+    const key = px > 0 ? `${Math.round(px)}|${where}` : '0|footer';
+    hintRoomWant = key === hintRoomKey ? null : { px, where, key };
+    flushHintRoom();
+    return !hintRoomWant;
+  }
   let cardOffersSurrender = false; // the open card shows Accept Surrender instead of Attack
 
   function refreshRegionCard() {
@@ -1638,10 +1662,11 @@ export function createWorldScene(services) {
 
   function updateCoach(nowMs) {
     watchPanZoom();
+    flushHintRoom(); // a room change held back by a press on the card lands now
     // nothing left to teach here (every step seen, or hints off): no facts to gather at all
     if (!tutorial.anyPending('world')) {
       hintOutlineRegion = -1;
-      if (coachSig !== 'off') { coachSig = 'off'; ui.regionCard.setHintSpace(0); ui.coach.update({ visible: false }); }
+      if (coachSig !== 'off') { coachSig = 'off'; hintRoom(0); ui.coach.update({ visible: false }); }
       return;
     }
     const facts = hintFacts(nowMs);
@@ -1650,7 +1675,7 @@ export function createWorldScene(services) {
     else if (frameForW2()) { if (coachSig !== 'off') { coachSig = 'off'; ui.coach.update({ visible: false }); } return; }
     const off = () => {
       hintOutlineRegion = -1;
-      ui.regionCard.setHintSpace(0);
+      hintRoom(0);
       if (coachSig !== 'off') { coachSig = 'off'; ui.coach.update({ visible: false }); }
     };
     if (!def) { off(); return; }
@@ -1660,8 +1685,11 @@ export function createWorldScene(services) {
     // "Attack!" opens room for its bubble ABOVE the button, inside the card, so it covers no number the player is deciding on
     if (res.slot) {
       hintSlotPx = Math.max(hintSlotPx, Math.min(130, Math.ceil(ui.coach.bubble.offsetHeight || 0) + 28));
-      ui.regionCard.setHintSpace(hintSlotPx, res.slot === 'scout' ? 'scout' : 'footer');
-    } else ui.regionCard.setHintSpace(0);
+      if (!hintRoom(hintSlotPx, res.slot === 'scout' ? 'scout' : 'footer')) { // held back by a press on the card: the bubble waits for its room
+        if (coachSig !== 'off') { coachSig = 'off'; ui.coach.update({ visible: false }); }
+        return;
+      }
+    } else hintRoom(0);
     // Step W3 says "Attack!": if the card in front of the player offers a surrender instead, say that.
     const text = res.text || (def.id === 'W3' && cardOffersSurrender ? SURRENDER_HINT : (services.isTouch() && def.textTouch) || def.text);
     coachSig = `${def.id}|${res.key || ''}|${text}`;

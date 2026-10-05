@@ -65,22 +65,25 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
 
   const listEl = h('div.council-list.scroll-y', { id: 'council-list', role: 'tabpanel', 'aria-labelledby': 'council-tab-army' });
 
-  // Feedback for a purchase made IN the council appears in the council (a toast would sit over the dialog): one polite status line under the header
+  // Feedback for a purchase made IN the council appears in the council (a toast would sit over the dialog): one polite status line IN the header, between
+  // the title and the close button. It never takes a row of its own: one that opened under the header pushed every Buy button down on the first purchase
+  // (and back up 4 s later), so a quick second click on a slow machine landed beside the button it aimed at.
   const statusEl = h('div.council-status', { role: 'status', 'aria-live': 'polite' }, '');
   let statusTimer = 0;
   function setStatus(message, kind = 'success') {
     clearTimeout(statusTimer);
     statusEl.textContent = message || '';
     statusEl.dataset.kind = kind;
+    statusEl.title = message || ''; // a long name may be cut with an ellipsis on a phone
     statusEl.classList.toggle('is-on', !!message);
     if (message) statusTimer = setTimeout(() => { statusEl.textContent = ''; statusEl.classList.remove('is-on'); }, 4000);
   }
   const el = h('div.council.glass-panel', {},
     h('div.council-header', {},
       h('h2.council-title', {}, 'War Council'),
+      statusEl,
       h('button.btn-icon.council-close', { onClick: () => onClose?.(), 'aria-label': 'Close' }, icon('close', 16)),
     ),
-    statusEl,
     h('div.council-toolbar', {}, tabsEl, buyMaxToggle),
     listEl,
   );
