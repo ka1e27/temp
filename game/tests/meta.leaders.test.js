@@ -10,7 +10,7 @@ import { makeWorld, makeGame } from './meta.fixtures.js';
 import { conquer } from '../meta/progression.js';
 import { FACTIONS } from '../config/world.js';
 
-const TITLES = { 1: 'Reeve', 2: 'Warlord', 3: 'High Seer', 4: 'Khan', 5: 'Margrave' }; // 5: the Ashen Host (PLAN-PHASE6)
+const TITLES = { 1: 'Reeve', 2: 'Warlord', 3: 'High Seer', 4: 'Khan', 5: 'Margrave', 6: 'Queen' }; // 5: the Ashen Host (PLAN-PHASE6); 6: the Sea Kings (PLAN-PHASE12)
 
 // --- leaders ----------------------------------------------------------------------------
 
@@ -68,13 +68,13 @@ test('leaderFor: the four leaders of one continent never share a name', () => {
 // --- the writing -------------------------------------------------------------------------
 
 test('config: every faction has 4-6 lines for every trigger, and no strays', () => {
-  assert.deepEqual([...LEADER_FACTIONS], [1, 2, 3, 4, 5]);
+  assert.deepEqual([...LEADER_FACTIONS], [1, 2, 3, 4, 5, 6]);
   assert.equal(LEADER_TRIGGERS.length, 21); // Phase 8: + deserters, harvest
   assert.ok(LEADER_TRIGGERS.includes('scouted') && LEADER_TRIGGERS.includes('sabotaged'), 'DESIGN §5.7 triggers');
   for (const t of ['grudge', 'vendetta', 'vendettaWon', 'vendettaLost', 'plague', 'merchant', 'duelWon', 'duelLost', 'deserters', 'harvest']) {
     assert.ok(LEADER_TRIGGERS.includes(t), `PLAN-PHASE4 trigger ${t}`);
   }
-  assert.deepEqual(Object.keys(LEADER_LINES).map(Number).sort(), [1, 2, 3, 4, 5]);
+  assert.deepEqual(Object.keys(LEADER_LINES).map(Number).sort(), [1, 2, 3, 4, 5, 6]);
   for (const f of LEADER_FACTIONS) {
     assert.deepEqual(Object.keys(LEADER_LINES[f]).sort(), [...LEADER_TRIGGERS].sort(), `faction ${f} trigger set`);
     for (const t of LEADER_TRIGGERS) {

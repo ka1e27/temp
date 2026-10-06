@@ -20,7 +20,7 @@ import { icon } from '../ui/icons.js';
 import { shortNumber } from '../ui/format.js';
 
 const TOAST_ID = 'world-event';
-const ICONS = { merchant: 'coin', plague: 'candle', duel: 'sword', deserters: 'flag', harvest: 'wheat' };
+const ICONS = { merchant: 'coin', plague: 'candle', duel: 'sword', deserters: 'flag', harvest: 'wheat', shipwreck: 'shipwreck' };
 
 /**
  * @param {{ getState: () => object, getWorld: () => object, manager: object, ui: object, services: object, isActive: () => boolean,
@@ -42,7 +42,7 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
       const off = fort && Number.isFinite(fort.priceShare) ? Math.round((1 - fort.priceShare) * 100) : null;
       return `${title}: ${ev.text.replace(/^A merchant offers /, 'offers ')}${off != null ? ` Or a fortification level at ${off}% off.` : ''} ${left} s.`;
     }
-    if (ev.kind === 'harvest') return `${title}: ${ev.text} ${left} s.`;
+    if (ev.kind === 'harvest' || ev.kind === 'shipwreck') return `${title}: ${ev.text} ${left} s.`;
     if (ev.kind === 'plague') return `${ev.text}`;
     return `${ev.text} ${left} s to answer.`;
   }
@@ -50,7 +50,7 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
   function toastOffer(ev) {
     if (closedId === ev.id && !ui.toasts.has?.(TOAST_ID)) return;
     const plague = ev.kind === 'plague';
-    if (ev.kind === 'deserters' || ev.kind === 'harvest') { toastChoice(ev); return; }
+    if (ev.kind === 'deserters' || ev.kind === 'harvest' || ev.kind === 'shipwreck') { toastChoice(ev); return; }
     ui.toasts.update({
       id: TOAST_ID, className: 'is-event', type: plague ? 'warning' : 'info', icon: ICONS[ev.kind] || 'bell', message: offerText(ev),
       duration: plague ? 12000 : (secondsLeft(ev) + 2) * 1000,
@@ -71,6 +71,14 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
         ...base,
         action: { label: c.desertersMuster, ariaLabel: `Deserters: ${c.desertersMuster}`, onClick: () => answer(ev.id, 'muster') },
         secondary: { label: c.desertersRaid, ariaLabel: `Deserters: ${c.desertersRaid}`, onClick: () => answer(ev.id, 'raid') },
+      });
+      return;
+    }
+    if (ev.kind === 'shipwreck') { // PLAN-PHASE12 §12C: salvage it for gold, or search it for a Relic (opt-in: the x just lets it lapse)
+      ui.toasts.update({
+        ...base,
+        action: { label: `${c.shipwreckSalvage} · ${shortNumber(ev.gold)}`, ariaLabel: `Shipwreck: ${c.shipwreckSalvage} for ${shortNumber(ev.gold)} gold`, onClick: () => answer(ev.id, 'salvage') },
+        secondary: { label: c.shipwreckLeave, ariaLabel: `Shipwreck: ${c.shipwreckLeave}`, onClick: () => answer(ev.id, 'leave') },
       });
       return;
     }
@@ -106,6 +114,8 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
     } else if (ev.kind === 'harvest') {
       const grumbler = merchantGrumbler();
       if (grumbler != null) { try { services.speak?.('harvest', grumbler, undefined, `harvest-${ev.id}`); } catch { /* a nicety */ } }
+    } else if (ev.kind === 'shipwreck') {
+      // PLAN-PHASE12: news on your coast, nobody to grumble; the answer writes the Chronicle line
     } else {
       const grumbler = merchantGrumbler();
       if (grumbler != null) { try { services.speak?.('merchant', grumbler, undefined, `merchant-${ev.id}`); } catch { /* a nicety */ } } // a neighbour grumbles about the caravan
@@ -149,6 +159,23 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
       const fname = getWorld().factions[res.faction] ? getWorld().factions[res.faction].name : 'rival';
       ui.toasts.update({ type: 'success', icon: 'flag', message: res.choice === 'raid' ? `The deserters thin the ${fname}'s next raid.` : `${res.regions} militias stand full.` });
       services.sfx?.play('levy', { volume: 0.7 });
+      services.tutorial?.notify('eventAnswered');
+      services.markMapDirty?.();
+      services.autosave?.save();
+      return true;
+    }
+    if (ev.kind === 'shipwreck') {
+      const res = acceptEvent(state, getWorld(), { choice: choice === 'leave' ? 'leave' : 'salvage' }, Date.now());
+      if (!res) return false;
+      ui.toasts.dismissId?.(TOAST_ID);
+      if (res.choice === 'salvage') {
+        ui.toasts.update({ type: 'success', icon: 'shipwreck', message: `The wreck is salvaged: +${shortNumber(res.gold)} gold.` });
+        services.sfx?.play('coin');
+        services.onEventAccepted?.(res);
+      } else if (!res.relic) {
+        ui.toasts.update({ type: 'info', icon: 'shipwreck', message: 'You search the wreck: nothing but driftwood and salt.' });
+      } // a Relic found in the wreck plays its claim card on its own (app/boons.js tick: a newly owned Relic)
+      chronicle(res.relic ? 'A Relic was found in a wreck on the coast.' : 'A wreck washed up on the coast.', ev.regionId);
       services.tutorial?.notify('eventAnswered');
       services.markMapDirty?.();
       services.autosave?.save();
@@ -303,7 +330,7 @@ export function createEventsLoop({ getState, getWorld, manager, ui, services, is
     if (expired) {
       ui.toasts.dismissId?.(TOAST_ID);
       if (merchantModal) { merchantModal.destroy(); merchantModal = null; }
-      if (expired.kind !== 'plague') ui.toasts.update({ type: 'info', icon: ICONS[expired.kind], message: { merchant: 'The merchant caravan moved on.', deserters: 'The deserters went their way.', harvest: 'The harvest was gathered without a festival.' }[expired.kind] || 'The challenge lapsed.', duration: 2600 });
+      if (expired.kind !== 'plague') ui.toasts.update({ type: 'info', icon: ICONS[expired.kind], message: { merchant: 'The merchant caravan moved on.', deserters: 'The deserters went their way.', harvest: 'The harvest was gathered without a festival.', shipwreck: 'The tide took the wreck back out to sea.' }[expired.kind] || 'The challenge lapsed.', duration: 2600 });
     }
     if (offered) onOffered(offered);
     // the countdown in the offer's toast, once a second (only while the player has not closed it)

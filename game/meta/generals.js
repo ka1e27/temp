@@ -28,8 +28,8 @@ export function freeGenerals(state, nowMs) {
 
 // How well a General suits a kind of battle: attackers for attacks, the Marshal (and Stalwarts) for defenses.
 const SUIT = Object.freeze({
-  attack: Object.freeze({ crimson: 0.6, amber: 0.5, violet: 0.4, gravewarden: 0.3, mercenary: 0.2, marshal: 0 }),
-  defense: Object.freeze({ marshal: 0.6, gravewarden: 0.5, violet: 0.3, mercenary: 0.2, amber: 0.1, crimson: 0 }),
+  attack: Object.freeze({ crimson: 0.6, amber: 0.5, admiral: 0.45, violet: 0.4, gravewarden: 0.3, mercenary: 0.2, marshal: 0 }),
+  defense: Object.freeze({ marshal: 0.6, gravewarden: 0.5, violet: 0.3, mercenary: 0.2, admiral: 0.15, amber: 0.1, crimson: 0 }),
 });
 
 /**
@@ -128,6 +128,7 @@ export function passiveText(general) {
     case 'speed': return `Squads +${pct(p.value)} march speed`;
     case 'campTroops': return `+${pct(p.value)} camp troops`;
     case 'reclaim': return `${pct(p.value)} of the enemies slain attacking your settlements join them`;
+    case 'laneShield': return 'Your squads sailing sea lanes take no tower fire';
     default: return '';
   }
 }
@@ -143,6 +144,7 @@ export function abilityText(general) {
     case 'foresight': return `${name}: enemy targets revealed, enemy squads −${pct(a.slow)} speed for ${a.duration} s`;
     case 'raid': return `${name}: ${a.squads > 1 ? `${a.squads} free squads` : 'a free squad'} of ${pct(a.share)} of the camp's troops ride to the target${a.noArrows ? ', through arrows' : ''}`;
     case 'bonus': return `${name}: +${pct(a.share)} troops at the camp`;
+    case 'broadside': return `${name}: every coastal enemy site loses ${pct(a.perSec)} of its troops a second for ${a.duration} s`;
     case 'raiseFallen': return `${name}: the troops you lost in the last ${a.windowSec} s rise at your strongest site (up to ${pct(a.cap)} of the camp)`;
     default: return name;
   }

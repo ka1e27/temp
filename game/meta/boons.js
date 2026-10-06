@@ -94,6 +94,7 @@ export function boonRelevant(state, world, b) {
   if (!world || !Array.isArray(world.regions)) return true;
   const open = (r) => state.owner[r.id] !== PLAYER;
   if (req === 'ashen') return rivalsInWorld(world).includes(ASHEN_FACTION);
+  if (req === 'archipelago') return !!world.archipelago; // PLAN-PHASE12: Navigator, Privateers, Harbour Chain
   if (req === 'night') return world.regions.some((r) => r.twist === 'night' && open(r));
   if (req === 'siege') return world.regions.some((r) => r.twist === 'siege' && open(r));
   if (req === 'dragon') return world.regions.some((r) => r.type === 'dragon' && open(r));
@@ -217,6 +218,14 @@ export function boonBattleEnd(state, world, battle, result) {
     out.plunder = m.plunderSec * incomePerSec(state, world) * captured;
     state.gold += out.plunder;
     if (state.stats) state.stats.goldEarned += out.plunder;
+  }
+  // Privateers (PLAN-PHASE12): each enemy harbour (a port site that was not the player's when the battle began) the player holds at the end
+  const ports = m.privateerSec > 0 && battle && Array.isArray(battle.sites) && battle.arena && Array.isArray(battle.arena.sites)
+    ? battle.sites.filter((s) => s.port && s.owner === PLAYER && battle.arena.sites[s.id] && battle.arena.sites[s.id].owner !== PLAYER).length : 0;
+  if (ports > 0) {
+    out.privateers = m.privateerSec * incomePerSec(state, world) * ports;
+    state.gold += out.privateers;
+    if (state.stats) state.stats.goldEarned += out.privateers;
   }
   if (m.lossGoldShare > 0 && result !== 'win') {
     out.goldLost = Math.max(0, state.gold) * m.lossGoldShare;

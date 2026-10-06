@@ -46,6 +46,7 @@
 .general-emblem[data-kind="violet"] { --emblem-bg: #6d1b99; }
 .general-emblem[data-kind="amber"] { --emblem-bg: #f29e38; color: #2a1d05; }
 .general-emblem[data-kind="gravewarden"] { --emblem-bg: #5c5b64; color: #e6dcc4; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), inset 0 0 0 2px rgba(169, 223, 214, 0.55), 0 0 8px rgba(169, 223, 214, 0.45); }
+.general-emblem[data-kind="admiral"] { --emblem-bg: #11786c; color: #effffb; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.45), inset 0 0 0 2px rgba(62, 239, 216, 0.55); } /* the Sea Kings' Admiral (Phase 12) */
 .general-emblem[data-kind="mercenary"] { --emblem-bg: #7a6a4a; }
 .general-emblem[data-kind="captain"] { --emblem-bg: #5b6472; }
 /* HUD: the Renown laurel beside the gold */

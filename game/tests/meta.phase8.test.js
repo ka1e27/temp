@@ -24,10 +24,10 @@ const own = (state, ...ids) => { state.boons2.owned.push(...ids); return state; 
 const NEW = ['vanguard', 'supplyWagons', 'rearguard', 'warDrums', 'towerSappers', 'spoilsOfWar', 'lastStand', 'cartographer'];
 const withNodes = (state, ...nodes) => { state.generals.legacy = { v: 1, points: 99, spent: 0, nodes: Object.fromEntries(nodes.map((n) => [n, true])), pendingBonus: 0 }; return state; };
 
-test('the pool: 32 Boons, 6 Duos, 12 Relics; every new text is filled from config', () => {
-  assert.equal(BOON_LIST.length, 32);
+test('the pool: 32 Boons, 6 Duos, 12 Relics (+3 Boons and 2 Relics in Phase 12); every new text is filled from config', () => {
+  assert.equal(BOON_LIST.length, 35);
   assert.equal(DUO_LIST.length, 6);
-  assert.equal(RELIC_LIST.length, 12);
+  assert.equal(RELIC_LIST.length, 14);
   for (const id of NEW) { const b = boonInfo(id); assert.ok(b && b.text && !/[{}]/.test(b.text), `${id}: ${b && b.text}`); }
   assert.match(boonInfo('vanguard').text, /50%/);
   assert.match(boonInfo('towerSappers').text, /3 hexes.*30%/);
@@ -35,7 +35,7 @@ test('the pool: 32 Boons, 6 Duos, 12 Relics; every new text is filled from confi
   assert.match(relicInfo('sealOfMargrave').text, /every 30 s instead of every 20 s/);
   assert.match(relicInfo('merchantsScale').text, /30%/);
   assert.match(relicInfo('twinCrowns').text, /20 s/);
-  assert.equal(allBoons().length, 32);
+  assert.equal(allBoons().length, 35);
 });
 
 test('the new Duos: Thunder Charge and Siege Train reveal on the second part and fold their keys', () => {

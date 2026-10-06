@@ -17,6 +17,9 @@ export const SITE_TYPES = Object.freeze({
   bandit:  { growth: 0.5,  cap: 100, def: 1.2 },
   gate:    { growth: 0.25, cap: 120, def: 2.0 },
   shrine:  { growth: 0.2,  cap: 40,  def: 1.0 },
+  // PLAN-PHASE12: an archipelago region's quay (its harbour site when it has no harbour settlement, config/sea.js HARBOUR.quayTroops): a
+  // hamlet's numbers, one more soft target that opens the sea lanes to whoever holds it
+  harbour: { growth: 0.35, cap: 40, def: 1.0 },
 });
 
 export const BATTLE = Object.freeze({
@@ -108,7 +111,7 @@ export const ENEMY_SCALING = Object.freeze({
   // thirteen times as strong as ring 1 and its Free Folk keeps a four-minute siege): the top is pinned by the
   // stalemate bound (a garrison must regrow less than fightRateMin per second), so the ladder cannot be steeper.
   atkDefByTier: [1, 0.88, 1.22, 1.523, 1.826, 2.128, 2.431, 2.734],
-  personalityStat: { passive: 1.09, defensive: 0.86, aggressive: 0.82, swarm: 0.77, undying: 0.75 }, // undying (PLAN-PHASE6): softer per troop than the others, because its garrisons grow from your dead (0.86 made D2 1.6x a classic D2); extra atk AND def from depth 2. Free Folk only 9%: they never attack, so a stronger keep is not a harder fight, it is a stalemate (+40% gave 100-troop keeps the bot timed out on)
+  personalityStat: { passive: 1.09, defensive: 0.86, aggressive: 0.82, swarm: 0.77, undying: 0.75, raider: 0.8 }, // raider (PLAN-PHASE12): light garrisons, it evacuates by sea rather than holding; // undying (PLAN-PHASE6): softer per troop than the others, because its garrisons grow from your dead (0.86 made D2 1.6x a classic D2); extra atk AND def from depth 2. Free Folk only 9%: they never attack, so a stronger keep is not a harder fight, it is a stalemate (+40% gave 100-troop keeps the bot timed out on)
   regionJitter: 0.05,        // each region's atk AND def x 1 +/- this (hash of world seed + region id): regions of one rung are not clones
   ladderCurve: 1.12,         // 1 = evenly spaced rungs; >1 keeps more regions easy and crowds the hard ones at the end. PLAN-PHASE11: 1.12 (was 1). A person shopping every few minutes (tools/campaign.mjs --policy=human, 32 seeds) had an Easy or Fair fight in 50% of the first hour's minutes at 1 and 79% at 1.12; the optimal D1 falls from 1.33 h to 1.01 h (24 seeds), the floor of its 1.0-1.6 h band (1.15: 0.99-1.01 h, 1.2: 0.95 h). Challenge worlds keep 1 (progression.js enemyDepth)
   capitalStat: 1.038,        // capitals' atk AND def x this on top (capitals already carry capitalMult troops)

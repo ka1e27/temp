@@ -151,7 +151,7 @@ export function assignRegionFeatures(world, opts = {}) {
 const siteCache = new WeakMap();
 
 function freeTiles(world, region) {
-  return region.tiles.map((i) => world.tiles[i]).filter((t) => t && t.passable && t.settlement === -1);
+  return region.tiles.map((i) => world.tiles[i]).filter((t) => t && t.passable && !t.ford && t.settlement === -1); // never on a ford (PLAN-PHASE12)
 }
 
 function homes(world, region) {

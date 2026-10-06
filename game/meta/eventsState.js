@@ -7,7 +7,7 @@
 //   Event = { id, kind: EVENT_KINDS, offeredAt, expiresAt, ...kind fields }   (times in the events clock's active seconds)
 import { EVENTS } from '../config/events.js';
 
-export const EVENT_KINDS = Object.freeze(['merchant', 'plague', 'duel', 'deserters', 'harvest']);
+export const EVENT_KINDS = Object.freeze(['merchant', 'plague', 'duel', 'deserters', 'harvest', 'shipwreck']); // shipwreck: PLAN-PHASE12, archipelagos only
 
 export function defaultWorldEvents() {
   return { seq: 1, rng: 0, activeSec: 0, nextAt: EVENTS.graceSec, pending: null, plague: null,

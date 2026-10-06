@@ -6,6 +6,7 @@
 //   frontier.tick(dtSec)          // every frame from main.js
 //
 // "Active" is the game open on the map or in a battle, not paused and with no dialog open: the raid clock then stands still as the battles do.
+import { touchesOpenSea } from '../world/archipelago.js';
 import { FEATURES } from './features.js';
 import { FRONTIER } from '../config/frontier.js';
 import { nearestFreeGeneral, freeGenerals } from '../meta/generals.js';
@@ -36,7 +37,10 @@ export function createFrontierLoop({ getState, getWorld, manager, ui, services, 
     const left = secondsLeft(raid);
     const go = goFor.has(raid.id);
     const who = factionTitle(world, raid.faction);
-    return `${who.charAt(0).toUpperCase()}${who.slice(1)} marches on ${to ? to.name : 'your land'}: arrives in ${left} s${go ? '. You will be taken there.' : ''}`;
+    // PLAN-PHASE12: a raid by sea "sails on" (it lands on the coast); a plural name ("the Sea Kings") takes a plural verb
+    const plural = /s$/i.test(who) && !/host$/i.test(who);
+    const verb = raid.landing ? (plural ? 'sail on' : 'sails on') : (plural ? 'march on' : 'marches on');
+    return `${who.charAt(0).toUpperCase()}${who.slice(1)} ${verb} ${to ? to.name : 'your land'}: ${raid.landing ? 'they land' : 'arrives'} in ${left} s${go ? '. You will be taken there.' : ''}`;
   }
 
   /** Go on an incoming raid: the map flies to the region now (when the map is up), and the defense opens when the band arrives. */
@@ -175,10 +179,10 @@ export function createFrontierLoop({ getState, getWorld, manager, ui, services, 
    * Dev / checks only: a war band sets out NOW against one of your regions (the one given, else the first a rival borders), arriving in `sec` active
    * seconds; `first` makes it the weak, forgiving first raid; `mult` scales its strength (meta/frontier.js raidEnemyStats honours it). Returns the raid or null.
    */
-  function devRaid(toRegionId, { sec = 20, first = false, mult } = {}) {
+  function devRaid(toRegionId, { sec = 20, first = false, mult, faction: onlyFaction } = {}) {
     const state = getState();
     const world = getWorld();
-    const rivals = borderingRivals(state, world);
+    const rivals = borderingRivals(state, world).filter((r) => onlyFaction == null || r.faction === onlyFaction);
     let pair = null;
     let faction = null;
     for (const r of rivals) {
@@ -192,6 +196,10 @@ export function createFrontierLoop({ getState, getWorld, manager, ui, services, 
       strength: 0, depth: raidDepth(state, world, pair.to), first,
     };
     if (Number.isFinite(mult)) raid.mult = mult;
+    // PLAN-PHASE12: a raider's war band on a coastal region lands from the sea, as meta/frontier.js announces it (the dev path mirrors that rule)
+    const fac = world.factions[faction];
+    if (world.archipelago && fac && fac.personality === 'raider'
+      && world.regions[pair.to].tiles.some((i) => world.tiles[i].land && touchesOpenSea(world.tiles, i, world.cols, world.rows))) raid.landing = true;
     raid.strength = Math.round(raidEnemyStats(state, world, raid).campTroops);
     f.incoming.push(raid);
     f.stats.raids += 1;

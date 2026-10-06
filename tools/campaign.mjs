@@ -96,6 +96,7 @@
 //   node tools/campaign.mjs [--seeds=1,2,3,4,5] [--works=normal|heavy|none] [--verbose] [--json] [--no-army]
 //                           [--maxRegions=N] [--offlineAt=N --offlineHours=H [--offlineDynasty=D]] [--intel=finisher|heavy]
 //                           [--dynasties=N]   (plays N dynasties per seed with the stars earned; prints D1..DN times and waits)
+//                           [--archipelago=force|off] (PLAN-PHASE12: every founding from dynasty 3 an archipelago with the Sea Kings, or none)
 //                           [--policy=human [--minutes=60] [--shop=three|bot3|cheapest|optimal] [--labels=card|plain] [--patience=strict] [--trace]]
 //                                              (PLAN-PHASE11: the human-paced first hour, per seed and medians; see runHumanHour; default seeds 1-8)
 //                           [--checkinHours=H] (a player who, whenever nothing is readable, leaves for H hours: the game's offline cap
@@ -149,6 +150,8 @@ import { battleSummaryFor } from '../game/meta/crowns.js';
 import { onStreakBroken } from '../game/meta/streak.js';
 import { deedProgress } from '../game/meta/deeds.js';
 import { edictChoices, worldOptsFor } from '../game/meta/edicts.js';
+import { rivalsFor } from '../game/meta/rivals.js';
+import { ARCHIPELAGO } from '../game/config/sea.js';
 import * as Quick from '../game/meta/quick.js';
 import { militiaFill } from '../game/meta/militia.js';
 import { legacyPointsForFounding, legacyInfo, legacyTree } from '../game/meta/legacy.js';
@@ -489,6 +492,7 @@ function fightRaid(state, world, raid, nowMs, inPerson, log) {
     atSec: nowMs / 1000, region: raid.toRegionId, inPerson, won, sec: b.t, depth: raid.depth, first: !!raid.first,
     winChance: est.winChance, ratio: est.ratio, forts: Forts.fortsOf(state, raid.toRegionId).length, vendetta: !!run.vendetta,
     commander: general ? general.kind : null, level: general ? general.level : 0,
+    faction: raid.faction, landing: !!raid.landing, // PLAN-PHASE12: who raided, and whether the war band landed from the sea
   };
   log.defenses.push(row);
   if (!won) log.lost.push(row);
@@ -1311,6 +1315,11 @@ export function runDynasties(seed, count, flags = {}) {
     const next = foundDynasty(state, newSeed, undefined, r.endState.world, { edict, challenges, legacyBuys }); // an unslain Dragon's Lair does not block founding
     if (!next) break;
     if (flags.rivals === 'classic') next.rivals = [2, 3, 4]; // PLAN-PHASE6 guard: --rivals=classic plays every dynasty against the classic three
+    // PLAN-PHASE12 guard: --archipelago=force makes every founding from dynasty 3 an archipelago (with the Sea Kings), --archipelago=off none
+    if ((flags.archipelago === 'force' || flags.archipelago === 'off') && next.dynasty.level >= ARCHIPELAGO.fromDynasty) {
+      next.archipelago = flags.archipelago === 'force';
+      next.rivals = flags.rivals === 'classic' ? [2, 3, 4] : rivalsFor(newSeed, next.dynasty.level, { archipelago: next.archipelago });
+    }
     const world = generateWorld(newSeed, worldOptsFor(next));
     resetRegions(next, world, state.lastSeen);
     r.founding = { edict, legacyBuys: next.founding ? next.founding.bought : [] };

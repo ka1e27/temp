@@ -11,6 +11,10 @@ function build(battle) {
   const tiles = battle.arena.tiles;
   const byIndex = new Map();
   for (const t of tiles) byIndex.set(t.i, t);
+  // PLAN-PHASE12: the sea tiles a lane uses (battle/seaArena.js) are looked up like any tile (a lane squad marches and is drawn on them),
+  // but never enter byKey, so no land route can cross the sea
+  const sea = battle.arena.sea;
+  if (sea && Array.isArray(sea.seaTiles)) for (const t of sea.seaTiles) if (!byIndex.has(t.i)) byIndex.set(t.i, t);
   const byKey = buildTileIndex(tiles);
   const siteByTile = new Map();
   for (const s of battle.sites) siteByTile.set(s.tile, s.id);

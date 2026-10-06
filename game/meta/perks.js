@@ -36,6 +36,7 @@ const THRONE_STAT_BY_PERSONALITY = Object.freeze({
   defensive: 'def',
   swarm: 'growth',
   undying: 'growth', // the Ashen Host (PLAN-PHASE6): its dead keep rising
+  raider: 'speed', // the Sea Kings (PLAN-PHASE12): their longships' speed
 });
 
 const THRONE_INCOME_PCT = 0.25;

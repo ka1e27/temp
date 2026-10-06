@@ -1161,3 +1161,58 @@ land over a battle: they wait for the map, and `goto.battle` also drops celebrat
 
 **Leader lines**: in a realm's first `VOICE.earlyMinutes` (10) of play the gate uses `earlyGapSec` (60) and only `earlyGapExempt` (the Vendetta's oath) skips it
 (`createVoiceGate.check(..., { early })`); and no banner over a modal card (see the shared-infrastructure section above).
+
+## Phase 12: the Sea Kings (2026-10-05)
+Spec: `docs/PLAN-PHASE12.md`. Pure API: `docs/briefs/phase12-hookup.md`.
+
+**Faction look.** `FACTIONS[6]`: light sea-green `#3eefd8`, dark `#11786c`, white `#effffb`, emblem `trident` (`ui/icons.js` and the same SVG path through
+`Path2D` in `render/sprites.js` `emblemTrident`). It is the only family left that clears the colour-blind bar against all six others (searched over HSL with
+`core/colorDistance.js`): closest pairs, CIEDE2000, Free Folk 30.2 normal / 17.5 deutan / 18.1 protan, Your Realm 25.3 tritan (bars: 20 normal, 15 CVD;
+`ui.a11y.test.js`). A darker sea-green fails against the Free Folk's grey under deuteranopia. Tokens `--faction-seakings`, `--sea-foam`.
+
+**The archipelago on the map.**
+- Fords (`tile.ford`: water, `land: false`, keep their `region`) are baked into the terrain chunks right after the sea (`terrainCache.js` collects them per chunk
+  descriptor; `render/seaMarks.js drawSandbar`): a pale turquoise shallow wash over the hex plus one or two sand shoals. A first version drew sandbar ribbons
+  toward every ford/land neighbour and read as a lattice of sand (a desert band, not a strait). No sea glints on fords. Fog (`cloudLayer.js`) skips ford tiles:
+  a strait is never hazed, and a battle's arena (which borrows the fords touching its region) is never fogged by a hidden neighbour's ford. Region labels
+  already skipped non-land tiles; the selection / frontier outlines DO include a region's fords (it fights over them).
+- `render/seaLayer.js createSeaLayer(world)` (`renderer.sea`, null on land): harbour piers + two moored boats in the holder's colour (zoom >= 7), drawn out over the
+  sea from the port's tile, and the world's port-to-port `seaLanes` as Chaikin-smoothed dotted arcs: bright and drifting in your light colour once you hold a
+  port at both ends, faint while only seen (both ends revealed). World scene: after `ambient.drawGround`, before the settlements.
+- A raid with `raid.landing` (the Sea Kings on a coast) is a longboat on a dotted arc (`warBands.js drawSeaBand`) from a point ~4 hexes offshore to the target's
+  shore tile nearest the raiders' keep (`world.js landingLeg`, cached per raid); its toast reads "The Sea Kings sail on X: they land in N s" (plural names take a
+  plural verb). `__hd.raid(id, { faction })` mirrors the landing rule.
+- The quay site type `harbour` has a sprite (`sprites-buildings.js`: boathouse, crates, crane mast), a banner anchor and a hit box.
+
+**Battle** (`scenes/battleSea.js`, drawing in `render/seaMarks.js` / `render/seaFx.js`): lanes (bright in your colour when `laneRoute` says you can sail it,
+in the raider's when its longships can, faint otherwise), a pier at every port site, a squad with `squad.lane` drawn as a longboat (badge below), a squad on
+a ford wading (ripples), a drag whose route is a lane shows the lane under the arrow.
+
+| Event | What it shows |
+|---|---|
+| `tideRising` | a rising-water ring on every flooding tile (from the event's own `tiles`), "The tide rises…"; redrawn on resume from `battle.sea.tide` |
+| `tideFlood` | flooded ford hexes (dark water, moving foam) until `until`, splashes, "The Tide!", a small shake |
+| `tideEbb` | the water goes |
+| `tideHit` | "−N swept away" pops merged per tile, red for yours |
+| `seaReinforce` | "+N by sea" at the keep |
+| `ability` broadside / `broadsideHit` | muzzle flashes over each coastal enemy site, "−N" pops |
+
+**Text.** Card: `features.sea` rows from `seaLines` (fords, harbour, the Tide, raiders), an owned port says `laneLine()`; each row has its icon (`ford`, `harbour`,
+`tide`, `trident`, `seaLane`). Ceremony: the summary and the recap carry `voyageLine(house)` ("sets sail: an archipelago awaits", `app/dynasty.js`) when
+`archipelagoFor(nextSeed, level + 1)`; the island count depends on the Edict picked in the ceremony, so the count is given by the arrival toast after founding.
+Tutorial S1 (after A1, `calm`, `intro: 'sea'`, `afterDone`, 12 s, anchor `fordRegion`, seen on `seaCardOpened`): `SEA.copy.hint`. Codex group "The sea":
+`archipelago`, `seaLanes`, `seaKings`, `admiral`. Shipwreck: a two-button event toast (salvage for gold / search for a Relic; a found Relic plays its claim card
+through `boons.tick`). Privateers' gold is a digest toast. Icons: `trident admiral broadside harbour seaLane ford tide shipwreck boonNavigator boonPrivateers
+boonHarbourChain relicAstrolabe relicDrownedCrown` (+ the config names `helm chain astrolabe drownedCrown`). Admiral emblem: bicorne, `generals.css`.
+
+**Checks and dev hooks.** `check.mjs --only=phase12` (`tools/phase12Checks.mjs`, desktop + phone); gallery `screenshots/phase12/`. `__hd.seaRealm(from)`
+completes the realm and founds the next dynasty (at least III) on the first archipelago seed from `from`; `__hd.seaInfo()`.
+
+**Polish after the gallery review.** Tide-loss pops within 0.6 s and 3 hexes merge into one ("−84 swept away", bigger and higher than the other pops;
+`TIDE_MERGE` in battleSea.js, presentation only). Below 420 px the HUD's stars chip is hidden (`hud.css`): from Dynasty II gold + chip + five 44 px buttons
+pushed the gear past the bar's right edge on a 390 px phone (it predates Phase 12; the Realm panel shows the stars). Victory over the Tide Fortress adds
+"The Tide took N" (`battle.sea.drowned`) to the results card.
+
+**Perf** (`node tools/perf.mjs`, new rows `archipelago map, slow pan` and `Tide Fortress fight`, 2026-10-06, second of two runs; the first ran on a busy machine
+and put the unchanged land rows 2x over): title 2452 ms, map 3597 ms; map pan 16.7 / 19.8 ms; big battle 16.7 / 20.1; Ashen 16.9 / 23.6; Dragon 17.9 / 24.6;
+archipelago pan 17.7 / 21.2; Tide Fortress 18.2 / 25.3 (median / p95, budgets 20 / 33); meta 0.52 ms; save 6.5 KB (13.4 KB mid-battle).

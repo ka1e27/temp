@@ -188,6 +188,19 @@ behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away rep
   progress: only cards affordable within ~60 s of income), the pacer reserves 150 s around the planned first raid. Human first hour (32
   seeds): 26 battles, Easy/Fair 89 %, longest stretch with nothing Easy/Fair 4.9 min. Optimal D1 1.01 h, D2 1.25x, D3 1.09x, 0 waits > 40.
   Gate: npm 1198, full check.mjs in 16 groups (1700), --base=temp 426, desktop/phone --cpu=4 green. Watch in playtest: Unrest is generous.
+  Best value: only cards affordable within 60 s of income (BEST_VALUE.horizonSec) + a cross-tab pointer; npm 1199. Snapshot
+  scratchpad/p11snap (38 files on b694eb8) PASSED the full gate in one run (npm 1199, full check.mjs, --base=temp). **Committed 9a98333 and pushed to
+  redesign + main** at the user's "deploy Phase 11" (2026-10-05); the main tree was reset onto it with the Phase 12 WIP kept. **LIVE** (Pages run passed first time).
+- **2026-10-05 PHASE 12 "The Sea Kings" STARTED** (docs/PLAN-PHASE12.md): archipelago continents from D3 (fords, harbours, sea lanes), a
+  6th rival (raider, coastal raids, Longships), the Tide Fortress, the Admiral, the Sea Queen, +3 Boons, +2 Relics, Shipwreck.
+  Sim/meta + integration engineers.
+- **Sim/meta Phase 12 DONE** (npm 1216): config/sea.js; world/archipelago.js (1-in-3 from D3, 3-5 islands, fords stay in their region,
+  harbours, sea lanes; land worlds byte-identical); battle/sea.js + seaArena.js (local lanes, quay sites, the Tide, sea reinforcements,
+  Broadside); raider AI and coastal raids; the Admiral; the Sea Queen; +3 Boons, +2 Relics, Shipwreck. D3 archipelago 0.97x land,
+  Sea Kings fights 0.89x/1.03x, Tide Fortress 0 timeouts, D1 human pace unchanged. Lead: make the Tide flood the approach routes
+  (catch something in 30-60 % of fortress fights). Done (npm 1217): the Tide floods tidal tiles on the approach routes (routeRadius 5,
+  keepShore 2); it catches some squad in 12/12 fortress fights, costing 3.1 % of troops sent (max 9.3 %), 0 timeouts. The Drowned Crown is
+  Shipwreck-only (it had been cancelling the Tide on 8/12 seeds).
 - **Phase 10 engineer pass (2026-10-05, uncommitted on top of the Phase 9 tree):** `tools/firstHour.mjs` (+ `firstHourProbe.js`, `firstHourBot.mjs`,
   `firstHourReport.mjs`): a 60-min scripted new player (seed 7, desktop, real presses) with an interruption log. Before: busiest minute 11 (the tutorial),
   14 systems unlocked in the first 8.5 min (12 spacing misses). Fixes: `app/pacer.js` (one new system per 150 play seconds (lead; was 190): intro hints, streak chip, first

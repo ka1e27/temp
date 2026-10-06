@@ -16,6 +16,7 @@ import { createNameGenerator } from './names.js';
 import { assignPerks } from './perks.js';
 import { assignRegionFeatures } from './regionFeatures.js';
 import { RIVALS } from '../config/ashen.js';
+import { applyArchipelago } from './archipelago.js';
 
 /** The classic line-up: generation is exactly the pre-rotation pipeline (5 faction entries, no remap). */
 function isClassicLineup(rivals) {
@@ -30,7 +31,9 @@ function isClassicLineup(rivals) {
  */
 function applyRivals(regions, sectorFactions, rivals) {
   for (const region of regions) if (region.faction >= 2 && region.faction <= 4) region.faction = rivals[region.faction - 2];
-  const out = FACTIONS.map((f) => ({ ...f, capitalRegion: -1 }));
+  // every entry up to the highest id in play (PLAN-PHASE12: a line-up without the Sea Kings keeps the Phase 6 shape, 6 entries)
+  const top = Math.max(RIVALS.pool[RIVALS.pool.length - 1], ...rivals);
+  const out = FACTIONS.filter((f) => f.id <= top).map((f) => ({ ...f, capitalRegion: -1 }));
   for (const f of out) if (f.id > 1 && !rivals.includes(f.id)) f.absent = true;
   rivals.forEach((id, k) => { out[id].capitalRegion = sectorFactions[2 + k] ? sectorFactions[2 + k].capitalRegion : -1; });
   return out;
@@ -82,8 +85,9 @@ function computeBounds(tiles) {
 
 /**
  * @param {number} seed
- * @param {{ cols?: number, rows?: number, regionCount?: number, dynasty?: number, edict?: string|null, rivals?: number[] }} [opts]
- *   edict: a Phase 5 Edict id; rivals: the faction holding rival sector 0, 1, 2 (PLAN-PHASE6, meta/rivals.js); both from meta/edicts.js worldOptsFor
+ * @param {{ cols?: number, rows?: number, regionCount?: number, dynasty?: number, edict?: string|null, rivals?: number[], archipelago?: boolean }} [opts]
+ *   edict: a Phase 5 Edict id; rivals: the faction holding rival sector 0, 1, 2 (PLAN-PHASE6, meta/rivals.js); archipelago: islands, fords,
+ *   harbours and sea lanes (PLAN-PHASE12, world/archipelago.js); all from meta/edicts.js worldOptsFor
  * @returns {import('./generate.js').World}
  */
 export function generateWorld(seed, opts = {}) {
@@ -123,6 +127,9 @@ export function generateWorld(seed, opts = {}) {
   );
 
   buildRoads(tiles, regions, settlements, mainLandmass, cols, rows);
+  // PLAN-PHASE12 §12A: an archipelago cuts the continent into islands joined by fords, with harbours and sea lanes (hash-seeded: a land
+  // continent never reaches this line, so every non-archipelago world stays byte-identical)
+  const arch = opts.archipelago ? applyArchipelago(seed, tiles, regions, settlements, startRegion, cols, rows) : null;
 
   assignNames(rng.fork('names'), regions, settlements);
   assignPerks(rng.fork('perks'), regions, tiles, startRegion);
@@ -131,6 +138,7 @@ export function generateWorld(seed, opts = {}) {
     seed, cols, rows, tiles, regions, settlements, factions, startRegion,
     bounds: computeBounds(tiles),
   };
+  if (arch) world.archipelago = arch; // PLAN-PHASE12: { islands, harbours, seaLanes, fords }; absent on a land continent
   if (!classic) world.rivals = [...opts.rivals]; // PLAN-PHASE6: set only when the line-up is not the classic one (D1 stays byte-identical)
   assignRegionFeatures(world, { edict: opts.edict }); // region types and battle twists (DESIGN §10.13), from hashes only: nothing above changes; an Edict (PLAN-PHASE5) may reshape them
   return world;

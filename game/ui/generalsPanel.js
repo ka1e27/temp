@@ -12,7 +12,7 @@ import { icon } from './icons.js';
 import { watchDialog } from './dialogs.js';
 import { formatDurationWords } from './format.js';
 
-const KIND_ICON = { marshal: 'shield', crimson: 'sword', violet: 'eye', amber: 'horse', gravewarden: 'skullCrown', mercenary: 'coin' };
+const KIND_ICON = { marshal: 'shield', crimson: 'sword', violet: 'eye', amber: 'horse', gravewarden: 'skullCrown', admiral: 'admiral', mercenary: 'coin' };
 const setText = (n, t) => { if (n.textContent !== t) n.textContent = t; };
 const setAttr = (n, k, v) => { if (n.getAttribute(k) !== v) n.setAttribute(k, v); };
 const setHidden = (n, v) => { if (n.hidden !== v) n.hidden = v; };

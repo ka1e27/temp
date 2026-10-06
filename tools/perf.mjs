@@ -170,6 +170,37 @@ async function framesDragon() {
   return r;
 }
 
+// Phase 12: an archipelago (Dynasty III via __hd.seaRealm): a slow pan over the straits, harbours and lanes, and the Tide Fortress fight
+async function seaRealmStage() {
+  const t = await realm(7);
+  await t.page.eval(() => window.__hd.seaRealm(1));
+  await until(t, () => window.__hd.scene === 'world' && !!window.__hd.world.archipelago, 30000);
+  await t.page.eval(stages.installHelpers);
+  await t.page.eval(() => window.__pf.calm());
+  await sleep(800);
+  return t;
+}
+async function framesSeaMap() {
+  const t = await seaRealmStage();
+  await t.page.eval(() => { window.__hd.conquerRegions(8); window.__hd.revealMap(); });
+  await sleep(2500);
+  const r = await sampleFrames(t, 8000, true);
+  await t.done();
+  return r;
+}
+async function framesTide() {
+  const t = await seaRealmStage();
+  const id = await t.page.eval(() => window.__hd.world.factions[6]?.capitalRegion ?? null);
+  if (id == null) { await t.done(); return null; }
+  await t.page.eval(stages.battleAt, id);
+  await t.page.eval(() => window.__pf.drive(14, { refill: true }));
+  await until(t, () => window.__hd.battle && window.__hd.battle.squads.length >= 8, 20000);
+  const r = await sampleFrames(t, 8000);
+  r.sea = await t.page.eval(() => JSON.stringify(window.__hd.seaInfo()));
+  await t.done();
+  return r;
+}
+
 async function lateDynasty(n) {
   const t = await realm(7);
   for (let d = 1; d < n; d++) {
@@ -230,6 +261,8 @@ if (wants('frames')) {
   results.frames.battle = await step('frames: big battle', framesBigBattle);
   results.frames.ashen = await step('frames: Ashen fight', framesAshen);
   results.frames.dragon = await step('frames: Dragon fight', framesDragon);
+  results.frames.seaMap = await step('frames: archipelago map', framesSeaMap);
+  results.frames.tide = await step('frames: Tide Fortress fight', framesTide);
 }
 if (wants('meta')) results.meta = await step('meta tick (late Dynasty II)', metaTick);
 if (wants('save')) results.save = await step('save (late Dynasty III)', saveSize);
@@ -242,7 +275,7 @@ if (results.load) {
   row('title interactive (Fast 4G, 4x CPU, cold)', `${f0(results.load.title)} ms`, `< ${BUDGET.title} ms`, results.load.title < BUDGET.title, `median of ${RUNS}`);
   row('map playable (New Realm pressed at once)', `${f0(results.load.map)} ms`, `< ${BUDGET.map} ms`, results.load.map < BUDGET.map, `${results.load.runs[0].reqs} requests, ${f0(results.load.runs[0].kb)} KB`);
 }
-for (const [k, label] of [['map', 'map, slow pan'], ['battle', 'big battle'], ['ashen', 'Ashen fight (wisps)'], ['dragon', 'Dragon fight']]) {
+for (const [k, label] of [['map', 'map, slow pan'], ['battle', 'big battle'], ['ashen', 'Ashen fight (wisps)'], ['dragon', 'Dragon fight'], ['seaMap', 'archipelago map, slow pan'], ['tide', 'Tide Fortress fight']]) {
   const r = results.frames && results.frames[k];
   if (!r) { if (results.frames) row(`frame: ${label}`, 'n/a', '', false); continue; }
   row(`frame median: ${label}`, `${f1(r.median)} ms`, `< ${BUDGET.median} ms`, r.median < BUDGET.median, `cpu ${f1(r.cpu)} ms${r.squads ? `, ${r.squads} squads` : ''}`);

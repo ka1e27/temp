@@ -142,14 +142,39 @@ export function createRegionCard({
   const relicText = h('span', {}, '');
   const relicEl = h('p.region-card-relic', {}, icon('chest', 20), h('span', {}, relicName, ' ', relicText));
   relicEl.hidden = true;
-  const featuresEl = h('div.region-card-features', {}, relicEl, typeRow.el, twistRow.el, ashenRow.el, bossEl);
+  // PLAN-PHASE12: an archipelago region's sea lines (fords, harbour, the Tide, the raiders; a held port's lanes), one icon row each, built once
+  const SEA_ROWS = 4;
+  const seaRows = Array.from({ length: SEA_ROWS }, () => {
+    const iconSlot = h('span.region-card-sea-icon', { 'aria-hidden': 'true' });
+    const label = h('strong', {}, '');
+    const text = h('span', {}, '');
+    const el = h('p.region-card-sea-line', {}, iconSlot, h('span', {}, label, ' ', text));
+    el.hidden = true;
+    return { el, iconSlot, label, text, iconName: '' };
+  });
+  const seaEl = h('div.region-card-sea', {}, ...seaRows.map((r) => r.el));
+  seaEl.hidden = true;
+  function patchSea(lines) {
+    seaEl.hidden = !lines || !lines.length;
+    seaRows.forEach((r, k) => {
+      const l = lines && lines[k];
+      r.el.hidden = !l;
+      if (!l) return;
+      if (r.iconName !== l.icon) { r.iconSlot.replaceChildren(icon(l.icon, 18)); r.iconName = l.icon; }
+      setText(r.label, l.label);
+      setText(r.text, l.text);
+    });
+  }
+  const featuresEl = h('div.region-card-features', {}, relicEl, typeRow.el, twistRow.el, ashenRow.el, seaEl, bossEl);
   featuresEl.hidden = true;
   function patchFeatures(f) {
     const t = f && f.type;
     const w = f && f.twist;
     const a = f && f.ashen;
     const r = f && f.relic;
-    featuresEl.hidden = !t && !w && !a && !r;
+    const sea = f && f.sea;
+    featuresEl.hidden = !t && !w && !a && !r && !(sea && sea.length);
+    patchSea(sea);
     relicEl.hidden = !r;
     if (r) { setText(relicName, `Relic: ${r.name}.`); setText(relicText, r.text); relicEl.dataset.relic = r.id; }
     ashenRow.el.hidden = !a;

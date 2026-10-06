@@ -239,6 +239,7 @@ function withDefaults(raw) {
     // inside `generals` (below)
     edict: sanitizeEdict(src.edict),
     rivals: sanitizeRivals(src.rivals), // PLAN-PHASE6: a save from before rotation keeps the classic three
+    archipelago: src.archipelago === true, // PLAN-PHASE12: this dynasty's continent is an archipelago (the world is regenerated from it)
     // Phase 7 (PLAN-PHASE7): this dynasty's Boons and Relics (an old save: none owned; relics.syncRelics places the Relics on load).
     // The lifetime Reliquary rides inside `generals` (sanitizeGenerals)
     boons2: sanitizeBoons2(src.boons2),

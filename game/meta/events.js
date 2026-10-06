@@ -5,6 +5,7 @@
 //   tickEvents(state, world, nowMs, activeDt) -> { offered, expired }   every frame of active play (like tickFrontier)
 //   acceptEvent(state, world, choice, nowMs)  -> the result, or false     Merchant: { deal: 'fort', regionId, type } | { deal: 'renown' }
 //                                                                          Deserters: { choice: 'raid'|'muster' }; Harvest: {} (pays gold)
+//                                                                          Shipwreck (PLAN-PHASE12): { choice: 'salvage'|'leave' }
 //   declineEvent(state)                                                    Plague: acknowledged; Duel: then duelRunFor
 //   duelRunFor(state, world, event, stats, opts) -> BattleRun (kind 'duel'); duelReward(state, world, run, result) -> { renown }
 import { EVENTS } from '../config/events.js';
@@ -26,6 +27,8 @@ import { boonMods } from './boonsState.js';
 import { edictMods } from './edicts.js';
 import { activeHarvest } from './eventsState.js';
 import { recordChronicle } from './chronicle.js';
+import { wreckRelic } from './relics.js';
+import { touchesOpenSea } from '../world/archipelago.js';
 
 export * from './eventsState.js';
 
@@ -40,8 +43,9 @@ function ownedCount(state) {
   return state.owner.reduce((n, o) => n + (o === PLAYER_FACTION ? 1 : 0), 0);
 }
 
-function pickKind(state) {
-  const entries = Object.entries(EVENTS.weights);
+function pickKind(state, world) {
+  // the Shipwreck washes up only on an archipelago (PLAN-PHASE12): a land continent rolls exactly the Phase 8 table
+  const entries = Object.entries(EVENTS.weights).filter(([k]) => k !== 'shipwreck' || !!(world && world.archipelago));
   const total = entries.reduce((a, [, w]) => a + w, 0);
   let x = rand(state) * total;
   for (const [k, w] of entries) { x -= w; if (x < 0) return k; }
@@ -89,6 +93,17 @@ function makeEvent(state, world, kind, t, nowMs) {
       text: EVENTS.copy.harvest.replace('{gold}', String(hgold)).replace('{mult}', String(EVENTS.harvest.rateMult))
         .replace('{min}', String(Math.round(EVENTS.harvest.durationSec / 60))) };
   }
+  if (kind === 'shipwreck') {
+    // a coastal region of the realm (seeded among them), on an archipelago
+    const coasts = world.archipelago ? world.regions.filter((r) => state.owner[r.id] === PLAYER_FACTION
+      && r.tiles.some((i) => world.tiles[i].land && touchesOpenSea(world.tiles, i, world.cols, world.rows))) : [];
+    if (!coasts.length) return null;
+    const region = coasts[Math.floor(rand(state) * coasts.length) % coasts.length];
+    const sgold = Math.round(incomePerSec(state, world) * EVENTS.shipwreck.salvageIncomeSec);
+    return { ...base, regionId: region.id, gold: sgold, relicChance: EVENTS.shipwreck.relicChance,
+      text: EVENTS.copy.shipwreck.replace('{region}', region.name).replace('{gold}', String(sgold))
+        .replace('{pct}', `${Math.round(EVENTS.shipwreck.relicChance * 100)}%`) };
+  }
   // the Merchant: two deals priced now (the Merchant's Scale Relic: x merchantPriceMult)
   const gold = Math.round(incomePerSec(state, world) * EVENTS.merchant.renownIncomeSec * boonMods(state).merchantPriceMult);
   return { ...base, deals: [{ deal: 'fort', priceShare: EVENTS.merchant.fortPriceShare * boonMods(state).merchantPriceMult }, { deal: 'renown', renown: EVENTS.merchant.renown, gold }],
@@ -111,7 +126,7 @@ export function tickEvents(state, world, nowMs, activeDt) {
   if (!e.pending && t >= e.nextAt) {
     e.nextAt = t + EVENTS.meanSec * (1 + EVENTS.jitter * (2 * rand(state) - 1));
     if (t >= EVENTS.graceSec && ownedCount(state) >= EVENTS.minRegions) {
-      const kind = pickKind(state);
+      const kind = pickKind(state, world);
       const ev = makeEvent(state, world, kind, t, nowMs) || (kind !== 'merchant' ? makeEvent(state, world, 'merchant', t, nowMs) : null);
       if (ev) {
         e.pending = ev;
@@ -184,6 +199,18 @@ export function acceptEvent(state, world, choice = {}, nowMs = 0) {
     e.pending = null;
     eventChronicle(state, world, ev, wall, pick);
     return { kind: 'deserters', choice: pick, faction: ev.faction, regions, event: ev };
+  }
+  if (ev.kind === 'shipwreck') {
+    // { choice: 'salvage' } (the default) pays the gold; { choice: 'leave' } searches the wreck: a seeded relicChance roll for a Relic
+    const pick = choice.choice === 'leave' ? 'leave' : 'salvage';
+    e.pending = null;
+    if (pick === 'salvage') {
+      state.gold += ev.gold;
+      if (state.stats) state.stats.goldEarned += ev.gold;
+      return { kind: 'shipwreck', choice: pick, gold: ev.gold, relic: null, event: ev };
+    }
+    const relic = rand(state) < ev.relicChance ? wreckRelic(state, world) : null;
+    return { kind: 'shipwreck', choice: pick, gold: 0, relic, event: ev };
   }
   if (ev.kind === 'harvest') {
     if (!(state.gold >= ev.gold)) return false;

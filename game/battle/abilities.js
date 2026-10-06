@@ -9,12 +9,14 @@
 //   raid        `squads` free squads of `share` x the camp's starting troops ride from your strongest site that can reach `target`
 //   bonus       your camp (the keep in a defense) gains `share` of its troops
 //   raiseFallen the troops you lost in the last `windowSec` s join your strongest site, at most `cap` x the camp's starting troops
+//   broadside   every coastal enemy site loses `perSec` of its troops a second for `duration` s (battle/sea.js; PLAN-PHASE12)
 // Events: `ability { owner, ability, x, y, target, sites? }` for fx, and the ordinary `send` events of a Raid's squads.
 import { PLAYER_OWNER } from './owner.js';
 import { tileAt } from './runtime.js';
 import { routeFor, canRoute } from './routing.js';
 import { recentLosses } from './fallen.js';
 import { abilityExtraUses } from './boons.js';
+import { startBroadside } from './sea.js';
 
 
 /** `{ id, ready, used }` for the HUD button, or null when nobody with an ability commands. */
@@ -128,6 +130,8 @@ export function applyAbility(battle, cmd, t) {
     ev.target = site.id;
     ev.count = count;
     pos = tileAt(battle, site.tile);
+  } else if (a.id === 'broadside') { // the Admiral (PLAN-PHASE12): sea.js runs it
+    ev.sites = startBroadside(battle, t, a.duration, a.perSec);
   } else {
     return false;
   }
@@ -154,6 +158,12 @@ export function abilityAdvice(battle, t) {
   const foes = battle.squads.filter((q) => q.owner !== PLAYER_OWNER);
   const cmd = (target = null) => ({ type: 'ability', owner: PLAYER_OWNER, ability: a.id, target });
   if (a.id === 'bonus') return cmd();
+  if (a.id === 'broadside') { // when the coast holds a good share of the enemy (or late, with any coast to hit)
+    const foeSites = battle.sites.filter((s) => s.owner !== PLAYER_OWNER);
+    const coast = foeSites.filter((s) => s.coastal).reduce((n, s) => n + s.troops, 0);
+    const all = foeSites.reduce((n, s) => n + s.troops, 0);
+    return (coast >= 30 && coast >= 0.4 * all) || (t > 45 && coast > 0) ? cmd() : null;
+  }
   if (a.id === 'raiseFallen') { // once the losses would fill most of the cap (or late in the fight with anything to raise)
     const cap = a.cap * (battle.player.campTroops || 0);
     const lost = recentLosses(battle, t, a.windowSec);

@@ -28,7 +28,14 @@ export const RELIC_LIST = Object.freeze([
     text: "Swift's par is {swiftParAdd} s longer" },
   { id: 'sealOfMargrave', name: 'Seal of the Margrave', icon: 'seal', mods: { risingIntervalMult: 1.5 }, requires: 'ashen',
     text: "The Barrow Keep's dead rise every {rising} s instead of every {risingBase} s" },
-].map((r) => Object.freeze({ requires: null, ...r, mods: Object.freeze(r.mods) })));
+  // Phase 12 (PLAN-PHASE12 §12C): the sea, archipelago continents only
+  { id: 'astrolabe', name: 'Astrolabe', icon: 'astrolabe', mods: { laneCostMult: 2 / 3 }, requires: 'archipelago', // lanes x0.4 instead of x0.6
+    text: 'Sea lanes cost your squads {pct:laneCostMult} less to sail' },
+  // The Drowned Crown is never placed on the map: only a Shipwreck gives it up (meta/relics.js wreckRelic). Placed, it was claimed before the
+  // Tide Fortress on 8 of 12 campaign archipelagos (undiscovered Relics are placed first), and the Tide then never drowned anyone.
+  { id: 'drownedCrown', name: 'The Drowned Crown', icon: 'drownedCrown', mods: { tideImmune: true }, requires: 'archipelago', wreckOnly: true,
+    text: 'The Tide never floods your squads' },
+].map((r) => Object.freeze({ requires: null, wreckOnly: false, ...r, mods: Object.freeze(r.mods) })));
 
 export const RELICS = Object.freeze({
   perContinent: 4,             // PLAN §7B

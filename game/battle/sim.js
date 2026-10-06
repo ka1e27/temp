@@ -18,6 +18,7 @@ import { marchSpeedMult } from './features.js';
 import { processDragon, initialDragon } from './dragon.js';
 import { initialChampion, championSquadRef, processChampion } from './champion.js';
 import { processRising } from './fallen.js';
+import { processSea } from './sea.js';
 import { processBoons } from './boons.js';
 import { FEATURES } from '../config/features.js';
 import { sendFromSite } from './squads.js';
@@ -67,6 +68,8 @@ export function createBattle(arena, player, enemy, opts = {}) {
     if (s.fort) site.fort = s.fort;
     if (s.feature) site.feature = s.feature;
     if (s.squadPower != null) site.squadPower = s.squadPower;
+    if (s.coastal) site.coastal = true; // PLAN-PHASE12: touches open sea (sea lanes, Broadside)
+    if (s.port) site.port = true;       // PLAN-PHASE12: a harbour (holding one opens the lanes)
     if (s.type === 'tower') site.nextVolley = 0;
     return site;
   });
@@ -248,6 +251,7 @@ export function step(battle, dt) {
   processPending(battle, t);
   processDragon(battle, t); // a Dragon's Lair (DESIGN §10.13): flights, telegraphed breath
   processRising(battle, t); // a Barrow Keep (PLAN-PHASE6): its dead rise every 20 s, telegraphed
+  processSea(battle, dt, t); // PLAN-PHASE12: the Tide Fortress's Tide and boats, Broadside (nothing on a land continent)
   resolveCombat(battle, dt, t);
   resolveTowerVolleys(battle, getRuntime(battle), t);
   processBoons(battle, dt, t); // Boons and Relics (PLAN-PHASE7, battle/boons.js): scorched ground, fire arrows, Martyr's Crown

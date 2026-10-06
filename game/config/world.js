@@ -23,6 +23,10 @@ export const FACTIONS = Object.freeze([
   // PLAN-PHASE6 §6B: the Ashen Host, a rival that rotates in from Dynasty 2 (config/ashen.js RIVALS). Slate and bone with a
   // cold glow (the light tint): chosen by integration, colour-blind separation from the other five checked in ui.a11y.test.js.
   { id: 5, name: 'Ashen Host', color: '#5c5b64', colorDark: '#2c2b33', colorLight: '#a9dfd6', emblem: 'skullCrown', personality: 'undying' },
+  // PLAN-PHASE12 §12B: the Sea Kings, a rival that rotates in from Dynasty 3 and always holds land on an archipelago (config/sea.js).
+  // Sea-green and white with a trident. Colours chosen by integration: the light sea-green is the only family left that clears 15 CIEDE2000 from all
+  // six others under every kind of vision (closest: Free Folk 17.5 deutan / 18.1 protan, Your Realm 25.3 tritan, Free Folk 30.2 normal; ui.a11y.test.js).
+  { id: 6, name: 'Sea Kings', color: '#3eefd8', colorDark: '#11786c', colorLight: '#effffb', emblem: 'trident', personality: 'raider' },
 ]);
 
 // Movement cost per terrain (Infinity = impassable). Roads replace the base cost.
@@ -30,6 +34,7 @@ export const TERRAIN_COST = Object.freeze({
   deep: Infinity, ocean: Infinity, shallows: Infinity,
   beach: 1.1, grass: 1.0, meadow: 1.0, forest: 1.6, pine: 1.6, hills: 1.5,
   mountain: Infinity, snow: 1.4, savanna: 1.1, desert: 1.2, marsh: 1.8,
+  ford: 2.5, // PLAN-PHASE12: a ford (archipelago strait) costs FORD.baseCost x FORD.marchMult (config/sea.js); never produced by terrain.js
 });
 export const ROAD_COST = 0.55;
 export const RIVER_PENALTY = 0.8;

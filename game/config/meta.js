@@ -158,10 +158,14 @@ export const DIFFICULTY = Object.freeze({
   horizonSec: 90,            // a garrison regrows while you fight: this many seconds of growth
   // PLAN-PHASE6: an 'undying' capital (the Barrow Keep: Gate + the Rising + The Fallen Rise) reads this much stronger on the card
   undyingCapital: 1.45, // 1.3: Fair Barrow Keeps were won 7 of 13
+  // PLAN-PHASE12: a 'raider' capital (the Tide Fortress: Gate + the Tide + sea reinforcements) reads this much stronger on the card, and an
+  // archipelago region reads (1 + fordWeight x the share of its tiles that are fords) stronger: fords are slow ground for the attacker
+  tideCapital: 1.15, // 1.3: the campaign won 12 of 12 Tide Fortresses (7 read Fair); the bot rarely stands on a ford at flood time
+  fordWeight: 0.3,
   depthPerTier: 0.79,        // strength x this per tier above 3: the ladder's atk/def climb slightly over-credits depth
   // Tier 1 plays far easier than its size says (the bot wins it at any upgrade level); the card deliberately
   // reads it harder (2.27 x the Free Folk factor 0.585 x the scale) so the first ring shows Easy-but-not-trivial
   // and stays under the surrender ratio on every seed.
   tierFactor: [1, 1.5, 1.094], // tier 1: the first ring reads Easy on 28 of 30 seeds (the tutorial pick on 10 of 12) and stays under the surrender ratio (card ratio 1.3-2.7); tier 2 was 0.948 before the ladder cliff was smoothed
-  personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.4, undying: 2.1 }), // undying (PLAN-PHASE6): measured with The Fallen Rise live, see below; Free Folk never attack; rival AIs punish a 3-second-cadence player (swarm 2.48 -> 2.4 with Generals and a varied map: its campaign Fair fights were won 93%; 2.3 broke the synthetic ladder)
+  personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.4, undying: 2.1, raider: 1.63 }), // raider (PLAN-PHASE12): starts at aggressive's, measured below; // undying (PLAN-PHASE6): measured with The Fallen Rise live, see below; Free Folk never attack; rival AIs punish a 3-second-cadence player (swarm 2.48 -> 2.4 with Generals and a varied map: its campaign Fair fights were won 93%; 2.3 broke the synthetic ladder)
 });

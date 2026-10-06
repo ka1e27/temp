@@ -112,3 +112,8 @@
   .hud-btn { padding: var(--sp-2); }
   .hud-actions { gap: var(--sp-1); }
 }
+/* A narrow phone from Dynasty II on: the stars chip pushed the gear past the bar's right edge (gold + chip + five 44 px buttons do not fit in
+   390 px). The chip steps aside there; the Realm panel shows the stars. */
+@media (max-width: 420px) {
+  .hud-stars { display: none; }
+}

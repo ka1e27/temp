@@ -50,9 +50,9 @@ test('boonMods: neutral with nothing, every Boon and Relic folds, Duos need both
   for (const r of RELIC_LIST) for (const k of Object.keys(r.mods)) assert.ok(k in BOON_NEUTRAL, `${r.id}.${k}`);
 });
 
-test('the pool: 32 Boons (24 + Phase 8), rarities and cursed ones, copy filled from config numbers', () => {
-  assert.equal(BOON_LIST.length, 32);
-  assert.equal(new Set(BOON_LIST.map((b) => b.id)).size, 32);
+test('the pool: 35 Boons (24 + Phase 8 + Phase 12), rarities and cursed ones, copy filled from config numbers', () => {
+  assert.equal(BOON_LIST.length, 35);
+  assert.equal(new Set(BOON_LIST.map((b) => b.id)).size, 35);
   assert.ok(BOON_LIST.filter((b) => b.cursed).length >= 3);
   for (const r of ['common', 'rare', 'legendary']) assert.ok(BOON_LIST.some((b) => b.rarity === r));
   for (const info of allBoons()) {

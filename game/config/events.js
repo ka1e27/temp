@@ -9,7 +9,8 @@ export const EVENTS = Object.freeze({
   minRegions: 4,               // nor before the player holds this many regions
   // Phase 8 adds deserters and harvest at 0.6 each: the mean gap is unchanged, so the older three come a little less often
   // (merchant 1 in 3.8 events instead of 1 in 2.6) and the new ones read as rarer news
-  weights: Object.freeze({ merchant: 1, plague: 0.8, duel: 0.8, deserters: 0.6, harvest: 0.6 }),
+  // Phase 12 adds the Shipwreck, on archipelagos only (meta/events.js leaves it out of a land continent's roll: its schedule is unchanged)
+  weights: Object.freeze({ merchant: 1, plague: 0.8, duel: 0.8, deserters: 0.6, harvest: 0.6, shipwreck: 0.6 }),
   offerSec: 90,                // an offer waits this long for Accept / Decline (DESIGN: "a caravan offers one deal for 90 s")
 
   merchant: Object.freeze({
@@ -43,8 +44,18 @@ export const EVENTS = Object.freeze({
     priceIncomeSec: 60,
     keep: 12,                  // past festivals remembered (their extra tenure stays counted); the oldest is dropped beyond this
   }),
+  shipwreck: Object.freeze({
+    // Opt-in (PLAN-PHASE12 §12C): a wreck washes up on one of your coasts. 'salvage' pays salvageIncomeSec of the realm's income at once;
+    // 'leave' rolls relicChance for a Relic (an undiscovered one first). Declining does nothing. 90 s is the Merchant's scale of reward;
+    // a 1-in-3 Relic is worth more on average but may give nothing.
+    salvageIncomeSec: 90,
+    relicChance: 0.35,
+  }),
   copy: Object.freeze({
-    titles: Object.freeze({ merchant: 'A merchant caravan', plague: 'Plague', duel: 'A duel', deserters: 'Deserters', harvest: 'Harvest Festival' }),
+    titles: Object.freeze({ merchant: 'A merchant caravan', plague: 'Plague', duel: 'A duel', deserters: 'Deserters', harvest: 'Harvest Festival', shipwreck: 'Shipwreck' }),
+    shipwreck: 'A wreck washes up on the coast of {region}: salvage it for {gold} gold, or search it for a Relic ({pct} chance).',
+    shipwreckSalvage: 'Salvage it',
+    shipwreckLeave: 'Search for a Relic',
     merchantFort: 'A merchant offers a fortification level for {gold} gold.',
     merchantRenown: 'A merchant offers {renown} Renown for {gold} gold.',
     plague: 'Plague in the lands of the {faction}: their regions are weaker for {min} minutes.',

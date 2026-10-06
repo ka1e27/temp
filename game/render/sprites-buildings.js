@@ -148,6 +148,29 @@ function tent(ctx, x, baseY, w, h, trim) {
 }
 
 const SETTLEMENT_BUILDERS = {
+  // PLAN-PHASE12: a quay (a battle's harbour site on a coast with no harbour settlement): a timber boathouse, a stack of crates and a
+  // cargo crane's mast, so it reads as "the port" beside the cottages
+  harbour(ctx, cx, baseY, s, wall, roof) {
+    const timber = '#8a6239';
+    cottage(ctx, cx - s * 0.2, baseY, s * 0.62, s * 0.36, shade(timber, 0.18), roof, false);
+    ctx.fillStyle = shade(timber, -0.35);
+    roundRect(ctx, cx - s * 0.31, baseY - s * 0.26, s * 0.22, s * 0.26, s * 0.08); // the boat door
+    ctx.fill();
+    ctx.fillStyle = timber;
+    ctx.fillRect(cx + s * 0.22, baseY - s * 0.2, s * 0.2, s * 0.2);
+    ctx.fillStyle = shade(timber, -0.15);
+    ctx.fillRect(cx + s * 0.3, baseY - s * 0.34, s * 0.16, s * 0.14);
+    ctx.strokeStyle = '#3b2a18';
+    ctx.lineWidth = Math.max(1, s * 0.05);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx + s * 0.58, baseY); ctx.lineTo(cx + s * 0.58, baseY - s * 0.92); // the crane mast
+    ctx.lineTo(cx + s * 0.86, baseY - s * 0.78); // its arm
+    ctx.stroke();
+    ctx.lineWidth = Math.max(0.6, s * 0.02);
+    ctx.beginPath(); ctx.moveTo(cx + s * 0.84, baseY - s * 0.78); ctx.lineTo(cx + s * 0.84, baseY - s * 0.5); ctx.stroke();
+    void wall;
+  },
   hamlet(ctx, cx, baseY, s, wall, roof) {
     cottage(ctx, cx - s * 0.34, baseY, s * 0.56, s * 0.4, wall, roof, s >= 24);
     cottage(ctx, cx + s * 0.3, baseY - s * 0.03, s * 0.5, s * 0.36, shade(wall, -0.04), shade(roof, -0.05), s >= 24);

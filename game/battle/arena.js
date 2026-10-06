@@ -12,6 +12,7 @@ import { busyKey, normalizeBusy } from './defenseArena.js';
 import { fortEffects, fortTowerTiles } from './fortSites.js';
 import { FEATURES } from '../config/features.js';
 import { banditTile, ancientTowerTile, gateTile, shrineTiles } from '../world/regionFeatures.js';
+import { decorateSea, touchingFords } from './seaArena.js';
 
 function isAdjacentToPlayer(world, owners, regionId) {
   return world.regions[regionId].neighbors.some((n) => owners[n] === PLAYER_OWNER);
@@ -302,6 +303,7 @@ export function buildArena(world, owners, regionId, player, enemy, opts = {}) {
   const {
     region, targetTiles, halo, tileSet, keepTile, approach,
   } = plan;
+  for (const t of touchingFords(world, region, tileSet)) tileSet.set(t.i, t); // PLAN-PHASE12: an island battle includes the fords touching it
 
   // A border of mountains: the camp stands on the nearest player land and a short strip of no-man's-land leads to the target.
   const stripTiles = approach.strip;
@@ -432,6 +434,8 @@ export function buildArena(world, owners, regionId, player, enemy, opts = {}) {
       .sort((a, b) => hexDistance(world.tiles[a.tile], end) - hexDistance(world.tiles[b.tile], end) || a.id - b.id)[0];
     arena.marches.push({ to: near ? near.id : 0, tiles: stripTiles.map((t) => t.i), approach: true });
   }
+  // PLAN-PHASE12: on an archipelago, coastal sites, harbours (a quay when the region has none), sea lanes and the Tide Fortress (seaArena.js)
+  decorateSea(world, arena, { regionId, owner: owners[regionId], enemy, mode: 'attack' });
   openCorridors(arena, region.tier === 1 ? BATTLE.openingTargetsFirstRing : BATTLE.openingTargets);
   return arena;
 }

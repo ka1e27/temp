@@ -10,10 +10,12 @@
 // DESIGN's starting values that moved: the Champion's assault passive +15% -> +4% (+15% made it x1.17 at level 1), the Raid 15% ->
 // 45% of the camp (x1.03), +2% passive a level read as a share of the passive (two points a level: a level-10 Marshal held 98%).
 
+import { BROADSIDE } from './sea.js';
+
 const MIN_MS = 60 * 1000;
 
 /** The four kinds of General plus mercenaries. Champions join when their faction's capital falls (faction id -> kind). */
-export const CHAMPION_OF_FACTION = Object.freeze({ 2: 'crimson', 3: 'violet', 4: 'amber', 5: 'gravewarden' }); // 5: the Ashen Host (PLAN-PHASE6)
+export const CHAMPION_OF_FACTION = Object.freeze({ 2: 'crimson', 3: 'violet', 4: 'amber', 5: 'gravewarden', 6: 'admiral' }); // 5: the Ashen Host (PLAN-PHASE6); 6: the Sea Kings (PLAN-PHASE12)
 
 export const GENERALS = Object.freeze({
   maxLevel: 10,
@@ -97,6 +99,18 @@ export const GENERALS = Object.freeze({
         Object.freeze(['raiseBigger', 'passivePlus2']),
       ]),
     }),
+    // The Admiral (PLAN-PHASE12 §12B), recruited by toppling the Tide Fortress. passive laneShield: your squads sailing sea lanes take no
+    // tower fire (a yes/no passive: its level growth and passivePlus mean nothing, so its tree has neither). Active Broadside (battle/sea.js).
+    admiral: Object.freeze({
+      title: 'Admiral', style: 'swift', passive: Object.freeze({ stat: 'laneShield', value: 1 }), ability: 'broadside',
+      skills: Object.freeze([
+        Object.freeze(['broadsideLong', 'broadsideHarder']),
+        Object.freeze(['laneFast', 'holdForts']),
+        Object.freeze(['broadsideHarder', 'broadsideLong']),
+        Object.freeze(['laneFast', 'thinkFast']),
+        Object.freeze(['broadsideHarder', 'broadsideLong']),
+      ]),
+    }),
     mercenary: Object.freeze({
       title: 'Captain', style: null, passive: null, ability: 'bonus',
       skills: Object.freeze([
@@ -138,6 +152,9 @@ export const GENERALS = Object.freeze({
     relocateFast: 4,        // Swift steward: sees threats this many seconds further ahead
     raiseLong: 10,          // Gravewarden: Raise the Fallen reaches this many seconds further back
     raiseBigger: 0.05,      // Gravewarden: Raise the Fallen's cap +5 points of the camp's starting troops
+    broadsideLong: 3,       // Admiral: Broadside lasts 3 s longer
+    broadsideHarder: 0.01,  // Admiral: Broadside takes 1 point more a second (2% -> 3%)
+    laneFast: 0.2,          // Admiral: your lane squads sail 20% faster
   }),
   // What each skill says on the roster (numbers filled in from skillValues / abilities by meta/generals.js skillText).
   skillText: Object.freeze({
@@ -147,7 +164,9 @@ export const GENERALS = Object.freeze({
     chargeFaster: 'Charge marches {pct} faster', foresightLong: 'Foresight lasts {n} s longer', foresightSlow: 'Foresight slows {pct} more',
     raidTwo: 'Raid sends {n} squads', raidNoArrows: 'Raid squads ignore tower fire', raidBigger: 'Raid squads {pct} bigger',
     bonusMore: 'The Bonus pays {pct} more', counter13: 'Steward retakes at {n}x odds', holdForts: 'Steward never abandons a fort',
-    usesFirestorm: 'Steward calls Firestorm', raiseLong: 'Raise the Fallen reaches {n} s further back', raiseBigger: 'Raise the Fallen cap +{pct}', relocateFast: 'Steward sees {n} s further ahead', thinkFast: 'Steward thinks faster',
+    usesFirestorm: 'Steward calls Firestorm', raiseLong: 'Raise the Fallen reaches {n} s further back', raiseBigger: 'Raise the Fallen cap +{pct}',
+    broadsideLong: 'Broadside lasts {n} s longer', broadsideHarder: 'Broadside takes {pct} more a second', laneFast: 'Lane squads sail {pct} faster',
+    relocateFast: 'Steward sees {n} s further ahead', thinkFast: 'Steward thinks faster',
   }),
 
   // --- Actives (game/battle/abilities.js; DESIGN §10.11) -------------------------------------------------------------------------
@@ -158,6 +177,7 @@ export const GENERALS = Object.freeze({
     raid: Object.freeze({ share: 0.45, squads: 1 }),                                // a free squad of 45% of the camp's starting troops (DESIGN said 15%: the Outrider was worth x1.03)
     bonus: Object.freeze({ share: 0.2 }),                                           // +20% troops at the camp (the keep in a defense)
     raiseFallen: Object.freeze({ windowSec: 20, cap: 0.25 }),                       // the troops you lost in the last 20 s rise at your strongest site, at most 25% of the camp's starting troops (PLAN-PHASE6)
+    broadside: Object.freeze({ duration: BROADSIDE.duration, perSec: BROADSIDE.perSec }), // every coastal enemy site loses 2% of its troops a second for 8 s (PLAN-PHASE12, config/sea.js)
   }),
 
   // --- The steward a General makes (DESIGN §10.11: quality improves with level) ------------------------------------------------
@@ -180,10 +200,11 @@ export const GENERALS = Object.freeze({
     violet: Object.freeze(['Sister Veyl', 'Mother Ysolde', 'Brother Quill', 'Seer Ondine', 'Sister Maelis']),
     amber: Object.freeze(['Tamsin of the Steppe', 'Arik Swiftmane', 'Juna Dawnrider', 'Bator of the Long Grass', 'Saran Galeheart']),
     gravewarden: Object.freeze(['Hollow Aldric', 'Sexton Mourne', 'Wenna of the Barrows', 'Old Tallow', 'Cadoc Ashveil']),
+    admiral: Object.freeze(['Brine Halloran', 'Saltjaw Merrow', 'Ysolt Wavecutter', 'Old Keelhook', 'Dagny of the Reef']),
     mercenary: Object.freeze(['Hollis Grey', 'Mags Ironpurse', 'Old Fennick', 'Dace the Hired', 'Rook Ambrel', 'Ysa Coinblade']),
   }),
   copy: Object.freeze({
-    abilityNames: Object.freeze({ shieldWall: 'Shield Wall', charge: 'Charge', foresight: 'Foresight', raid: 'Raid', bonus: 'Pay the Bonus', raiseFallen: 'Raise the Fallen' }),
+    abilityNames: Object.freeze({ shieldWall: 'Shield Wall', charge: 'Charge', foresight: 'Foresight', raid: 'Raid', bonus: 'Pay the Bonus', raiseFallen: 'Raise the Fallen', broadside: 'Broadside' }),
     styleNames: Object.freeze({ stalwart: 'Stalwart', bold: 'Bold', cunning: 'Cunning', swift: 'Swift' }),
     captainName: 'Militia Captain',
     // what a champion says when they join (the recruitment card, DESIGN 10.11); `other` for anyone else
@@ -192,6 +213,7 @@ export const GENERALS = Object.freeze({
       violet: 'I foresaw this day. I will see the paths you cannot.',
       amber: 'The steppe follows strength. Point, and I ride.',
       gravewarden: 'The dead keep no banner. I will keep yours.',
+      admiral: 'You took my tide. Fair winds, then: I sail for you.',
       other: 'I fight for you now.',
     }),
   }),

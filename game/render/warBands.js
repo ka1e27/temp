@@ -5,6 +5,7 @@
 //   bands: [{ from: {x, y}, to: {x, y}, progress: 0..1, color, strength, label }] in world units (keep to keep)
 // `time` undefined (Reduce Motion): no bobbing, the dashes stand still.
 import { formatNum } from '../core/format.js';
+import { arcPoints, drawLongboat, drawSeaLane } from './seaMarks.js';
 
 /**
  * @param {CanvasRenderingContext2D} ctx
@@ -16,6 +17,7 @@ export function drawWarBands(ctx, camera, bands, { time, avoid = [] } = {}) {
   if (!bands || !bands.length) return;
   const hits = (bx) => avoid.some((o) => bx.x0 < o.x1 && bx.x1 > o.x0 && bx.y0 < o.y1 && bx.y1 > o.y0);
   for (const b of bands) {
+    if (b.sea) { drawSeaBand(ctx, camera, b, time, hits); continue; }
     const k0 = 0.3; // the band sets out from its border, not from the middle of its region (where the region's name sits)
     const a0 = camera.worldToScreen(b.from.x, b.from.y);
     const z = camera.worldToScreen(b.to.x, b.to.y);
@@ -79,4 +81,38 @@ export function drawWarBands(ctx, camera, bands, { time, avoid = [] } = {}) {
     }
     ctx.restore();
   }
+}
+
+/**
+ * A raid that comes by sea (PLAN-PHASE12: the Sea Kings strike any coast of yours): a longboat on a dotted arc over the water from the
+ * raiders' coast to your region, the strength badge beside it. `b.from` / `b.to` are world points; the arc bows out to sea.
+ */
+function drawSeaBand(ctx, camera, b, time, hits) {
+  const a = camera.worldToScreen(b.from.x, b.from.y);
+  const z = camera.worldToScreen(b.to.x, b.to.y);
+  const pts = arcPoints(a, z, 0.28, 24);
+  const k = Math.max(0, Math.min(1, b.progress));
+  const at = Math.min(pts.length - 2, Math.floor(k * (pts.length - 1)));
+  const u = k * (pts.length - 1) - at;
+  const p = { x: pts[at].x + (pts[at + 1].x - pts[at].x) * u, y: pts[at].y + (pts[at + 1].y - pts[at].y) * u };
+  drawSeaLane(ctx, [p, ...pts.slice(at + 1)], b.color, time, { width: 2.2 });
+  const dir = { x: pts[at + 1].x - pts[at].x, y: pts[at + 1].y - pts[at].y };
+  drawLongboat(ctx, p.x, p.y, 24, dir.x, dir.y, b.color, time == null ? null : time);
+  if (b.strength == null) return;
+  ctx.save();
+  const text = formatNum(Math.round(b.strength));
+  ctx.font = '800 11px Nunito, system-ui, sans-serif';
+  const w = ctx.measureText(text).width + 10;
+  const hgt = 15; const r = 7.5;
+  const spots = [[-w / 2, 9], [16, -hgt / 2], [-w - 16, -hgt / 2], [-w / 2, -30 - hgt]];
+  let [x0, y0] = spots[0];
+  for (const [sx, sy] of spots) { if (!hits({ x0: p.x + sx, x1: p.x + sx + w, y0: p.y + sy, y1: p.y + sy + hgt })) { x0 = sx; y0 = sy; break; } }
+  ctx.translate(p.x, p.y);
+  ctx.beginPath();
+  ctx.moveTo(x0 + r, y0); ctx.arcTo(x0 + w, y0, x0 + w, y0 + hgt, r); ctx.arcTo(x0 + w, y0 + hgt, x0, y0 + hgt, r); ctx.arcTo(x0, y0 + hgt, x0, y0, r); ctx.arcTo(x0, y0, x0 + w, y0, r);
+  ctx.fillStyle = 'rgba(14, 18, 28, 0.9)'; ctx.fill();
+  ctx.strokeStyle = b.color; ctx.lineWidth = 1.4; ctx.stroke();
+  ctx.fillStyle = '#f3ead7'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, x0 + w / 2, y0 + hgt / 2 + 0.5);
+  ctx.restore();
 }

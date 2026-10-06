@@ -14,6 +14,7 @@ import { findPath } from './geom.js';
 import { PLAYER_OWNER } from './owner.js';
 import { computeTerritory } from './territory.js';
 import { gateBlocks } from './features.js';
+import { laneRoute } from './sea.js';
 
 const KEY_SPAN = 4096;
 
@@ -85,7 +86,8 @@ function playerDeadlocked(battle, terr) {
  * `tiles` are arena tile indices from the first tile entered to the target's tile (the start tile is NOT included, the
  * same format as a squad's `path`); `points` are the world-unit centres of the start tile followed by every tile of
  * `tiles`, so `points.length === tiles.length + 1`; `cost` is the sum of the tile costs entered.
- * @returns {{tiles:number[], points:{x:number,y:number}[], cost:number}|null}
+ * On an archipelago the route may be a sea lane (`lane: true`; its tiles are sea tiles of `arena.sea.seaTiles` then the target's tile).
+ * @returns {{tiles:number[], points:{x:number,y:number}[], cost:number, lane?:true}|null}
  */
 export function routeFor(battle, owner, fromSiteId, toSiteId) {
   const from = battle.sites[fromSiteId];
@@ -105,6 +107,9 @@ export function routeFor(battle, owner, fromSiteId, toSiteId) {
       if (path && path.length > 0) route = makeRoute(rt, start, path);
     }
   }
+  // PLAN-PHASE12: a sea lane between two sites this owner holds (sea.js laneRoute), when it is the cheaper way
+  const lane = battle.arena.sea ? laneRoute(battle, owner, fromSiteId, toSiteId) : null;
+  if (lane && (!route || lane.cost < route.cost)) route = lane;
   terr.routes.set(key, route);
   return route;
 }

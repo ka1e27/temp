@@ -219,3 +219,13 @@
 .region-card-boss { display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: 4px var(--sp-2); border-radius: 8px; background: rgba(255, 122, 61, 0.12); border: 1px solid rgba(255, 122, 61, 0.5); font-size: var(--fs-sm); font-weight: 800; color: var(--text); }
 .region-card-boss .icon { color: #ff7a3d; }
 @media (max-height: 420px) { .region-card-feature, .region-card-boss { font-size: var(--fs-xs); } }
+
+/* PLAN-PHASE12: an archipelago region's sea lines (fords, harbour, the Tide, the raiders), one icon row each, in the feature block */
+.region-card-sea { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px; border-radius: var(--panel-radius-sm);
+  background: linear-gradient(90deg, rgba(62, 239, 216, 0.12), rgba(62, 239, 216, 0.03)); border: 1px solid rgba(159, 232, 224, 0.3); }
+.region-card-sea[hidden], .region-card-sea-line[hidden] { display: none; }
+.region-card-sea-line { display: flex; align-items: flex-start; gap: var(--sp-2); margin: 0; font-size: var(--fs-sm); line-height: 1.35; color: var(--text-muted); }
+.region-card-sea-line strong { color: var(--text); font-weight: 800; }
+.region-card-sea-icon { flex: none; display: inline-flex; color: var(--sea-foam); margin-top: 1px; }
+.region-card-sea-icon .icon { display: block; }
+@media (max-height: 420px) { .region-card-sea-line { font-size: var(--fs-xs); } }

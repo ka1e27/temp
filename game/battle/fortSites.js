@@ -74,7 +74,7 @@ export function fortTowerTiles(world, regionId, count = 1) {
   if (region && Array.isArray(world.tiles) && world.tiles.length) {
     const keepTile = world.tiles[world.settlements[region.keep].tile];
     const homes = region.settlements.map((id) => world.tiles[world.settlements[id].tile]);
-    const free = region.tiles.map((i) => world.tiles[i]).filter((t) => t && t.passable && t.settlement === -1);
+    const free = region.tiles.map((i) => world.tiles[i]).filter((t) => t && t.passable && !t.ford && t.settlement === -1); // never on a ford (PLAN-PHASE12)
     const ranked = free.map((t) => {
       const d = hexDistance(t, keepTile);
       return { t, key: [Math.abs(d - FORTS.site.keepDist), d, hash32(world.seed, 'fort', t.i)] };

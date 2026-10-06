@@ -29,6 +29,7 @@ import {
 import { drawChunkTerritory } from './territory.js';
 import { createProsperityPlan, drawProsperityGround, drawProsperityStructures } from './prosperityDecor.js';
 import { createSeaField, seaBackgroundStops } from './seaField.js';
+import { drawSandbar } from './seaMarks.js';
 
 const SQ3 = Math.sqrt(3);
 const CHUNK = 8; // tiles per chunk side
@@ -101,6 +102,22 @@ export function createTerrainCache(world) {
   for (const s of world.settlements) settlementTypeByTile.set(s.tile, s.type);
 
   const AX_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+  // PLAN-PHASE12: a ford's sandbar runs toward every neighbour it links (another ford, or land)
+  const islandOf = (t) => (t.region >= 0 && world.regions[t.region] ? world.regions[t.region].island : -1);
+  function fordDirs(tile) {
+    const out = [];
+    for (let d = 0; d < 6; d++) {
+      const [dq, dr] = AX_DIRS[d];
+      const r = tile.r + dr;
+      const col = (tile.q + dq) + (r - (r & 1)) / 2;
+      if (col < 0 || col >= cols || r < 0 || r >= rows) continue;
+      const n = tiles[r * cols + col];
+      // to the shore, and across the strait (a ford of the other island's side): never along it, which drew a lattice of sand
+      if (n && (n.land || (n.ford && islandOf(n) !== islandOf(tile)))) out.push(d);
+    }
+    return out;
+  }
+
   function hasFarmSeedNeighbor(tile) {
     for (const [dq, dr] of AX_DIRS) {
       const r = tile.r + dr;
@@ -132,6 +149,7 @@ export function createTerrainCache(world) {
     const y1 = cy === chunkRows - 1 ? gridMaxY : y0 + CH;
 
     const land = [];
+    const fords = []; // PLAN-PHASE12: archipelago straits, drawn as sandbars between the sea and the land
     const regionSet = new Set();
 
     // Land tiles: everything whose drawing can touch [x0..x1] x [y0..y1].
@@ -141,14 +159,14 @@ export function createTerrainCache(world) {
       const [c0, c1] = rowColRange(row, x0 - LAND_REACH.left, x1 + LAND_REACH.right);
       for (let col = c0; col <= c1; col++) {
         const t = tiles[row * cols + col];
-        if (isWaterTile(t)) continue;
+        if (isWaterTile(t)) { if (t.ford) fords.push(t); continue; }
         land.push(t);
         if (t.region >= 0) regionSet.add(t.region);
       }
     }
     // Rows are visited in order and cols ascend, so both lists are already in
     // global tile-index order (the tiles-water.js seam contract).
-    d = { cx, cy, x0, x1, y0, y1, land, regions: [...regionSet], hasLand: land.length > 0 };
+    d = { cx, cy, x0, x1, y0, y1, land, fords, regions: [...regionSet], hasLand: land.length > 0 || fords.length > 0 };
     descriptors.set(key, d);
     return d;
   }
@@ -177,6 +195,7 @@ export function createTerrainCache(world) {
     const oy = PAD_PX - desc.y0 * s;
 
     sea.paint(ctx, cw, chh, s, ox, oy); // global smooth sea field, continuous across chunks
+    for (const t of desc.fords) drawSandbar(ctx, ox + t.x * s, oy + t.y * s, s, t.i + 1, fordDirs(t));
 
     for (const t of desc.land) {
       const x = ox + t.x * s;
@@ -361,7 +380,7 @@ export function createTerrainCache(world) {
   }
 
   // ---- per-frame water shimmer ----------------------------------------------
-  const waterTiles = tiles.filter((t) => isWaterTile(t));
+  const waterTiles = tiles.filter((t) => isWaterTile(t) && !t.ford); // no glints on a sandbar (PLAN-PHASE12)
 
   function drawGlints(ctx, camera, t) {
     if (camera.zoom < 9) return;

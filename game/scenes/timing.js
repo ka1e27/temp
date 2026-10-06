@@ -4,6 +4,7 @@
 // nothing browser-specific, so it's safe to import from tests too.
 import { FEATURES as MAP_FEATURES } from '../config/features.js';
 import { ASHEN } from '../config/ashen.js';
+import { SEA } from '../config/sea.js';
 
 const SHRINE_HOLD_SEC = MAP_FEATURES.shrine.holdSec; // tutorial V3's words
 
@@ -198,6 +199,9 @@ export const TUTORIAL_STEPS = Object.freeze([
   // The Ashen Host (PLAN-PHASE6 §6B): the first time one of its regions is on the frontier (Dynasty 2 on, so `afterDone`). Last in the list and after M1:
   // every earlier step that is due goes first; it steps aside after 12 s and is seen once its card is opened.
   { id: 'A1', scene: 'world', calm: true, intro: 'ashen', anchor: 'ashenRegion', after: ['M1'], seenOn: ['ashenCardOpened'], timeoutSec: 12, afterDone: true, text: ASHEN.copy.hint },
+  // The sea (PLAN-PHASE12): the first time fords (and so the lanes) appear on the frontier of an archipelago (Dynasty 3 on, so `afterDone`). Right after A1,
+  // like it: every earlier step that is due goes first, the pacer holds it behind the last new system, and it is seen once a region's sea lines are read.
+  { id: 'S1', scene: 'world', calm: true, intro: 'sea', anchor: 'fordRegion', after: ['M1'], seenOn: ['seaCardOpened'], timeoutSec: 12, afterDone: true, text: SEA.copy.hint },
   // Phase 7 (PLAN-PHASE7): K1 lives inside the first Boon draft (a static line: the coach layer sits under dialogs, like D1); L1 is the first Relic on
   // the frontier (its label and chest), last in the list and after M1 like A1, so every earlier step that is due goes first; it steps aside after 12 s
   { id: 'K1', scene: 'world', anchor: 'boonDraft', seenOn: ['boonPicked'], text: 'Your first Boon: pick the card that suits how you fight. It lasts the dynasty.' },

@@ -104,7 +104,8 @@ export function mergeSquads(battle) {
       if (a.path[a.seg] !== b.path[b.seg]) continue;
       if (Math.abs(a.prog - b.prog) > EPS) continue;
       if ((a.power ?? 1) !== (b.power ?? 1) || (a.speedMult ?? 1) !== (b.speedMult ?? 1) || !!a.noArrows !== !!b.noArrows) continue; // a Charge or Raid squad keeps its own traits
-      if (a.champion || b.champion) continue; // a Vendetta's Champion is always its own squad (battle/champion.js)
+      if (a.champion || b.champion) continue;
+      if (!!a.lane !== !!b.lane) continue; // a lane squad sails, a land squad marches (PLAN-PHASE12) // a Vendetta's Champion is always its own squad (battle/champion.js)
       a.count += b.count;
       merged.add(b.id);
     }

@@ -55,6 +55,8 @@
   --faction-ashen: #5c5b64; /* slate (Phase 6) */
   --ashen-bone: #e6dcc4;
   --ashen-glow: #a9dfd6; /* the cold ember glow: the faction's light variant */
+  --faction-seakings: #3eefd8; /* light sea-green (Phase 12); its light variant is near-white #effffb */
+  --sea-foam: #9fe8e0; /* the sea lines on a region card */
   --ember-burn: #ff8a3d; /* Firestorm burning the dead */
 
   /* --- Type --------------------------------------------------------------- */

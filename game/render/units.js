@@ -1,7 +1,8 @@
 // Battle squad rendering (DESIGN §7.2): squads interpolated between fixed simulation ticks, standing
 // on the raised tile tops, facing along their path, plus the enemy INTENT lines (faint dashed
 // route to each hostile squad's target). Browser only; no game/battle mutation.
-import { drawSquad } from './sprites.js';
+import { drawSquad, drawTroopBadge } from './sprites.js';
+import { drawLongboat, drawWading } from './seaMarks.js';
 import { squadPosition } from '../battle/sim.js';
 import { tileAt } from '../battle/runtime.js';
 import { PLAYER_OWNER } from '../battle/owner.js';
@@ -90,7 +91,8 @@ function segmentInfo(battle, squad) {
   if (!fromTile || !toTile) return { lift: 0, dx: 0, dy: -1 };
   const prog = Math.max(0, Math.min(1, squad.prog));
   const lift = elevOffset(fromTile, 1) * (1 - prog) + elevOffset(toTile, 1) * prog;
-  return { lift, dx: toTile.x - fromTile.x, dy: toTile.y - fromTile.y };
+  const here = prog < 0.5 ? fromTile : toTile; // PLAN-PHASE12: wading while the squad stands on a ford
+  return { lift, dx: toTile.x - fromTile.x, dy: toTile.y - fromTile.y, ford: !!here.ford };
 }
 
 /**
@@ -132,7 +134,7 @@ export function createUnitLayer() {
     const cur = squadPosition(battle, sq);
     const info = segmentInfo(battle, sq);
     const before = prev.get(sq.id);
-    if (!before) return { x: cur.x, y: cur.y, lift: info.lift, dx: info.dx, dy: info.dy };
+    if (!before) return { x: cur.x, y: cur.y, lift: info.lift, dx: info.dx, dy: info.dy, ford: info.ford };
     const a = Math.max(0, Math.min(1, alpha));
     return {
       x: before.x + (cur.x - before.x) * a,
@@ -140,6 +142,7 @@ export function createUnitLayer() {
       lift: before.lift + (info.lift - before.lift) * a,
       dx: info.dx,
       dy: info.dy,
+      ford: info.ford,
     };
   }
 
@@ -160,6 +163,14 @@ export function createUnitLayer() {
       // a Vendetta's Champion (PLAN-PHASE4 §4D) wears its leader's pennant and a gold ring
       const champ = sq.champion ? (opts.championColor || factionColor(sq.owner)) : null;
       if (champ) drawChampionMark(ctx, screen.x, screen.y, s, champ, t, { still: !!opts.still, layer: 'under' });
+      // PLAN-PHASE12: a squad on a sea lane sails a small longboat (its badge rides above the sail); one on a ford wades through ripples
+      if (sq.lane) {
+        drawLongboat(ctx, screen.x, screen.y, s * 1.25, p.dx, p.dy, factionColor(sq.owner), opts.still ? null : t);
+        drawTroopBadge(ctx, screen.x, screen.y + s * 0.55, sq.count, sq.owner, s * 0.9);
+        if (champ) drawChampionMark(ctx, screen.x, screen.y, s, champ, t, { still: !!opts.still });
+        continue;
+      }
+      if (p.ford) drawWading(ctx, screen.x, screen.y, s, opts.still ? null : t);
       drawSquad(ctx, screen.x, screen.y, sq.count, sq.owner, s, t, p.dx, p.dy, { phase: sq.id * 1.7 });
       if (champ) drawChampionMark(ctx, screen.x, screen.y, s, champ, t, { still: !!opts.still });
     }

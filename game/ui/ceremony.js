@@ -90,7 +90,9 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
   const saveBtn = createSaveMapButton({ onSave: () => onSaveMap?.() });
   const saveNote = h('p.keepsake-save-note', {}, '');
   const resetNote = h('p.ceremony-note', {}, 'Gold, upgrades and the map reset. Stars, Legacy, Deeds, your Generals and your lifetime records carry over forever.');
-  const pageSummary = h('section.ceremony-page', { 'data-page': 'summary' }, earnEl, statsGrid, resetNote,
+  const voyageEl = h('p.ceremony-voyage', {}, icon('seaLane', 18), h('span', {}, '')); // PLAN-PHASE12: "The House of X sets sail…"
+  voyageEl.hidden = true;
+  const pageSummary = h('section.ceremony-page', { 'data-page': 'summary' }, earnEl, voyageEl, statsGrid, resetNote,
     h('div.keepsake-save-box.ceremony-save', {}, saveNote, saveBtn.el, saveBtn.statusEl));
 
   // --- page 2: the Legacy tree ------------------------------------------------------------------------------------------------------------
@@ -210,6 +212,7 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
         : [icon('laurel', 16), 'No Challenges'],
       [icon('tree', 16), `${data.legacy.available} Legacy point${data.legacy.available === 1 ? '' : 's'} left to spend`],
     ];
+    if (data.voyage) items.unshift([icon('seaLane', 16), data.voyage]);
     recap.replaceChildren(...items.map(([ic, t]) => h('li', {}, ic, h('span', {}, t))));
   }
 
@@ -283,6 +286,8 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
       statsGrid.dataset.sig = statSig;
       statsGrid.replaceChildren(...d.stats.map((s) => h('div.ceremony-stat', {}, icon(s.icon, 16), h('span.ceremony-stat-label', {}, s.label), h('span.ceremony-stat-value.nums', {}, s.value))));
     }
+    voyageEl.hidden = !d.voyage;
+    put(voyageEl.lastChild, d.voyage || '');
     put(starsNum, `+${d.stars}`);
     put(starsLine, `${d.starsTotal} in all${d.starText ? ` · each: ${d.starText}` : ''}`);
     put(legacyNum, `+${d.legacyEarned}`);

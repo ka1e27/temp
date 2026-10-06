@@ -4,7 +4,7 @@
 // and 6.
 import { hexDistance } from '../core/hex.js';
 import { drawHexTint, elevOffset } from '../render/tiles.js';
-import { ACCENTS, factionColor } from '../render/palette.js';
+import { ACCENTS, factionColor, factionColorLight } from '../render/palette.js';
 import {
   frontier, revealed, difficulty, conquer, canFoundDynasty, attackable, attackBlocker, conquestBounty, crownsPayable
 } from '../meta/progression.js';
@@ -54,7 +54,9 @@ import { regionHintBox } from '../app/hintTargets.js';
 import { FEATURES } from '../app/features.js';
 import { FEATURES as MAP_FEATURES } from '../config/features.js';
 import { ASHEN } from '../config/ashen.js';
-import { fallenLine, ashenOnFrontier } from '../meta/rivals.js';
+import { fallenLine, ashenOnFrontier, seaLines, laneLine, fordsOnFrontier } from '../meta/rivals.js';
+import { regionHarbours, touchesOpenSea } from '../world/archipelago.js';
+import { voyageLine } from '../app/dynasty.js';
 import { MAX_BATTLES } from '../app/battles.js';
 import { fortsPanelData, buildFort, upgradeFort, demolishFort, fortName, fortsToast, fortsMarksData } from '../meta/forts.js';
 import { drawFortMarks } from '../render/fortMarks.js';
@@ -219,7 +221,7 @@ export function createWorldScene(services) {
     const perk = perkDisplay(region.perk, world, region);
     if (ownerFactionId === PLAYER_FACTION) {
       return {
-        id: regionId, name: region.name, tier: region.tier, owned: true, owner, perk, features: featureRows(region, true),
+        id: regionId, name: region.name, tier: region.tier, owned: true, owner, perk, features: withSea(featureRows(region, true), state, world, regionId, true),
         income: effectiveRegionIncome(state, world, region),
         crowns: region.tier === 0 ? undefined : getCrowns(state, regionId),
         parSec: parFor(world, regionId, state),
@@ -241,7 +243,7 @@ export function createWorldScene(services) {
       owned: false,
       owner,
       perk,
-      features: withRelic(withFallen(featureRows(region, false), state, world, regionId), regionId),
+      features: withSea(withRelic(withFallen(featureRows(region, false), state, world, regionId), regionId), state, world, regionId, false),
       income: effectiveRegionIncome(state, world, region),
       bounty: conquestBounty(state, world, regionId), // what winning pays: the conquest bounty, or a retake's share (the payout's own function)
       crownsPayable: crownsPayable(state, regionId),
@@ -285,6 +287,23 @@ export function createWorldScene(services) {
     const parts = line.replace(/^The Fallen Rise:\s*/, '').split('. '); // a capital adds "The Barrow Keep: its dead rise every N s"
     parts[0] += '; Firestorm burns the dead';
     return { ...(rows || {}), ashen: { name: 'The Fallen Rise', text: parts.join('. '), emblem: world.factions[ASHEN.factionId]?.emblem || 'skullCrown' } };
+  }
+
+  /**
+   * PLAN-PHASE12: an archipelago region's sea lines from meta/rivals.js seaLines (fords, harbour, the Tide, the raiders), each split into a bold
+   * label and its text with an icon; an owned region with a port says what its lanes do (laneLine). Nothing on a land continent.
+   */
+  const SEA_ICON = [[/^Fords/, 'ford'], [/^Harbour/, 'harbour'], [/^The Tide/, 'tide'], [/^Raiders/, 'trident'], [/^Sea lanes/, 'seaLane']];
+  function withSea(rows, state, world, regionId, owned) {
+    if (!world.archipelago) return rows;
+    const lines = owned ? (regionHarbours(world, regionId).length ? [laneLine()] : []) : seaLines(state, world, regionId);
+    if (!lines.length) return rows;
+    const sea = lines.slice(0, 4).map((line) => {
+      const k = line.indexOf(': ');
+      const label = k > 0 ? `${line.slice(0, k)}:` : '';
+      return { icon: (SEA_ICON.find(([re]) => re.test(line)) || [0, 'seaLane'])[1], label, text: k > 0 ? line.slice(k + 2) : line };
+    });
+    return { ...(rows || {}), sea };
   }
 
   // --- Generals and Renown (DESIGN 10.11, 10.12) ------------------------------------------------------------------------
@@ -613,6 +632,7 @@ export function createWorldScene(services) {
     tutorial.notify('regionSelected');
     if (data && data.features && (data.features.type || data.features.twist)) tutorial.notify('featureCardOpened'); // a typed or twisted region's card (tutorial V1)
     if (data && data.features && data.features.ashen) tutorial.notify('ashenCardOpened'); // an Ashen region's card (tutorial A1)
+    if (data && data.features && data.features.sea) tutorial.notify('seaCardOpened'); // a region's sea lines (tutorial S1, Phase 12)
     if (data && data.features && data.features.relic) tutorial.notify('relicCardOpened'); // a Relic's region card (tutorial L1)
     // A region that would surrender: its leader offers, once per region (selection only, not the card's 1 s refresh).
     if (data && data.difficulty && data.difficulty.surrender) {
@@ -1021,7 +1041,9 @@ export function createWorldScene(services) {
     const info = choice.edict ? services.dynasty.realmData().dynastyRules.edict : null;
     const refused = res.founding && Array.isArray(res.founding.refused) ? res.founding.refused : [];
     if (refused.length) ui.toasts.update({ id: 'legacy-refused', type: 'warning', icon: 'tree', message: `${refused.length === 1 ? 'One Legacy node' : `${refused.length} Legacy nodes`} could not be bought; the points are still yours to spend in the Realm panel.`, duration: 6000 });
-    ui.toasts.update({ type: 'success', icon: 'crown', message: `The House of ${house} rises on a new continent${info ? `, under the Edict of ${info.name}` : ''}.`, duration: 6000 });
+    const arch = container.get().world.archipelago; // PLAN-PHASE12 §12A: an archipelago says so, with its island count
+    if (arch) ui.toasts.update({ type: 'success', icon: 'seaLane', message: `${voyageLine(house, arch.islands.length)}${info ? ` Edict: ${info.name}.` : ''}`, duration: 7000 });
+    else ui.toasts.update({ type: 'success', icon: 'crown', message: `The House of ${house} rises on a new continent${info ? `, under the Edict of ${info.name}` : ''}.`, duration: 6000 });
     enter({ freshRealm: true, newWorld: true });
     services.autosave.save();
   }
@@ -1394,6 +1416,7 @@ export function createWorldScene(services) {
       featureRegion: FEATURES.frontier ? featureTutorialRegion() : -1, // V1
       boardUnlocked: !!(state.bounties && state.bounties.unlocked), // Q1
       ashenRegion: ashenTutorialRegion(), // A1
+      fordRegion: fordTutorialRegion(), // S1 (Phase 12)
       relicRegion: relicTutorialRegion(), // L1
       challengesOpen: !!services.challenge && services.challenge.unlocked() && !services.inChallenge?.(), // J1 (Phase 9): the Challenges have opened
     };
@@ -1464,6 +1487,18 @@ export function createWorldScene(services) {
     for (const id of derived.frontier) {
       const f = world.factions[state.owner[id]];
       if (!f || f.personality !== 'undying' || !anchors[id]) continue;
+      if (best < 0 || world.regions[id].tier < world.regions[best].tier) best = id;
+    }
+    return best;
+  }
+
+  /** Tutorial S1 (PLAN-PHASE12): the lowest-tier frontier region with fords, its label on screen, or -1 (none on a land continent). */
+  function fordTutorialRegion() {
+    const { state, world } = container.get();
+    if (!world.archipelago || fordsOnFrontier(state, world) == null) return -1;
+    let best = -1;
+    for (const id of derived.frontier) {
+      if (!anchors[id] || !world.regions[id].tiles.some((i) => world.tiles[i].ford)) continue;
       if (best < 0 || world.regions[id].tier < world.regions[best].tier) best = id;
     }
     return best;
@@ -1589,6 +1624,11 @@ export function createWorldScene(services) {
         const id = relicTutorialRegion();
         if (id < 0 || !anchors[id]) return null;
         return { target: regionTarget(id), key: `relic${id}`, outline: id, noRing: true };
+      }
+      case 'fordRegion': {
+        const id = fordTutorialRegion();
+        if (id < 0 || !anchors[id]) return null;
+        return { target: regionTarget(id), key: `ford${id}`, outline: id, noRing: true };
       }
       case 'ashenRegion': {
         const id = ashenTutorialRegion();
@@ -1779,6 +1819,12 @@ export function createWorldScene(services) {
     const vb = camera.visibleBounds(2);
     ambient.update(dt);
     ambient.drawGround(ctx, camera, vb);
+    // PLAN-PHASE12: an archipelago's sea lanes (bright and drifting once you hold a port at both ends, faint while only seen) and its harbours
+    if (renderer.sea) {
+      const seen = (rid) => rid >= 0 && (isVisibleRegion(rid) || !!services.devRevealAll);
+      renderer.sea.drawLanes(ctx, camera, { usable: (l) => state.owner[l.regionA] === PLAYER_FACTION && state.owner[l.regionB] === PLAYER_FACTION, visible: seen, color: factionColorLight(PLAYER_FACTION), t: rm ? undefined : t });
+      renderer.sea.drawHarbours(ctx, camera, { ownerOf: (rid) => visualOwners[rid] ?? state.owner[rid], visible: seen, t: rm ? undefined : t });
+    }
     siteDrawer.draw(ctx, renderer, camera, state.owner, t, isVisibleRegion, { hideHamlets: camera.zoom < 12 });
     drawWorksMarks(ctx, camera, derived.worksMarks || [], camera.zoom, {
       color: factionColor(PLAYER_FACTION), // the realm's banner colour on barracks and watchtower flags
@@ -1823,12 +1869,14 @@ export function createWorldScene(services) {
       const keepAt = (rid) => { const r = world.regions[rid]; const t = r && world.tiles[world.settlements[r.keep].tile]; return t ? { x: t.x, y: t.y - elevOffset(t, 1) } : null; };
       const bands = [];
       for (const raid of f.incoming) {
-        const from = keepAt(raid.fromRegionId);
-        const to = keepAt(raid.toRegionId);
+        const sea = raid.landing ? landingLeg(world, raid) : null; // PLAN-PHASE12: a raid by sea sails in from offshore to the coast it lands on
+        const from = sea ? sea.from : keepAt(raid.fromRegionId);
+        const to = sea ? sea.to : keepAt(raid.toRegionId);
         const fac = world.factions[raid.faction];
         if (!from || !to || !fac) continue;
         const span = Math.max(1, raid.arriveAt - raid.announcedAt);
-        bands.push({ from, to, progress: (f.activeSec - raid.announcedAt) / span, color: fac.color, strength: raid.strength });
+        // PLAN-PHASE12: a raid that lands from the sea (raid.landing, the Sea Kings) is drawn as a longboat on a dotted arc
+        bands.push({ from, to, progress: (f.activeSec - raid.announcedAt) / span, color: fac.color, strength: raid.strength, sea: !!raid.landing });
       }
       drawWarBands(ctx, camera, bands, { time: state.settings.reduceMotion ? undefined : t, avoid: labelBoxes || [] });
     }
@@ -1845,6 +1893,36 @@ export function createWorldScene(services) {
     if (!ui.generals.el.hidden && nowMs - lastGeneralsMs > 1000) { lastGeneralsMs = nowMs; updateGenerals(); } // wound timers, busy Generals
     if (selectedRegionId != null) refreshRegionCardThrottled(nowMs);
     updateCoach(nowMs);
+  }
+
+  /**
+   * PLAN-PHASE12: the sea leg of a landing raid (cached per raid): `to` = the target region's shore tile nearest the raiders' keep, `from` = an
+   * open-sea point a few hexes straight out from that shore, so the longboat crosses water, never the land between two neighbours.
+   */
+  const landingLegs = new Map();
+  function landingLeg(world, raid) {
+    const key = `${container.epoch}:${raid.id}`;
+    if (landingLegs.has(key)) return landingLegs.get(key);
+    const region = world.regions[raid.toRegionId];
+    const src = world.regions[raid.fromRegionId];
+    const k = src && world.tiles[world.settlements[src.keep].tile];
+    let best = null; let bestD = Infinity;
+    for (const i of region ? region.tiles : []) {
+      const t = world.tiles[i];
+      if (!t.land || !touchesOpenSea(world.tiles, i, world.cols, world.rows)) continue;
+      const d = k ? Math.hypot(t.x - k.x, t.y - k.y) : 0;
+      if (d < bestD) { bestD = d; best = t; }
+    }
+    let leg = null;
+    if (best) {
+      // straight out to sea: away from the region's centre, about 4 hexes
+      let dx = best.x - region.centroid.x; let dy = best.y - region.centroid.y;
+      const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+      leg = { from: { x: best.x + dx * 6, y: best.y + dy * 5 }, to: { x: best.x, y: best.y - elevOffset(best, 1) } };
+    }
+    if (landingLegs.size > 40) landingLegs.clear();
+    landingLegs.set(key, leg);
+    return leg;
   }
 
   /**

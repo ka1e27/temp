@@ -172,7 +172,7 @@ export function resolveTowerVolleys(battle, runtime, t) {
  * @returns {Set<number>} ids of squads that are blocked (near an active fight) this tick.
  */
 export function resolveEngagements(battle) {
-  const marching = battle.squads.filter((s) => s.state === 'march').sort((a, b) => a.id - b.id);
+  const marching = battle.squads.filter((s) => s.state === 'march' && !s.lane).sort((a, b) => a.id - b.id); // a lane squad is at sea (PLAN-PHASE12)
   const fighting = battle.squads.filter((s) => s.state === 'fight');
   const radius = hexRadiusToWorld(BATTLE.interceptRadius);
   const blocked = new Set();

@@ -52,6 +52,10 @@ export function estimateDifficulty(arena, player, enemy) {
     * (1 + DIFFICULTY.powerBonusPerUnlocked * (arena.twist === 'holy' ? 0 : powerUnits(player))); // Holy Ground: no powers
   const strip = (arena.marches || []).filter((m) => m.approach).reduce((n, m) => n + m.tiles.length, 0);
   strength *= DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1) * (1 + DIFFICULTY.approachPerTile * strip);
+  // PLAN-PHASE12: the Tide Fortress, and the share of the target's own tiles that are fords (the meta card's rule, progression.js)
+  if (arena.sea && arena.sea.tide) strength *= DIFFICULTY.tideCapital;
+  const own = arena.tiles.filter((t) => t.region === arena.regionId);
+  if (own.length && arena.sea) strength *= 1 + DIFFICULTY.fordWeight * (own.filter((t) => t.ford).length / own.length);
   const ratio = strength > 0 ? power / strength : (power > 0 ? Infinity : 1);
   return { power, strength, ratio };
 }

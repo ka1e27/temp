@@ -217,6 +217,8 @@ export function abilityOf(general) {
         noArrows: count('raidNoArrows') > 0 };
     case 'bonus':
       return { id: 'bonus', share: a.bonus.share + sv.bonusMore * count('bonusMore') };
+    case 'broadside': // the Admiral (PLAN-PHASE12)
+      return { id: 'broadside', duration: a.broadside.duration + sv.broadsideLong * count('broadsideLong'), perSec: a.broadside.perSec + sv.broadsideHarder * count('broadsideHarder') };
     case 'raiseFallen': // the Gravewarden (PLAN-PHASE6)
       return { id: 'raiseFallen', windowSec: a.raiseFallen.windowSec + sv.raiseLong * count('raiseLong'), cap: a.raiseFallen.cap + sv.raiseBigger * count('raiseBigger') };
     default:
@@ -240,7 +242,10 @@ export function commanderEffects(general) {
     else if (p.stat === 'speed') out.speedMult = 1 + p.value;
     else if (p.stat === 'campTroops') out.campTroopsMult = 1 + p.value;
     else if (p.stat === 'reclaim') out.reclaim = p.value; // the Gravewarden: share of attackers' dead joining your settlement
+    else if (p.stat === 'laneShield') out.laneShield = true; // the Admiral (PLAN-PHASE12): lane squads take no tower fire
   }
+  const fast = skillIds(general).filter((s) => s === 'laneFast').length;
+  if (fast) out.laneSpeedMult = 1 + GENERALS.skillValues.laneFast * fast; // the Admiral's skill: lane squads sail faster
   if (skillIds(general).includes('garrisonPlus')) out.garrisonMult += GENERALS.skillValues.garrisonPlus;
   return out;
 }

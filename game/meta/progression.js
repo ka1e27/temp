@@ -19,7 +19,7 @@ import { fortEffects } from './fortsEffects.js';
 import { FRONTIER } from '../config/frontier.js';
 import { RENOWN } from '../config/renown.js';
 import { generalById, commanderEffects, recruitChampion, ensureGenerals } from './generalsState.js';
-import { rivalsFor } from './rivals.js';
+import { rivalsFor, archipelagoFor } from './rivals.js';
 import { GENERALS } from '../config/generals.js';
 import { earnRenown, defaultRenown } from './renownState.js';
 import { typeBountyMult, typeRewards, ensureBoons, defaultBoons } from './featuresState.js';
@@ -35,6 +35,8 @@ import { CHALLENGES } from '../config/edicts.js';
 import { boonMods, boonSimStats, defaultBoons2, defaultRelics } from './boonsState.js'; // the leaf (PLAN-PHASE7): Boons and Relics, one modifier source
 import { offerBoons, boonsUnlocked, titheOnConquest, winDrafts } from './boons.js';
 import { claimRelic, syncRelics } from './relics.js';
+import { quayTile } from '../world/archipelago.js';
+import { HARBOUR } from '../config/sea.js';
 
 /** The roster for a new dynasty: every General keeps level, XP and skills; where they last fought is forgotten. */
 function carryGenerals(state) {
@@ -98,7 +100,15 @@ export function playerBattleStats(state, world, targetRegionId, opts = {}) {
     powers,
   };
   if (em.noPowers) out.powersBlocked = 'ironWill'; // Iron Will: battle/powers.js refuses every power
-  const sim = boonSimStats(state); // PLAN-PHASE7: the Boons and Relics that change how the sim plays (battle/boons.js); absent with none
+  if (cmd.laneShield) out.laneShield = true;                 // the Admiral's passive (PLAN-PHASE12, battle/boons.js towerIgnores)
+  if (cmd.laneSpeedMult > 1) out.laneSpeedMult = cmd.laneSpeedMult; // the Admiral's laneFast skill (battle/boons.js marchBoonMult)
+  let sim = boonSimStats(state); // PLAN-PHASE7: the Boons and Relics that change how the sim plays (battle/boons.js); absent with none
+  // Harbour Chain (PLAN-PHASE12): lane squads +harbourChainStep per harbour the player holds on the map, up to harbourChainMax
+  if (bm.harbourChainStep > 0 && world && world.archipelago) {
+    const held = world.archipelago.harbours.filter((id) => state.owner[world.settlements[id].region] === PLAYER_FACTION).length;
+    const k = 1 + Math.min(bm.harbourChainMax, bm.harbourChainStep * held);
+    if (k > 1) sim = { ...(sim || {}), laneSpeedMult: k };
+  }
   if (sim) out.boons = sim;
   return out;
 }
@@ -510,7 +520,7 @@ function estimatePower(state, world, region, player) {
  * region are base-stat troops, exactly as buildArena places them.
  */
 /** What a region's feature sites add to its strength (the arena places them: arena.js addFeatureSites). */
-function featureStrength(region, enemy, siteValue) {
+function featureStrength(region, enemy, siteValue, world = null) {
   const tm = enemy.troopMult;
   const unit = enemy.atk * enemy.def;
   const capped = (type, troops) => {
@@ -524,8 +534,18 @@ function featureStrength(region, enemy, siteValue) {
   if (region.twist === 'siege') sum += capped('gate', FEATURES.gate.troops * tm * (enemy.gateTroopMult ?? 1)); // Kingmaker
   if (region.twist === 'raid') sum += capped('shrine', FEATURES.shrine.troops * tm) * FEATURES.shrine.count;
   if (region.type === 'dragon') sum += FEATURES.dragon.hp * tm * (enemy.dragonHpMult ?? 1) * FEATURES.difficulty.dragonHpWeight; // Age of Dragons
+  if (world && quayTile(world, region.id) != null) sum += capped('harbour', HARBOUR.quayTroops * tm); // PLAN-PHASE12: the quay (seaArena.js)
   void siteValue;
   return sum;
+}
+
+/** PLAN-PHASE12: the share of a region's walkable tiles that are fords (an archipelago's straits: slow ground for the attacker). */
+export function fordShare(world, region) {
+  if (!world || !world.archipelago || !world.tiles || !world.tiles.length) return 0;
+  let fords = 0;
+  let walk = 0;
+  for (const i of region.tiles) { const t = world.tiles[i]; if (!t.passable) continue; walk += 1; if (t.ford) fords += 1; }
+  return walk ? fords / walk : 0;
 }
 
 /** The measured strength factor of a region's type and twist (FEATURES.difficulty; Night only while the region is unscouted). */
@@ -561,9 +581,11 @@ function estimateStrength(world, region, enemy, captured = null, scouted = false
   // worth more per level (FRONTIER.occupation.towerCredit), and its Walls harden the keep and forts (above).
   if (captured && captured.towerLevel > 0) sum += siteValue('tower', false) * (1 + FRONTIER.occupation.towerCredit * captured.towerLevel);
   // A varied map (DESIGN §10.13): the feature sites, then a measured factor per type and twist (Night only while unscouted)
-  sum += featureStrength(region, enemy, siteValue);
+  sum += featureStrength(region, enemy, siteValue, world);
   sum *= featureFactor(region, scouted);
   if (region.isCapital && enemy.personality === 'undying') sum *= DIFFICULTY.undyingCapital; // the Barrow Keep (PLAN-PHASE6)
+  if (region.isCapital && enemy.personality === 'raider' && world.archipelago) sum *= DIFFICULTY.tideCapital; // the Tide Fortress (PLAN-PHASE12)
+  sum *= 1 + DIFFICULTY.fordWeight * fordShare(world, region); // PLAN-PHASE12: fords slow the attack
   return sum * DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1)
     * Math.pow(DIFFICULTY.depthPerTier, Math.max(0, region.tier - 3))
     * (DIFFICULTY.tierFactor[region.tier] ?? 1);
@@ -653,6 +675,7 @@ export function difficulty(state, world, regionId, opts = {}) {
 
   const out = { power, strength, ratio, label: labelFor(ratio), surrender, approach, winChance: winChance(ratio) };
   if (enemy.personality === 'undying') out.mechanic = 'fallen'; // PLAN-PHASE6: the card shows The Fallen Rise (meta/rivals.js fallenLine)
+  if (enemy.personality === 'raider') out.mechanic = 'sea'; // PLAN-PHASE12: the card shows the sea lines (meta/rivals.js seaLines)
   return out;
 }
 
@@ -746,7 +769,8 @@ export function foundDynasty(state, newSeed, world, currentWorld, choice = {}) {
   };
   // Phase 5: this dynasty's Edict and Challenges; the lifetime Legacy (inside `generals`) gains the points founding pays
   next.edict = { ...defaultEdict(), id: edictId, challenges };
-  next.rivals = rivalsFor(newSeed, next.dynasty.level); // PLAN-PHASE6 §6A: the new continent's rivals (worldOptsFor passes them on)
+  next.archipelago = archipelagoFor(newSeed, next.dynasty.level); // PLAN-PHASE12 §12A: a seeded 1-in-3 archipelago from dynasty 3
+  next.rivals = rivalsFor(newSeed, next.dynasty.level, { archipelago: next.archipelago }); // PLAN-PHASE6 §6A (+ the Sea Kings on an archipelago): worldOptsFor passes them on
   const legacy = ensureLegacy(next);
   legacy.points += legacyEarned;
   legacy.pendingBonus = CHALLENGES.legacyBonus * challenges.length;

@@ -86,6 +86,7 @@ export function worldOptsFor(state) {
   if (id) opts.edict = id;
   const rivals = rivalsOf(state); // PLAN-PHASE6 §6A: the dynasty's rival line-up (stored at founding); omitted when classic (byte-identical)
   if (!classicRivals(rivals)) opts.rivals = rivals;
+  if (state && state.archipelago === true) opts.archipelago = true; // PLAN-PHASE12: islands, fords, harbours and sea lanes (omitted on land: byte-identical)
   return opts;
 }
 

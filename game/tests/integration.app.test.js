@@ -182,7 +182,7 @@ test('tutorial controller: a set of seen steps, the right step for the facts, ev
   assert.equal(tut.pick(world).id, 'W0');
   state.tutorial.done = true;
   assert.equal(tut.pick(world), null, 'done switches every hint off');
-  assert.equal(TUTORIAL_STEPS.map((x) => x.id).join(' '), 'W0 W1 W2 W3 B1 B2 B3 B4 B5 C1 C2 C3 P1 P2 M1 M2 M3 M4 F1 F2 F3 F4 G1 G2 R1 V1 V2 V3 V4 V5 Q1 Q2 D1 D2 A1 K1 L1 H1 J1');
+  assert.equal(TUTORIAL_STEPS.map((x) => x.id).join(' '), 'W0 W1 W2 W3 B1 B2 B3 B4 B5 C1 C2 C3 P1 P2 M1 M2 M3 M4 F1 F2 F3 F4 G1 G2 R1 V1 V2 V3 V4 V5 Q1 Q2 D1 D2 A1 S1 K1 L1 H1 J1');
 });
 
 test('pickLandTile resolves tile centres (and mountain faces) to the tile drawn there', () => {

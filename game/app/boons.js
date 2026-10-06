@@ -27,11 +27,14 @@ const BOON_ICONS = {
   // Duos
   fireArrows: 'boonFireArrows', ghostLegion: 'boonGhost', lightningWar: 'boonLightning', gildedBanners: 'boonGilded',
   thunderCharge: 'boonThunder', siegeTrain: 'boonSiegeTrain',
+  // Phase 12 (the sea)
+  navigator: 'boonNavigator', privateers: 'boonPrivateers', harbourChain: 'boonHarbourChain',
 };
 const RELIC_ICONS = {
   dragonBanner: 'relicDragonBanner', crownOfReeve: 'relicReeve', sundial: 'relicSundial', hornOfAges: 'relicHorn', seersLens: 'relicLens',
   blackPennant: 'relicPennant', emberHeart: 'relicEmber', gravewardensLantern: 'relicLantern',
   merchantsScale: 'relicScale', wardensBell: 'relicBell', twinCrowns: 'relicTwinCrowns', sealOfMargrave: 'relicSeal',
+  astrolabe: 'relicAstrolabe', drownedCrown: 'relicDrownedCrown', // Phase 12
 };
 const known = new Set(ICON_NAMES);
 export function boonIcon(id, cfgIcon) { return BOON_ICONS[id] || (known.has(cfgIcon) ? cfgIcon : 'boonCard'); }

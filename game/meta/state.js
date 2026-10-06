@@ -212,6 +212,7 @@ export function createGame(seed, world, now) {
     // Phase 5 (PLAN-PHASE5): this dynasty's Edict and Challenges (the first dynasty plays by the standard rules)
     edict: defaultEdict(),
     rivals: [2, 3, 4], // PLAN-PHASE6 §6A: the rival line-up (the classic three in Dynasty 1; foundDynasty draws the next one)
+    archipelago: false, // PLAN-PHASE12 §12A: never in Dynasty 1 (foundDynasty draws it from Dynasty 3)
   };
   return resetRegions(state, world, now);
 }

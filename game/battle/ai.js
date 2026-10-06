@@ -25,10 +25,11 @@ import { BATTLE, SITE_TYPES, POWERS } from '../config/battle.js';
 import { FRONTIER } from '../config/frontier.js';
 import { ownerStats, siteDefence, PLAYER_OWNER } from './combat.js';
 import { getRuntime } from './runtime.js';
-import { routeCost, canRoute } from './routing.js';
+import { routeCost, canRoute, routeFor } from './routing.js';
 import { UNDYING_AI } from '../config/ashen.js';
+import { RAIDER_AI } from '../config/sea.js';
 
-const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90, bandit: 40, gate: 60, shrine: 70 };
+const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90, bandit: 40, gate: 60, shrine: 70, harbour: 30 };
 
 // Personality tuning. `reserve`: fraction of a site's usual garrison it never sends out (keeps and
 // threatened sites hold more, see holdBack). `keepGuard`: the keep insists on holding this
@@ -54,6 +55,7 @@ const PERSONALITY = {
     extend: 1.5, softOnly: false, neutrals: true, losing: 0.4, sources: 2,
   },
   undying: UNDYING_AI.tuning, // the Ashen Host (PLAN-PHASE6): holds thickly, counterattacks once you've spent troops (attritionWindow)
+  raider: RAIDER_AI.tuning, // the Sea Kings (PLAN-PHASE12): holds lightly, evacuates a lost coastal site by sea (longships)
   passive: {
     reserve: 0.6, keepGuard: 1.6, margin: 1.2, maxCommit: 1.0, waves: 0, thinkMult: 1.1, open: 0,
     extend: 1, softOnly: true, neutrals: false, losing: 0, sources: 3,
@@ -262,10 +264,39 @@ function friendlyEnRoute(ctx, site) {
   return n;
 }
 
+/**
+ * Longships (PLAN-PHASE12, the 'raider' AI): a coastal site facing an attack it cannot hold (RAIDER_AI.evacuateAt x its garrison's
+ * strength, the attackers close or already at the walls) sends RAIDER_AI.evacuateShare of its troops by sea lane to the safest other
+ * coastal site it holds. The player takes an empty town; the war band lives to land elsewhere. Never the keep or a Gate.
+ */
+function evacuate(ctx, commands, spent) {
+  const out = new Set();
+  if (!ctx.p.longships || !ctx.battle.arena.sea) return out;
+  for (const site of ctx.mine) {
+    if (!site.coastal || site.type === 'keep' || site.type === 'gate' || site.troops < 3) continue;
+    const inc = ctx.incoming.get(site.id);
+    const assault = assaultStrength(ctx, site);
+    const attack = (inc && inc.eta <= 4 ? inc.strength : 0) + assault;
+    if (attack <= 0 || attack < RAIDER_AI.evacuateAt * site.troops * defUnit(ctx, site)) continue;
+    let best = null;
+    for (const to of ctx.mine) {
+      if (to.id === site.id || !to.coastal || ctx.incoming.has(to.id) || (to.assault && to.assault.owner !== ctx.me)) continue;
+      const route = routeFor(ctx.battle, ctx.me, site.id, to.id);
+      if (!route || !route.lane) continue;
+      if (!best || route.cost < best.cost) best = { to, cost: route.cost };
+    }
+    if (!best) continue;
+    const n = send(ctx, commands, site, best.to, site.troops * RAIDER_AI.evacuateShare);
+    if (n > 0) { addTo(spent, site.id, n); out.add(site.id); }
+  }
+  return out;
+}
+
 /** Sends the shortfall to every threatened site, keep first. Records what it spent. */
-function defend(ctx, commands, spent) {
+function defend(ctx, commands, spent, skip = null) {
   const order = [...ctx.mine].sort((a, b) => (b.type === 'keep') - (a.type === 'keep') || a.id - b.id);
   for (const site of order) {
+    if (skip && skip.has(site.id)) continue; // evacuated by sea this think (longships)
     const inc = ctx.incoming.get(site.id);
     const assault = assaultStrength(ctx, site);
     const attack = (inc ? inc.strength : 0) + assault;
@@ -499,7 +530,7 @@ export function think(battle, t) {
     finishThink(battle);
     return commands;
   }
-  defend(ctx, commands, spent);
+  defend(ctx, commands, spent, evacuate(ctx, commands, spent));
   topUpKeep(ctx, commands, spent);
   if (t >= grace) attack(ctx, commands, spent);
   finishThink(battle);

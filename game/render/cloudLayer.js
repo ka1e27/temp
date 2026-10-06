@@ -61,7 +61,10 @@ export function createCloudLayer(world) {
     const region = world.regions[regionId];
     if (!region) return null;
     const rng = createRng(hash32(world.seed >>> 0, 'fog', regionId));
-    const pts = region.tiles.map((i) => world.tiles[i]);
+    // PLAN-PHASE12: a region's ford tiles (water) take no fog: the strait stays visible, and a battle's arena (which borrows the fords touching it)
+    // is never fogged by a hidden neighbour's ford
+    const land = region.tiles.map((i) => world.tiles[i]).filter((t) => !t.ford);
+    const pts = land.length ? land : region.tiles.map((i) => world.tiles[i]);
     const n = Math.max(4, Math.round(pts.length / TILES_PER_PUFF) + 2);
     f = [];
     for (let k = 0; k < n; k++) {
@@ -95,6 +98,7 @@ export function createCloudLayer(world) {
     const region = world.regions[regionId];
     for (const i of region.tiles) {
       const t = world.tiles[i];
+      if (t.ford) continue; // no haze over a strait (PLAN-PHASE12)
       const lift = t.elev === 3 ? 0.5 : t.elev === 2 ? 0.34 : t.elev === 1 ? 0.22 : 0;
       for (let k = 0; k < 6; k++) {
         const x = t.x + HEX_CORNERS[k][0] * 1.02;

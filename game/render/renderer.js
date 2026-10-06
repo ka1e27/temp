@@ -5,6 +5,7 @@
 // draw-order composition by calling these layers directly — this file is the
 // shared instance + canvas plumbing they compose.
 import { createTerrainCache, oceanStops } from './terrainCache.js';
+import { createSeaLayer } from './seaLayer.js';
 import { createSiteSpriteCache } from './sites.js';
 import { createCloudLayer } from './cloudLayer.js';
 import { createOverlays } from './overlays.js';
@@ -32,6 +33,7 @@ export function createRenderer(canvas) {
   let overlays = null;
   let arena = null;
   let ambient = null; // caravans, smoke, sails, boats, birds: one per world
+  let sea = null; // PLAN-PHASE12: an archipelago's harbours and sea lanes (null on a land continent)
   let reduceMotion = false;
 
   // World-independent layers persist across `setWorld` calls.
@@ -56,6 +58,7 @@ export function createRenderer(canvas) {
     arena.setPixelRatio(dpr);
     // The ambient life shares the terrain cache's prosperity plan (the windmill sites).
     ambient = createAmbient({ world, seed: world.seed, plan: terrain.plan, pixelRatio: dpr, reduceMotion });
+    sea = createSeaLayer(world);
     oceanMinY = terrain.seaExtent.minY;
     oceanMaxY = terrain.seaExtent.maxY;
     units.reset();
@@ -118,6 +121,7 @@ export function createRenderer(canvas) {
     get clouds() { return clouds; },
     get overlays() { return overlays; },
     get arena() { return arena; },
+    get sea() { return sea; },
     get ambient() { return ambient; },
     /** Reduce Motion for the ambient layer (no birds, still sails, half the smoke, slower carts). */
     setReduceMotion(on) { reduceMotion = !!on; if (ambient) ambient.setReduceMotion(reduceMotion); },

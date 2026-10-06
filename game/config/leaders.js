@@ -34,8 +34,10 @@
 
 /** Faction ids that can have a leader (0 is the player realm: no leader). */
 import { ASHEN_LEADER, ASHEN_LINES } from './leadersAshen.js';
+import { SEA_LEADER, SEA_LINES } from './leadersSea.js';
 
-export const LEADER_FACTIONS = Object.freeze([1, 2, 3, 4, 5]); // 5: the Ashen Host's Pale Margrave (PLAN-PHASE6, config/leadersAshen.js)
+// 5: the Ashen Host's Pale Margrave (PLAN-PHASE6, config/leadersAshen.js); 6: the Sea Kings' Sea Queen (PLAN-PHASE12, config/leadersSea.js)
+export const LEADER_FACTIONS = Object.freeze([1, 2, 3, 4, 5, 6]);
 
 /** Every moment a leader may speak. */
 export const LEADER_TRIGGERS = Object.freeze([
@@ -115,6 +117,7 @@ export const LEADERS = Object.freeze({
     coda: ['ak', 'ko', 'ab', 'shi', 'ug', 'dek', 'po', 'xan', 'zu', 'lo', 'bek', 'tai', 'gai', 'rok'],
   },
   5: ASHEN_LEADER,
+  6: SEA_LEADER,
 });
 
 /**
@@ -698,4 +701,5 @@ export const LEADER_LINES = Object.freeze({
     ],
   },
   5: ASHEN_LINES, // the Pale Margrave (PLAN-PHASE6): dry, ancient, patient
+  6: SEA_LINES, // the Sea Queen (PLAN-PHASE12): dry, salt-sharp, mocking
 });

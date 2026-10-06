@@ -7,7 +7,7 @@ import { edictMods, commanderFor as edictCommander } from '../meta/edicts.js';
 import { hexDistance } from '../core/hex.js';
 import { elevOffset } from '../render/tiles.js';
 import { drawDragArrow } from '../render/sprites.js';
-import { factionColor, ACCENTS } from '../render/palette.js';
+import { factionColor, factionColorLight, ACCENTS } from '../render/palette.js';
 import { hitTestSites } from '../render/sites.js';
 import {
   drawSupplyLine, drawWaitingLine, drawReachGlow, drawNoRoute, drawArmedRing,
@@ -58,6 +58,8 @@ import { FEATURES } from '../app/features.js';
 import { createArenaOwnership } from './arenaOwnership.js';
 import { createBattleFeatures } from './battleFeatures.js';
 import { createBattleAshen } from './battleAshen.js';
+import { createBattleSea } from './battleSea.js';
+import { drawSeaLane } from '../render/seaMarks.js';
 import { createBattleBoons } from './battleBoons.js';
 import { championTitle } from '../meta/leaders.js';
 import { computeThreats } from './battleThreat.js';
@@ -255,11 +257,14 @@ export function createBattleScene(services) {
   const ashen = createBattleAshen({ ctx, camera, renderer, sfx, ui, reduceMotion, siteWorldPos });
   // Phase 7: boonTriggered pops and Scorched Earth's ground (scenes/battleBoons.js)
   const boonFx = createBattleBoons({ ctx, camera, ui, sfx, reduceMotion });
+  // PLAN-PHASE12: harbours, sea lanes, the Tide Fortress's Tide and boats, the Admiral's Broadside (scenes/battleSea.js)
+  const seaFx = createBattleSea({ ctx, camera, renderer, sfx, reduceMotion, siteWorldPos });
 
   // --- fx / sfx event routing (INTEGRATION-NOTES event mapping) ---------------------
   function handleEvent(ev, nowMs) {
     const fx = renderer.fx;
     if (ashen.onEvent(ev, nowMs)) return;
+    if (seaFx.onEvent(ev, nowMs)) return;
     if (boonFx.onEvent(ev, nowMs)) return;
     if (feat.onEvent(ev, nowMs)) return;
     switch (ev.type) {
@@ -554,6 +559,7 @@ export function createBattleScene(services) {
         durationSec: battle.stats.durationSec,
         troopsLost: battle.stats.lost,
         troopsKilled: battle.stats.killed,
+        tideTook: battle.arena.sea && battle.arena.sea.tide && battle.sea ? Math.round(battle.sea.drowned || 0) : 0, // PLAN-PHASE12: the Tide Fortress's toll
         crowns: crownResult.crowns,
         parSec: crownResult.parSec,
         // exact, pre-conquest, from what conquer pays (awardCrowns multiplies the same base); a region that already holds crowns earns none again
@@ -1778,6 +1784,12 @@ export function createBattleScene(services) {
         const lk = blocked ? { ...blockedLook, word: sayNoRoute ? 'No route' : null } : { ...look, word: worded ? null : look.word };
         if (!blocked || sayNoRoute) worded = true;
         if (lk.word) drag.wordDrawn = lk.word;
+        // PLAN-PHASE12: a send that would sail (route.lane: between two harbours you hold) shows its sea lane as a dotted arc under the arrow
+        if (!blocked && battle.arena.sea && drag.target != null && drag.target !== id) {
+          let r = null;
+          try { r = routeFor(battle, PLAYER_OWNER, id, drag.target); } catch { r = null; }
+          if (r && r.lane) drawSeaLane(ctx, r.points.map((q) => camera.worldToScreen(q.x, q.y)), factionColorLight(PLAYER_FACTION), t, { width: Math.max(2, camera.zoom * 0.06) });
+        }
         drawDragArrow(ctx, o.x, o.y, cur.x, cur.y, blocked ? DRAG_ARROW.blocked : arrowColor, t, { zoom: camera.zoom, viewW: renderer.cssWidth, ...lk });
       }
     } else if (drag && drag.kind === 'lasso') {
@@ -1889,6 +1901,7 @@ export function createBattleScene(services) {
     if (phase !== 'entering') drawSupplyLines(t);
     if (phase !== 'entering') renderer.units.drawIntent(ctx, camera, battle, t);
     ashen.drawGround(t, nowMs); // Firestorm's burning ground, the Barrow Keep's ash ring
+    seaFx.drawGround(t, nowMs); // the lanes, the piers, the Tide's rising ring and flooded fords (PLAN-PHASE12)
     boonFx.drawGround(t); // Scorched Earth's burning ground (Phase 7)
     feat.drawGround(t, nowMs); // high water, Night's tower reach, the Shrine rings, the Dragon's warning
     const chips = drawSites(t, nowMs);
@@ -1897,6 +1910,7 @@ export function createBattleScene(services) {
     fx.draw(ctx, camera);
     feat.drawAir(t, nowMs); // the Dragon, its health and its breath
     ashen.drawAir(t, nowMs); // The Fallen Rise's wisps and "+N risen" pops
+    seaFx.drawAir(t, nowMs); // Broadside's flashes, the Tide's and the boats' pops (PLAN-PHASE12)
     boonFx.drawAir(t, nowMs); // the Boons' small icon pops (Phase 7)
     drawSiteBadges(t); // over the squads AND the dust a busy camp kicks up: the number is always readable
     feat.drawTags(); // Siege: the Gate's tag, the padlock on the keep it shuts
@@ -1955,6 +1969,7 @@ export function createBattleScene(services) {
     own = createArenaOwnership(world, battle, regionId, state.owner);
     feat.reset(battle, world, regionId);
     ashen.reset(battle);
+    seaFx.reset(battle);
     boonFx.reset(battle);
     const holeTiles = new Map();
     for (const t of battle.arena.tiles) holeTiles.set(t.i, world.tiles[t.i]);
@@ -2191,6 +2206,8 @@ export function createBattleScene(services) {
     /** Dev/automation: what the Ashen layer has shown this battle (PLAN-PHASE6): rises, burns, Risings, wisps in the air. */
     ashenInfo() { return battle ? ashen.info() : null; },
     boonInfo() { return battle ? boonFx.info() : null; },
+    /** Dev/automation: what the sea layer has shown this battle (PLAN-PHASE12): lanes, ports, Tide telegraphs and floods, Broadside. */
+    seaInfo() { return battle ? seaFx.info() : null; },
     /** Dev/automation: every site with its owner, troops and screen position. */
     siteInfo() {
       if (!battle) return [];

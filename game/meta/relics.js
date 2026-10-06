@@ -23,6 +23,7 @@ export function relicInfo(id) {
 
 function relevant(state, world, r) {
   if (r.requires === 'ashen') return rivalsInWorld(world).includes(ASHEN_FACTION);
+  if (r.requires === 'archipelago') return !!(world && world.archipelago); // PLAN-PHASE12: the Astrolabe, the Drowned Crown
   if (r.requires === 'raids') return edictMods(state).raids !== false;
   return true;
 }
@@ -38,7 +39,7 @@ export function placeRelics(state, world) {
   const seed = (world.seed >>> 0) || 0;
   const level = (state.dynasty && state.dynasty.level) || 1;
   const found = new Set(ensureReliquary(state).found);
-  const pool = RELIC_LIST.filter((x) => relevant(state, world, x) && !r.owned.includes(x.id))
+  const pool = RELIC_LIST.filter((x) => relevant(state, world, x) && !x.wreckOnly && !r.owned.includes(x.id)) // the Drowned Crown: Shipwrecks only
     .map((x) => ({ id: x.id, found: found.has(x.id) ? 1 : 0, h: hash32(seed, 'relic', level, x.id) }))
     .sort((a, b) => a.found - b.found || a.h - b.h || (a.id < b.id ? -1 : 1));
   const maxTier = Math.max(0, ...world.regions.map((x) => x.tier));
@@ -127,4 +128,25 @@ export function relicLine(state, regionId) {
   if (!id) return null;
   const info = relicInfo(id);
   return RELICS.copy.cardLine.replace('{name}', info.name).replace('{text}', info.text);
+}
+
+/**
+ * The Shipwreck's find (PLAN-PHASE12, meta/events.js): a Relic not held this dynasty and relevant here, the wreck-only Drowned Crown first,
+ * then undiscovered ones (seeded
+ * per world and the find count). Claimed at once, exactly like a conquest's (Reliquary, the Reliquarian deed); a Relic that was waiting
+ * on the map is lifted from it. Returns claimRelic's shape, or null when every Relic is held. MUTATES.
+ */
+export function wreckRelic(state, world) {
+  const r = ensureRelics(state);
+  const found = new Set(ensureReliquary(state).found);
+  const seed = (world.seed >>> 0) || 0;
+  const n = r.owned.length;
+  const pick = RELIC_LIST.filter((x) => relevant(state, world, x) && !r.owned.includes(x.id))
+    .map((x) => ({ id: x.id, wreck: x.wreckOnly ? 0 : 1, found: found.has(x.id) ? 1 : 0, h: hash32(seed, 'wreck', n, x.id) }))
+    .sort((a, b) => a.wreck - b.wreck || a.found - b.found || a.h - b.h || (a.id < b.id ? -1 : 1))[0]; // the Drowned Crown first
+  if (!pick) return null;
+  const at = Object.keys(r.placed || {}).find((k) => r.placed[k] === pick.id);
+  if (at == null) { r.placed = r.placed || {}; r.placed.wreck = pick.id; }
+  const out = claimRelic(state, at == null ? 'wreck' : Number(at));
+  return out;
 }

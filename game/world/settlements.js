@@ -18,6 +18,7 @@ const TYPE_WEIGHTS = {
   defensive: { fort: 0.35, tower: 0.25, village: 0.3, hamlet: 0.1 },
   swarm: { village: 0.6, hamlet: 0.4 },
   undying: { fort: 0.2, town: 0.3, village: 0.5 }, // the Ashen Host (PLAN-PHASE6) holds its sites thickly: forts and towns, no hamlets
+  raider: { village: 0.45, town: 0.2, hamlet: 0.35 }, // the Sea Kings (PLAN-PHASE12) hold their land lightly: fishing villages, few walls
 };
 
 const HILLS_FORT_CHANCE = 0.4;

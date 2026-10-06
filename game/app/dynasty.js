@@ -15,6 +15,17 @@ import { DYNASTY } from '../config/meta.js';
 import { PLAYER_FACTION } from '../meta/state.js';
 import { crownTotals } from '../meta/crowns.js';
 import { shortNumber, formatDurationWords } from '../ui/format.js';
+import { archipelagoFor } from '../meta/rivals.js';
+import { SEA } from '../config/sea.js';
+
+/**
+ * PLAN-PHASE12 §12A: the ceremony's line for a founding onto an archipelago ("The House of X sets sail…"). The island count is only known once the
+ * continent is made (the Edict picked in the ceremony can reshape it), so the ceremony says "an archipelago" and the arrival toast gives the count.
+ */
+export function voyageLine(house, islands) {
+  const t = SEA.copy.ceremony.replace('{house}', house);
+  return islands ? t.replace('{n}', String(islands)) : t.replace(/ of \{n\} islands/, '');
+}
 
 // The config names generic icons; the UI has a crest per Edict, a medallion per Legacy branch and a mark per Challenge (game/ui/icons.js).
 const EDICT_ICON = Object.freeze({
@@ -89,6 +100,7 @@ export function createDynasty({ getState, getWorld, ui, services }) {
     const pts = legacyPointsForFounding(state);
     return {
       house: houseName(),
+      voyage: archipelagoFor(nextSeed, state.dynasty.level + 1) ? voyageLine(houseName()) : '', // PLAN-PHASE12: the next continent is an archipelago
       level: state.dynasty.level,
       stats: [
         { icon: 'flag', label: 'Regions held', value: `${owned} / ${world.regions.length}` },

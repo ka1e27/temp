@@ -80,6 +80,7 @@ import { createLeaderVoice } from './meta/leaders.js';
 import { baselineProsperity, updateProsperity } from './meta/prosperity.js';
 import { chronicleOnProsperity } from './meta/chronicle.js';
 import { PLAYER_FACTION } from './meta/state.js';
+import { archipelagoFor } from './world/archipelago.js'; // dev: __hd.seaRealm (Phase 12)
 
 const VERSION = '2.0.0';
 const MAX_DPR = 2;
@@ -829,6 +830,7 @@ function boot() {
     if (!bb) return;
     if (bb.plunder > 0) ui.toasts.update({ id: 'boon-plunder', type: 'success', icon: 'boonSack', message: `Plunderers: +${shortNumber(bb.plunder)} gold`, duration: 3600, digest: true });
     if (bb.goldLost > 0) ui.toasts.update({ id: 'boon-fortune', type: 'warning', icon: 'boonDice', message: `Fortune Favours: the loss cost ${shortNumber(bb.goldLost)} gold`, duration: 5200, digest: true });
+    if (bb.privateers > 0) ui.toasts.update({ id: 'boon-privateers', type: 'success', icon: 'boonPrivateers', message: `Privateers: +${shortNumber(bb.privateers)} gold from the harbours you took`, duration: 3600, digest: true }); // Phase 12
   });
 
   /** "Gorran Redhand, the Crimson Champion, joins your cause": a short card with the champion's line, and a Chronicle entry. */
@@ -1075,6 +1077,7 @@ function boot() {
       featureInfo: () => battleScene.featureInfo(),
       ashenInfo: () => battleScene.ashenInfo(), // Phase 6: rises, burns, Risings, wisps
       boonFxInfo: () => battleScene.boonInfo(), // Phase 7: boonTriggered counts, pops, Scorched Earth ground
+      seaInfo: () => battleScene.seaInfo(), // Phase 12: lanes, ports, the Tide, Broadside
       afterFrame,
       tutorialArrow: () => battleScene.tutorialArrow(),
       dragInfo: () => battleScene.dragInfo(),
@@ -1160,6 +1163,18 @@ function boot() {
         applyWorld();
         goto.world({ freshRealm: true, newWorld: true });
         return true;
+      },
+      /**
+       * Dev/checks (Phase 12): founds the next dynasty on the first seed from `from` that makes an ARCHIPELAGO (at least Dynasty III, so the Sea Kings
+       * hold one sector), with no ceremony, then enters it. Returns the seed, or false.
+       */
+      seaRealm: (from = 1, choice = {}) => {
+        const st = container.get().state;
+        if (st.dynasty.level < 2) st.dynasty.level = 2;
+        worldScene.devCompleteRealm(); // a founding needs the realm complete
+        let seed = from >>> 0;
+        while (!archipelagoFor(seed, st.dynasty.level + 1)) seed += 1;
+        return devCtx.foundDynasty({ ...choice, seed }) ? seed : false;
       },
       hideUI: (on = true) => { uiRoot.style.visibility = on ? 'hidden' : ''; },
       hideDev: (on = true) => {

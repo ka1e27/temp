@@ -45,6 +45,7 @@ export function sendFromSite(battle, fromSiteId, toSiteId, fraction, opts = null
     squad.speedMult = fx.chargeSpeed;
     fx.chargeLeft -= 1;
   }
+  if (route.lane) squad.lane = true; // PLAN-PHASE12: sails a sea lane (battle/sea.js): no clashes at sea, towers on the coast still shoot
   battle.squads.push(squad);
   if (squad.owner === PLAYER_OWNER) battle.stats.sent += count;
   onPlayerSend(battle, squad, opts); // Warlord's Mark (PLAN-PHASE7); Vanguard, Supply Wagons, Siege Train, Thunder Charge (PLAN-PHASE8)
@@ -52,6 +53,7 @@ export function sendFromSite(battle, fromSiteId, toSiteId, fraction, opts = null
     type: 'send', owner: squad.owner, from: fromSiteId, to: toSiteId, count, squad: squad.id,
   };
   if (opts && opts.auto) event.auto = true;
+  if (squad.lane) event.lane = true;
   battle.events.push(event);
   return squad;
 }

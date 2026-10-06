@@ -133,8 +133,8 @@ export function installHintMonitor() {
       const p = id >= 0 ? hd.regionScreenPos(id) : null;
       return box && p ? [{ box, probe: p }] : null;
     }
-    // The Ashen Host (A1): the Ashen frontier region
-    if (/the fallen rise/i.test(text)) {
+    // The Ashen Host (A1): the Ashen frontier region; the sea (S1, Phase 12): the frontier region with fords
+    if (/the fallen rise/i.test(text) || /fords cross the straits/i.test(text)) {
       const id = hd.hintOutline ? hd.hintOutline() : -1;
       const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
       const p = id >= 0 ? hd.regionScreenPos(id) : null;

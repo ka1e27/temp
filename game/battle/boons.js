@@ -135,7 +135,11 @@ function onRoad(battle, squad) {
 
 /** Pathfinder (movement.js): the cost a player squad pays to cross `tile`. */
 export function moveCost(battle, squad, tile) {
-  if (squad.owner === PLAYER_OWNER && boonsOf(battle).pathfinder && ROUGH.has(tile.terrain)) return Math.min(tile.cost, 1);
+  if (squad.owner !== PLAYER_OWNER) return tile.cost;
+  const b = boonsOf(battle);
+  if (b.pathfinder && ROUGH.has(tile.terrain)) return Math.min(tile.cost, 1);
+  if (tile.ford && b.fordCostMult > 0 && b.fordCostMult !== 1) return tile.cost * b.fordCostMult; // Navigator (PLAN-PHASE12): fords x1.5, not x2.5
+  if (tile.sea && b.laneCostMult > 0 && b.laneCostMult !== 1) return tile.cost * b.laneCostMult; // the Astrolabe (PLAN-PHASE12): lanes x0.4, not x0.6
   return tile.cost;
 }
 
@@ -146,7 +150,9 @@ export function marchBoonMult(battle, squad, t) {
   const fx = battle.effects || {};
   const hit = b.hitRunMult > 1 && t < (fx.hitRunUntil || 0) ? b.hitRunMult : 1;
   const drums = b.drumsMult > 1 && t < (fx.drumsUntil || 0) ? b.drumsMult : 1; // War Drums (PLAN-PHASE8)
-  return hit * drums;
+  // Harbour Chain (PLAN-PHASE12): +10% a port held, up to +30%; the Admiral's laneFast skill (PlayerStats.laneSpeedMult)
+  const chain = squad.lane ? (b.laneSpeedMult > 1 ? b.laneSpeedMult : 1) * (battle.player && battle.player.laneSpeedMult > 1 ? battle.player.laneSpeedMult : 1) : 1;
+  return hit * drums * chain;
 }
 
 // --- Towers ------------------------------------------------------------------------------------------------------------------------
@@ -159,7 +165,9 @@ export function towerIntervalMult(battle, site) {
 
 /** Night Raiders: in a Night battle an enemy tower does not shoot the player's squads. */
 export function towerIgnores(battle, site, squad) {
-  return squad.owner === PLAYER_OWNER && site.owner !== PLAYER_OWNER && !!boonsOf(battle).nightRaiders && twistOf(battle) === 'night';
+  if (squad.owner !== PLAYER_OWNER || site.owner === PLAYER_OWNER) return false;
+  if (squad.lane && battle.player && battle.player.laneShield) return true; // the Admiral's passive (PLAN-PHASE12): lane squads take no tower fire
+  return !!boonsOf(battle).nightRaiders && twistOf(battle) === 'night';
 }
 
 /**

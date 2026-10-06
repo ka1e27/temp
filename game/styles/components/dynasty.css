@@ -56,6 +56,9 @@ html.reduce-motion .ceremony-veil, html.reduce-motion .ceremony-panel { animatio
 
 /* page 1: what the dynasty earns, its numbers */
 .ceremony-earn { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.ceremony-voyage { display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: 8px 12px; border-radius: var(--panel-radius-sm); font-weight: 800; color: var(--text); background: linear-gradient(90deg, rgba(62, 239, 216, 0.16), rgba(62, 239, 216, 0.04)); border: 1px solid rgba(159, 232, 224, 0.4); }
+.ceremony-voyage[hidden] { display: none; }
+.ceremony-voyage .icon { flex: none; color: var(--sea-foam); }
 .ceremony-earn-item {
   display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3);
   border-radius: var(--panel-radius-sm); border: 1px solid rgba(245, 196, 81, 0.4); background: rgba(245, 196, 81, 0.08);

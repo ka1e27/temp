@@ -807,6 +807,103 @@ const ICONS = {
     path('M8.4 10.6 8 7.8l2 1.4 2-2 2 2 2-1.4-.4 2.8Z', { fill: '#000', 'fill-opacity': 0.45 }),
     circle(12, 14, 3, { fill: '#000', 'fill-opacity': 0.45 }),
   ],
+
+  // --- Phase 12: the sea ------------------------------------------------------
+  // The Sea Kings: a barbed trident. Bounding box x 4.1..19.9, y 1.6..22.6 (centred on 12,12.1).
+  trident: () => [
+    path('M12 1.6l2.1 4.3h-1.15v5.5h-1.9V5.9H9.9Z'),
+    path('M6.1 2.8l2 4H7v2.4H5.2V6.8H4.1Z'),
+    path('M17.9 2.8l2 4h-1.1v2.4H17V6.8h-1.1Z'),
+    path('M5.2 8.6v.9c0 2.4 1.8 3.9 4.2 3.9h5.2c2.4 0 4.2-1.5 4.2-3.9v-.9h-1.8v.9c0 1.2-.9 2-2.4 2H9.4c-1.5 0-2.4-.8-2.4-2v-.9Z'),
+    rect(11.05, 13, 1.9, 8.4, { rx: 0.6 }),
+    rect(10.3, 15.4, 3.4, 1.3, { rx: 0.4, 'fill-opacity': 0.7 }),
+    circle(12, 21.5, 1.1),
+  ],
+  // a harbour: a pier on posts with a moored boat
+  harbour: () => [
+    rect(2.6, 9.4, 11.4, 2, { rx: 0.5 }),
+    rect(4, 11.4, 1.5, 6.4, { 'fill-opacity': 0.75 }), rect(8, 11.4, 1.5, 6.4, { 'fill-opacity': 0.75 }), rect(12, 11.4, 1.5, 6.4, { 'fill-opacity': 0.75 }),
+    path('M13.6 14.2h8l-1.8 3.4h-4.6Z'),
+    rect(17.1, 5.4, 1.1, 8.6, { rx: 0.4 }), path('M18.4 6l3.2 5.6h-3.2Z', { 'fill-opacity': 0.7 }),
+    path('M2 20.2c1.6-1.3 3.2-1.3 4.8 0s3.2 1.3 4.8 0 3.2-1.3 4.8 0 3.2 1.3 4.8 0', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round' }),
+  ],
+  // a sea lane: a longboat on a dotted arc
+  seaLane: () => [
+    path('M3 17.4C6 9 18 9 21 17.4', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.7, 'stroke-dasharray': '0.1 3', 'stroke-linecap': 'round' }),
+    path('M5.6 12.4h12.8l-2.2 3.6H7.8Z'),
+    path('M5.6 12.4 4.2 10.4M18.4 12.4l1.4-2', { stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round' }),
+    rect(11.4, 4, 1.2, 8.4, { rx: 0.4 }), path('M12.6 4.6h5l-1 4.4h-4Z', { 'fill-opacity': 0.75 }),
+  ],
+  // a ford: a sandbar across the waves
+  ford: () => [
+    path('M2 13.2c3-2.6 6-3.4 10-3.4s7 .8 10 3.4c-3 1.4-6 2-10 2s-7-.6-10-2Z'),
+    path('M2 7c1.6-1.3 3.2-1.3 4.8 0s3.2 1.3 4.8 0 3.2-1.3 4.8 0 3.2 1.3 4.8 0M2 19c1.6-1.3 3.2-1.3 4.8 0s3.2 1.3 4.8 0 3.2-1.3 4.8 0 3.2 1.3 4.8 0',
+      { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-opacity': 0.75 }),
+  ],
+  // the Tide: a cresting wave
+  tide: () => [
+    path('M2 18.6c2.4 0 3.4-1.6 4.4-4.2 1.4-3.8 3.6-8 8.2-8 3.4 0 5.6 2.4 5.6 5.2 0 2-1.4 3.4-3.2 3.4-1.4 0-2.4-1-2.4-2.2 0-1 .7-1.7 1.6-1.7-.4-1-1.4-1.6-2.6-1.6-3.6 0-4.6 5-6 7.6-.6 1.2-1.4 2-2.4 2.4H22v2.4H2Z'),
+  ],
+  // a shipwreck: a broken hull aground with a snapped mast
+  shipwreck: () => [
+    path('M2.6 15.4 14 12.6l7.4 3.2-2 3.6H5Z'),
+    path('M10.6 13.4 8.2 3.6l1.4-.4 2.6 9.8Z', { 'fill-opacity': 0.8 }),
+    path('M9.4 5.6 15.6 6l-1 3.6-4.4.4Z', { 'fill-opacity': 0.5 }),
+    path('M2 21.4c1.6-1.3 3.2-1.3 4.8 0s3.2 1.3 4.8 0 3.2-1.3 4.8 0 3.2 1.3 4.8 0', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round' }),
+  ],
+  // the Admiral (General emblem): a bicorne hat worn side-on, with a cockade and a trimmed brim, over a short anchor stock
+  admiral: () => [
+    path('M1.6 15.2c2.2-.6 4-5.6 10.4-8.4 6.4 2.8 8.2 7.8 10.4 8.4-3.2 1.8-6.8 2.6-10.4 2.6s-7.2-.8-10.4-2.6Z'),
+    path('M2.6 15.1c2.8 1.3 6 1.9 9.4 1.9s6.6-.6 9.4-1.9', { fill: 'none', stroke: '#fff', 'stroke-opacity': 0.55, 'stroke-width': 1.1 }),
+    circle(12, 10.6, 2, { fill: '#fff', 'fill-opacity': 0.6 }),
+    circle(12, 10.6, 0.8, { fill: '#000', 'fill-opacity': 0.35 }),
+    path('M8.2 20.2h7.6', { stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-linecap': 'round' }),
+  ],
+  // Broadside (the Admiral's ability): a cannon firing, with a puff of smoke
+  broadside: () => [
+    path('M3 16.4 13.6 10.6l1.6 2.8-10.6 5.8Z'),
+    circle(5.4, 18.6, 2.6, { 'fill-opacity': 0.8 }),
+    circle(5.4, 18.6, 1, { fill: '#000', 'fill-opacity': 0.4 }),
+    circle(17.6, 9, 2.6, { 'fill-opacity': 0.55 }), circle(20.4, 6.6, 2, { 'fill-opacity': 0.45 }), circle(18.6, 4.4, 1.6, { 'fill-opacity': 0.35 }),
+    polygon(starPoints(15.6, 11.4, 2.4, 1, 5), { 'fill-opacity': 0.9 }),
+  ],
+  // Navigator (Boon): a compass rose over a wave
+  boonNavigator: () => [
+    circle(12, 10.4, 8, { 'fill-opacity': 0.28 }),
+    polygon([[12, 2.6], [13.8, 10.4], [12, 18.2], [10.2, 10.4]]),
+    polygon([[4.2, 10.4], [12, 8.6], [19.8, 10.4], [12, 12.2]], { 'fill-opacity': 0.6 }),
+    path('M2 21c1.6-1.3 3.2-1.3 4.8 0s3.2 1.3 4.8 0 3.2-1.3 4.8 0 3.2 1.3 4.8 0', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round' }),
+  ],
+  // Privateers (Boon): a black flag over a coin
+  boonPrivateers: () => [
+    rect(4.4, 2.4, 1.8, 19.6, { rx: 0.7 }),
+    path('M6.2 3.4h13.4l-2.6 4 2.6 4H6.2Z'),
+    circle(12.6, 7.4, 1.7, { fill: '#000', 'fill-opacity': 0.5 }),
+    circle(15.4, 17.4, 4.2, { 'fill-opacity': 0.8 }),
+    circle(15.4, 17.4, 2.2, { fill: '#000', 'fill-opacity': 0.25 }),
+  ],
+  // Harbour Chain (Boon): three linked chain rings
+  boonHarbourChain: () => [
+    ellipse(6.4, 12, 4.2, 2.8, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2 }),
+    ellipse(12, 12, 4.2, 2.8, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-opacity': 0.75 }),
+    ellipse(17.6, 12, 4.2, 2.8, { fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2 }),
+  ],
+  // Astrolabe (Relic): a ringed disc with a pointer and a hanging loop
+  relicAstrolabe: () => [
+    circle(12, 3.2, 1.6, { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }),
+    circle(12, 13, 8.6, { 'fill-opacity': 0.3 }),
+    circle(12, 13, 8.6, { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8 }),
+    circle(12, 13, 5, { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.2, 'stroke-opacity': 0.8 }),
+    path('M5.4 18.6 18.6 7.4', { stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round' }),
+    circle(12, 13, 1.6),
+  ],
+  // The Drowned Crown (Relic): a crown over the waves
+  relicDrownedCrown: () => [
+    path('M4 14.4 3.2 5.4l4.2 3.2L12 3l4.6 5.6 4.2-3.2-.8 9Z'),
+    rect(4, 14.2, 16, 1.6, { rx: 0.6, 'fill-opacity': 0.7 }),
+    path('M2 19c1.6-1.3 3.2-1.3 4.8 0s3.2 1.3 4.8 0 3.2-1.3 4.8 0 3.2 1.3 4.8 0M4.4 22c1.3-1 2.6-1 3.9 0s2.6 1 3.9 0 2.6-1 3.9 0',
+      { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round' }),
+  ],
 };
 
 // the names config/edicts.js gives (keys only: app/dynasty.js maps each Edict and Challenge to its own crest or mark; these keep a raw config name drawable)
@@ -814,6 +911,11 @@ ICONS.snowflake = ICONS.edictWinter;
 ICONS.road = ICONS.edictRoads;
 ICONS.fist = ICONS.challengeIronWill;
 ICONS.horde = ICONS.challengeOverrun;
+// Phase 12: the config's icon names (keys only; app/boons.js maps each id to its own icon)
+ICONS.helm = ICONS.boonNavigator;
+ICONS.chain = ICONS.boonHarbourChain;
+ICONS.astrolabe = ICONS.relicAstrolabe;
+ICONS.drownedCrown = ICONS.relicDrownedCrown;
 // the Ashen Host's emblem under the spellings a config may use
 ICONS['skull-crown'] = ICONS.skullCrown;
 ICONS.crownSkull = ICONS.skullCrown;

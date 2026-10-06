@@ -127,6 +127,7 @@ export const BANNER_ANCHOR = Object.freeze({
   tower: { dx: 0, dy: -1.8 },
   keep: { dx: 0.72, dy: -1.32 },
   camp: { dx: 0, dy: -0.66 },
+  harbour: { dx: 0.58, dy: -1.12 }, // the quay's crane mast (PLAN-PHASE12)
   bandit: { dx: 0.62, dy: -0.5 },
   gate: { dx: 0.7, dy: -1.5 },
   shrine: { dx: 0.62, dy: -1.0 },
@@ -272,8 +273,28 @@ function emblemSkullCrown(ctx, color) {
   ctx.fillRect(SK(5.4), SKY(8.4), 13.2 / 21, 1.3 / 21);
 }
 
+// The Sea Kings (Phase 12): a barbed trident, the same silhouette as the `trident` UI icon (the 24-grid mapped to about -0.5..0.5; the
+// SVG path data is shared through Path2D). Built lazily: Path2D exists only in a browser.
+const TRIDENT_D = 'M12 1.6l2.1 4.3h-1.15v5.5h-1.9V5.9H9.9Z M6.1 2.8l2 4H7v2.4H5.2V6.8H4.1Z M17.9 2.8l2 4h-1.1v2.4H17V6.8h-1.1Z '
+  + 'M5.2 8.6v.9c0 2.4 1.8 3.9 4.2 3.9h5.2c2.4 0 4.2-1.5 4.2-3.9v-.9h-1.8v.9c0 1.2-.9 2-2.4 2H9.4c-1.5 0-2.4-.8-2.4-2v-.9Z '
+  + 'M11.05 13h1.9v8.4h-1.9Z M12 20.4a1.1 1.1 0 1 0 0.01 0Z';
+let tridentPath = null;
+function emblemTrident(ctx, color) {
+  if (!tridentPath) tridentPath = new Path2D(TRIDENT_D);
+  ctx.save();
+  ctx.scale(1 / 21, 1 / 21);
+  ctx.translate(-12, -12.1);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(20,16,10,0.8)';
+  ctx.stroke(tridentPath);
+  ctx.fillStyle = color;
+  ctx.fill(tridentPath);
+  ctx.restore();
+}
+
 const EMBLEMS = { star: emblemStar, wheat: emblemWheat, sword: emblemSword, sun: emblemSun };
-const CUSTOM_EMBLEMS = { eye: emblemEye, skullCrown: emblemSkullCrown, 'skull-crown': emblemSkullCrown, crownSkull: emblemSkullCrown };
+const CUSTOM_EMBLEMS = { eye: emblemEye, skullCrown: emblemSkullCrown, 'skull-crown': emblemSkullCrown, crownSkull: emblemSkullCrown, trident: emblemTrident };
 
 /**
  * A single-colour, colour-blind-safe emblem glyph, centred at (x, y).

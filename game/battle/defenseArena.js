@@ -19,6 +19,26 @@ import {
 } from './geom.js';
 import { PLAYER_OWNER } from './owner.js';
 import { fortEffects, fortTowerTiles } from './fortSites.js';
+import { decorateSea } from './seaArena.js';
+import { touchesOpenSea } from '../world/archipelago.js';
+
+/**
+ * PLAN-PHASE12: a 'raider' (the Sea Kings) on an archipelago comes from the sea. When the raided region has a free coastal tile in its
+ * keep pocket, the war band LANDS there (at the region's harbour when it has one, else about 4 hexes from the keep) and brings no halo:
+ * `{ camp, strip: [] }`, or null (a land raid as usual).
+ */
+function landingCamp(world, region, attacker, pocketInfo) {
+  const f = world.archipelago && world.factions[attacker];
+  if (!f || f.personality !== 'raider') return null;
+  const ports = region.settlements.map((id) => world.settlements[id]).filter((s) => s.harbour).map((s) => world.tiles[s.tile]);
+  const { pocket, keep } = pocketInfo;
+  const cands = [...pocket].map((i) => world.tiles[i])
+    .filter((t) => t.passable && !t.ford && t.settlement === -1 && touchesOpenSea(world.tiles, t.i, world.cols, world.rows));
+  if (!cands.length) return null;
+  const key = (t) => (ports.length ? Math.min(...ports.map((p) => hexDistance(p, t))) : Math.abs(hexDistance(keep, t) - 4));
+  cands.sort((a, b) => key(a) - key(b) || a.i - b.i);
+  return { camp: cands[0], strip: [] };
+}
 
 /**
  * The key a settlement has in a battle manager's `busy().sites` set: `"regionId:index"`, where index is the settlement's
@@ -176,8 +196,8 @@ export function canBuildDefenseArena(world, owners, regionId, attacker) {
     const region = world.regions[regionId];
     if (region && owners[regionId] === PLAYER_OWNER && Array.isArray(world.tiles) && world.tiles.length) {
       const busy = normalizeBusy(null);
-      const halo = raiderHalo(world, owners, region, attacker, busy);
-      ok = !!placeCamp(world, owners, region, attacker, -1, halo, keepPocket(world, region), busy);
+      const pocket = keepPocket(world, region);
+      ok = !!landingCamp(world, region, attacker, pocket) || !!placeCamp(world, owners, region, attacker, -1, raiderHalo(world, owners, region, attacker, busy), pocket, busy);
     }
   } catch { ok = false; }
   if (perWorld.size > 4000) perWorld.clear();
@@ -218,8 +238,9 @@ export function buildDefenseArena(world, owners, regionId, opts = {}) {
   const fromRegionId = opts.fromRegionId ?? -1;
 
   const pocketInfo = keepPocket(world, region);
-  const halo = raiderHalo(world, owners, region, attacker, busy);
-  const placed = placeCamp(world, owners, region, attacker, fromRegionId, halo, pocketInfo, busy);
+  const landing = landingCamp(world, region, attacker, pocketInfo); // PLAN-PHASE12: the Sea Kings land on your coast
+  const halo = landing ? [] : raiderHalo(world, owners, region, attacker, busy);
+  const placed = landing || placeCamp(world, owners, region, attacker, fromRegionId, halo, pocketInfo, busy);
   if (!placed) throw Object.assign(new Error(`buildDefenseArena: faction ${attacker} has no way into region ${regionId}`), { code: 'no-passable-border' });
   const keepSettlement = world.settlements[region.keep];
   if (isBusySettlement(world, busy, keepSettlement.id)) {
@@ -302,6 +323,8 @@ export function buildDefenseArena(world, owners, regionId, opts = {}) {
     siegeSec, campSite: 0, keepSite,
   };
   if (effects.speedMult !== 1) arena.playerSpeedMult = effects.speedMult;
+  if (landing) arena.landing = true; // PLAN-PHASE12: the camp is a landing on the region's coast (the map draws boats, not a march)
+  decorateSea(world, arena, { regionId, enemy, mode: 'defense' }); // PLAN-PHASE12: coastal sites, harbours, sea lanes (no-op on land)
   // a Vendetta (PLAN-PHASE4 §4D): the leader's Champion marches with the war band (battle/champion.js)
   if (opts.vendetta) {
     const v = typeof opts.vendetta === 'object' ? opts.vendetta : {};

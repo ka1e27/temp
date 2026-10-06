@@ -70,6 +70,7 @@ export const INTEL = Object.freeze({
     swarm: 'Swarm: many small, fast raids',
     passive: 'Passive: never attacks, only supports its own sites',
     undying: 'Undying: holds thickly, strikes once you have spent troops',
+    raider: 'Raider: holds lightly, slips away by sea, strikes any coast',
   }),
   // One plain line under the weak point (shown on touch too, where there is no hover): what the words mean.
   glossary: Object.freeze({

@@ -24,6 +24,7 @@ import { INTEL } from '../config/intel.js';
 import { CHALLENGE_MODE, DAILY, RECORD, BANNERS } from '../config/challenges.js';
 import { SCENARIO_LIST, SCENARIOS } from '../config/scenarios.js';
 import { UNREST } from '../config/unrest.js';
+import { SEA, FORD, LANE, TIDE, BROADSIDE, ARCHIPELAGO } from '../config/sea.js';
 
 // --- number words (from config values only) ---
 export const pct = (x) => `${Math.round(x * 100)}%`;
@@ -69,6 +70,7 @@ export const CODEX_GROUPS = [
   { id: 'dynasties', title: 'Dynasties' },
   { id: 'boons', title: 'Boons and Relics' },
   { id: 'ashen', title: 'The Ashen Host' },
+  { id: 'sea', title: 'The sea' },
   { id: 'challenges', title: 'Challenges' },
 ];
 // Phase 9: the Challenges open after the realm's first conquest beyond home (CHALLENGE_MODE.unlockConquests), or in any later dynasty
@@ -218,6 +220,24 @@ export const CODEX_TOPICS = [
     lines: ['The Ashen Host is a rival of the dead. Troops you lose at their settlements rise and join them.',
       'Their capital, the Barrow Keep, raises its dead on a timer. Fire burns the dead before they can rise.'],
     numbers: [['Your losses that rise', pct(ASHEN.fallen.share)], ['Barrow Keep rises every', secs(ASHEN.rising.everySec)], ['Burning ground', secs(ASHEN.fallen.burnSec)]] },
+  // --- The sea (Phase 12) ---
+  { id: 'archipelago', group: 'sea', title: 'Archipelagos', icon: 'ford', seen: (s) => !!s.archipelago || met(s).includes(SEA.factionId),
+    lines: [`From Dynasty ${['', 'I', 'II', 'III', 'IV', 'V', 'VI'][ARCHIPELAGO.fromDynasty] || ARCHIPELAGO.fromDynasty} a new continent may be an archipelago: islands joined by fords, the pale sandbars across the straits.`,
+      'Fords are slow to cross. Every island has one or two harbours, and a region on the coast gets a harbour site in its battles.'],
+    numbers: [['Chance per founding', `1 in ${ARCHIPELAGO.chanceOneIn}`], ['Islands', `${ARCHIPELAGO.islands[0]} to ${ARCHIPELAGO.islands[1]}`], ['Ford march cost', `×${FORD.marchMult}`]] },
+  { id: 'seaLanes', group: 'sea', title: 'Sea lanes', icon: 'seaLane', seen: (s) => !!s.archipelago || met(s).includes(SEA.factionId),
+    lines: ['Hold two harbours and your troops sail between them by sea lane: the dotted arc along the coast. It is fast, but towers on the coast shoot at the boats.',
+      'Take an enemy harbour to cut their lanes.'],
+    numbers: [['Lane march cost', `×${LANE.tileCost}`]] },
+  { id: 'seaKings', group: 'sea', title: 'The Sea Kings', icon: 'trident', seen: (s) => met(s).includes(SEA.factionId),
+    lines: ['The Sea Kings hold their land lightly and strike from the sea: their raids can land on any coast of yours, so fortify your harbours.',
+      'In battle their longships sail between any two coastal settlements they hold. Take their harbours to cut them off.',
+      'Their capital, the Tide Fortress, floods the fords around it on a timer. A rising ring of water warns you first: get off the sandbars.'],
+    numbers: [['The Tide, every', secs(TIDE.everySec)], ['Floods for', secs(TIDE.floodSec)], ['Warning', secs(TIDE.telegraphSec)], ['Squads caught lose', pct(TIDE.loss)]] },
+  { id: 'admiral', group: 'sea', title: 'The Admiral', icon: 'admiral', seen: (s) => roster(s).some((g) => g && g.kind === 'admiral'),
+    lines: ['Topple the Tide Fortress to recruit the Admiral, a swift General. Your squads sailing sea lanes take no tower fire under the Admiral.',
+      'Broadside: for a few seconds every coastal enemy settlement loses troops each second.'],
+    numbers: [['Broadside lasts', secs(BROADSIDE.duration)], ['Troops lost a second', pct(BROADSIDE.perSec)]] },
   // --- Challenges (Phase 9) ---
   { id: 'daily', group: 'challenges', title: 'The Daily', icon: 'sun', seen: challengesOpen,
     lines: ['Every day brings one challenge that everyone plays: the same small continent, Edict, Boons, General and goal. Play it from the title screen or Settings > Challenges.',

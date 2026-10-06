@@ -18,7 +18,7 @@ function footprintOf(type, s) {
 
 // Generous upward tap-target extension (world-unit-ish, × zoom) per type —
 // covers the banner pole + flag + tall building silhouettes (tower/keep/fort).
-const HIT_EXTEND_UP = { hamlet: 1.3, village: 1.4, town: 2.0, fort: 2.1, tower: 2.9, keep: 2.3, camp: 1.5, bandit: 1.5, gate: 2.3, shrine: 2.0, ancientTower: 3.1 };
+const HIT_EXTEND_UP = { hamlet: 1.3, village: 1.4, town: 2.0, fort: 2.1, tower: 2.9, keep: 2.3, camp: 1.5, bandit: 1.5, gate: 2.3, shrine: 2.0, ancientTower: 3.1, harbour: 1.6 };
 
 function makeCanvas(size) {
   if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(size, size);

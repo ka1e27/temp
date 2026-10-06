@@ -42,6 +42,7 @@ import { boonMods } from './boonsState.js'; // the leaf (PLAN-PHASE7): Oathkeepe
 import { offerChampionEye } from './boons.js';
 import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE5): Iron Frontier, Peace of the Crowns, Overrun
 import { EVENTS } from '../config/events.js';
+import { touchesOpenSea } from '../world/archipelago.js';
 
 export * from './frontierState.js';
 export { busyKey };
@@ -95,9 +96,41 @@ export function activeDefenses(state) {
   return f.incoming.length + runningBattles(state).filter((r) => r.kind === 'defense').length;
 }
 
+/** True when the region has land touching open sea (a raider can land there; PLAN-PHASE12). */
+function seaCoast(world, region) {
+  return region.tiles.some((i) => world.tiles[i].land && touchesOpenSea(world.tiles, i, world.cols, world.rows));
+}
+
 /**
- * Every rival faction with land touching the player's, and the (from, to) region pairs it could raid along.
- * @returns {{ faction:number, pairs:{from:number, to:number}[] }[]} by faction id
+ * Coastal raids (PLAN-PHASE12 §12B): on an archipelago a 'raider' faction (the Sea Kings) may raid ANY coastal region of the player, not
+ * only a bordering one; the war band lands on that coast (battle/defenseArena.js). Adds `{ from, to, landing: true }` pairs (from: the
+ * raider's region nearest the target, by centroid) for every coastal player region not already on its border list. MUTATES byFaction.
+ */
+function addLandings(state, world, byFaction) {
+  if (!world.archipelago) return;
+  const held = new Map();
+  for (const region of world.regions) {
+    const o = state.owner[region.id];
+    const f = world.factions[o];
+    if (o > FREE_FOLK && f && f.personality === 'raider') { if (!held.has(o)) held.set(o, []); held.get(o).push(region); }
+  }
+  for (const [faction, own] of held) {
+    const pairs = byFaction.get(faction) || [];
+    const listed = new Set(pairs.map((p) => p.to));
+    for (const region of world.regions) {
+      if (state.owner[region.id] !== PLAYER_FACTION || listed.has(region.id) || !seaCoast(world, region)) continue;
+      const from = own.map((r) => ({ r, d: Math.hypot(r.centroid.x - region.centroid.x, r.centroid.y - region.centroid.y) }))
+        .sort((a, b) => a.d - b.d || a.r.id - b.r.id)[0].r;
+      pairs.push({ from: from.id, to: region.id, landing: true });
+    }
+    if (pairs.length) byFaction.set(faction, pairs);
+  }
+}
+
+/**
+ * Every rival faction with land touching the player's, and the (from, to) region pairs it could raid along. On an archipelago a raider
+ * also lists every coastal region of the player (`landing: true` pairs, PLAN-PHASE12).
+ * @returns {{ faction:number, pairs:{from:number, to:number, landing?:true}[] }[]} by faction id
  */
 export function borderingRivals(state, world) {
   const byFaction = new Map();
@@ -110,6 +143,7 @@ export function borderingRivals(state, world) {
       byFaction.get(o).push({ from: n, to: region.id });
     }
   }
+  addLandings(state, world, byFaction);
   return [...byFaction.entries()].sort((a, b) => a[0] - b[0]).map(([faction, pairs]) => ({ faction, pairs }));
 }
 
@@ -251,6 +285,9 @@ function announce(state, world, faction, pair, t) {
   // the Deserters event (PLAN-PHASE8): this rival's next raid comes smaller, once
   const we = state.worldEvents;
   if (we && we.deserters && we.deserters.faction === faction) { raid.deserted = true; we.deserters = null; }
+  // PLAN-PHASE12: a raider's war band on a coastal region comes by sea and lands there (defenseArena.js landingCamp): the map draws boats
+  const fac = world.factions[faction];
+  if (world.archipelago && fac && fac.personality === 'raider' && seaCoast(world, world.regions[pair.to])) raid.landing = true;
   raid.strength = Math.round(raidEnemyStats(state, world, raid).campTroops);
   f.incoming.push(raid);
   f.cooldown[pair.to] = raid.arriveAt + FRONTIER.regionCooldownSec;

@@ -34,6 +34,10 @@ export const BOON_NEUTRAL = Object.freeze({
   merchantPriceMult: 1,     // Relic: the Merchant's deals cost x this (events.js)
   siegeSecMult: 1,          // Relic: a raid defense's siege timer x this (frontier.defenseRunFor / estimateDefense)
   swiftParAdd: 0,           // Relic: Swift's par + this many seconds (crowns.parFor)
+  // Phase 12 (PLAN-PHASE12 §12C), meta:
+  privateerSec: 0,          // Privateers: each enemy harbour captured in battle pays this many seconds of income (boonBattleEnd)
+  harbourChainStep: 0,      // Harbour Chain: lane squads +this per harbour you hold on the map ... (progression.playerBattleStats -> laneSpeedMult)
+  harbourChainMax: 0,       // ... up to this much
   // --- Sim (copied into PlayerStats.boons; read by game/battle/*) ---
   scorchSec: 0,             // Firestorm leaves burning ground this long ...
   scorchDps: 0,             // ... burning this many troops a second from every enemy squad standing in it
@@ -81,18 +85,25 @@ export const BOON_NEUTRAL = Object.freeze({
   drumVanguardMult: 1,      // Duo (Thunder Charge): the first squad you send after each power cast carries x this troops
   supplyNoArrows: false,    // Duo (Siege Train): squads your supply lines send ride through enemy arrows
   risingIntervalMult: 1,    // Relic: the Barrow Keep's Rising comes this much less often (x its interval)
+  // Phase 12 (PLAN-PHASE12 §12C), sim:
+  fordCostMult: 1,          // Navigator: your squads pay this x a ford's cost (1.5 / 2.5 = x0.6: fords at x1.5 instead of x2.5)
+  laneCostMult: 1,          // Relic (the Astrolabe): your lane squads pay this x a sea tile's cost (0.4 / 0.6: lanes at x0.4 instead of x0.6)
+  laneSpeedMult: 1,         // Harbour Chain: your lane squads march this much faster (meta/boonsState.js fills it from the ports you hold)
+  tideImmune: false,        // Relic (the Drowned Crown): the Tide never floods your squads
 });
 
 export const BOON_MAX_KEYS = Object.freeze(['scorchSec', 'scorchDps', 'hitRunSec', 'hitRunMult', 'abilityRechargeSec', 'secondWindTroops',
   'secondWindCampShare', 'warlordEvery', 'phalanxMin', 'martyrSurge', 'martyrSec', 'fireArrowsDps', 'fireArrowsSec', 'ghostShare',
   'lightningWarSec', 'lanternRadius', 'titheEvery', 'titheRenown', 'plunderSec', 'hoardStepSec', 'hoardStep', 'hoardMax', 'turncoatShare',
-  'captureBleed', 'lossGoldShare', 'dragonTelegraphAdd', 'crownProsperity', 'supplyBonus', 'sapperHexes', 'drumsSec', 'lastStandShare']);
+  'captureBleed', 'lossGoldShare', 'dragonTelegraphAdd', 'crownProsperity', 'supplyBonus', 'sapperHexes', 'drumsSec', 'lastStandShare',
+  'privateerSec', 'harbourChainStep', 'harbourChainMax']);
 export const BOON_MINPOS_KEYS = Object.freeze(['freeFolkSurrender']);
 export const BOON_SIM_KEYS = Object.freeze(Object.keys(BOON_NEUTRAL).slice(Object.keys(BOON_NEUTRAL).indexOf('scorchSec')));
 
 // The pool (PLAN-PHASE7 §7A table). `requires` keeps a Boon out of a draft where it could do nothing this dynasty:
 //   powers (not Iron Will) · ability (a General may command: not Lone Banner) · raids (raids happen) · ashen (the Ashen hold land)
 //   night / siege / dragon (an unconquered region with that twist / a Lair still stands) · quick (Quick Conquest is unlocked) · streak (the Conquest Streak exists)
+//   archipelago (PLAN-PHASE12: the continent is an archipelago; a land continent's drafts never see these, so they are unchanged)
 // Deviations from the PLAN table (see docs/briefs/phase7-hookup.md): War Chest is "Royal Hoard" (the Legacy tree already has a War
 // Chest node) and is measured in seconds of income, not 1K gold (gold grows 100x over three dynasties); Blood Price bleeds a share of
 // every site instead of 3 troops (3 troops is no drawback past the first ring); Martyr's Crown's drawback is a smaller War Camp.
@@ -170,6 +181,13 @@ export const BOON_LIST = Object.freeze([
     text: 'In a defense your keep defends +{pct:lastStandDefMult} harder below {pct:lastStandShare} of its troops' },
   { id: 'cartographer', name: 'Cartographer', rarity: 'rare', icon: 'compass', mods: { quickFair: true }, requires: 'quick',
     text: 'Quick Conquest also takes regions labelled Fair' },
+  // --- Phase 12 (PLAN-PHASE12 §12C): the sea. Archipelagos only.
+  { id: 'navigator', name: 'Navigator', rarity: 'common', icon: 'helm', mods: { fordCostMult: 0.6 }, requires: 'archipelago', // x1.5 / x2.5
+    text: 'Fords cost your squads {pct:fordCostMult} less to cross' },
+  { id: 'privateers', name: 'Privateers', rarity: 'rare', icon: 'anchor', mods: { privateerSec: 20 }, requires: 'archipelago',
+    text: 'Each enemy harbour you capture in battle pays {privateerSec} s of income' },
+  { id: 'harbourChain', name: 'Harbour Chain', rarity: 'rare', icon: 'chain', mods: { harbourChainStep: 0.1, harbourChainMax: 0.3 }, requires: 'archipelago',
+    text: 'Every harbour you hold makes your sea-lane squads +{pct:harbourChainStep} faster (up to +{pct:harbourChainMax})' },
 ].map((b) => Object.freeze({ cursed: false, requires: null, ...b, mods: Object.freeze(b.mods) })));
 
 // Duo Boons: holding both parts unlocks a free bonus (a reveal moment: pickBoon returns `duo`).
