@@ -5,7 +5,7 @@
 // resolver) imports progression.js, so everything conquer needs lives here. frontier.js re-exports it all.
 //
 //   state.frontier = { seq, rng, activeSec, nextCheckAt, cooldown: { [regionId]: untilActiveSec }, incoming: [Raid],
-//                      lastAwayReport, provoked: { [factionId]: activeSec }, stats: { raids, defensesWon, defensesLost, retakes } }
+//                      lastAwayReport, graceEndedAt?, provoked: { [factionId]: activeSec }, stats: { raids, defensesWon, defensesLost, retakes } }
 //   state.occupation = { [regionId]: { by, at, prosperity, tenureMs, forts, works, militia } }
 //     by: the occupier's faction id; at: ms; prosperity: the stored level when it fell (0..3); tenureMs: how long the player had
 //     held it (its prosperity clock, frozen); forts / works: the lists that now fight for the occupier; militia: the fill then.
@@ -159,6 +159,7 @@ export function sanitizeFrontier(raw) {
     provoked: {},
     stats: { ...d.stats },
   };
+  if (raw.graceEndedAt != null && Number.isFinite(Number(raw.graceEndedAt))) out.graceEndedAt = Math.max(0, Number(raw.graceEndedAt)); // PLAN-PHASE11 (absent until the grace ends)
   if (raw.cooldown && typeof raw.cooldown === 'object') {
     for (const [k, v] of Object.entries(raw.cooldown)) if (/^\d+$/.test(k) && Number.isFinite(Number(v))) out.cooldown[k] = Number(v);
   }

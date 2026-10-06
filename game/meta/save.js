@@ -6,6 +6,7 @@
 
 import { PLAYER_FACTION, defaultStats, defaultSettings } from './state.js';
 import { sanitizeIntel } from './intelState.js';
+import { sanitizeUnrest } from './unrestState.js';
 import { sanitizeWorks } from './worksEffects.js';
 import { sanitizeFrontier, sanitizeOccupation } from './frontierState.js';
 import { sanitizeForts } from './fortsEffects.js';
@@ -207,6 +208,7 @@ function withDefaults(raw) {
     crowns: crownList(src.crowns),
     metFactions: factionIdList(src.metFactions),
     intel: sanitizeIntel(src.intel),
+    unrest: sanitizeUnrest(src.unrest), // PLAN-PHASE11b
     prosperity: smallIntList(src.prosperity),
     works: sanitizeWorks(src.works),
     upgrades: sanitizeUpgrades(src.upgrades),

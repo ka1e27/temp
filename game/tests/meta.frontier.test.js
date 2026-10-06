@@ -475,13 +475,13 @@ test('a defense played by the steward ends, and the run can be settled either wa
 
 test('the campaign tool plays raids end to end, deterministically (tools/campaign.mjs)', async () => {
   const { runCampaign } = await import('../../tools/campaign.mjs');
-  const a = runCampaign(5, { maxRegions: 14 });
-  const b = runCampaign(5, { maxRegions: 14 });
+  const a = runCampaign(5, { maxRegions: 18 }); // PLAN-PHASE11: the faster early ladder takes 14 regions before the grace and the scheduled first raid
+  const b = runCampaign(5, { maxRegions: 18 });
   assert.ok(a.raids && a.raids.announced > 0, 'raids happened');
   assert.deepEqual(a.raids, b.raids);
   assert.deepEqual(a.timeline.map((r) => r.wallSec), b.timeline.map((r) => r.wallSec));
   assert.ok(a.raids.defenses.every((d) => d.atSec >= FRONTIER.graceSec), 'never during the grace');
-  assert.equal(runCampaign(5, { maxRegions: 14, raids: 'off' }).raids, null);
+  assert.equal(runCampaign(5, { maxRegions: 18, raids: 'off' }).raids, null);
 });
 
 test('Phase 10A: holdRaids keeps any new raid from setting out (the first raid waits its turn), and lifting it lets them come', () => {

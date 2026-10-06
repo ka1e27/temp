@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { bestValueUpgrade, meanArmyPower } from '../app/bestValue.js';
+import { incomePerSec } from '../meta/economy.js';
+import { BEST_VALUE } from '../config/meta.js';
 import { UPGRADES, levelOf, upgradeCost } from '../meta/upgrades.js';
 import { frontier } from '../meta/progression.js';
 import { stuckHintDue } from '../scenes/stuckHint.js';
@@ -11,20 +13,23 @@ import { intentWorthDrawing } from '../render/units.js';
 import { makeWorld, makeGame, ownEverything } from './meta.fixtures.js';
 
 // --- Best value ------------------------------------------------------------------------------------------------------------
+const RATED = new Set(['army', 'powers']); // the tabs whose cards raise Army Power (PLAN-PHASE11b; the Realm tab does not)
 
-test('bestValueUpgrade: the Army upgrade with the most Army Power per gold, by brute force', () => {
+test('bestValueUpgrade: the Army or Powers card with the most Army Power per gold, by brute force (PLAN-PHASE11b: Powers rated too)', () => {
   const world = makeWorld();
   const state = makeGame(world);
   const best = bestValueUpgrade(state, world);
-  assert.ok(best, 'a fresh realm has an Army upgrade that raises power');
-  assert.equal(UPGRADES[best.id].tab, 'army');
+  assert.ok(best, 'a fresh realm has a card that raises power');
+  assert.ok(RATED.has(UPGRADES[best.id].tab));
   const ids = frontier(state, world);
   const base = meanArmyPower(state, world, ids);
+  const reach = state.gold + incomePerSec(state, world) * BEST_VALUE.horizonSec; // PLAN-PHASE11b: only cards within reach
   let top = null;
-  for (const def of Object.values(UPGRADES).filter((u) => u.tab === 'army')) {
+  for (const def of Object.values(UPGRADES).filter((u) => RATED.has(u.tab))) {
     const lvl = levelOf(state, def.id);
     const gain = meanArmyPower({ ...state, upgrades: { ...state.upgrades, [def.id]: lvl + 1 } }, world, ids) - base;
     const perGold = gain / upgradeCost(def.id, lvl);
+    if (upgradeCost(def.id, lvl) > reach) continue;
     if (gain > 0 && (!top || perGold > top.perGold)) top = { id: def.id, perGold };
   }
   assert.equal(best.id, top.id);
@@ -32,7 +37,7 @@ test('bestValueUpgrade: the Army upgrade with the most Army Power per gold, by b
   assert.ok(best.gain > 0 && best.cost === upgradeCost(best.id, levelOf(state, best.id)));
 });
 
-test('bestValueUpgrade: it follows the prices (buy the winner until another card is the better deal) and never names a non-Army card', () => {
+test('bestValueUpgrade: it follows the prices (buy the winner until another card is the better deal) and never names a Realm card', () => {
   const world = makeWorld();
   const state = makeGame(world);
   const seen = new Set();
@@ -40,7 +45,7 @@ test('bestValueUpgrade: it follows the prices (buy the winner until another card
     const best = bestValueUpgrade(state, world);
     if (!best) break;
     seen.add(best.id);
-    assert.equal(UPGRADES[best.id].tab, 'army');
+    assert.ok(RATED.has(UPGRADES[best.id].tab), `${best.id} is an Army or Powers card`);
     state.upgrades[best.id] = levelOf(state, best.id) + 1;
   }
   assert.ok(seen.size >= 2, `the recommendation moves on as prices climb (saw ${[...seen].join(', ')})`);

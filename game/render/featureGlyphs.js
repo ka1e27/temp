@@ -128,3 +128,25 @@ export function drawPlagueMark(ctx, x, y, s) {
   for (const [dx, dy] of [[-3, 3], [3, 4], [0, 8]]) { ctx.beginPath(); ctx.arc(dx, dy, 1.8, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
 }
+
+/** Unrest (PLAN-PHASE11b): a cracked amber shield beside a frontier name, centred at (x, y), `s` tall; faded while the region recovers. */
+export function drawUnrestMark(ctx, x, y, s, thinning = true) {
+  ctx.save();
+  ctx.translate(x, y);
+  const u = s / 24;
+  ctx.scale(u, u);
+  ctx.globalAlpha *= thinning ? 1 : 0.55;
+  ctx.beginPath();
+  ctx.moveTo(0, -11); ctx.lineTo(9, -7); ctx.lineTo(8, 3); ctx.quadraticCurveTo(5, 9, 0, 12); ctx.quadraticCurveTo(-5, 9, -8, 3); ctx.lineTo(-9, -7); ctx.closePath();
+  ctx.fillStyle = '#e8962e';
+  ctx.fill();
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(40, 20, 4, 0.9)';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(1, -10); ctx.lineTo(-2, -3); ctx.lineTo(2, 1); ctx.lineTo(-1, 10);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#4a2506';
+  ctx.stroke();
+  ctx.restore();
+}

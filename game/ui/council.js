@@ -63,6 +63,17 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
     'aria-pressed': 'false',
   }, 'Buy Max');
 
+  // PLAN-PHASE11b: when the Best value card sits on another tab, a pointer to it (in the toolbar, kept in the layout when hidden so nothing moves)
+  let bestTab = null;
+  const tabLabel = (id) => (TABS.find(([t]) => t === id) || [id, id])[1];
+  const pointerEl = h('button.council-bv-pointer', { type: 'button', onClick: () => { if (bestTab) selectTab(bestTab); } }, '');
+  function refreshPointer() {
+    const on = !!bestTab && bestTab !== activeTab;
+    pointerEl.classList.toggle('is-on', on);
+    pointerEl.tabIndex = on ? 0 : -1;
+    pointerEl.setAttribute('aria-hidden', on ? 'false' : 'true');
+    if (on) { pointerEl.textContent = `Best value on ${tabLabel(bestTab)} ›`; pointerEl.setAttribute('aria-label', `Best value is on the ${tabLabel(bestTab)} tab: show it`); }
+  }
   const listEl = h('div.council-list.scroll-y', { id: 'council-list', role: 'tabpanel', 'aria-labelledby': 'council-tab-army' });
 
   // Feedback for a purchase made IN the council appears in the council (a toast would sit over the dialog): one polite status line IN the header, between
@@ -84,7 +95,7 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
       statusEl,
       h('button.btn-icon.council-close', { onClick: () => onClose?.(), 'aria-label': 'Close' }, icon('close', 16)),
     ),
-    h('div.council-toolbar', {}, tabsEl, buyMaxToggle),
+    h('div.council-toolbar', {}, tabsEl, pointerEl, buyMaxToggle),
     listEl,
   );
 
@@ -99,6 +110,7 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
     }
     listEl.setAttribute('aria-labelledby', `council-tab-${tab}`);
     for (const [id, card] of cards) card.el.hidden = card.tab !== tab;
+    refreshPointer();
   }
   selectTab(activeTab);
 
@@ -195,6 +207,7 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
       entry.update(d);
       entry.el.hidden = entry.tab !== activeTab;
     }
+    if (data.upgrades) { const b = data.upgrades.find((d) => d.bestValue); bestTab = b ? b.tab : null; refreshPointer(); }
   }
 
   function destroy() {

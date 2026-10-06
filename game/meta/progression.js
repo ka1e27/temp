@@ -13,6 +13,7 @@ import { hexDistance } from '../core/hex.js';
 import { hash32 } from '../core/rng.js';
 import { canBuildArena, arenaBlockedReason, approachTiles } from '../battle/arena.js';
 import { sabotageTroopMult, clearRegionIntel, isScouted } from './intelState.js'; // the dependency-free leaf: intel.js imports this file
+import { unrestTroopMult, clearRegionUnrest } from './unrestState.js'; // PLAN-PHASE11b: the leaf (unrest.js imports this file)
 import { occupationOf, retake, ensureFrontier, defaultFrontier } from './frontierState.js'; // the Living Frontier's leaf: frontier.js imports this file
 import { fortEffects } from './fortsEffects.js';
 import { FRONTIER } from '../config/frontier.js';
@@ -144,7 +145,9 @@ export function enemyDepth(world, region) {
   if (tier <= 0) return 0;
   // PLAN-PHASE9: a challenge's small continent climbs a shorter ladder (world.ladderSpan, set by meta/challenges.js challengeWorld)
   const span = Number.isFinite(world.ladderSpan) ? world.ladderSpan : ENEMY_SCALING.atkDefByTier.length - 2;
-  return 1 + span * Math.pow(ladderPosition(world, region), ENEMY_SCALING.ladderCurve);
+  // the curve shapes the realm's ladder (PLAN-PHASE11); a challenge's short ladder stays evenly spaced, as Phase 9 tuned it
+  const curve = Number.isFinite(world.ladderSpan) ? 1 : ENEMY_SCALING.ladderCurve;
+  return 1 + span * Math.pow(ladderPosition(world, region), curve);
 }
 
 /** Table lookup with linear interpolation between tiers (tier may be fractional). */
@@ -206,6 +209,7 @@ export function enemyBattleStats(world, state, regionId) {
   if (region.isCapital) troopMult *= ENEMY_SCALING.capitalMult;
   if (decapitated) troopMult *= ENEMY_SCALING.decapitationMult;
   troopMult *= sabotageTroopMult(state, regionId); // DESIGN §5.7: 1, 0.85, 0.70 (garrisons only: growth, atk and def stay)
+  troopMult *= unrestTroopMult(state, regionId); // Unrest (PLAN-PHASE11b): a walled frontier region thins, down to -30%
   troopMult *= plagueMult(state, factionId); // a Plague on the faction (DESIGN §10.13): -20% for a while
   const holy = region.twist === 'holy' ? holyGarrisonMult(state) : 1; // Holy Ground: no powers, garrisons smaller in proportion
   troopMult *= holy;
@@ -220,7 +224,8 @@ export function enemyBattleStats(world, state, regionId) {
   const capMult = Math.pow(ENEMY_SCALING.capPerDepth, Math.max(0, depth - 1)) * dynastyMult
     * (region.isCapital ? ENEMY_SCALING.capitalCapMult : 1)
     * (faction.personality === 'passive' ? ENEMY_SCALING.freeFolkCapMult : 1)
-    * holy; // Holy Ground: smaller garrisons and caps
+    * holy // Holy Ground: smaller garrisons and caps
+    * unrestTroopMult(state, regionId); // Unrest thins the caps too
 
   const graceTable = ENEMY_SCALING.graceSecByTier;
   const graceSec = Math.max(ENEMY_SCALING.graceFloorSec, graceTable[Math.min(tier, graceTable.length - 1)]
@@ -372,6 +377,7 @@ export function conquer(state, world, regionId, now, opts = {}) {
 
   state.owner[regionId] = PLAYER_FACTION;
   state.conqueredAt[regionId] = now;
+  clearRegionUnrest(state, regionId);
   clearRegionIntel(state, regionId); // a conquered region forgets what was scouted or sabotaged (DESIGN §5.7)
   state.gold += gold;
   state.stats.goldEarned += gold;

@@ -48,6 +48,7 @@ const fortIcon = (type, size = 20) => uiIcon(FORT_ICONS[type] || 'shield', size)
  * @property {import('./intelPanel.js').IntelPanelData} [intel]  frontier only: Scout / Sabotage panel data
  * @property {{ level: number, label: string, nextInMs: number|null, bonusPct: number }} [prosperity]  owned regions
  * @property {import('./worksPanel.js').WorksPanelData} [works]  owned regions: the Region Works section (meta/works.js worksPanelData)
+ * @property {{ pct: number, thinning: boolean, text: string } | null} [unrest]  frontier only: Unrest (PLAN-PHASE11b, meta/unrest.js unrestInfo)
  * @property {{ type?: {id:string,name:string,text:string}, twist?: {id:string,name:string,text:string}, boss?: boolean }} [features]
  *   a varied map (DESIGN 10.13): the region type and battle twist rows
  */
@@ -228,6 +229,10 @@ export function createRegionCard({
   const occupiedText = h('span', {}, '');
   const occupiedEl = h('p.region-card-occupied', { role: 'note' }, icon('flag', 16), occupiedText);
   occupiedEl.hidden = true;
+  // Unrest (PLAN-PHASE11b): a walled region thinning or recovering; the text comes as data (config/unrest.js through the scene)
+  const unrestText = h('span', {}, '');
+  const unrestEl = h('p.region-card-unrest', { role: 'note' }, icon('flag', 16), unrestText);
+  unrestEl.hidden = true;
 
   const frontierIncome = rewardLine('.icon-good');
   const frontierBounty = rewardLine('.icon-gold');
@@ -278,7 +283,7 @@ export function createRegionCard({
     mode = next;
     if (next === 'locked') bodyEl.replaceChildren(lockedEl);
     else if (next === 'owned') bodyEl.replaceChildren(threatEl, perkEl, featuresEl, ownedProsperity, ownedRewards, ownedCrowns, musterRow, worksPanel.el, fortsPanel.el); // Works and Fortifications: the interactive part, last
-    else bodyEl.replaceChildren(occupiedEl, perkEl, featuresEl, grudgeEl, matchupEl, scoutSlot, intelPanel.el, frontierCrowns, frontierRewards, commanderEl, blockedEl);
+    else bodyEl.replaceChildren(occupiedEl, unrestEl, perkEl, featuresEl, grudgeEl, matchupEl, scoutSlot, intelPanel.el, frontierCrowns, frontierRewards, commanderEl, blockedEl);
     footerEl.replaceChildren(hintSlot, ...(next === 'frontier' ? [actionsRow, surrenderBtn] : []));
     footerEl.hidden = next !== 'frontier';
   }
@@ -405,6 +410,8 @@ export function createRegionCard({
     // a battle is already being fought here (DESIGN 10.5): the same button opens it; an occupied region of yours is retaken (10.2)
     setText(attackLabel, data.battleRunning ? 'Watch the battle' : data.occupied ? 'Retake' : 'Attack');
     occupiedEl.hidden = !data.occupied;
+    unrestEl.hidden = !data.unrest;
+    if (data.unrest) { setText(unrestText, data.unrest.text); unrestEl.classList.toggle('is-recovering', !data.unrest.thinning); }
     if (data.occupied) {
       const o = data.occupied;
       setText(occupiedText, `Occupied by ${o.byName}: retake it to restore its income${o.prosperityLabel ? `, Prosperity ${o.prosperityLabel}` : ''}${o.buildings ? ` and ${o.buildings} building${o.buildings === 1 ? '' : 's'}` : ''}.`);

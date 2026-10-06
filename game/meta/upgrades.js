@@ -21,7 +21,7 @@
 // its own baseCost/growth/magnitude exactly as before for every caller.
 
 import { POWERS } from '../config/battle.js';
-import { UPGRADE_TUNING, ECONOMY } from '../config/meta.js';
+import { UPGRADE_TUNING, ECONOMY, upgradeCostRamp } from '../config/meta.js';
 
 function pct(magnitude, level) {
   return `${Math.round(magnitude * level * 100)}%`;
@@ -162,7 +162,7 @@ export function levelOf(state, id) {
 export function upgradeCost(id, level) {
   const def = UPGRADES[id];
   if (!def) return Infinity;
-  return Math.round(def.baseCost * Math.pow(def.growth, level));
+  return Math.round(def.baseCost * Math.pow(def.growth, level) * upgradeCostRamp(level)); // PLAN-PHASE11: early levels cheap, late ones dear
 }
 
 /** @param {import('./state.js').GameState} state @param {string} id */

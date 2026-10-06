@@ -40,7 +40,7 @@ import { createStateContainer } from './app/stateContainer.js';
 import { createAutosave } from './app/autosave.js';
 import { createIdleTicker } from './app/idle.js';
 import { createTutorialController } from './app/tutorial.js';
-import { createPacer } from './app/pacer.js';
+import { createPacer, firstRaidReserved } from './app/pacer.js';
 import { PACING } from './config/pacing.js';
 import { VOICE } from './config/leaders.js';
 import { installDevHooks } from './app/devhooks.js';
@@ -51,6 +51,7 @@ import { createWorldScene } from './scenes/world.js';
 import { createBattleScene } from './scenes/battle.js';
 import { createBattleManager } from './app/battles.js';
 import { createFrontierLoop } from './app/frontierLoop.js';
+import { createUnrestLoop } from './app/unrestLoop.js';
 import { createEventsLoop } from './app/eventsLoop.js';
 import { createGoals } from './app/goals.js';
 import { createDynasty } from './app/dynasty.js';
@@ -346,7 +347,10 @@ function boot() {
   // Phase 10A: new systems arrive one at a time (app/pacer.js); the tutorial's `intro` steps, the streak chip, the first Deeds and the board ask it
   // (tools/check.mjs and tools/hints.mjs set window.__HD_TEST_NO_PACING in ?dev=1: their flows stage systems in seconds; tools/firstHour.mjs measures the pacing)
   const noPacing = () => isDev && window.__HD_TEST_NO_PACING === true;
-  const pacer = createPacer({ getState: () => cur().state, gapSec: () => (noPacing() ? 0 : PACING.introGapSec) });
+  const pacer = createPacer({
+    getState: () => cur().state, gapSec: () => (noPacing() ? 0 : PACING.introGapSec),
+    hold: (name) => !noPacing() && name !== 'raids' && !container.inSandbox && firstRaidReserved(cur().state), // the first raid's slot (PLAN-PHASE11b)
+  });
   const tutorial = createTutorialController({ getState: () => cur().state, pacer, newHintGapSec: () => (noPacing() ? 0 : HINT_PACE.newHintGapSec) });
 
   function closeSettings() {
@@ -893,6 +897,14 @@ function boot() {
       && !services.battles.paused && !document.documentElement.hasAttribute('data-dialog'),
   });
   frontierRef = services.frontier;
+  // Unrest (PLAN-PHASE11b): a walled frontier region thins on the same active clock; the open card follows it (the map labels refresh by themselves)
+  services.unrest = createUnrestLoop({
+    getState: () => cur().state, getWorld: () => cur().world, ui,
+    isActive: () => sessionStarted && (sceneManager.name === 'world' || sceneManager.name === 'battle') && !document.hidden
+      && !services.battles.paused && !document.documentElement.hasAttribute('data-dialog'),
+    onChange: () => { if (sceneManager.name === 'world') worldScene.devRefreshCard(); },
+    onFirst: () => pacer.introduce('unrest'),
+  });
   // world events (DESIGN 10.13): the Merchant, the Plague, the Duel, offered on the same active clock (never in the very first battle)
   services.events = createEventsLoop({
     getState: () => cur().state, getWorld: () => cur().world, manager: services.battles, ui, services,
@@ -1364,6 +1376,7 @@ function boot() {
       const m1 = performance.now();
       services.frontier.tick(dt);
       if (!container.inSandbox) services.events.tick(dt); // no world events in a challenge (Phase 9)
+      if (!container.inSandbox) services.unrest.tick(dt); // no Unrest in a challenge (PLAN-PHASE11b)
       services.challenge.tick(dt); // the challenge's clock, scripted raids, goal and tracker (inert outside one)
       if (sceneManager.name !== 'title' && sessionStarted && !container.inSandbox) services.goals.tick(dt);
       if (sceneManager.name !== 'title' && sessionStarted) services.boons.tick(sceneManager.name);

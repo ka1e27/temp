@@ -31,6 +31,7 @@ import { renownSpends, festival, train, heal, respec, hireMercenary, muster, ren
 import { militiaFill } from '../meta/militia.js';
 import { commanderFor as edictCommander, edictMods } from '../meta/edicts.js';
 import { plagueMult } from '../meta/eventsState.js';
+import { unrestInfo } from '../meta/unrest.js';
 import { GENERALS } from '../config/generals.js';
 import { chronicleOnConquest, chroniclePanelData } from '../meta/chronicle.js';
 import { saveText } from '../meta/keepsake.js';
@@ -149,7 +150,8 @@ export function createWorldScene(services) {
       const rivalCapital = region.isCapital && !owned;
       const datum = { x: a.x, y: a.y, name: region.name, isCapital: rivalCapital, regionId: region.id };
       // Placement priority (labels.js): selected 0 > frontier 1 > rival capital 2 > owned 3 > the rest 4.
-      if (frontierSet.has(region.id)) { datum.difficulty = difficulty(state, world, region.id); datum.kind = 1; }
+      // PLAN-PHASE11: the map reads what the card reads (its default commander credited): a plain label said Hard where the card said Fair
+      if (frontierSet.has(region.id)) { datum.difficulty = difficulty(state, world, region.id, { commander: commanderFor(region.id) }); datum.kind = 1; }
       else if (rivalCapital) datum.kind = 2;
       else if (owned) datum.kind = 3;
       else datum.kind = 4;
@@ -164,6 +166,8 @@ export function createWorldScene(services) {
       // a plagued rival's region (DESIGN 10.13): the plague mark beside its name while the Plague lasts
       const pl = state.worldEvents && state.worldEvents.plague;
       if (pl && pl.faction === state.owner[region.id] && plagueMult(state, pl.faction) < 1) datum.plague = true;
+      const unrest = !owned ? unrestInfo(state, region.id) : null; // PLAN-PHASE11b: a walled frontier region thinning (2) or recovering (1)
+      if (unrest) datum.unrest = unrest.thinning ? 2 : 1;
       datum.priority = datum.kind;
       labels.push(datum);
     }
@@ -250,6 +254,7 @@ export function createWorldScene(services) {
       crownBonusPct: CROWN_BONUS_PCT,
       battleRunning: services.battles.list().some((r) => r.regionId === regionId),
       occupied: occupiedInfo(regionId),
+      unrest: unrestInfo(state, regionId), // PLAN-PHASE11b: the Unrest line (its text from config/unrest.js)
       commander: commanderData(regionId), // "Commander: [name]" (DESIGN 10.11)
       grudge: services.goals && edictMods(state).raids !== false ? services.goals.grudgeFor(regionId) : null, // the owner's Grudge (PLAN-PHASE4 §4D); none in a Peace of the Crowns
       quick: services.quick ? services.quick.cardData(regionId, commanderFor(regionId)) : null, // Quick Conquest (PLAN-PHASE5 §5D)
@@ -1041,7 +1046,7 @@ export function createWorldScene(services) {
   // --- the Regions list: every region you can see, as buttons (a way round the map for a keyboard, a screen reader and a thumb) ----------------------------------
   function updateRegions() {
     const { state, world } = container.get();
-    ui.regions.update({ rows: regionsListData(state, world, { revealAll: services.devRevealAll }), ...(services.goals ? services.goals.regionsData() : {}) });
+    ui.regions.update({ rows: regionsListData(state, world, { revealAll: services.devRevealAll, commanderFor }), ...(services.goals ? services.goals.regionsData() : {}) });
   }
 
   function onRegionsOpen() {
@@ -1137,7 +1142,7 @@ export function createWorldScene(services) {
 
   // --- the map's keyboard cursor (DESIGN 7.5a): a canvas that takes focus, a ring on one region, arrow keys to the neighbour that way, Enter to open its card ------------------
   const seenRegion = (id) => !!(derived.revealed[id] || services.devRevealAll);
-  const allRows = () => { const { state, world } = container.get(); return regionsListData(state, world, { revealAll: services.devRevealAll }); };
+  const allRows = () => { const { state, world } = container.get(); return regionsListData(state, world, { revealAll: services.devRevealAll, commanderFor }); };
   const summaryOf = (id) => { const row = allRows().find((r) => r.id === id); return row ? row.summary : container.get().world.regions[id].name; };
 
   /** The cursor starts on the open card's region, else the region the tutorial points at, else home; it never rests on a region that is still under the mists. */

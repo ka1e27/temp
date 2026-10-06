@@ -25,6 +25,10 @@ export const FRONTIER = Object.freeze({
   // Grace: no raids in the first `graceSec` active seconds of a realm or dynasty, nor before the player holds `minRegions`.
   graceSec: 20 * MIN,
   minRegions: 4,
+  // PLAN-PHASE11: the first raid of a realm (and of each dynasty) is SCHEDULED, not rolled: it sets out at a seeded point this many active
+  // seconds after the grace ends (the first check out of grace), so with its telegraph it arrives 2-5 minutes after the grace. The random
+  // rolls start once it has set out. Rolled, the first raid came at about minute 40 of a human-paced first hour (tools/firstHour.mjs, seed 7).
+  firstRaidAfterGraceSec: Object.freeze([75, 255]),
   telegraphSec: 45,            // the war band marches visibly this long before it arrives ("arrives in 45 s [Go]")
   beaconSecPerLevel: 20,       // + this much warning per Beacon level in the target region
   // A smart raider probes weak spots: a target's weight is 1 / (1 + perFortLevel x its fortification levels) x

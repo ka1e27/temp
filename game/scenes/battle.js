@@ -33,6 +33,7 @@ import {
 } from '../meta/crowns.js';
 import { CROWN_BONUS_PCT } from '../app/crownCopy.js';
 import { sabotageBattleNote, sabotageLevel } from '../meta/intel.js';
+import { calmUnrest } from '../meta/unrest.js';
 import { battleIntensity, battleAssault } from '../audio/musicIntensity.js';
 import { POWERS, SUPPLY } from '../config/battle.js';
 import { FRONTIER } from '../config/frontier.js';
@@ -2071,6 +2072,7 @@ export function createBattleScene(services) {
     try { labelAtAttack = difficulty(state, world, regionId, { commander }).label || null; } catch { labelAtAttack = null; }
     run = manager.start({ kind: 'attack', regionId, battle, commander, labelAtAttack }); // the manager owns it (state.battles); it also starts the crowns tracker
     if (!run) throw new Error('the battle could not start (too many battles, or this region is already being fought over)');
+    calmUnrest(state, regionId); // PLAN-PHASE11b: attacking the region in Unrest calms it (the thinned garrisons above are what this fight meets)
     manager.focus(run.id);
     voice.resetBattle(); // every leader trigger may speak again
     setupView(opts);

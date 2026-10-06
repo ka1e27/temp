@@ -6,7 +6,7 @@ import { ACCENTS } from './palette.js';
 import { drawCrownPips } from './crownPips.js';
 import { drawSabotageMark } from './intelMarks.js';
 import { DIFFICULTY_COLORS, WORLD_SCENE } from '../scenes/timing.js';
-import { drawTypeIcon, drawTwistGlyph, drawPlagueMark } from './featureGlyphs.js';
+import { drawTypeIcon, drawTwistGlyph, drawPlagueMark, drawUnrestMark } from './featureGlyphs.js';
 import { bake, blit, ctxScale } from './spriteCache.js';
 
 // Phase 8 perf: a region's name (outlined, an owned one with a soft shadow) and its difficulty chip are baked once per look and size and blitted while
@@ -73,6 +73,7 @@ function drawCrown(ctx, x, y, size, color) {
  * @property {string} [type] a region type (DESIGN 10.13): its icon in a round badge left of the name (left of the crown on a capital)
  * @property {string} [twist] a battle twist (DESIGN 10.13): its glyph at the front of the difficulty chip
  * @property {boolean} [plague] a plagued rival's region (DESIGN 10.13): the plague mark right of the name
+ * @property {number} [unrest] a frontier region in Unrest (PLAN-PHASE11b): 2 thinning, 1 recovering; the Unrest mark right of the name
  */
 
 /** "Occupied" (DESIGN 10.2): a small square in the occupier's colour, hatched, with a dark rim: the same hatching as the region on the map. */
@@ -153,7 +154,7 @@ export function drawRegionLabels(ctx, camera, labelData, opts = {}) {
     const chipW = hasChip ? textWidth(ctx, chipFontStr, d.difficulty.label) + chipFont * 1.1 + (d.twist ? chipFont * 1.25 : 0) : 0;
     const hasPips = !!(d.crowns > 0 && showChips); // same zoom threshold as the difficulty chips
     const pipsW = hasPips ? d.crowns * pipPx + (d.crowns - 1) * Math.max(1, pipPx * 0.22) : 0;
-    const torchW = (d.sabotage > 0 ? fontPx * 1.3 : 0) + (d.occupied ? fontPx * 1.3 : 0) + (d.plague ? fontPx * 1.3 : 0); // right of the name / the occupied badge (the capital crown takes the left)
+    const torchW = (d.sabotage > 0 ? fontPx * 1.3 : 0) + (d.occupied ? fontPx * 1.3 : 0) + (d.plague ? fontPx * 1.3 : 0) + (d.unrest ? fontPx * 1.3 : 0); // right of the name / the occupied badge (the capital crown takes the left)
     const typeW = d.type ? fontPx * 1.35 : 0; // the type badge, left of the name (and of a capital's crown)
     const halfW = Math.max(nameW / 2 + (d.isCapital ? fontPx * 1.3 : 0) + typeW + torchW, chipW / 2, pipsW / 2);
     const baseY = p.y - fontPx * 0.6; // text baseline
@@ -235,10 +236,11 @@ function drawName(ctx, d, x, y, fontPx, nameFont) {
   ctx.fillText(d.name, x, y);
 }
 
-/** What travels beside the name: the sabotage torch, the plague mark, the occupied badge, a capital's crown, the region type's badge. */
+/** What travels beside the name: the sabotage torch, the plague mark, the Unrest mark, the occupied badge, a capital's crown, the region type's badge. */
 function drawMarks(ctx, c, d, y, fontPx, opts) {
   if (d.sabotage > 0) drawSabotageMark(ctx, c.x + c.nameW / 2 + fontPx * 0.8, y - fontPx * 0.32, fontPx * 1.15, opts.time);
   if (d.plague) drawPlagueMark(ctx, c.x + c.nameW / 2 + fontPx * (0.8 + (d.sabotage > 0 ? 1.3 : 0) + (d.occupied ? 1.3 : 0)), y - fontPx * 0.36, fontPx * 1.15);
+  if (d.unrest) drawUnrestMark(ctx, c.x + c.nameW / 2 + fontPx * (0.8 + (d.sabotage > 0 ? 1.3 : 0) + (d.occupied ? 1.3 : 0) + (d.plague ? 1.3 : 0)), y - fontPx * 0.36, fontPx * 1.15, d.unrest === 2);
   if (d.occupied) drawOccupiedBadge(ctx, c.x + c.nameW / 2 + fontPx * (d.sabotage > 0 ? 2.1 : 0.8), y - fontPx * 0.32, fontPx * 1.05, d.occupied);
   if (d.isCapital) drawCrown(ctx, c.x - c.nameW / 2 - fontPx * 0.75, y - fontPx * 0.32, fontPx * 0.9, ACCENTS.gold);
   if (d.type) drawTypeIcon(ctx, d.type, c.x - c.nameW / 2 - fontPx * (d.isCapital ? 2.05 : 0.8), y - fontPx * 0.34, fontPx * 1.1);

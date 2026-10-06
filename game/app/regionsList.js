@@ -39,7 +39,8 @@ export function regionSummary(row) {
 /**
  * @param {import('../meta/state.js').GameState} state
  * @param {import('../world/generate.js').World} world
- * @param {{ revealAll?: boolean }} [opts] dev: every region counts as revealed
+ * @param {{ revealAll?: boolean, commanderFor?: (regionId: number) => (string|null) }} [opts] revealAll (dev): every region counts as revealed;
+ *   commanderFor: the card's default commander per region, credited in the label as the region card does
  * @returns {RegionRow[]} frontier first (attackable, easiest first; then the walled-off), then owned (highest tier first, then by name)
  */
 export function regionsListData(state, world, opts = {}) {
@@ -59,7 +60,7 @@ export function regionsListData(state, world, opts = {}) {
       };
       rows.push({ ...row, summary: regionSummary(row) });
     } else if (front.has(region.id) || opts.revealAll) {
-      const d = difficulty(state, world, region.id);
+      const d = difficulty(state, world, region.id, opts.commanderFor ? { commander: opts.commanderFor(region.id) } : {}); // the card's reading (PLAN-PHASE11)
       const blockedReason = attackBlocker(state, world, region.id);
       const blocked = blockedReason === 'no-passable-border' || blockedReason === 'unbuildable' ? blockedReason : null;
       const row = {

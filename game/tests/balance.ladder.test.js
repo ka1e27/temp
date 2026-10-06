@@ -23,8 +23,9 @@ test('ladder: the start region is depth 0, the rest spread evenly over 1..deepes
     for (let i = 1; i < byTier.length; i++) {
       assert.ok(byTier[i].d >= byTier[i - 1].d - 1e-9, `seed ${seed}: a deeper tier is never shallower`);
     }
-    // evenly spaced: neighbouring rungs are one step apart
-    const sorted = depths.map((x) => x.d).sort((a, b) => a - b);
+    // evenly spaced ladder positions: neighbouring rungs are one step apart once ENEMY_SCALING.ladderCurve is undone (PLAN-PHASE11: 1.15)
+    const pos = (d) => (DEEPEST - 1) * Math.pow((d - 1) / (DEEPEST - 1), 1 / ENEMY_SCALING.ladderCurve);
+    const sorted = depths.map((x) => pos(x.d)).sort((a, b) => a - b);
     const step = (DEEPEST - 1) / (sorted.length - 1);
     for (let i = 1; i < sorted.length; i++) assert.ok(Math.abs(sorted[i] - sorted[i - 1] - step) < 1e-6);
   }

@@ -160,6 +160,34 @@ behaviour change, Step 2 = tray/switching/markers/occupation/fortify UI/away rep
 - **2026-10-05 PHASE 10 "Cohesion" STARTED** (user: "after phase 9 finishes continue working"): docs/PLAN-PHASE10.md. A first-hour
   interruption audit (tools/firstHour.mjs, pacing targets) + a rough-edge sweep (1:37 vs 1:38, tracker wording, banner over modals,
   galleries, a Cartographer check, Lantern text, CRLF-safe preload check). One engineer owns the whole tree.
+- **Phase 10 DONE** (uncommitted): pacer (app/pacer.js, 152 s between first appearances; the first raid exempt), hint pacing,
+  merged post-battle toasts, quieter leader lines for the first 10 min, the first Boon held off battles; all 9 sweep items done. First
+  hour (seed 7): busiest minute 11 -> 5, unlock misses 12 -> 1. npm 1187, gate sections green. Snapshot scratchpad/p10snap (Phase 9+10,
+  73 files on 59475b7) is running the full gate. Found: only 9 battles in a human-paced first hour (a Hard/Deadly wall from about
+  minute 5) and the first raid at about minute 40.
+- **2026-10-05 PHASE 11 "Early flow" STARTED** (docs/PLAN-PHASE11.md): a human-policy measure across seeds; targets >= 18 battles in
+  the first hour, Easy/Fair available >= 75 % of minutes, idle <= 4 min; the first raid 2-5 min after the grace; campaign guards kept.
+- **Phases 9 + 10 committed dc73d40** from the gate-verified snapshot (npm 1187, full check.mjs, --base=temp) and pushed to redesign + main
+  at the user's "deploy Phase 9 and 10" (2026-10-05); the main tree was reset onto it with the Phase 11 WIP kept.
+  **CI BLOCKED the deploy twice** (the site is still Phase 8): check.mjs §3b "a real click on Scout records the scouting" fails on CI
+  every time (the click lands, the scouting never records) while passing locally; a one-off defense failure did not repeat. Theory: the
+  card rebuilds between mousedown and mouseup on the slow runner. An isolated-worktree engineer is reproducing it with --cpu throttling.
+- **Phase 11 (uncommitted) first pass:** campaign --policy=human (32 seeds); ladderCurve 1.12; upgrade cost ramp 1.0 -> 1.5 by level 8;
+  map labels credit the commander (as the card does); first raid scheduled 75-255 s after the grace. Human first hour: battles 21 -> 26,
+  Easy/Fair minutes 50 -> 79 %, longest idle 14.4 -> 9.5 min (target 4 unreachable by config: walls are map structure). D1 1.03 h.
+  Lead -> 11b: UNREST (the weakest frontier region thins 6 %/min, up to 30 %, after 3 min with nothing Easy/Fair), Best value rates
+  Powers cards too, the pacer reserves a slot around the scheduled first raid; then the full gate.
+- **CI blocker ROOT-CAUSED + FIXED (b694eb8, pushed to redesign + main):** a real Phase 10 bug. The delayed Attack hint opened its
+  slot in the region card and the phone bottom sheet grew ~100 px mid-tap, so taps landed on the wrong button. Fix: card layout
+  changes are held while a pointer is down (+250 ms). Also: the council "Bought X" line no longer shifts the Buy buttons; check.mjs
+  --cpu/--tz and a Scout regression step. Verified on the worktree (cpu=4 3x, full gate, npm 1187). The Phase 11 engineer is applying
+  the patch to the main tree (done; local redesign = b694eb8). **LIVE 2026-10-05:** after two GitHub-side failures (Chrome never started;
+  jobs never got runners), the third attempt passed: Phases 1-10 + the fix are on Pages at b694eb8.
+- **Phase 11b DONE** (uncommitted on b694eb8): UNREST (game/config/unrest.js, meta/unrest*.js, app/unrestLoop.js; 90 s / 20 %/min / -40 %
+  / recovers 2 %/min, through enemyBattleStats so labels and fights include it; not in challenges), Best value rates Powers too (fix in
+  progress: only cards affordable within ~60 s of income), the pacer reserves 150 s around the planned first raid. Human first hour (32
+  seeds): 26 battles, Easy/Fair 89 %, longest stretch with nothing Easy/Fair 4.9 min. Optimal D1 1.01 h, D2 1.25x, D3 1.09x, 0 waits > 40.
+  Gate: npm 1198, full check.mjs in 16 groups (1700), --base=temp 426, desktop/phone --cpu=4 green. Watch in playtest: Unrest is generous.
 - **Phase 10 engineer pass (2026-10-05, uncommitted on top of the Phase 9 tree):** `tools/firstHour.mjs` (+ `firstHourProbe.js`, `firstHourBot.mjs`,
   `firstHourReport.mjs`): a 60-min scripted new player (seed 7, desktop, real presses) with an interruption log. Before: busiest minute 11 (the tutorial),
   14 systems unlocked in the first 8.5 min (12 spacing misses). Fixes: `app/pacer.js` (one new system per 150 play seconds (lead; was 190): intro hints, streak chip, first

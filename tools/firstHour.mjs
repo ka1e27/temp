@@ -4,7 +4,7 @@
 // interruption; tools/firstHourReport.mjs prints the minute-by-minute table, the unlock timeline and the targets.
 //
 //   npm start                     # in another terminal (or --url=...)
-//   node tools/firstHour.mjs [--minutes=60] [--seed=7] [--variant=desktop|phone] [--label=before] [--out=screenshots/phase10] [--assert]
+//   node tools/firstHour.mjs [--minutes=60] [--seed=7] [--variant=desktop|phone] [--label=before] [--out=screenshots/phase10] [--shop=three|bot3] [--assert]
 //
 // Writes <out>/firstHour-<label>.json (rewritten every 30 s, so a long run can be read while it plays) and .txt. --assert exits 1 when a target is missed.
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -38,7 +38,7 @@ for (const k of ['eval', 'send', 'mouse', 'drag', 'screenshot']) page[k] = timed
 const T0 = Date.now();
 const clock = () => { const s = Math.round((Date.now() - T0) / 1000); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 const log = (msg) => console.log(`[${clock()}] ${msg}`);
-const bot = createBot(page, { touch: PHONE, W, H, log });
+const bot = createBot(page, { touch: PHONE, W, H, log, shopStyle: flags.shop || 'three' });
 const { sleep, ev, press, key, tap } = bot;
 
 await page.goto(`${BASE}/index.html?dev=1&seed=${SEED}`);

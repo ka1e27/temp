@@ -96,6 +96,8 @@
 //   node tools/campaign.mjs [--seeds=1,2,3,4,5] [--works=normal|heavy|none] [--verbose] [--json] [--no-army]
 //                           [--maxRegions=N] [--offlineAt=N --offlineHours=H [--offlineDynasty=D]] [--intel=finisher|heavy]
 //                           [--dynasties=N]   (plays N dynasties per seed with the stars earned; prints D1..DN times and waits)
+//                           [--policy=human [--minutes=60] [--shop=three|bot3|cheapest|optimal] [--labels=card|plain] [--patience=strict] [--trace]]
+//                                              (PLAN-PHASE11: the human-paced first hour, per seed and medians; see runHumanHour; default seeds 1-8)
 //                           [--checkinHours=H] (a player who, whenever nothing is readable, leaves for H hours: the game's offline cap
 //                                               pays them and they buy Treasury too; the report says how many check-ins a dynasty took)
 // --offlineAt/--offlineHours is the welcome-back experiment: the player closes the game after conquest N and
@@ -113,7 +115,7 @@ import { hash32 } from '../game/core/rng.js';
 import { createGame } from '../game/meta/state.js';
 import { tickIncome, incomePerSec, regionIncome, offlineEarnings } from '../game/meta/economy.js';
 import {
-  playerBattleStats, enemyBattleStats, frontier, difficulty, conquer, perkTotals, foundDynasty,
+  playerBattleStats, enemyBattleStats, frontier, attackableFrontier, enemyDepth, difficulty, conquer, perkTotals, foundDynasty,
 } from '../game/meta/progression.js';
 import { updateProsperity, nextProsperityChangeAt } from '../game/meta/prosperity.js';
 import {
@@ -154,6 +156,8 @@ import { resetRegions } from '../game/meta/state.js';
 import * as Boons from '../game/meta/boons.js';
 import { relicAt } from '../game/meta/relics.js';
 import { BOON_LIST } from '../game/config/boons.js';
+import { bestValueUpgrade } from '../game/app/bestValue.js';
+import { tickUnrest, calmUnrest } from '../game/meta/unrest.js';
 
 // --- Tuning knobs for the VIRTUAL PLAYER (not game balance — see file header) -------------
 const CORE_ARMY = ['recruitment', 'steel', 'armour', 'muster'];
@@ -365,6 +369,10 @@ function buyingPass(state, world, conquestCount, flags, goldSpent) {
 let raidCtx = null; // { state, mode: 'idle'|'playing', log } while a campaign with raids runs
 let genCtx = null;  // { busy: generalId|null, noSpend, log } while a campaign with Generals runs
 let quickCtx = null; // { n, won } while a campaign that may Quick-Conquer runs
+let unrestCtx = null; // the state whose Unrest ticks along the clock (PLAN-PHASE11b), unless --unrest=off
+const unrestLog = { started: 0 };
+const UNREST_STEP_SEC = 20; // the campaign ticks Unrest in chunks of this many active seconds
+let humanCtx = false; // true while runHumanHour plays (attemptConquest's patience rule)
 let boonCtx = null;  // { recent: [won...], picks: [{ id, at }], force } while a campaign with Boons runs (off with --boons=off)
 
 const RARITY_RANK = { legendary: 3, rare: 2, common: 1 };
@@ -592,7 +600,7 @@ function bountyBattle(state, world, run, battle, tracker, nowMs) {
 function advanceClock(state, world, wallSecRef, sec) {
   let left = sec;
   const raids = raidCtx && raidCtx.state === state ? raidCtx : null;
-  for (let guard = 0; left > 1e-9 && guard < (raids ? 1e6 : 256); guard++) {
+  for (let guard = 0; left > 1e-9 && guard < (raids || unrestCtx === state ? 1e6 : 256); guard++) {
     const nowMs = wallSecRef.sec * 1000;
     prosper(state, world, nowMs);
     const change = nextProsperityChangeAt(state, world, nowMs); // ms, or null
@@ -600,6 +608,10 @@ function advanceClock(state, world, wallSecRef, sec) {
     if (raids) {
       step = Math.min(step, FRONTIER.checkSec);
       frontierTick(state, world, wallSecRef.sec + step, step, raids);
+    }
+    if (unrestCtx === state) { // PLAN-PHASE11b: Unrest runs on the same active clock (--unrest=off: never)
+      step = Math.min(step, UNREST_STEP_SEC);
+      if (tickUnrest(state, world, step, nowMs).started != null) unrestLog.started += 1;
     }
     tickIncome(state, world, step);
     wallSecRef.sec += step;
@@ -713,6 +725,7 @@ function rankTargets(candidates, state, world) {
 
 // --- One battle attempt (or instant surrender) ------------------------------------------------
 function attemptConquest(state, world, regionId, wallSecRef, battleDurations, forceBattle = false) {
+  if (unrestCtx === state) calmUnrest(state, regionId); // attacking ends the wait (PLAN-PHASE11b)
   const general = pickCommander(state, world, regionId, 'attack', wallSecRef.sec * 1000);
   const diffAtAttack = difficulty(state, world, regionId, general ? { commander: general } : {}); // the card credits its commander
   const region = world.regions[regionId];
@@ -765,14 +778,19 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
   const botMemo = {};
   // PLAN-PHASE8: a player holding Supply Wagons uses supply lines (the bot's 'overflow' habit: only sites about to waste growth)
   if (state.boons2 && state.boons2.owned.includes('supplyWagons')) botMemo.supply = 'overflow';
-  const capSec = patienceFor(region, state.dynasty.level);
-  while (!battle.result && battle.t < capSec) {
+  const patience = patienceFor(region, state.dynasty.level);
+  // --policy=human: a person who holds most of the settlements at the patience mark keeps going (up to HUMAN.aheadPatience x it); behind, it retreats
+  const ahead = () => { let mine = 0; for (const x of battle.sites) if (x.owner === PLAYER_FACTION) mine += 1; return mine * 2 > battle.sites.length; };
+  const longest = humanCtx ? patience * HUMAN.aheadPatience : patience;
+  let capSec = patience;
+  while (!battle.result && (battle.t < patience || (battle.t < longest && ahead()))) {
     for (const cmd of think(battle, battle.t)) issue(battle, cmd);
     for (const cmd of decide(battle, battle.t, botMemo)) issue(battle, cmd);
     step(battle, TICK_SEC);
     trackBattle(tracker, battle);
   }
   const timedOut = !battle.result;
+  if (timedOut || battle.t > patience) capSec = Math.max(patience, Math.min(longest, battle.t));
   if (hooks.onBattleEnd) hooks.onBattleEnd(battle, region, timedOut);
   const battleSec = timedOut ? capSec : battle.stats.durationSec;
   if (raidCtx) raidCtx.mode = 'playing'; // the player watches its own attack: raids that land now are the Steward's
@@ -874,6 +892,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
   // start, so a region lost to a raid has to be won back before the continent counts as whole.
   const raidLog = newRaidLog();
   raidCtx = flags.raids === 'off' ? null : { state, mode: 'idle', log: raidLog, watchingUntil: 0, noEvents: flags.events === 'off' };
+  unrestCtx = flags.unrest === 'off' ? null : state;
   if (!Array.isArray(state.battles)) state.battles = [];
   // the Dragon's Lair is optional (DESIGN §10.13): the continent counts as whole without it, and it is attacked only when it reads
   // Fair or better, like any region (so it is taken when ready, or left behind when the dynasty is founded)
@@ -1047,6 +1066,7 @@ export function runCampaign(seed, flags = {}, carry = null) {
   }
 
   raidCtx = null;
+  unrestCtx = null;
   bountyCtx = null;
   quickCtx = null;
   boonCtx = null;
@@ -1079,6 +1099,191 @@ export function runCampaign(seed, flags = {}, carry = null) {
   };
   Object.defineProperty(result, 'endState', { value: { state, world }, enumerable: false }); // for runDynasties; not in --json
   return result;
+}
+
+// --- The human-paced first hour (PLAN-PHASE11, --policy=human) ---------------------------------------------------------------
+// tools/firstHour.mjs's new player, headless: the same machinery as runCampaign (battles by the bot, raids, events, Boons, the board,
+// Generals, Quick Conquest), but a person's habits instead of the optimal shopper. It looks at the map, attacks the Easy or Fair region
+// with the best ratio (the label on the map, commander credited as on the card), tries the best Hard one after 2 minutes with nothing better (and
+// again 2 minutes later), and opens the War Council every 3 minutes, or every 45 s while nothing is worth attacking, where it presses the
+// cheapest of three cards (Best value, the next power, Taxes) until the gold runs out (humanShop). No Works, no fortifications, no
+// Renown spending. Every step costs a person's seconds (HUMAN). Virtual-player knobs, not game balance.
+const HUMAN = Object.freeze({
+  startSec: 20,        // the title, the realm reveal and the first hint before the first look at the map
+  shopEverySec: 180,   // the War Council every 3 minutes of play (firstHour.mjs, from minute 2) ...
+  idleShopSec: 45,     // ... and, with nothing worth attacking, again once 45 s have passed since the last visit
+  shopSec: 8,          // a visit to the council
+  idleStepSec: 30,     // nothing worth attacking: a person looks again every 30 s
+  hardAfterSec: 120,   // ... and tries the best Hard region after 2 minutes of that
+  aheadPatience: 2,    // ... holding most of the settlements at the patience mark (config/battle.js PATIENCE_SEC), a person fights on up to 2x it
+  retrySec: 180,       // a region that beat us is tried again after 3 minutes (or sooner, once its card reads RETRY_MARGIN better)
+  attackSec: 6,        // find the region, read the card, press Attack
+  afterSec: 12,        // the results card, a Boon draft, the toasts
+  maxPresses: 60,      // per visit: presses until the gold runs out (a backstop)
+  armyBuys: 3,         // --shop=bot3: up to three Army buys per visit (firstHourBot.mjs)
+});
+const ARMY_ORDER = ['recruitment', 'steel', 'armour', 'logistics', 'muster']; // the Army tab's card order
+
+function humanBuy(state, id, goldSpent) {
+  const cost = upgradeCost(id, levelOf(state, id));
+  if (!canBuy(state, id)) return false;
+  buy(state, id);
+  goldSpent[id] = (goldSpent[id] || 0) + cost;
+  return true;
+}
+
+const costNow = (state, id) => upgradeCost(id, levelOf(state, id));
+
+/**
+ * One visit to the War Council. The default (a sensible person): it watches three cards, the Best value Army card, the cheapest power
+ * (the next unlock or a level) and Taxes, and presses the cheapest of them until the gold runs out (at most HUMAN.maxPresses).
+ * --shop=bot3 shops exactly as tools/firstHourBot.mjs does (the Best value card, else the first affordable Army card, up to
+ * HUMAN.armyBuys times, a power it can unlock, a level of Taxes and of Plunder). --shop=cheapest / optimal: see runHumanHour.
+ */
+function humanShop(state, world, goldSpent, variant) {
+  let n = 0;
+  if (variant !== 'bot3') {
+    for (let i = 0; i < HUMAN.maxPresses; i++) {
+      const best = bestValueUpgrade(state, world);
+      const power = [...POWER_ID_SET].sort((a, b) => costNow(state, a) - costNow(state, b))[0];
+      const ids = [best && best.id, power, 'taxes'].filter(Boolean).sort((a, b) => costNow(state, a) - costNow(state, b));
+      if (!humanBuy(state, ids[0], goldSpent)) break;
+      n += 1;
+    }
+    return n;
+  }
+  for (let i = 0; i < HUMAN.armyBuys; i++) {
+    const best = bestValueUpgrade(state, world);
+    const id = best && canBuy(state, best.id) ? best.id : ARMY_ORDER.find((x) => canBuy(state, x));
+    if (!id || !humanBuy(state, id, goldSpent)) break;
+    n += 1;
+  }
+  const locked = [...POWER_ID_SET].filter((id) => levelOf(state, id) < 1).sort((a, b) => upgradeCost(a, 0) - upgradeCost(b, 0))[0];
+  if (locked && humanBuy(state, locked, goldSpent)) n += 1;
+  for (const id of ['taxes', 'plunder']) if (humanBuy(state, id, goldSpent)) n += 1;
+  return n;
+}
+
+/** Plays the first `flags.minutes` (60) minutes of a fresh realm the human way. Returns { seed, attacks, segs, metrics, raids }. */
+export function runHumanHour(seed, flags = {}) {
+  const endSec = Number(flags.minutes || 60) * 60;
+  const world = generateWorld(seed);
+  const state = createGame(seed, world, 0);
+  const goldSpent = {};
+  const battleDurations = [];
+  const wall = { sec: 0 };
+  const raidLog = newRaidLog();
+  raidCtx = flags.raids === 'off' ? null : { state, mode: 'idle', log: raidLog, watchingUntil: 0, noEvents: flags.events === 'off' };
+  unrestCtx = flags.unrest === 'off' ? null : state;
+  if (!Array.isArray(state.battles)) state.battles = [];
+  genCtx = flags.generals === 'off' ? null : { busy: null, noSpend: true, log: { xp: 0, festivals: 0, trains: 0, heals: 0, generalDefenses: 0, captainDefenses: 0 } };
+  if (genCtx) Generals.ensureGenerals(state);
+  bountyCtx = flags.bounties === 'off' ? null : { log: { completed: 0, gold: 0, renown: 0, xp: 0, byKind: {} } };
+  quickCtx = flags.quick === 'off' ? null : { n: 0, won: 0 };
+  boonCtx = flags.boons === 'off' ? null : { recent: [], picks: [], plunder: 0, goldLost: 0, champEye: 0 };
+  humanCtx = flags.patience !== 'strict';
+  const segs = []; // { a, b, ok }: ok = an Easy or Fair fight was there to take (or being fought)
+  const attacks = [];
+  const blocked = new Set();
+  // the labels on the MAP are what a person scans for a fight: since PLAN-PHASE11 they credit the card's default commander (world.js);
+  // --labels=plain reads them without it (the map before Phase 11)
+  const cards = () => attackableFrontier(state, world).filter((id) => !blocked.has(id))
+    .map((regionId) => { const cmdr = flags.labels !== 'plain' ? pickCommander(state, world, regionId, 'attack', wall.sec * 1000) : null; return { regionId, diff: difficulty(state, world, regionId, cmdr ? { commander: cmdr } : {}) }; }).sort((a, b) => b.diff.ratio - a.diff.ratio);
+  // a region that beat us is left until its card reads RETRY_MARGIN better or HUMAN.retrySec have passed (a person does not replay the same lost fight at once)
+  const lost = new Map();
+  const fresh = (c) => { const l = lost.get(c.regionId); return !l || c.diff.ratio >= l.ratio * RETRY_MARGIN || wall.sec - l.at >= HUMAN.retrySec; };
+  const worth = (c) => fresh(c) && (c.diff.surrender || c.diff.label === 'Easy' || c.diff.label === 'Fair');
+  const spend = (sec, ok) => { const a = wall.sec; advanceClock(state, world, wall, sec); segs.push({ a, b: wall.sec, ok }); };
+  // --shop=optimal: the optimal campaign's buying (everything affordable, cheapest first, Works included) at the human's visits
+  const net = () => state.owner.filter((o) => o === PLAYER_FACTION).length - 1;
+  const shop = () => (flags.shop === 'optimal' ? buyingPass(state, world, net(), flags, goldSpent)
+    : flags.shop === 'cheapest' ? buyingPass(state, world, net(), { ...flags, works: 'none', forts: 'none' }, goldSpent)
+    : humanShop(state, world, goldSpent, flags.shop));
+  spend(HUMAN.startSec, true);
+  let lastShop = -Infinity;
+  let noTargetSince = null;
+  let doneAt = null;
+  for (let guard = 0; wall.sec < endSec && guard < 5000; guard++) {
+    bountyEnsure(state, world);
+    if (wall.sec >= 120 && wall.sec - lastShop >= HUMAN.shopEverySec) {
+      shop(); lastShop = wall.sec;
+      spend(HUMAN.shopSec, cards().some(worth));
+    }
+    const list = cards();
+    let pick = list.find(worth) || null;
+    let hard = false;
+    if (pick) noTargetSince = null;
+    else {
+      if (noTargetSince == null) noTargetSince = wall.sec;
+      if (wall.sec - noTargetSince >= HUMAN.hardAfterSec) {
+        pick = list.find((c) => fresh(c) && c.diff.label === 'Hard') || null;
+        if (pick) { hard = true; noTargetSince = wall.sec; }
+      }
+    }
+    if (!pick && !frontier(state, world).some((id) => world.regions[id].type !== 'dragon')) { doneAt = wall.sec; break; } // the continent is whole: the hour ends here (Found a Dynasty)
+    if (!pick) {
+      if (wall.sec - lastShop > HUMAN.idleShopSec) { shop(); lastShop = wall.sec; }
+      if (flags.trace && Math.floor(wall.sec / 120) !== Math.floor((wall.sec + HUMAN.idleStepSec) / 120)) {
+        console.log(`  ${(wall.sec / 60).toFixed(1)}m gold ${Math.round(state.gold)} income ${incomePerSec(state, world).toFixed(1)}/s unrest ${state.unrest ? `${state.unrest.target}:${JSON.stringify(state.unrest.thin)} idle ${Math.round(state.unrest.idleSec)}` : "-"}; `
+          + list.slice(0, 5).map((c) => `${c.diff.label[0]} ${c.diff.ratio.toFixed(2)} t${world.regions[c.regionId].tier} d${enemyDepth(world, world.regions[c.regionId]).toFixed(1)} ${world.factions[world.regions[c.regionId].faction].personality.slice(0, 4)}${world.regions[c.regionId].isCapital ? "C" : ""} s${Math.round(c.diff.strength)}`).join(' | '));
+      }
+      spend(HUMAN.idleStepSec, false);
+      continue;
+    }
+    spend(HUMAN.attackSec, !hard);
+    const t0 = wall.sec;
+    const res = attemptConquest(state, world, pick.regionId, wall, battleDurations, state.stats.battlesWon === 0);
+    if (res.unattackable) { blocked.add(pick.regionId); continue; }
+    segs.push({ a: t0, b: wall.sec, ok: !hard });
+    if (!res.won) lost.set(pick.regionId, { ratio: pick.diff.ratio, at: wall.sec });
+    attacks.push({ t: t0, sec: wall.sec - t0, label: pick.diff.label, ratio: pick.diff.ratio, won: res.won, kind: res.surrendered ? 'surrender' : res.quick ? 'quick' : 'battle' });
+    spend(HUMAN.afterSec, !hard);
+  }
+  const raids = raidCtx ? { firstRaidSec: raidLog.firstRaidSec, announced: raidLog.announced } : null;
+  raidCtx = null; genCtx = null; bountyCtx = null; quickCtx = null; boonCtx = null; humanCtx = false; unrestCtx = null;
+  return { seed, attacks, segs, raids, unrest: state.unrest ? { ...state.unrest, thin: { ...state.unrest.thin } } : null, upgrades: { ...state.upgrades }, goldSpent, owned: state.owner.filter((o) => o === PLAYER_FACTION).length, doneAt, metrics: humanMetrics(attacks, segs, doneAt != null ? Math.min(endSec, doneAt) : endSec) };
+}
+
+/** Battles started in the hour, the share of minutes after minute 3 with an Easy or Fair fight to take, the longest stretch without one. */
+export function humanMetrics(attacks, segs, endSec) {
+  const battles = attacks.filter((x) => x.t < endSec).length;
+  let ok = 0;
+  let n = 0;
+  for (let m = 3; m < endSec / 60; m++, n++) if (segs.some((s) => s.ok && s.b > m * 60 && s.a < m * 60 + 60)) ok += 1;
+  let longest = 0;
+  let longestAt = 0;
+  let cur = 0;
+  let from = 0;
+  for (const s of segs) {
+    if (s.a >= endSec) break;
+    if (s.ok) { cur = 0; continue; }
+    if (cur === 0) from = s.a;
+    cur += Math.min(s.b, endSec) - s.a;
+    if (cur > longest) { longest = cur; longestAt = from; }
+  }
+  let gap = 0; // the longest wait between two fights (Hard ones too): the end of one battle to the start of the next, or to the end of the hour
+  for (let i = 0, prevEnd = 0; i <= attacks.length; i++) {
+    const next = i < attacks.length ? Math.min(endSec, attacks[i].t) : endSec;
+    gap = Math.max(gap, next - prevEnd);
+    if (i < attacks.length) prevEnd = Math.min(endSec, attacks[i].t + attacks[i].sec);
+  }
+  return { battles, won: attacks.filter((x) => x.t < endSec && x.won).length, avail: n ? ok / n : 1, longestIdleSec: longest, longestIdleAt: longestAt, longestGapSec: gap };
+}
+
+function printHuman(seeds, flags) {
+  const runs = seeds.map((s) => runHumanHour(s, flags));
+  const fmtM = (sec) => `${(sec / 60).toFixed(1)}m`;
+  console.log(`\n=== human-paced first ${flags.minutes || 60} min (PLAN-PHASE11) ===`);
+  console.log('  seed  battles (won)  Easy/Fair minutes  longest idle (at)  longest gap  first raid  regions');
+  for (const r of runs) {
+    const m = r.metrics;
+    console.log(`  ${String(r.seed).padStart(4)}  ${String(m.battles).padStart(7)} (${String(m.won).padStart(2)})  ${`${Math.round(100 * m.avail)}%`.padStart(17)}  ${fmtM(m.longestIdleSec).padStart(6)} @${fmtM(m.longestIdleAt).padStart(5)}  ${fmtM(m.longestGapSec).padStart(11)}  ${(r.raids && r.raids.firstRaidSec != null ? fmtM(r.raids.firstRaidSec) : '-').padStart(10)}  ${String(r.owned).padStart(7)}${r.doneAt != null ? ` (whole at ${fmtM(r.doneAt)})` : ''}`);
+    if (flags.verbose) console.log('        ' + r.attacks.map((x) => `${(x.t / 60).toFixed(1)}${x.label[0]}${x.won ? '' : 'x'}${x.kind === 'battle' ? '' : x.kind[0]}`).join(' '));
+  }
+  const med = (fn) => median(runs.map(fn));
+  console.log(`  median: ${med((r) => r.metrics.battles)} battles, Easy/Fair ${Math.round(100 * med((r) => r.metrics.avail))}% of minutes, longest idle ${fmtM(med((r) => r.metrics.longestIdleSec))} (gap between fights ${fmtM(med((r) => r.metrics.longestGapSec))}), first raid ${fmtM(med((r) => (r.raids && r.raids.firstRaidSec != null ? r.raids.firstRaidSec : Infinity)))}`);
+  console.log(`  targets: >= 18 battles, >= 75%, <= 4.0m`);
+  return runs;
 }
 
 /**
@@ -1533,6 +1738,7 @@ async function main() {
   const flags = parseArgs(process.argv.slice(2));
   const seeds = (flags.seeds ? String(flags.seeds).split(',') : ['1', '2', '3', '4', '5']).map(Number);
 
+  if (flags.policy === 'human') { printHuman(flags.seeds ? seeds : [1, 2, 3, 4, 5, 6, 7, 8], flags); return; }
   if (Number(flags.dynasties) > 1) { const all = printDynasties(seeds, flags); if (flags.boonReport) printBoonTable(all); return; }
   const results = seeds.map((seed) => runCampaign(seed, flags));
 

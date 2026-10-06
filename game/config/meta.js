@@ -17,7 +17,14 @@
 // back to 1.13 h (1.65: 1.16 h with two D2 waits over 40 min). The War Council stays the army's engine: the campaign still buys ~97% of
 // the upgrade levels it bought without Boons. A weak lever (D1 is battle- and frontier-bound), so the Boons were trimmed first.
 export const UPGRADE_COST_MULT = 1.5; // 1.06 left D1 at 1.10 h, 1.12 at 1.13 h (12 seeds, pre-Phase-7): D1 is mostly battle- and frontier-bound
-const UPGRADE_BASE = Object.freeze({ // the pre-Phase-6 prices; UPGRADE_TUNING below applies UPGRADE_COST_MULT
+// PLAN-PHASE11 (early flow): the multiplier is a RAMP over each upgrade's levels instead of a flat x1.5: [level, multiplier] points, straight
+// lines between them, the last one held beyond. The first levels cost x1.0 and climb to the Phase 7 price at level 8, where it stays (the
+// late levels, where the optimal campaign's time goes, and the Daily, whose army starts at level 8, are priced as before). Measured with
+// tools/campaign.mjs --policy=human together with ENEMY_SCALING.ladderCurve: on its own the ramp moves the human's first hour little (the
+// shopper is gold-bound on the ladder, not on the first levels) but takes D2 back toward D1's ratio; ending at level 12 instead slowed one
+// Daily date past its 20 minutes (a different purchase order, a capital fight lost on time).
+export const UPGRADE_COST_RAMP = Object.freeze([[0, 1.0], [8, UPGRADE_COST_MULT]]);
+const UPGRADE_BASE = Object.freeze({ // the pre-Phase-6 prices; UPGRADE_TUNING below applies UPGRADE_COST_RAMP[0] (level 0), upgradeCostRamp the rest
   recruitment: { baseCost: 33, growth: 1.4, magnitude: 0.0333 },  // DESIGN +10%/level; a third of it, see above
   steel: { baseCost: 33, growth: 1.4, magnitude: 0.027 },         // DESIGN +8%
   armour: { baseCost: 33, growth: 1.4, magnitude: 0.027 },        // DESIGN +8%
@@ -37,7 +44,21 @@ const UPGRADE_BASE = Object.freeze({ // the pre-Phase-6 prices; UPGRADE_TUNING b
   levy: { baseCost: 457, growth: 1.12 },
 });
 export const UPGRADE_TUNING = Object.freeze(Object.fromEntries(Object.entries(UPGRADE_BASE)
-  .map(([id, t]) => [id, Object.freeze({ ...t, baseCost: Math.round(t.baseCost * UPGRADE_COST_MULT) })])));
+  .map(([id, t]) => [id, Object.freeze({ ...t, baseCost: Math.round(t.baseCost * UPGRADE_COST_RAMP[0][1]) })])));
+/** The cost multiplier of `level` relative to level 0 (UPGRADE_COST_RAMP, interpolated; the last point holds beyond). */
+export function upgradeCostRamp(level) {
+  const pts = UPGRADE_COST_RAMP;
+  let m = pts[pts.length - 1][1];
+  for (let i = 1; i < pts.length; i++) {
+    if (level <= pts[i][0]) { const [l0, m0] = pts[i - 1]; const [l1, m1] = pts[i]; m = m0 + ((m1 - m0) * (Math.max(l0, level) - l0)) / (l1 - l0); break; }
+  }
+  return m / pts[0][1];
+}
+
+// PLAN-PHASE11b: the council's "Best value" tag (game/app/bestValue.js) rates only cards the player can buy now or within this many seconds
+// of current income, so it never points at a Powers unlock far out of reach (the old-bot shopper then bought the first Army card instead).
+// With none in reach it names the cheapest card that raises Army Power.
+export const BEST_VALUE = Object.freeze({ horizonSec: 60 });
 
 // Income, bounty and offline rules (DESIGN §5.1). Income rises 39% per depth tier (the lever that keeps the late waits
 // short: the last regions pay like the realm they sit in) and the start region pays 1.82 gold/s so the first upgrades

@@ -258,8 +258,54 @@ function announce(state, world, faction, pair, t) {
   return raid;
 }
 
+/**
+ * PLAN-PHASE11: when the realm's first raid sets out (active seconds): a seeded point FRONTIER.firstRaidAfterGraceSec after the grace ended
+ * (per realm seed and dynasty), or null while the grace holds. Tools and the tutorial may read it.
+ */
+export function firstRaidDueAt(state) {
+  const f = ensureFrontier(state);
+  if (f.graceEndedAt == null) return null;
+  const [lo, hi] = FRONTIER.firstRaidAfterGraceSec;
+  const u = hash32(state.seed ?? 0, 'firstRaid', state.dynasty && state.dynasty.level ? state.dynasty.level : 1) / 4294967296;
+  return f.graceEndedAt + lo + (hi - lo) * u;
+}
+
+/**
+ * When the first raid is expected to set out (active seconds), for the pacer's reserved slot (PLAN-PHASE11b): firstRaidDueAt once the grace has
+ * ended; before that, if the realm already holds FRONTIER.minRegions, the same seeded offset after the grace's clock runs out; otherwise null
+ * (not yet known). Null once a raid has set out, or when this realm has no raids (Peace of the Crowns).
+ */
+export function firstRaidPlannedAt(state) {
+  const f = ensureFrontier(state);
+  if (f.stats.raids > 0 || !edictMods(state).raids) return null;
+  const due = firstRaidDueAt(state);
+  if (due != null) return due;
+  if (ownedCount(state) < FRONTIER.minRegions) return null;
+  const [lo, hi] = FRONTIER.firstRaidAfterGraceSec;
+  const u = hash32(state.seed ?? 0, 'firstRaid', state.dynasty && state.dynasty.level ? state.dynasty.level : 1) / 4294967296;
+  return Math.max(FRONTIER.graceSec, f.activeSec) + lo + (hi - lo) * u;
+}
+
+/** The scheduled first raid (PLAN-PHASE11): once it is due, a bordering rival that raids at all (picked by its rate) sets out. */
+function sendFirstRaid(state, world, t, announced, nowMs) {
+  const due = firstRaidDueAt(state);
+  if (due == null || t + 1e-9 < due || activeDefenses(state) >= FRONTIER.maxDefenses) return;
+  const rivals = borderingRivals(state, world).map((r) => ({ ...r, rate: raidRate(state, world, r.faction) })).filter((r) => r.rate > 0);
+  if (!rivals.length) return;
+  let roll = rand(state) * rivals.reduce((a, r) => a + r.rate, 0);
+  const first = rivals.findIndex((r) => (roll -= r.rate) < 0);
+  const order = [...rivals.slice(Math.max(0, first)), ...rivals.slice(0, Math.max(0, first))]; // the rolled rival, then the others
+  for (const { faction, pairs } of order) {
+    const pair = pickPair(state, world, faction, pairs, t, null, nowMs);
+    if (pair) { announced.push(announce(state, world, faction, pair, t)); return; }
+  }
+}
+
 function rollRaids(state, world, t, announced, nowMs) {
   if (inGrace(state)) return;
+  const f = ensureFrontier(state);
+  if (f.graceEndedAt == null) f.graceEndedAt = t;
+  if (f.stats.raids === 0) { sendFirstRaid(state, world, t, announced, nowMs); return; } // the first raid is scheduled; the rolls wait for it
   for (const { faction, pairs } of borderingRivals(state, world)) {
     const rate = raidRate(state, world, faction);
     if (rate <= 0) continue;

@@ -23,6 +23,7 @@ import { ASHEN } from '../config/ashen.js';
 import { INTEL } from '../config/intel.js';
 import { CHALLENGE_MODE, DAILY, RECORD, BANNERS } from '../config/challenges.js';
 import { SCENARIO_LIST, SCENARIOS } from '../config/scenarios.js';
+import { UNREST } from '../config/unrest.js';
 
 // --- number words (from config values only) ---
 export const pct = (x) => `${Math.round(x * 100)}%`;
@@ -106,7 +107,7 @@ export const CODEX_TOPICS = [
       'Conquering a region also pays a one-off bounty.'],
     numbers: [['Away cap', `${ECONOMY.offlineCapHours} h, more with Treasury upgrades`], ['Capitals pay', `×${ECONOMY.capitalIncomeMult}`], ['Bounty', `${ECONOMY.bountySeconds} s of that region's income`]] },
   { id: 'council', group: 'realm', title: 'The War Council', icon: 'castle', seen: (s) => seenHint(s, 'M1') || Object.keys(o(s.upgrades)).length > 1,
-    lines: ['The War Council sells upgrades for gold: stronger armies, a bigger War Camp, powers and a deeper treasury.', 'The card marked Best value raises your army power the most for its price.'],
+    lines: ['The War Council sells upgrades for gold: stronger armies, a bigger War Camp, powers and a deeper treasury.', 'The card marked Best value, in the Army or Powers tab, raises your army power the most for its price.'],
     numbers: [] },
   { id: 'prosperity', group: 'realm', title: 'Prosperity and Festivals', icon: 'wheat', seen: (s) => anyLevel(s.prosperity) || owned(s) > 2,
     lines: ['A region you hold grows over time: fields, then cottages and a windmill, then paved roads and a market. Each level raises its income.',
@@ -161,6 +162,10 @@ export const CODEX_TOPICS = [
     lines: ['A twist changes how a battle plays: Night shortens tower range, a Blizzard slows everyone, Holy Ground forbids powers, a Siege shuts the keep behind a Gate, a Raid asks you to hold shrines.',
       'The twist shows on the region’s label before you attack.'],
     numbers: [['Twists', list(TWISTS.map((t) => (FEATURES.copy.twistNames && FEATURES.copy.twistNames[t]) || nameOf(t)))], ['Blizzard speed', pct(FEATURES.blizzard.speed)], ['Night tower range', pct(FEATURES.night.towerRange)]] },
+  { id: 'unrest', group: 'map', title: 'Unrest', icon: 'flag', seen: (s) => !!o(s.unrest).toasted || anyKeys(o(s.unrest).thin), // PLAN-PHASE11b
+    lines: ['When nothing on your frontier reads Easy or Fair for a while, the weakest region there falls into Unrest: its garrisons thin minute by minute until you attack it or something becomes Easy or Fair.',
+      'Its label and its chance of winning already count the thinning. Once calm it slowly recovers. There is no Unrest in a challenge.'],
+    numbers: [['Starts after', secs(UNREST.idleSec)], ['Thins', `${pct(UNREST.perMin)} a minute, at most ${pct(UNREST.max)}`], ['Recovers', `${pct(UNREST.recoverPerMin)} a minute`]] },
   { id: 'worldEvents', group: 'map', title: 'World events', icon: 'envelope', seen: evAny,
     lines: ['Now and then something happens in the world: a merchant caravan, a plague among your rivals, a duel, deserters, a rich harvest.',
       'Most are offers: answer in time or they pass. The envelope by the HUD reopens a closed one.'],

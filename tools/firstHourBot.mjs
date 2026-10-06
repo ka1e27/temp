@@ -1,6 +1,6 @@
 // The new player of tools/firstHour.mjs: real mouse / touch presses at a human-ish pace. Dev hooks are only READ (positions, the drag preview,
 // difficulty labels) plus a camera flight to a region that is off screen; every decision is pressed. One step per call; the driver loops.
-export function createBot(page, { touch = false, W, H, log }) {
+export function createBot(page, { touch = false, W, H, log, shopStyle = 'three' }) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const ev = (fn, ...a) => page.eval(fn, ...a);
   const tap = async (x, y) => {
@@ -43,22 +43,60 @@ export function createBot(page, { touch = false, W, H, log }) {
 
   // --- the War Council: buy what is affordable, "Best value" first (a person reads the tag) -----------------------------------------------
   async function shop(why) {
+    if (shopStyle !== 'bot3') return shopThree(why);
     if (!(await press('.hud-btn[aria-label="War Council"]'))) return 0;
     await sleep(1100);
     let bought = 0;
-    for (const tab of ['Army', 'Realm']) {
+    for (const tab of ['Army', 'Powers', 'Realm']) { // PLAN-PHASE11b: the Best value tag can sit on a Powers card
       await press('.council-tab', tab); await sleep(500);
       for (let i = 0; i < 3; i++) {
-        const c = await ev(() => {
+        const c = await ev((tagOnly) => {
           const cards = [...document.querySelectorAll('.upgrade-card')].filter((x) => x.getClientRects().length && x.querySelector('.upgrade-card-buy:not([disabled])'));
-          const best = cards.find((x) => /best value/i.test(x.textContent)) || cards[0];
+          const best = cards.find((x) => /best value/i.test(x.textContent)) || (tagOnly ? null : cards[0]); // Powers: only the tagged card
           if (!best) return null;
           const r = best.querySelector('.upgrade-card-buy').getBoundingClientRect();
           return { x: r.left + r.width / 2, y: r.top + r.height / 2, name: best.querySelector('.upgrade-card-name')?.textContent };
-        });
+        }, tab === 'Powers');
         if (!c) break;
         await tap(c.x, c.y); bought += 1; await sleep(700);
       }
+    }
+    await press('.council-close'); await sleep(600);
+    log(`  council (${why}): bought ${bought}`);
+    return bought;
+  }
+
+  // PLAN-PHASE11, the default shopper (tools/campaign.mjs --policy=human humanShop): it watches three cards, the Army tab's Best value, the cheapest
+  // card of the Powers tab and Taxes, and presses the cheapest of them until the gold runs out. The choice is read from the game's modules; every
+  // purchase is a real press on the card in its tab. --shop=bot3 keeps the Phase 10 shopper (three Army buys and three Realm buys per visit).
+  async function shopThree(why) {
+    if (!(await press('.hud-btn[aria-label="War Council"]'))) return 0;
+    await sleep(1100);
+    let bought = 0;
+    let tab = null;
+    for (let i = 0; i < 40; i++) {
+      const pick = await ev(async () => {
+        const hd = window.__hd;
+        const U = await import(new URL('game/meta/upgrades.js', document.baseURI).href);
+        const { bestValueUpgrade } = await import(new URL('game/app/bestValue.js', document.baseURI).href);
+        const cost = (id) => U.upgradeCost(id, U.levelOf(hd.state, id));
+        const best = bestValueUpgrade(hd.state, hd.world);
+        const power = U.POWER_IDS.slice().sort((a, b) => cost(a) - cost(b))[0];
+        const id = [best && best.id, power, 'taxes'].filter(Boolean).sort((a, b) => cost(a) - cost(b))[0];
+        return id && U.canBuy(hd.state, id) ? { id, name: U.UPGRADES[id].name, tab: U.UPGRADES[id].tab } : null;
+      });
+      if (!pick) break;
+      if (pick.tab !== tab) { await press('.council-tab', `^${pick.tab}$`); tab = pick.tab; await sleep(500); }
+      const c = await ev((name) => {
+        const card = [...document.querySelectorAll('.upgrade-card')].find((x) => x.getClientRects().length && x.querySelector('.upgrade-card-name')?.textContent === name);
+        const b = card && card.querySelector('.upgrade-card-buy:not([disabled])');
+        if (!b) return null;
+        b.scrollIntoView({ block: 'center' });
+        const r = b.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }, pick.name);
+      if (!c) break;
+      await tap(c.x, c.y); bought += 1; await sleep(450);
     }
     await press('.council-close'); await sleep(600);
     log(`  council (${why}): bought ${bought}`);
@@ -70,8 +108,12 @@ export function createBot(page, { touch = false, W, H, log }) {
     return ev(async (hard) => {
       const hd = window.__hd;
       const { difficulty, attackableFrontier } = await import(new URL('game/meta/progression.js', document.baseURI).href);
+      const { bestFreeGeneral } = await import(new URL('game/meta/generals.js', document.baseURI).href);
+      const { commanderFor } = await import(new URL('game/meta/edicts.js', document.baseURI).href);
+      // the label the map shows (world.js, PLAN-PHASE11): the card's default commander credited
+      const cmd = (id) => { const g = bestFreeGeneral(hd.state, hd.world, id, 'attack', Date.now()); return commanderFor(hd.state, g ? g.id : null); };
       const ids = attackableFrontier(hd.state, hd.world);
-      const rows = ids.map((id) => { const d = difficulty(hd.state, hd.world, id); return { id, label: d.label, ratio: d.ratio, surrender: !!d.surrender }; })
+      const rows = ids.map((id) => { const d = difficulty(hd.state, hd.world, id, { commander: cmd(id) }); return { id, label: d.label, ratio: d.ratio, surrender: !!d.surrender }; })
         .filter((r) => r.surrender || r.label === 'Easy' || r.label === 'Fair' || (hard && r.label === 'Hard')).sort((a, b) => b.ratio - a.ratio);
       return rows[0] || null;
     }, allowHard);

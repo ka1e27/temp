@@ -280,3 +280,13 @@ html.reduce-motion .relic-claim-rays, html.reduce-motion .relic-claim-icon, html
 .battle-ability.is-boon-ready { animation: boon-ready 900ms ease-out 2; }
 @keyframes boon-ready { 0% { box-shadow: 0 0 0 0 rgba(255, 216, 107, 0.8); } 100% { box-shadow: 0 0 0 14px rgba(255, 216, 107, 0); } }
 html.reduce-motion .battle-ability.is-boon-ready { animation: none; }
+
+/* ------------------------------------------------------------------ the region card's Unrest line (PLAN-PHASE11b) */
+.region-card-unrest {
+  display: flex; align-items: center; gap: var(--sp-2); margin: 0; padding: 6px 10px; border-radius: var(--panel-radius-sm);
+  font-size: var(--fs-sm); color: var(--text); background: linear-gradient(90deg, rgba(232, 150, 46, 0.2), rgba(232, 150, 46, 0.04));
+  border: 1px solid rgba(232, 150, 46, 0.45);
+}
+.region-card-unrest[hidden] { display: none; }
+.region-card-unrest .icon { flex: none; color: #e8962e; }
+.region-card-unrest.is-recovering { opacity: 0.8; }

@@ -67,7 +67,12 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
       const { frontier, difficulty } = await import(new URL('game/meta/progression.js', document.baseURI).href);
       const ids = frontier(hd.state, hd.world).sort((a, b) => hd.world.regions[a].tier - hd.world.regions[b].tier || a - b);
       // a win that drafts (PLAN-PHASE7 gate): the card reads Fair or harder at attack time (an Easy win drafts nothing)
-      const rid = ids.find((id) => !hd.world.regions[id].isCapital && difficulty(hd.state, hd.world, id).label !== 'Easy') ?? ids[0];
+      // read with the commander the card credits (battle.js labelAtAttack); PLAN-PHASE11's softer early ladder can leave the whole second ring Easy,
+      // so then the hardest non-capital region is staged (winBattle decides the fight either way)
+      const { bestFreeGeneral } = await import(new URL('game/meta/generals.js', document.baseURI).href);
+      const card = (id) => { const g = bestFreeGeneral(hd.state, hd.world, id, 'attack', Date.now()); return difficulty(hd.state, hd.world, id, g ? { commander: g.id } : {}); };
+      const soft = ids.filter((id) => !hd.world.regions[id].isCapital);
+      const rid = soft.find((id) => card(id).label !== 'Easy') ?? soft.slice().sort((a, b) => card(a).ratio - card(b).ratio)[0] ?? ids[0];
       hd.placeRelic(rid, 'sundial');
       return { rid, placed: hd.state.relics.placed };
     });

@@ -17,6 +17,7 @@ import { edictMods, defaultEdict } from './edicts.js'; // the leaf (PLAN-PHASE5)
 import { PROSPERITY } from '../config/prosperity.js';
 import { defaultBoons2, defaultRelics } from './boonsState.js'; // Phase 7 (PLAN-PHASE7): Boons and Relics, per dynasty
 import { placeRelics } from './relics.js';
+import { defaultUnrest } from './unrestState.js'; // PLAN-PHASE11b: Unrest, per continent
 
 /** Faction id that always identifies the player's own realm (see FACTIONS). */
 export const PLAYER_FACTION = 0;
@@ -68,6 +69,7 @@ export const PLAYER_FACTION = 0;
  * @property {(RegionCrowns|null)[]} crowns  per region id, null until conquered with crowns (this dynasty only)
  * @property {number[]} metFactions       faction ids whose leader has already made first contact (this dynasty only)
  * @property {Object<string, {scouted: boolean, sabotage: number}>} intel  per region id, only regions the player paid to scout or sabotage (meta/intelState.js; this dynasty only)
+ * @property {{ idleSec: number, target: number|null, thin: Object<string, number>, toasted: boolean }} [unrest]  PLAN-PHASE11b: Unrest (meta/unrestState.js; this continent only)
  * @property {number[]} prosperity        per region id, 0..3 prosperity level last reported (meta/prosperity.js; this dynasty only)
  * @property {Object<string, {type: string, level: number}[]>} works  per region id, this dynasty only (meta/worksEffects.js)
  * @property {Object<string, number>} upgrades  levels, missing = 0
@@ -129,6 +131,7 @@ export function resetRegions(state, world, now) {
   state.metFactions = [];
   // Scout / sabotage intel and prosperity levels belong to this continent too.
   state.intel = {};
+  state.unrest = defaultUnrest(); // PLAN-PHASE11b: no Unrest on a new continent
   state.prosperity = [];
   // Region Works (DESIGN 5.8) are built on this continent's regions: a new continent starts with none.
   state.works = {};
