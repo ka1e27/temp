@@ -1,0 +1,186 @@
+/* Phase 13, the Crown of Ages (docs/PLAN-PHASE13.md): the ending (tour, the Chronicle scroll, credits), the ceremony's Crown choice and Ascension
+   picker, the title's Crown, the Realm panel's Ascension ladder, the Throne's banners. Royal wine and gold. */
+
+/* ------------------------------------------------------------------ the ending: one dialog, three moments */
+.ending { position: fixed; inset: 0; z-index: calc(var(--z-modal) + 3); display: grid; place-items: center; padding: var(--sp-4); }
+.ending[hidden] { display: none; }
+.ending-veil { position: absolute; inset: 0; pointer-events: auto; background: transparent; transition: background var(--dur-slow) var(--ease-out); }
+.ending[data-phase='chronicle'] .ending-veil, .ending[data-phase='credits'] .ending-veil {
+  background: radial-gradient(ellipse at 50% 40%, rgba(40, 6, 18, 0.55), rgba(6, 4, 10, 0.92) 75%);
+}
+.ending-skip { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 2; gap: 6px; min-height: var(--touch-target); }
+.ending-tour, .ending-scroll, .ending-credits { position: relative; z-index: 1; }
+.ending-tour[hidden], .ending-scroll[hidden], .ending-credits[hidden] { display: none; }
+
+/* the tour: letterbox bars, a title and one caption per stop over the live map */
+.ending-tour { position: absolute; inset: 0; pointer-events: none; }
+.ending-bar { position: absolute; left: 0; right: 0; height: 11vh; background: #050307; animation: ending-bar 900ms var(--ease-out) both; }
+.ending-bar.is-top { top: 0; transform-origin: top; }
+.ending-bar.is-bottom { bottom: 0; transform-origin: bottom; }
+@keyframes ending-bar { from { transform: scaleY(0); } to { transform: none; } }
+.ending-tour-words { position: absolute; left: 0; right: 0; bottom: calc(11vh + 18px); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 var(--sp-4); text-align: center; }
+.ending-tour-crown { color: var(--gold-bright); filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.7)); }
+.ending-tour-title { margin: 0; font-family: var(--font-title); font-weight: 800; font-size: clamp(1.6rem, 6vw, 2.8rem); color: var(--gold-bright); letter-spacing: 0.06em; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85), 0 0 2px #000; }
+.ending-tour-caption { margin: 0; max-width: 34em; font-size: var(--fs-md); font-weight: 800; color: var(--text); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.95), 0 0 2px #000; }
+.ending-tour-caption.is-in { animation: ending-caption 700ms var(--ease-out) both; }
+@keyframes ending-caption { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* the Chronicle scroll: parchment between two rods */
+.ending-scroll { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); width: min(600px, 100%); max-height: calc(100dvh - 32px); }
+.ending-scroll-paper { position: relative; display: flex; flex-direction: column; width: 100%; min-height: 0; flex: 1; animation: ending-unroll 900ms var(--ease-out) both; }
+@keyframes ending-unroll { from { clip-path: inset(48% 0 48% 0); } to { clip-path: inset(0 0 0 0); } }
+.ending-rod { display: block; height: 14px; margin: 0 -10px; border-radius: 7px; background: linear-gradient(180deg, #e9c46a, #8a5a12 70%, #4a2c06); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); flex: none; }
+.ending-scroll-body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  background: linear-gradient(90deg, rgba(120, 82, 30, 0.22), transparent 8%, transparent 92%, rgba(120, 82, 30, 0.22)), linear-gradient(180deg, #f1e3c2, #e6d2a6);
+  color: #2b1d0c; outline-offset: -3px;
+}
+.ending-scroll-head { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; color: #6b1022; }
+.ending-scroll-title { margin: 0; font-family: var(--font-title); font-weight: 800; font-size: var(--fs-xl); color: #4a0718; line-height: 1.15; }
+.ending-scroll-kicker { margin: 0; font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #6b4a14; }
+.ending-scroll-lead { margin: var(--sp-3) 0; font-size: var(--fs-md); line-height: 1.5; text-align: center; font-style: italic; color: #3b2a12; }
+.ending-sections { display: flex; flex-direction: column; gap: var(--sp-4); }
+.ending-section { border-top: 1px solid rgba(107, 74, 20, 0.35); padding-top: var(--sp-3); }
+.ending-section-title { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--sp-2); font-family: var(--font-title); font-weight: 700; font-size: var(--fs-md); color: #4a0718; }
+.ending-section-title .icon { color: #8a5a12; flex: none; }
+.ending-rows { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--sp-3); margin: 0; font-size: var(--fs-sm); }
+.ending-rows dt { color: #4b3a20; }
+.ending-rows dd { margin: 0; font-weight: 900; text-align: right; color: #2b1d0c; }
+.ending-lines { margin: var(--sp-2) 0 0; padding-left: 1.2em; font-size: var(--fs-sm); line-height: 1.5; color: #3b2a12; }
+.ending-scroll-end { margin: var(--sp-4) 0 0; text-align: center; color: #8a5a12; font-weight: 900; letter-spacing: 0.4em; }
+.ending-foot { display: flex; justify-content: center; flex: none; }
+.ending-next { min-width: 180px; font-family: var(--font-title); }
+
+/* the credits */
+.ending-credits { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); text-align: center; padding: var(--sp-4); animation: ending-fade 1200ms var(--ease-out) both; }
+@keyframes ending-fade { from { opacity: 0; } to { opacity: 1; } }
+.ending-credits-crown { color: var(--gold-bright); filter: drop-shadow(0 0 18px rgba(245, 196, 81, 0.45)); }
+.ending-credits-title { margin: 0; font-family: var(--font-title); font-weight: 800; font-size: clamp(2rem, 9vw, 3.4rem); color: var(--gold-bright); letter-spacing: 0.08em; text-shadow: 0 3px 16px rgba(0, 0, 0, 0.8); }
+.ending-credits-line { margin: 0; font-size: var(--fs-lg); font-weight: 800; color: var(--text); letter-spacing: 0.04em; }
+.ending-credits-more { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--text-muted); }
+.ending-credits-more p { margin: 0; }
+
+html.reduce-motion .ending *, .ending.is-still * { animation: none !important; transition: none !important; }
+@media (max-width: 640px) {
+  .ending { padding: 0; }
+  .ending-scroll { width: 100%; max-height: 100dvh; padding: 60px 8px 12px; }
+  .ending-scroll-body { padding: var(--sp-4) var(--sp-3); }
+  .ending-rod { margin: 0 -4px; }
+  .ending-tour-words { bottom: calc(11vh + 10px); }
+}
+
+/* ------------------------------------------------------------------ the ceremony: the final choice (dynasty 7+) in a regal frame */
+.crown-choice { display: flex; flex-direction: column; gap: var(--sp-2); }
+.crown-choice[hidden] { display: none; }
+.crown-choice-kicker { margin: 0; text-align: center; font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
+.crown-paths { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.crown-path {
+  display: flex; align-items: center; gap: var(--sp-2); min-height: 72px; padding: var(--sp-3); text-align: left; cursor: pointer;
+  border-radius: var(--panel-radius-sm); border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.04); color: var(--text);
+  font: inherit; transition: border-color var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast);
+}
+.crown-path > .icon { flex: none; color: var(--text-muted); }
+.crown-path-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.crown-path-name { font-weight: 900; font-size: var(--fs-sm); }
+.crown-path-line { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.35; }
+.crown-path.is-picked { border-color: var(--gold); background: rgba(245, 196, 81, 0.1); box-shadow: 0 0 0 1px rgba(245, 196, 81, 0.4) inset; }
+/* the Crown's own card: wine and gold, a double gilt rim */
+.crown-path.is-crown {
+  position: relative; border: 2px solid rgba(233, 196, 106, 0.75);
+  background: linear-gradient(160deg, rgba(101, 8, 36, 0.85), rgba(40, 4, 16, 0.92));
+  box-shadow: inset 0 0 0 3px rgba(20, 4, 10, 0.9), inset 0 0 0 4px rgba(233, 196, 106, 0.35), 0 0 22px rgba(160, 20, 60, 0.25);
+}
+.crown-path.is-crown .crown-path-name { font-family: var(--font-title); color: var(--gold-bright); font-size: var(--fs-md); }
+.crown-path.is-crown .crown-path-line { color: #f0d9de; }
+.crown-path-emblem { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; color: var(--gold-bright);
+  background: radial-gradient(circle, rgba(233, 196, 106, 0.25), rgba(233, 196, 106, 0) 70%); }
+.crown-path.is-crown.is-picked { border-color: var(--gold-bright); box-shadow: inset 0 0 0 3px rgba(20, 4, 10, 0.9), inset 0 0 0 4px rgba(255, 224, 138, 0.6), 0 0 30px rgba(245, 196, 81, 0.35); }
+.crown-choice-lines { list-style: none; margin: 0; padding: 0; display: none; flex-direction: column; gap: 4px; }
+.crown-choice.is-crown .crown-choice-lines { display: flex; }
+.crown-choice-lines li { display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.4; }
+.crown-choice-lines .icon { flex: none; margin-top: 2px; color: var(--gold); }
+.crown-choice-warning { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 8px 10px; border-radius: 8px; font-size: var(--fs-xs); font-weight: 800; color: var(--warn);
+  background: rgba(242, 161, 84, 0.1); border: 1px solid rgba(242, 161, 84, 0.4); line-height: 1.4; }
+.crown-choice-warning[hidden] { display: none; }
+.crown-choice-warning .icon { flex: none; margin-top: 1px; }
+.ceremony.is-crown .ceremony-panel { border-color: rgba(233, 196, 106, 0.85); box-shadow: var(--panel-shadow-lg), inset 0 0 0 1px rgba(255, 224, 138, 0.18), 0 0 70px rgba(160, 20, 60, 0.3); }
+.ceremony-found.is-crown { background: linear-gradient(180deg, #8a1838, #5a0620); color: var(--gold-bright); border: 1px solid var(--gold); }
+.ceremony-found.is-crown:hover { background: linear-gradient(180deg, #9c2244, #650824); }
+@media (max-width: 420px) { .crown-paths { grid-template-columns: 1fr; } .crown-path { min-height: 60px; } }
+
+/* ------------------------------------------------------------------ the ceremony: the Ascension picker (after the ending) */
+.ascension-pick { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-2); padding: var(--sp-3); border-radius: var(--panel-radius-sm);
+  border: 1px solid rgba(233, 196, 106, 0.45); background: linear-gradient(160deg, rgba(101, 8, 36, 0.35), rgba(20, 16, 24, 0.5)); }
+.ascension-pick[hidden] { display: none; }
+.ascension-pick-title { display: flex; align-items: center; gap: 6px; margin: 0; font-family: var(--font-title); font-size: var(--fs-md); color: var(--gold-bright); }
+.ascension-levels { display: flex; flex-wrap: wrap; gap: 6px; }
+.ascension-level { min-width: var(--touch-target); min-height: var(--touch-target); padding: 0 10px; border-radius: 8px; font: inherit; font-weight: 900; cursor: pointer;
+  color: var(--text); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.18); }
+.ascension-level.is-picked { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: var(--gold); }
+.ascension-detail { display: flex; flex-direction: column; gap: 4px; }
+.ascension-detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.ascension-detail-title { font-weight: 900; color: var(--text); }
+.ascension-detail-bonus { font-size: var(--fs-xs); font-weight: 900; color: var(--good); }
+.ascension-detail-added { margin: 0; font-size: var(--fs-sm); color: var(--text); line-height: 1.4; }
+.ascension-detail-all { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ascension-detail-all[hidden] { display: none; }
+.ascension-detail-all li { display: flex; gap: 8px; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.35; }
+.ascension-detail-all .nums { flex: none; width: 1.4em; text-align: right; color: var(--gold); font-weight: 900; }
+
+/* ------------------------------------------------------------------ the title's lasting Crown */
+.title-crown { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border-radius: 999px; pointer-events: auto;
+  background: linear-gradient(90deg, rgba(101, 8, 36, 0.82), rgba(40, 4, 16, 0.82)); border: 1px solid rgba(233, 196, 106, 0.7);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 24px rgba(245, 196, 81, 0.2); }
+.title-crown[hidden] { display: none; }
+.title-crown-icon { display: grid; color: var(--gold-bright); filter: drop-shadow(0 0 6px rgba(245, 196, 81, 0.6)); }
+.title-crown-line { font-family: var(--font-title); font-weight: 700; font-size: var(--fs-sm); color: var(--gold-bright); letter-spacing: 0.04em; }
+.title-crown-pips { display: inline-flex; gap: 3px; }
+.title-crown-pips:empty { display: none; }
+.title-crown-pip { width: 7px; height: 7px; transform: rotate(45deg); background: var(--gold); box-shadow: 0 0 4px rgba(245, 196, 81, 0.7); }
+
+/* ------------------------------------------------------------------ the Realm panel: crown pips by the title, the Ascension ladder */
+.realm-crown-pips { display: inline-flex; align-items: center; gap: 2px; margin-right: auto; margin-left: 8px; color: var(--gold-bright); }
+.realm-crown-pips:empty { display: none; }
+.realm-crown-pip { display: grid; filter: drop-shadow(0 0 3px rgba(245, 196, 81, 0.6)); }
+.ascension-section { display: flex; flex-direction: column; gap: var(--sp-2); }
+.ascension-section[hidden] { display: none; }
+.ascension-summary, .ascension-note { margin: 0; font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.4; }
+.ascension-note[hidden] { display: none; }
+.ascension-ladder { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; position: relative; }
+.ascension-rung { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.03); border: 1px solid transparent; }
+.ascension-rung-num { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: var(--fs-xs); font-weight: 900;
+  border: 1px solid rgba(255, 255, 255, 0.2); color: var(--text-dim); }
+.ascension-rung-body { display: flex; flex-direction: column; min-width: 0; }
+.ascension-rung-text { font-size: var(--fs-xs); color: var(--text-muted); line-height: 1.3; }
+.ascension-rung-tag { font-size: 0.7rem; font-weight: 800; color: var(--text-dim); }
+.ascension-rung[data-state='cleared'] .ascension-rung-num { background: var(--btn-primary-grad); color: var(--btn-primary-text); border-color: var(--gold); }
+.ascension-rung[data-state='cleared'] .ascension-rung-text { color: var(--text); }
+.ascension-rung[data-state='cleared'] .ascension-rung-tag { color: var(--gold); }
+.ascension-rung[data-state='open'] { border-color: rgba(245, 196, 81, 0.35); }
+.ascension-rung[data-state='open'] .ascension-rung-num { border-color: var(--gold); color: var(--gold-bright); }
+.ascension-rung[data-state='open'] .ascension-rung-tag { color: var(--good); }
+.ascension-rung[data-state='locked'] { opacity: 0.6; }
+.ascension-rung.is-current { border-color: rgba(233, 196, 106, 0.8); background: linear-gradient(90deg, rgba(101, 8, 36, 0.55), rgba(101, 8, 36, 0.1)); }
+@media (max-width: 640px) { .ascension-rung-tag { font-size: var(--fs-xs); } }
+
+/* ------------------------------------------------------------------ the Throne of Ages: its banners (battleHud showChampionBanner, variant 'throne') */
+.battle-champion-banner.is-throne { background: linear-gradient(180deg, rgba(101, 8, 36, 0.95), rgba(40, 4, 16, 0.95)); border: 1px solid rgba(233, 196, 106, 0.8);
+  color: var(--gold-bright); font-family: var(--font-title); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 0 30px rgba(160, 20, 60, 0.35); }
+.battle-champion-banner.is-throne .icon { color: var(--gold-bright); }
+@media (max-width: 640px) { .battle-champion-banner.is-throne { max-width: calc(100vw - 24px); white-space: normal; text-align: center; border-radius: 14px; } }
+.battle-feature.is-throne .battle-feature-text, .battle-feature.is-borrow .battle-feature-text { color: #f6d98c; }
+.battle-feature.is-throne .battle-feature-fill { background: linear-gradient(90deg, #e9c46a, #ffe08a); }
+.battle-feature.is-borrow.is-bad .battle-feature-text { color: #ffb38a; }
+.battle-feature.is-usurper .battle-feature-text { color: #ffc2d0; }
+.battle-feature.is-usurper .battle-feature-fill { background: linear-gradient(90deg, #a3123f, #e0476e); }
+.battle-feature.is-usurper.is-good .battle-feature-text { color: var(--good); }
+html[data-ending] #ui { visibility: hidden; } /* the ending is a cinematic: the HUD, tabs and chips step aside while it plays */
+
+/* the final choice must read as a choice: a radio mark on both cards, and the Crown's card quiet until it is picked */
+.crown-path { position: relative; padding-right: 40px; }
+.crown-path::after { content: ''; position: absolute; top: 50%; right: 12px; width: 18px; height: 18px; margin-top: -9px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.45); background: transparent; box-sizing: border-box; }
+.crown-path.is-picked::after { border-color: var(--gold-bright); background: radial-gradient(circle, var(--gold-bright) 0 4px, transparent 5px); }
+.crown-path.is-crown:not(.is-picked) { opacity: 0.78; border-color: rgba(233, 196, 106, 0.4); box-shadow: inset 0 0 0 3px rgba(20, 4, 10, 0.9); }
+.crown-path.is-new.is-picked { background: rgba(245, 196, 81, 0.14); border-color: var(--gold); color: var(--text); }
+.crown-path.is-new.is-picked > .icon { color: var(--gold-bright); }

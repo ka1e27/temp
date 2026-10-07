@@ -6,6 +6,7 @@ import { icon } from './icons.js';
 import { createModal } from './modal.js';
 import { showControls } from './controls.js';
 import { watchDialog } from './dialogs.js';
+import { createOptionsSection } from './optionsPanel.js';
 
 let toggleSeq = 0;
 
@@ -41,8 +42,10 @@ function toggleRow({ label, iconOn, iconOff, checked, onToggle }) {
  */
 export function createSettings({
   onToggleSound, onToggleReduceMotion, onToggleHints, onToggleSlowBattles, onToggleLeaderVoices, onToggleMusic, onMusicVolume, onSfxVolume,
-  onReplayTutorial, onExport, onImport, onReset, onClose, onCodex, onChallenges, onBanner,
+  onReplayTutorial, onExport, onImport, onReset, onClose, onCodex, onChallenges, onBanner, onOption, onKeyboard,
 } = {}) {
+  // Phase 14 (Play your way): Display, the audio extras and Controls (ui/optionsPanel.js); onOption(key, value, final), onKeyboard()
+  const opts = createOptionsSection({ onChange: (k, v, final) => onOption?.(k, v, final), onKeyboard: () => onKeyboard?.() });
   const soundRow = toggleRow({
     label: 'Sound', iconOn: 'sound-on', iconOff: 'sound-off', checked: true,
     onToggle: (v) => { soundRow.setToggle(v); onToggleSound?.(v); },
@@ -121,7 +124,7 @@ export function createSettings({
     copyTimer = setTimeout(() => { copyMsg.textContent = ''; }, 2500);
   }
 
-  const resetBtn = h('button.btn.btn-danger.btn-block', { onClick: () => confirmReset() }, icon('flame', 16), 'Reset Save');
+  const resetBtn = h('button.btn.btn-danger.btn-block.settings-reset', { onClick: () => confirmReset() }, icon('flame', 16), 'Reset Save');
 
   // Phase 9: the Challenges (the Daily and the Scenarios) and the realm's banner style (§9C, purely visual). Both arrive as data once the
   // challenge kit has loaded; a locked style shows how it is earned.
@@ -165,7 +168,9 @@ export function createSettings({
       h('button.btn-icon.settings-close', { onClick: () => onClose?.(), 'aria-label': 'Close' }, icon('close', 16)),
     ),
     h('div.settings-body.scroll-y', {},
-      h('section.settings-section', {}, soundRow, musicRow, volumeRow, sfxRow, motionRow, slowRow, hintsRow, helpRow, voicesRow, challengesBtn),
+      h('section.settings-section', {}, soundRow, musicRow, volumeRow, sfxRow, motionRow, slowRow, hintsRow, helpRow, voicesRow, ...opts.audio, challengesBtn),
+      opts.display,
+      opts.controls,
       bannerSection,
       challengeNote,
       saveSection,
@@ -223,6 +228,7 @@ export function createSettings({
     if (data.sfxVolume != null) sfxInput.value = String(Math.round(data.sfxVolume * 100));
     if (data.challengesUnlocked != null) challengesBtn.hidden = !data.challengesUnlocked;
     if (Array.isArray(data.banners)) { renderBanners(data.banners); bannerSection.hidden = false; }
+    if (data.options) opts.update(data.options);
     if (data.inChallenge != null) {
       saveSection.hidden = !!data.inChallenge;
       resetSection.hidden = !!data.inChallenge;

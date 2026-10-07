@@ -45,6 +45,7 @@ export function sendFromSite(battle, fromSiteId, toSiteId, fraction, opts = null
     squad.speedMult = fx.chargeSpeed;
     fx.chargeLeft -= 1;
   }
+  if (opts && opts.auto) squad.auto = true; // PLAN-PHASE14: a supply line sent it (the bot does not count these as squads it manages)
   if (route.lane) squad.lane = true; // PLAN-PHASE12: sails a sea lane (battle/sea.js): no clashes at sea, towers on the coast still shoot
   battle.squads.push(squad);
   if (squad.owner === PLAYER_OWNER) battle.stats.sent += count;

@@ -99,6 +99,9 @@
 //                           [--archipelago=force|off] (PLAN-PHASE12: every founding from dynasty 3 an archipelago with the Sea Kings, or none)
 //                           [--policy=human [--minutes=60] [--shop=three|bot3|cheapest|optimal] [--labels=card|plain] [--patience=strict] [--trace]]
 //                                              (PLAN-PHASE11: the human-paced first hour, per seed and medians; see runHumanHour; default seeds 1-8)
+//                           [--policy=human --dynasties=N [--crown=7] [--legacy=greedy] [--edict=first]]
+//                                              (PLAN-PHASE14: whole dynasties at a person's pace with a person's Legacy and Edict; default seeds 1-12;
+//                                               tools/_p14pace.mjs forks D7 and the Crown from one D6 realm and tabulates)
 //                           [--checkinHours=H] (a player who, whenever nothing is readable, leaves for H hours: the game's offline cap
 //                                               pays them and they buy Treasury too; the report says how many check-ins a dynasty took)
 // --offlineAt/--offlineHours is the welcome-back experiment: the player closes the game after conquest N and
@@ -193,7 +196,7 @@ const FORT_POLICIES = {
 };
 
 /** Debug hook for scratch tools: called with (battle, region, timedOut) after every fought battle. */
-export const hooks = { onBattleEnd: null, onConquest: null };
+export const hooks = { onBattleEnd: null, onConquest: null, onBattleStart: null };
 const MAX_WALL_SEC = 24 * 3600;
 const MAX_LOOP_ITERATIONS = 4000; // absolute backstop so a broken policy can't hang forever
 
@@ -778,6 +781,7 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
     return { unattackable: true, region, regionId };
   }
   const battle = createBattle(arena, player, enemy);
+  if (hooks.onBattleStart) hooks.onBattleStart(battle, region, state);
   const tracker = trackerOf(battle); // crowns (DESIGN §4.8): fed after EVERY step, exactly as the battle scene does
   const botMemo = {};
   // PLAN-PHASE8: a player holding Supply Wagons uses supply lines (the bot's 'overflow' habit: only sites about to waste growth)
@@ -806,7 +810,8 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
   battleDurations.push({
     band: bandFor(region), sec: battleSec, timedOut, won: battle.result === 'win',
     ratio: diffAtAttack.ratio, label: diffAtAttack.label, tier: region.tier, personality: enemy.personality,
-    capital: region.isCapital, sites: region.settlements.length, regionId,
+    capital: region.isCapital, sites: region.settlements.length, regionId, throne: !!region.throne, // PLAN-PHASE13: the Throne of Ages
+    ...(battle.throne ? { thronePhase: battle.throne.phase, usurperFell: battle.throne.usurper.fell, winChance: diffAtAttack.winChance, throneAt: { ...battle.throne.at }, borrows: battle.throne.borrow.n } : {}),
     boons: state.boons2 ? state.boons2.owned.slice() : [], dynasty: state.dynasty.level, // PLAN-PHASE7: the per-Boon report
   });
 
@@ -1168,11 +1173,16 @@ function humanShop(state, world, goldSpent, variant) {
   return n;
 }
 
-/** Plays the first `flags.minutes` (60) minutes of a fresh realm the human way. Returns { seed, attacks, segs, metrics, raids }. */
-export function runHumanHour(seed, flags = {}) {
-  const endSec = Number(flags.minutes || 60) * 60;
-  const world = generateWorld(seed);
-  const state = createGame(seed, world, 0);
+/**
+ * Plays the first `flags.minutes` (60) minutes of a fresh realm the human way. Returns { seed, attacks, segs, metrics, raids }.
+ * PLAN-PHASE14: with `flags.whole` it plays the whole continent instead (from `carry` = { state, world } for a later dynasty, as
+ * runCampaign does), spends Renown as the optimal campaign does (--renown=off: never) and returns the continent's metrics (wholeMetrics).
+ */
+export function runHumanHour(seed, flags = {}, carry = null) {
+  const whole = !!flags.whole;
+  const endSec = whole ? MAX_WALL_SEC : Number(flags.minutes || 60) * 60;
+  const world = carry ? carry.world : generateWorld(seed);
+  const state = carry ? carry.state : createGame(seed, world, 0);
   const goldSpent = {};
   const battleDurations = [];
   const wall = { sec: 0 };
@@ -1180,7 +1190,7 @@ export function runHumanHour(seed, flags = {}) {
   raidCtx = flags.raids === 'off' ? null : { state, mode: 'idle', log: raidLog, watchingUntil: 0, noEvents: flags.events === 'off' };
   unrestCtx = flags.unrest === 'off' ? null : state;
   if (!Array.isArray(state.battles)) state.battles = [];
-  genCtx = flags.generals === 'off' ? null : { busy: null, noSpend: true, log: { xp: 0, festivals: 0, trains: 0, heals: 0, generalDefenses: 0, captainDefenses: 0 } };
+  genCtx = flags.generals === 'off' ? null : { busy: null, noSpend: !whole || flags.renown === 'off', log: { xp: 0, festivals: 0, trains: 0, heals: 0, generalDefenses: 0, captainDefenses: 0 } };
   if (genCtx) Generals.ensureGenerals(state);
   bountyCtx = flags.bounties === 'off' ? null : { log: { completed: 0, gold: 0, renown: 0, xp: 0, byKind: {} } };
   quickCtx = flags.quick === 'off' ? null : { n: 0, won: 0 };
@@ -1188,10 +1198,10 @@ export function runHumanHour(seed, flags = {}) {
   humanCtx = flags.patience !== 'strict';
   const segs = []; // { a, b, ok }: ok = an Easy or Fair fight was there to take (or being fought)
   const attacks = [];
-  const blocked = new Set();
+  const blocked = new Map(); // region id -> when its arena could not be built (a busy border; whole continents look again HUMAN.retrySec later)
   // the labels on the MAP are what a person scans for a fight: since PLAN-PHASE11 they credit the card's default commander (world.js);
   // --labels=plain reads them without it (the map before Phase 11)
-  const cards = () => attackableFrontier(state, world).filter((id) => !blocked.has(id))
+  const cards = () => attackableFrontier(state, world).filter((id) => !blocked.has(id) || (whole && wall.sec - blocked.get(id) >= HUMAN.retrySec))
     .map((regionId) => { const cmdr = flags.labels !== 'plain' ? pickCommander(state, world, regionId, 'attack', wall.sec * 1000) : null; return { regionId, diff: difficulty(state, world, regionId, cmdr ? { commander: cmdr } : {}) }; }).sort((a, b) => b.diff.ratio - a.diff.ratio);
   // a region that beat us is left until its card reads RETRY_MARGIN better or HUMAN.retrySec have passed (a person does not replay the same lost fight at once)
   const lost = new Map();
@@ -1207,10 +1217,11 @@ export function runHumanHour(seed, flags = {}) {
   let lastShop = -Infinity;
   let noTargetSince = null;
   let doneAt = null;
-  for (let guard = 0; wall.sec < endSec && guard < 5000; guard++) {
+  for (let guard = 0; wall.sec < endSec && guard < (whole ? 60000 : 5000); guard++) {
     bountyEnsure(state, world);
     if (wall.sec >= 120 && wall.sec - lastShop >= HUMAN.shopEverySec) {
       shop(); lastShop = wall.sec;
+      if (whole) spendRenown(state, world, wall.sec * 1000);
       spend(HUMAN.shopSec, cards().some(worth));
     }
     const list = cards();
@@ -1237,15 +1248,51 @@ export function runHumanHour(seed, flags = {}) {
     spend(HUMAN.attackSec, !hard);
     const t0 = wall.sec;
     const res = attemptConquest(state, world, pick.regionId, wall, battleDurations, state.stats.battlesWon === 0);
-    if (res.unattackable) { blocked.add(pick.regionId); continue; }
+    if (res.unattackable) { blocked.set(pick.regionId, wall.sec); continue; }
     segs.push({ a: t0, b: wall.sec, ok: !hard });
     if (!res.won) lost.set(pick.regionId, { ratio: pick.diff.ratio, at: wall.sec });
-    attacks.push({ t: t0, sec: wall.sec - t0, label: pick.diff.label, ratio: pick.diff.ratio, won: res.won, kind: res.surrendered ? 'surrender' : res.quick ? 'quick' : 'battle' });
+    attacks.push({ t: t0, sec: wall.sec - t0, label: pick.diff.label, ratio: pick.diff.ratio, won: res.won, kind: res.surrendered ? 'surrender' : res.quick ? 'quick' : 'battle', regionId: pick.regionId, hard, timedOut: !!res.timedOut });
     spend(HUMAN.afterSec, !hard);
   }
   const raids = raidCtx ? { firstRaidSec: raidLog.firstRaidSec, announced: raidLog.announced } : null;
   raidCtx = null; genCtx = null; bountyCtx = null; quickCtx = null; boonCtx = null; humanCtx = false; unrestCtx = null;
+  if (whole) {
+    const out = {
+      seed, dynasty: state.dynasty.level, attacks, segs, doneAt, stallReason: doneAt == null ? `not whole within ${fmtSec(wall.sec)}` : null,
+      regions: world.regions.length, crown: !!state.crownOfAges, ascension: state.ascension || 0, edict: state.edict ? state.edict.id : null,
+      archipelago: !!state.archipelago, rivals: (state.rivals || []).map((f) => world.factions[f] && world.factions[f].personality),
+      battleDurations, raids: raidLog, goldSpent, metrics: wholeMetrics(attacks, segs, doneAt != null ? doneAt : wall.sec),
+    };
+    Object.defineProperty(out, 'endState', { value: { state, world }, enumerable: false });
+    return out;
+  }
   return { seed, attacks, segs, raids, unrest: state.unrest ? { ...state.unrest, thin: { ...state.unrest.thin } } : null, upgrades: { ...state.upgrades }, goldSpent, owned: state.owner.filter((o) => o === PLAYER_FACTION).length, doneAt, metrics: humanMetrics(attacks, segs, doneAt != null ? Math.min(endSec, doneAt) : endSec) };
+}
+
+/**
+ * PLAN-PHASE14: a whole continent at a human pace. humanMetrics over the continent, plus the continent's time, the longest WAIT (as the
+ * optimal campaign counts it: the end of one conquest to the start of the battle that wins the next, lost and Hard tries included), where
+ * it fell, the share of the time spent in battles, timeouts and Hard tries.
+ */
+export function wholeMetrics(attacks, segs, endSec) {
+  const m = humanMetrics(attacks, segs, endSec);
+  let prev = 0;
+  let longestWait = 0;
+  let longestWaitAt = 0;
+  const waits = [];
+  for (const a of attacks) {
+    if (!a.won) continue;
+    const w = a.t - prev;
+    waits.push(w);
+    if (w > longestWait) { longestWait = w; longestWaitAt = prev; }
+    prev = a.t + a.sec;
+  }
+  const inBattle = attacks.reduce((s, a) => s + a.sec, 0);
+  return {
+    ...m, timeSec: endSec, longestWait, longestWaitAt, waits, battleShare: endSec > 0 ? inBattle / endSec : 0,
+    timeouts: attacks.filter((a) => a.timedOut).length, hardTries: attacks.filter((a) => a.hard).length,
+    lost: attacks.filter((a) => !a.won).length,
+  };
 }
 
 /** Battles started in the hour, the share of minutes after minute 3 with an Easy or Fair fight to take, the longest stretch without one. */
@@ -1296,37 +1343,81 @@ function printHuman(seeds, flags) {
  * (enemyMultPerDynasty), upgrades and gold reset, lifetime stats kept (so surrender is open from the first minute).
  * Returns one runCampaign result per dynasty; a dynasty that stalls ends the run.
  */
-export function runDynasties(seed, count, flags = {}) {
+export function runDynasties(seed, count, flags = {}, from = null) {
   const out = [];
-  let carry = null;
-  for (let level = 1; level <= count; level++) {
-    const r = runCampaign(seed, flags, carry);
+  let carry = from ? from.carry : null;
+  for (let level = from ? from.level : 1; level <= count; level++) {
+    // PLAN-PHASE14: --policy=human plays every continent at a person's pace (runHumanHour with `whole`), with a person's Legacy and Edict
+    const r = flags.policy === 'human' ? runHumanHour(seed, { ...flags, whole: true }, carry) : runCampaign(seed, flags, carry);
     out.push(r);
     if (r.stallReason || level === count) break;
-    const { state } = r.endState;
-    const newSeed = hash32(seed, 'dynasty', level + 1);
-    // Phase 5 (PLAN-PHASE5 pacing guard): the Edict (--edict=first, the default: the first one offered; --edict=<id> forces one on
-    // every founding; --edict=none: standard rules), the Challenges (--challenges=a,b) and the Legacy bought greedily (--legacy=off: none)
-    const legacyBuys = flags.legacy === 'off' ? [] : greedyLegacy(state);
-    const edictFlag = flags.edict || 'first';
-    const edict = edictFlag === 'none' ? null : edictFlag === 'first'
-      ? edictChoices(state, newSeed, { legacyNodes: previewNodes(state, legacyBuys) })[0].id : edictFlag;
-    const challenges = flags.challenges ? String(flags.challenges).split(',') : [];
-    const next = foundDynasty(state, newSeed, undefined, r.endState.world, { edict, challenges, legacyBuys }); // an unslain Dragon's Lair does not block founding
-    if (!next) break;
-    if (flags.rivals === 'classic') next.rivals = [2, 3, 4]; // PLAN-PHASE6 guard: --rivals=classic plays every dynasty against the classic three
-    // PLAN-PHASE12 guard: --archipelago=force makes every founding from dynasty 3 an archipelago (with the Sea Kings), --archipelago=off none
-    if ((flags.archipelago === 'force' || flags.archipelago === 'off') && next.dynasty.level >= ARCHIPELAGO.fromDynasty) {
-      next.archipelago = flags.archipelago === 'force';
-      next.rivals = flags.rivals === 'classic' ? [2, 3, 4] : rivalsFor(newSeed, next.dynasty.level, { archipelago: next.archipelago });
-    }
-    const world = generateWorld(newSeed, worldOptsFor(next));
-    resetRegions(next, world, state.lastSeen);
-    r.founding = { edict, legacyBuys: next.founding ? next.founding.bought : [] };
-    Works.resetWorks(next); // a new continent: no Works (state.js's resetRegions does the same once integration has patched it)
-    carry = { state: next, world };
+    carry = foundNext(r, seed, level, flags);
+    if (!carry) break;
   }
   return out;
+}
+
+/**
+ * The founding that follows dynasty `level`'s finished run `r` (DESIGN §5.4): the Legacy, the Edict, the Crown and Ascension choices,
+ * the next continent generated. Returns { state, world } for the next runCampaign / runHumanHour, or null. MUTATES r (r.founding) and
+ * consumes r.endState (pass a structuredClone of it to fork one realm into two foundings).
+ */
+export function foundNext(r, seed, level, flags = {}, endState = r.endState) {
+  const { state } = endState;
+  const newSeed = hash32(seed, 'dynasty', level + 1);
+  const human = flags.policy === 'human';
+  // Phase 5 (PLAN-PHASE5 pacing guard): the Edict (--edict=first, the default: the first one offered; --edict=<id> forces one on
+  // every founding; --edict=none: standard rules), the Challenges (--challenges=a,b) and the Legacy bought greedily (--legacy=off: none).
+  // PLAN-PHASE14: the human policy buys Legacy by a person's wish list and takes the Edict a person prefers among those offered
+  const legacyBuys = flags.legacy === 'off' ? [] : human && flags.legacy !== 'greedy' ? humanLegacy(state) : greedyLegacy(state);
+  const edictFlag = flags.edict || (human ? 'prefer' : 'first');
+  const offered = () => edictChoices(state, newSeed, { legacyNodes: previewNodes(state, legacyBuys) }).map((e) => e.id);
+  const edict = edictFlag === 'none' ? null : edictFlag === 'first' ? offered()[0]
+    : edictFlag === 'prefer' ? offered().sort((a, b) => HUMAN_EDICT_ORDER.indexOf(a) - HUMAN_EDICT_ORDER.indexOf(b))[0] : edictFlag;
+  const challenges = flags.challenges ? String(flags.challenges).split(',') : [];
+  // PLAN-PHASE13: --crown=N seeks the Crown of Ages at every founding of dynasty N or later (when it is offered); --ascension=N founds at
+  // that level (clamped by the game: 0 until crowned) or --ascension=max at the highest open one
+  const crownOfAges = !!flags.crown && level + 1 >= Number(flags.crown);
+  const ascension = flags.ascension === 'max' ? 99 : Number(flags.ascension) || 0;
+  const next = foundDynasty(state, newSeed, undefined, endState.world, { edict, challenges, legacyBuys, crownOfAges, ascension }); // an unslain Dragon's Lair does not block founding
+  if (!next) return null;
+  if (flags.rivals === 'classic') next.rivals = [2, 3, 4]; // PLAN-PHASE6 guard: --rivals=classic plays every dynasty against the classic three
+  // PLAN-PHASE13 guard: --ascensionForce=N plays every dynasty from --ascensionFrom (default 3) at Ascension N, crowned or not
+  if (flags.ascensionForce != null && next.dynasty.level >= Number(flags.ascensionFrom || 3)) next.ascension = Number(flags.ascensionForce);
+  // PLAN-PHASE12 guard: --archipelago=force makes every founding from dynasty 3 an archipelago (with the Sea Kings), --archipelago=off none
+  if ((flags.archipelago === 'force' || flags.archipelago === 'off') && next.dynasty.level >= ARCHIPELAGO.fromDynasty) {
+    next.archipelago = flags.archipelago === 'force';
+    next.rivals = flags.rivals === 'classic' ? [2, 3, 4] : rivalsFor(newSeed, next.dynasty.level, { archipelago: next.archipelago });
+  }
+  const world = generateWorld(newSeed, worldOptsFor(next));
+  resetRegions(next, world, state.lastSeen);
+  r.founding = { edict, legacyBuys: next.founding ? next.founding.bought : [] };
+  Works.resetWorks(next); // a new continent: no Works (state.js's resetRegions does the same once integration has patched it)
+  return { state: next, world };
+}
+
+// PLAN-PHASE14: a person's choices at a founding (virtual-player knobs, not game balance). The Edict: the first of these among those offered
+// (calm and gold first, the slow-march and raid-heavy ones last, as a reader of the cards would). The Legacy: this wish list, each node
+// bought as soon as it is affordable and unlocked (a person reaches for the obvious army and economy nodes, the Court last).
+const HUMAN_EDICT_ORDER = ['peaceOfCrowns', 'merchantPrinces', 'ageOfIron', 'bountyHunters', 'openRoads', 'warriorKings', 'grandFestival',
+  'ageOfDragons', 'ironFrontier', 'longWinter'];
+const HUMAN_LEGACY_ORDER = ['veteranCamp', 'oldRoads', 'swiftBanners', 'royalTreasury', 'heralds', 'quickConquest', 'warChest', 'masons',
+  'drillmasters', 'scribes', 'patronage', 'warlord', 'oldAlliances', 'spymaster', 'kingmaker'];
+
+function humanLegacy(state) {
+  const l = state.generals && state.generals.legacy ? state.generals.legacy : { v: 1, points: 0, spent: 0, nodes: {}, pendingBonus: 0 };
+  const sim = { generals: { legacy: { ...l, nodes: { ...l.nodes }, points: (l.points || 0) + legacyPointsForFounding(state) } } };
+  const cost = new Map(legacyTree().flatMap((b) => b.nodes).map((n) => [n.id, n.cost]));
+  const buys = [];
+  for (let guard = 0; guard < 20; guard++) {
+    const info = legacyInfo(sim);
+    const pick = HUMAN_LEGACY_ORDER.find((id) => info.nodes[id] === 'buyable');
+    if (!pick) break;
+    sim.generals.legacy.nodes[pick] = true;
+    sim.generals.legacy.spent += cost.get(pick);
+    buys.push(pick);
+  }
+  return buys;
 }
 
 /** The Legacy nodes a greedy player buys at a founding: the cheapest buyable node, again and again (tree order on a tie). */
@@ -1742,11 +1833,35 @@ function printDynasties(seeds, flags) {
   return all;
 }
 
+/** PLAN-PHASE14: --policy=human --dynasties=N: whole dynasties at a person's pace (--crown=7 makes the 7th the Crown of Ages). */
+function printHumanDynasties(seeds, flags) {
+  const n = Number(flags.dynasties);
+  const all = seeds.map((seed) => runDynasties(seed, n, flags));
+  const hrs = (sec) => (sec == null ? 'never' : `${(sec / 3600).toFixed(2)}h`);
+  console.log(`\n=== ${n} dynasties per seed at a human pace (PLAN-PHASE14) ===`);
+  console.log('  seed  ' + Array.from({ length: n }, (_, d) => `D${d + 1}: time, longest wait, Easy/Fair`).join(' | '));
+  for (let i = 0; i < seeds.length; i++) {
+    console.log(`  ${String(seeds[i]).padStart(4)}  ` + all[i].map((r) => `${hrs(r.doneAt).padStart(6)} ${String(Math.round(r.metrics.longestWait / 60)).padStart(3)}m ${String(Math.round(100 * r.metrics.avail)).padStart(3)}%${r.crown ? ' C' : ''}${r.stallReason ? ' STALL' : ''}`).join(' | '));
+  }
+  for (let d = 0; d < n; d++) {
+    const rs = all.map((a) => a[d]).filter(Boolean);
+    const waits = rs.map((r) => r.metrics.longestWait / 60);
+    const dm = median(rs.map((r) => r.doneAt ?? Infinity));
+    const worst = [...rs].sort((a, b) => (b.doneAt ?? Infinity) - (a.doneAt ?? Infinity)).slice(0, 3).map((r) => `seed ${r.seed} ${hrs(r.doneAt)}`).join(', ');
+    const battles = rs.reduce((a, r) => a + r.metrics.battles, 0);
+    console.log(`  D${d + 1}: median ${hrs(Number.isFinite(dm) ? dm : null)}; longest wait over 30 min on ${waits.filter((w) => w > 30).length} of ${rs.length} seeds, `
+      + `over 60 on ${waits.filter((w) => w > 60).length}, worst ${Math.round(Math.max(...waits))} min; Easy/Fair ${Math.round(100 * median(rs.map((r) => r.metrics.avail)))}% of minutes; `
+      + `battles ${median(rs.map((r) => r.metrics.battles))} per seed (${Math.round((100 * rs.reduce((a, r) => a + r.metrics.won, 0)) / Math.max(1, battles))}% won, ${rs.reduce((a, r) => a + r.metrics.timeouts, 0)} timeouts); slowest ${worst}`);
+  }
+  return all;
+}
+
 async function main() {
   const t0 = Date.now();
   const flags = parseArgs(process.argv.slice(2));
   const seeds = (flags.seeds ? String(flags.seeds).split(',') : ['1', '2', '3', '4', '5']).map(Number);
 
+  if (flags.policy === 'human' && Number(flags.dynasties) > 1) { printHumanDynasties(flags.seeds ? seeds : Array.from({ length: 12 }, (_, i) => i + 1), flags); return; }
   if (flags.policy === 'human') { printHuman(flags.seeds ? seeds : [1, 2, 3, 4, 5, 6, 7, 8], flags); return; }
   if (Number(flags.dynasties) > 1) { const all = printDynasties(seeds, flags); if (flags.boonReport) printBoonTable(all); return; }
   const results = seeds.map((seed) => runCampaign(seed, flags));

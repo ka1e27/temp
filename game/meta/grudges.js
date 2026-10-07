@@ -10,6 +10,7 @@
 //   state.trophies = { v:1, [faction]: n }      PER DYNASTY; each Trophy is +GRUDGES.vendetta.trophyAtk attack against that faction
 import { GRUDGES } from '../config/grudges.js';
 import { boonMods } from './boonsState.js'; // the leaf (PLAN-PHASE7): Oathkeeper
+import { edictMods } from './edicts.js'; // the leaf (PLAN-PHASE13): Long Memories (Ascension 6)
 import { PLAYER_FACTION } from './state.js';
 
 const FREE_FOLK = 1;
@@ -69,6 +70,8 @@ export function addGrudge(state, faction, reason, now) {
   if (e.vendettaAt != null) return { value: e.value, crossed: null };
   const before = e.value;
   e.value = Math.min(GRUDGES.max, e.value + gain);
+  // Long Memories (PLAN-PHASE13 Ascension 6): a Vendetta is sworn at GRUDGES.max x vendettaGrudgeMult; reaching it fills the Grudge
+  if (e.value >= GRUDGES.max * edictMods(state).vendettaGrudgeMult - 1e-9) e.value = GRUDGES.max;
   let crossed = null;
   if (e.warnedAt == null && e.value >= GRUDGES.warnAt) {
     e.warnedAt = nowSec(state);

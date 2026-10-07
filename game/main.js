@@ -55,6 +55,8 @@ import { createUnrestLoop } from './app/unrestLoop.js';
 import { createEventsLoop } from './app/eventsLoop.js';
 import { createGoals } from './app/goals.js';
 import { createDynasty } from './app/dynasty.js';
+import { createCrown } from './app/crown.js';
+import { ASCENSION } from './config/ascension.js'; // Phase 13: the Crown of Ages, the ending, Ascension
 import { commanderFor as edictCommander, edictMods } from './meta/edicts.js';
 import { createQuickConquest } from './app/quickConquest.js';
 import { createCeremony } from './ui/ceremony.js';
@@ -81,6 +83,14 @@ import { baselineProsperity, updateProsperity } from './meta/prosperity.js';
 import { chronicleOnProsperity } from './meta/chronicle.js';
 import { PLAYER_FACTION } from './meta/state.js';
 import { archipelagoFor } from './world/archipelago.js'; // dev: __hd.seaRealm (Phase 12)
+// Phase 14 (Play your way): the device's options, the keyboard map, the colour-vision presets, hold to confirm, the leader voices
+import { loadOptions, saveOptions } from './app/options.js';
+import { setBindings, matches as keyMatches } from './ui/keymap.js';
+import { setPalette, paintWorld, setPatterns, setEffects } from './render/accessibility.js';
+import { setHoldToConfirm } from './ui/holdConfirm.js';
+import { TEXT_SIZES } from './config/options.js';
+import { createVoiceSfx } from './app/voiceSfx.js';
+import { showKeybindings } from './ui/keybindings.js';
 
 const VERSION = '2.0.0';
 const MAX_DPR = 2;
@@ -157,6 +167,9 @@ function boot() {
   canvas.setAttribute('aria-label', 'World map. Arrow keys move between regions, Enter opens a region, brackets cycle the regions you can attack, plus and minus zoom, Shift with the arrows moves the map.');
   const uiRoot = document.getElementById('ui');
   const storage = getStorage();
+  // Phase 14: the options belong to the device (their own storage key, app/options.js). The colour preset is painted before the first world is made.
+  const options = loadOptions(storage);
+  setPalette(options.palette);
 
   const container = createStateContainer({ storage, now: () => Date.now() });
   // ?dev=1&seed=N: a reproducible continent for screenshots and bug reports (never overrides a save). Handed to boot, so only one world is generated.
@@ -207,6 +220,7 @@ function boot() {
   input.handlers = inputHandlers;
 
   const sfx = createSfx();
+  const voiceSfx = createVoiceSfx(sfx); // Phase 14: the leader voices' murmur (Settings > Voices volume)
   // The generative score shares the sfx AudioContext and master gain (docs/MUSIC.md). It is inert until
   // the first pointerdown / keydown unlocks audio; ?dev=1&music=noreverb skips the convolver for CPU checks.
   const music = createMusic(sfx, { seed: bootState.seed, reverb: !(isDev && params.get('music') === 'noreverb') });
@@ -258,12 +272,37 @@ function boot() {
   function applySettings(s) {
     if (osMotion && !s.settings.reduceMotionSet) s.settings.reduceMotion = osMotion.matches;
     camera.instant = !!s.settings.reduceMotion; // every camera flight is a cut
-    sfx.setMuted(!s.settings.sound);
+    sfx.setMuted(!s.settings.sound || (options.muteHidden && document.hidden));
     sfx.setEffectsLevel(s.settings.sfxVolume ?? 1);
     renderer.fx.setReduceMotion(!!s.settings.reduceMotion);
     renderer.setReduceMotion(!!s.settings.reduceMotion); // ambient life: no birds, still sails, half the smoke
     document.documentElement.classList.toggle('reduce-motion', !!s.settings.reduceMotion);
     applyMusicSettings(s);
+  }
+
+  /** Phase 14: every device option, live. Cheap and idempotent: called on boot and after every change. */
+  function applyOptions() {
+    const root = document.documentElement;
+    setPalette(options.palette, cur().world); // repaints the faction records; the caches keyed on the look re-bake (render/accessibility.js)
+    setPatterns(options.patterns);
+    setEffects(options.effects);
+    const size = `${Math.round((TEXT_SIZES[options.textSize] || 1) * 1000) / 10}%`;
+    const sizeChanged = root.dataset.textSize !== options.textSize;
+    root.style.fontSize = options.textSize === 'normal' ? '' : size;
+    root.dataset.textSize = options.textSize;
+    // layouts that measure themselves (the battle HUD's power names, the card dock) refit on resize: a new text size is one
+    if (sizeChanged) requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    root.classList.toggle('high-contrast', !!options.highContrast);
+    setHoldToConfirm(options.holdToConfirm);
+    setBindings(options.keys);
+    voiceSfx.setVolume(options.voicesVolume);
+    applyHiddenMute();
+  }
+  function persistOptions() { saveOptions(storage, options); }
+  /** Mute when the tab is hidden (on by default): the master mute follows visibility; Sound off always wins. */
+  function applyHiddenMute() {
+    const st = cur().state.settings;
+    sfx.setMuted(!st.sound || (options.muteHidden && document.hidden));
   }
 
   /** Music on/off and its own volume; the master `sound` mute already silences it through the sfx bus. */
@@ -275,6 +314,7 @@ function boot() {
   let bootBaked = false; // the first applyWorld (the boot) defers most chunk bakes until the title is up (Phase 8 perf)
   function applyWorld() {
     const { state, world } = cur();
+    paintWorld(world); // the colour-vision preset (Phase 14) on this world's faction copies
     renderer.setWorld(world);
     if (!bootBaked) mark('hd-setworld');
     music.setSeed(state.seed); // boot, import, reset and a new dynasty all re-key the score
@@ -283,6 +323,7 @@ function boot() {
     else renderer.terrain.schedulePrebake(fit * 1.25 * renderer.dpr, state.owner, levelsOf(state)); // the chunks on screen bake in the first frame
     if (!bootBaked) mark('hd-chunks');
     applySettings(state);
+    applyOptions();
     // The living layers: pre-populate the roads so the very first frame is already alive, and bake the sprites of the
     // framing zoom now, behind the boot splash (a few tens of ms), instead of as a hitch on the first pan.
     renderer.ambient.rebuild({ owner: state.owner, prosperity: state.prosperity });
@@ -362,6 +403,7 @@ function boot() {
     ui.settings.update({
       sound: s.sound, reduceMotion: s.reduceMotion, hints: s.hints, slowBattles: !!s.slowBattles, leaderVoices: s.leaderVoices !== false,
       music: s.music !== false, musicVolume: s.musicVolume ?? 0.4, sfxVolume: s.sfxVolume ?? 1,
+      options, // Phase 14: Display, the audio extras, Controls
       // Phase 9: the Challenges entry (not from inside a battle) and the banner styles, once the challenge kit has loaded
       challengesUnlocked: !!services.challenge && services.challenge.unlocked() && sceneManager.name !== 'battle',
       inChallenge: container.inSandbox,
@@ -465,7 +507,7 @@ function boot() {
       onCrown: (i) => sfx.play('upgrade', { pitch: 1 + i * 0.16, volume: 0.6 }),
     }),
     settings: createSettings({
-      onToggleSound: (v) => { cur().state.settings.sound = v; sfx.setMuted(!v); autosave.save(); },
+      onToggleSound: (v) => { cur().state.settings.sound = v; applyHiddenMute(); autosave.save(); },
       onToggleReduceMotion: (v) => {
         cur().state.settings.reduceMotion = v;
         cur().state.settings.reduceMotionSet = true; // the player's own choice from now on
@@ -518,6 +560,18 @@ function boot() {
         return true;
       },
       onCodex: () => openCodex(),
+      // Phase 14: the device options apply live; sliders save once on release
+      onOption: (key, value, final) => {
+        if (!(key in options)) return;
+        const changed = options[key] !== value;
+        options[key] = value;
+        if (changed) applyOptions();
+        if (key === 'voicesVolume' && final) voiceSfx.say(2, 'Hear me'); // let go of the slider: a sample, so the level can be heard
+        if (final) persistOptions();
+        if (!changed) return;
+        ui.settings.update({ options });
+      },
+      onKeyboard: () => showKeybindings({ bindings: options.keys, onChange: (b) => { options.keys = b; setBindings(b); persistOptions(); } }),
       onChallenges: () => services.challenge.openHub(),
       onBanner: (id) => { services.challenge.chooseBanner(id); openSettings(); },
       onReset: () => {
@@ -621,6 +675,13 @@ function boot() {
     ui.coach.el.hidden = true;
     ui.tooltip.el.hidden = true;
   }
+
+  // Phase 14: a line that reaches the screen is also heard, a short murmur in the speaker's pitch (Settings > Voices volume; app/voiceSfx.js)
+  const bannerUpdate = ui.leaderBanner.update;
+  ui.leaderBanner.update = (data) => {
+    bannerUpdate(data);
+    if (data && data.faction && data.line) voiceSfx.say(Number(data.faction.id) || 0, String(data.line));
+  };
 
   // Leader voices: one gate for every scene. `speak` returns the line it showed, or null when the gate
   // (setting off, hint on screen, once per battle, 15 s gap) blocked it, so callers never need to check.
@@ -816,6 +877,12 @@ function boot() {
       ui.toasts.update({ id: 'dragonscale', type: 'success', icon: 'shield', message: `The Dragon is slain! ${MAP_FEATURES.copy.dragonscale}`, duration: 7000 });
       try { recordChronicle(state, { kind: 'event', t: Date.now(), hl: true, data: { text: `The Dragon of ${world.regions[out.regionId]?.name || 'the Lair'} fell. Its scales now armour the realm's fortifications.`, regionId: out.regionId } }); } catch (err) { console.warn('[chronicle] dragon line skipped:', err); }
     }
+    // PLAN-PHASE13 §13C: a new highest Ascension cleared (present once per level), said once, with a Chronicle line
+    if (out.result && out.result.ascension && out.result.ascension.newHighest && !container.inSandbox) {
+      const lv = out.result.ascension.level;
+      ui.toasts.update({ id: 'ascension-cleared', type: 'success', icon: 'ascension', className: 'is-deed', seal: 'ascension', message: `Ascension ${lv} cleared! Your banner gains a crown pip${lv < ASCENSION.maxLevel ? `, and Ascension ${lv + 1} opens at the next founding` : ': the whole ladder is climbed'}.`, duration: 7000, digest: true });
+      try { recordChronicle(state, { kind: 'event', t: Date.now(), hl: true, data: { text: `The realm cleared Ascension ${lv}.` } }); } catch (err) { console.warn('[chronicle] ascension line skipped:', err); }
+    }
     if (out.kind === 'duel') {
       const f = world.factions[out.attackerFaction];
       try { recordChronicle(state, { kind: 'event', t: Date.now(), data: { text: out.won ? `Your champion won the duel at ${world.regions[out.regionId]?.name || 'the border'} against the ${f ? f.name : 'rivals'}.` : `The duel at ${world.regions[out.regionId]?.name || 'the border'} went to the ${f ? f.name : 'rivals'}.`, regionId: out.regionId } }); } catch (err) { console.warn('[chronicle] duel line skipped:', err); }
@@ -941,6 +1008,16 @@ function boot() {
     onEntryChange: () => { if (sceneManager.name === 'title') ui.title.update({ challenges: services.challenge.unlocked() }); },
   });
   services.inChallenge = () => container.inSandbox;
+  // Phase 13 (docs/PLAN-PHASE13.md): the ceremony's Crown choice and Ascension picker, the Realm ladder, the title's Crown, the ending (lazy)
+  services.mainState = () => container.main().state;
+  // the Usurper-King's battle lines (scenes/battleThrone.js): shown like any leader line, held while a card is up
+  services.leaderLine = (data) => { if (modalUp()) heldLine = { data, at: performance.now(), epoch: container.epoch }; else ui.leaderBanner.update(data); };
+  services.crown = createCrown({
+    getState: () => cur().state, getWorld: () => cur().world, ui, services, camera, storage, sfx,
+    reduceMotion: () => !!cur().state.settings.reduceMotion,
+  });
+  services.onEndingStart = () => { music.setScene('title'); music.stinger('victory', { resolveInSec: 1.2 }); }; // the title's calm score under the tour
+  services.onEndingEnd = () => { if (sceneManager.name === 'world') { music.setScene('world'); worldScene.flyHome?.(); worldScene.refreshRealmIfOpen?.(); } services.autosave.save(); };
 
   /** A run's commander for its chip: the name, and the choices (free Generals + this one + the Militia Captain). */
   function trayCommander(r) {
@@ -1078,6 +1155,7 @@ function boot() {
       ashenInfo: () => battleScene.ashenInfo(), // Phase 6: rises, burns, Risings, wisps
       boonFxInfo: () => battleScene.boonInfo(), // Phase 7: boonTriggered counts, pops, Scorched Earth ground
       seaInfo: () => battleScene.seaInfo(), // Phase 12: lanes, ports, the Tide, Broadside
+      throneInfo: () => battleScene.throneInfo(), // Phase 13: the Throne of Ages
       afterFrame,
       tutorialArrow: () => battleScene.tutorialArrow(),
       dragInfo: () => battleScene.dragInfo(),
@@ -1157,7 +1235,7 @@ function boot() {
       startNewRealm: () => titleScene.onNewRealm(),
       /** Dev/perf (Phase 8): founds the next dynasty at once on `seed` (no ceremony), then enters its continent. */
       foundDynasty: (choice = {}) => {
-        const res = container.tryFoundDynasty({ seed: choice.seed ?? container.nextSeed(), edict: choice.edict ?? null, challenges: choice.challenges || [] });
+        const res = container.tryFoundDynasty({ seed: choice.seed ?? container.nextSeed(), edict: choice.edict ?? null, challenges: choice.challenges || [], crownOfAges: !!choice.crownOfAges, ascension: choice.ascension | 0 });
         if (!res) return false;
         sessionStarted = true;
         applyWorld();
@@ -1168,6 +1246,15 @@ function boot() {
        * Dev/checks (Phase 12): founds the next dynasty on the first seed from `from` that makes an ARCHIPELAGO (at least Dynasty III, so the Sea Kings
        * hold one sector), with no ceremony, then enters it. Returns the seed, or false.
        */
+      /** Dev/checks (Phase 13): completes the realm at Dynasty VI+ and founds the Crown of Ages (no ceremony). Returns the seed, or false. */
+      crownRealm: (choice = {}) => {
+        const st = container.get().state;
+        if (st.dynasty.level < 6) st.dynasty.level = 6;
+        worldScene.devCompleteRealm();
+        const seed = choice.seed ?? 7;
+        return devCtx.foundDynasty({ ...choice, seed, crownOfAges: true }) && container.get().world.crown ? seed : false;
+      },
+      crown: services.crown, // Phase 13: crown.playEnding(), crown.pending(), crown.devForget()
       seaRealm: (from = 1, choice = {}) => {
         const st = container.get().state;
         if (st.dynasty.level < 2) st.dynasty.level = 2;
@@ -1176,6 +1263,11 @@ function boot() {
         while (!archipelagoFor(seed, st.dynasty.level + 1)) seed += 1;
         return devCtx.foundDynasty({ ...choice, seed }) ? seed : false;
       },
+      /** Phase 14: the device options (live object), set one and apply it as Settings would, and the voices said so far. */
+      options: () => options,
+      setOption: (key, value) => { options[key] = value; applyOptions(); persistOptions(); if (!ui.settings.el.hidden) ui.settings.update({ options }); return options[key]; },
+      voicesSaid: () => voiceSfx.said(),
+      sfxMuted: () => sfx.isMuted(),
       hideUI: (on = true) => { uiRoot.style.visibility = on ? 'hidden' : ''; },
       hideDev: (on = true) => {
         for (const el of uiRoot.querySelectorAll('.devpanel, .hd-perf')) el.style.display = on ? 'none' : '';
@@ -1248,17 +1340,17 @@ function boot() {
   });
   // M mutes and unmutes the sound from anywhere (not while typing, and not inside a dialog): it says so, in a toast a screen reader announces too
   window.addEventListener('keydown', (e) => {
-    if (e.code !== 'KeyM' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if (!keyMatches('mute', e) || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     if (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
     if (document.documentElement.dataset.dialog) return;
     const st = cur().state.settings;
     st.sound = !st.sound;
-    sfx.setMuted(!st.sound);
+    applyHiddenMute();
     ui.settings.update({ sound: st.sound });
     ui.toasts.update({ id: 'sound-toggle', type: 'info', icon: st.sound ? 'sound-on' : 'sound-off', message: st.sound ? 'Sound on' : 'Sound off: press M to turn it back on', duration: 2200 });
     autosave.save();
   });
-  document.addEventListener('visibilitychange', () => music.setPaused(document.hidden));
+  document.addEventListener('visibilitychange', () => { music.setPaused(document.hidden); applyHiddenMute(); });
   window.addEventListener('pagehide', () => music.setPaused(true));
   window.addEventListener('pageshow', () => music.setPaused(document.hidden));
   // pagehide already covers bfcache navigations; this covers a hard close.

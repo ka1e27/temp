@@ -7,6 +7,7 @@ import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { formatClock } from './format.js';
 import { createModal } from './modal.js';
+import { matches, labelOf, bindingOf, onBindingsChange } from './keymap.js';
 
 // The HUD refreshes ~15 times a second. Anything a player presses must NOT be rebuilt by a refresh: a press
 // is a pointerdown ... pointerup pair, and if the element under the finger (the icon inside a button counts)
@@ -98,7 +99,7 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
   const pauseBtn = h('button.btn-icon.battle-pause', { onClick: () => onPauseToggle?.(), 'aria-label': 'Pause', 'aria-keyshortcuts': 'Space' }, pauseIcon);
   const speedLabel = h('span', {}, '1×');
   const speedBtn = h('button.btn.btn-secondary.battle-speed', {
-    onClick: () => { const cycle = slow ? SLOW_SPEEDS : SPEEDS; onSpeed?.(cycle[(cycle.indexOf(lastSpeed) + 1) % cycle.length]); }, // a speed outside the cycle (0.5x just switched off) goes to the first
+    onClick: () => cycleSpeed(), // a speed outside the cycle (0.5x just switched off) goes to the first
     'aria-label': 'Battle speed 1×, press to change',
   }, icon('speed', 16), speedLabel);
   const retreatBtn = h('button.btn.btn-danger.battle-retreat', { onClick: () => confirmRetreat(), 'aria-label': 'Retreat' },
@@ -156,14 +157,30 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
   const championBanner = h('div.battle-champion-banner', { 'aria-hidden': 'true' }, '');
   championBanner.hidden = true;
   let championTimer = 0;
-  function showChampionBanner(text, iconEl) {
+  // PLAN-PHASE13: the Throne's moments (a Champion falls, a phase begins, a borrowed weapon) come close together: a banner already up finishes
+  // its 2.6 s before the next one shows (at most 3 wait; the oldest waiting one is dropped). `variant` 'throne' is the regal wine-and-gold look.
+  const bannerQueue = [];
+  let championBusyUntil = 0;
+  function showChampionBanner(text, iconEl, variant) {
+    const now = performance.now();
+    if (now < championBusyUntil) {
+      bannerQueue.push([text, iconEl, variant]);
+      if (bannerQueue.length > 3) bannerQueue.shift();
+      return;
+    }
     clearTimeout(championTimer);
     championBanner.replaceChildren(...(iconEl ? [iconEl] : []), h('span', {}, text));
+    championBanner.classList.toggle('is-throne', variant === 'throne');
     championBanner.hidden = false;
     championBanner.classList.remove('is-in');
     void championBanner.offsetWidth;
     championBanner.classList.add('is-in');
-    championTimer = setTimeout(() => { championBanner.hidden = true; championBanner.classList.remove('is-in'); }, 2600);
+    championBusyUntil = now + 2500;
+    championTimer = setTimeout(() => {
+      championBanner.hidden = true; championBanner.classList.remove('is-in'); championBusyUntil = 0;
+      const next = bannerQueue.shift();
+      if (next) showChampionBanner(...next);
+    }, 2600);
   }
   const el = h('div.battle-hud', {}, topEl, topRightEl, pausedTag, abilityBanner, championBanner, bottomEl);
 
@@ -183,32 +200,61 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
     document.body.appendChild(modal.el);
   }
 
-  // --- keyboard: 1-4 send fraction, Q/W/E/R/T the first 5 powers ------------
-  // Letter shortcuts use the PHYSICAL key (`e.code`), so they work on any layout; they stand down for text entry and while a dialog is open (ui/dialogs.js).
-  const LETTER_CODES = ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT'];
-  const DIGIT_CODES = ['Digit1', 'Digit2', 'Digit3', 'Digit4'];
-  const NUMPAD_CODES = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'];
+  // --- keyboard: the send sizes, the five powers, Auto, the ability and the speed, through the rebindable map (ui/keymap.js; defaults 1-4, Q W E R T,
+  // S, G, F). Shortcuts use the PHYSICAL key (`e.code`), so they work on any layout; they stand down for text entry and while a dialog is open (ui/dialogs.js).
+  const SEND_ACTIONS = ['send25', 'send50', 'send75', 'send100'];
+  const POWER_ACTIONS = ['power1', 'power2', 'power3', 'power4', 'power5'];
   function onKeydown(e) {
     if (e.metaKey || e.ctrlKey || e.altKey || el.hidden) return;
     const tag = e.target && e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
     if (document.documentElement.hasAttribute('data-dialog')) return;
-    if (e.code === 'KeyS') { onAuto?.(); return; }
-    if (e.code === 'KeyG') { if (!abilityBtn.hidden && !abilityBtn.disabled) onAbility?.(); return; }
-    let fi = DIGIT_CODES.indexOf(e.code);
-    if (fi === -1) fi = NUMPAD_CODES.indexOf(e.code);
-    if (fi === -1) fi = ['1', '2', '3', '4'].indexOf(e.key);
+    if (matches('auto', e)) { onAuto?.(); return; }
+    if (matches('ability', e)) { if (!abilityBtn.hidden && !abilityBtn.disabled) onAbility?.(); return; }
+    if (matches('speed', e)) { if (!e.repeat) cycleSpeed(); return; }
+    const fi = SEND_ACTIONS.findIndex((a) => matches(a, e));
     if (fi !== -1) {
       onSendFraction?.(SEND_FRACTIONS[fi]);
       return;
     }
-    const hi = LETTER_CODES.indexOf(e.code);
+    const hi = POWER_ACTIONS.findIndex((a) => matches(a, e));
     if (hi === -1) return;
     const p = lastPowers[hi];
     if (!p || p.locked) return;
     onPower?.(p.id);
   }
   window.addEventListener('keydown', onKeydown);
+
+  /** Every key label and aria-keyshortcuts on the HUD follows the map (a rebind relabels at once). */
+  function relabelKeys() {
+    SEND_ACTIONS.forEach((a, i) => {
+      const btn = fractionButtons.get(SEND_FRACTIONS[i]);
+      if (!btn) return;
+      btn.setAttribute('aria-keyshortcuts', labelOf(a));
+      const k = btn.querySelector('.send-fraction-key');
+      if (k) k.textContent = labelOf(a);
+    });
+    lastPowers.forEach((p, i) => {
+      const entry = powerEntries.get(p.id);
+      if (!entry || i >= POWER_ACTIONS.length) return;
+      entry.hotkeyEl.textContent = labelOf(POWER_ACTIONS[i]);
+      entry.btn.setAttribute('aria-keyshortcuts', labelOf(POWER_ACTIONS[i]));
+    });
+    abilityBtn.setAttribute('aria-keyshortcuts', labelOf('ability'));
+    abilityBtn.querySelector('.battle-ability-key').textContent = labelOf('ability');
+    pauseBtn.setAttribute('aria-keyshortcuts', bindingOf('pause') === 'Space' ? 'Space' : labelOf('pause'));
+    speedBtn.setAttribute('aria-keyshortcuts', labelOf('speed'));
+    autoBtn.title = `Auto supply lines (${labelOf('auto')}): sends become supply lines`;
+  }
+  const offBindings = onBindingsChange(relabelKeys);
+  relabelKeys();
+
+  /** The speed button's cycle (1x, 2x, 3x; 0.5x first with Settings > Slow battles), from a press or the speed key. */
+  function cycleSpeed() {
+    if (el.hidden) return;
+    const cycle = slow ? SLOW_SPEEDS : SPEEDS;
+    onSpeed?.(cycle[(cycle.indexOf(lastSpeed) + 1) % cycle.length]);
+  }
 
   function buildPower(data, hotkey) {
     const ring = h('div.power-cooldown-ring', {});
@@ -327,7 +373,7 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
       data.powers.forEach((p, i) => {
         let entry = powerEntries.get(p.id);
         if (!entry) {
-          entry = buildPower(p, HOTKEYS[i]);
+          entry = buildPower(p, i < POWER_ACTIONS.length ? labelOf(POWER_ACTIONS[i]) : HOTKEYS[i]);
           powerEntries.set(p.id, entry);
         }
 
@@ -396,7 +442,10 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
 
   function destroy() {
     window.removeEventListener('keydown', onKeydown);
+    offBindings();
   }
 
-  return { el, update, destroy, refuse, showAbilityBanner, showChampionBanner, abilityButton: () => (abilityBtn.hidden ? null : abilityBtn) };
+  /** A new battle: no banner of the last one is left waiting. */
+  function clearBanners() { bannerQueue.length = 0; clearTimeout(championTimer); championBusyUntil = 0; championBanner.hidden = true; championBanner.classList.remove('is-in'); }
+  return { el, update, destroy, refuse, showAbilityBanner, showChampionBanner, clearBanners, abilityButton: () => (abilityBtn.hidden ? null : abilityBtn) };
 }

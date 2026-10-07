@@ -13,6 +13,7 @@ import { SEA_FACTION, SEA, FORD, LANE, TIDE } from '../config/sea.js';
 import { archipelagoFor, quayTile, regionHarbours } from '../world/archipelago.js';
 
 export { archipelagoFor }; // PLAN-PHASE12: the seeded 1-in-3 archipelago from dynasty 3 (world/archipelago.js)
+export { crownRivals } from '../world/crown.js'; // PLAN-PHASE13: the Crown of Ages' three sector rivals (two classic + the Ashen Host)
 
 const isClassic = (r) => r.length === 3 && r.every((f, i) => f === RIVALS.classic[i]);
 

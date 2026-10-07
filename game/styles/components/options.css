@@ -1,0 +1,86 @@
+/* Play your way (PLAN-PHASE14 §14B): the Settings rows (ui/optionsPanel.js), the keyboard map (ui/keybindings.js), hold to confirm
+   (ui/holdConfirm.js) and the high-contrast mode's component overrides (the tokens are in tokens.css). */
+
+/* --- Settings rows -------------------------------------------------------------------------------------------------------------------- */
+.opt-radio-row { flex-wrap: wrap; }
+.opt-radios { display: flex; flex-wrap: wrap; gap: var(--sp-1); justify-content: flex-end; }
+.opt-radio {
+  min-height: 36px;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--btn-radius);
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--btn-secondary-border);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.opt-radio:hover { background: var(--btn-secondary-bg-hover); }
+.opt-radio.is-selected { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); background: rgba(245, 196, 81, 0.12); }
+.settings-row.opt-palette-row { flex-direction: column; align-items: stretch; }
+.opt-palettes { flex-direction: column; justify-content: stretch; }
+.opt-palettes .opt-radio { justify-content: flex-start; text-align: left; min-height: 44px; }
+.opt-swatches { display: inline-grid; grid-template-columns: repeat(8, 12px); gap: 2px; flex-shrink: 0; }
+.opt-swatch { width: 12px; height: 12px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+.opt-slider-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.opt-slider-value { min-width: 4.5em; text-align: right; font-size: var(--fs-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.opt-effects-row .settings-slider { width: 7.5em; }
+
+/* --- The keyboard map ------------------------------------------------------------------------------------------------------------------- */
+.keybind-modal .modal-panel { width: min(520px, calc(100vw - 24px)); }
+.keybind-list { display: flex; flex-direction: column; gap: 2px; max-height: min(52vh, 460px); overflow-y: auto; padding-right: var(--sp-1); margin: var(--sp-2) 0; }
+.keybind-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: 2px 0; }
+.keybind-label { font-size: var(--fs-sm); font-weight: 700; min-width: 0; }
+.keybind-key { min-width: 6.5em; min-height: 36px; font-variant-numeric: tabular-nums; }
+.keybind-key.is-waiting { border-color: var(--gold); color: var(--gold-bright); }
+.keybind-row.is-conflict .keybind-key { border-color: var(--bad); color: var(--bad); }
+.keybind-foot { display: flex; flex-direction: column; gap: var(--sp-2); }
+.keybind-status { font-size: var(--fs-xs); color: var(--good); font-weight: 700; min-height: 1.4em; margin: 0; }
+.keybind-status.is-warn { color: var(--warn); }
+
+/* --- Hold to confirm -------------------------------------------------------------------------------------------------------------------- */
+.is-hold { position: relative; overflow: hidden; }
+.is-hold > .hold-fill, .is-hold > .hold-hint { display: none; }
+html[data-hold-confirm] .is-hold > .hold-fill {
+  display: block; position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
+  background: rgba(255, 255, 255, 0.32); pointer-events: none;
+}
+html[data-hold-confirm] .is-hold.is-holding > .hold-fill { transform: scaleX(1); transition: transform var(--hold-ms, 900ms) linear; }
+html[data-hold-confirm] .is-hold > .hold-hint {
+  display: inline-block; margin-left: 0.4em; font-size: 0.72em; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.85;
+}
+.hold-hint::after { content: 'Hold'; }
+html[data-hold-confirm] .is-hold.is-nudge > .hold-hint { animation: hold-nudge 0.5s ease-out; }
+@keyframes hold-nudge { 0%, 100% { transform: none; } 30% { transform: scale(1.35); } 60% { transform: scale(0.95); } }
+html.reduce-motion .is-hold.is-nudge > .hold-hint { animation: none; text-decoration: underline; }
+/* the battle's Retreat loses its word below 960 px: the hint goes too, the hold still works */
+.battle-retreat.is-hold > .hold-hint { display: none !important; }
+
+/* --- High contrast: what the tokens alone do not reach ----------------------------------------------------------------------------------- */
+html.high-contrast .glass-panel,
+html.high-contrast .toast,
+html.high-contrast .coach-bubble,
+html.high-contrast .leader-card,
+html.high-contrast .tooltip {
+  background: var(--panel-bg-solid) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 2px solid var(--panel-border) !important;
+}
+html.high-contrast .btn-secondary, html.high-contrast .opt-radio { border-width: 2px; }
+html.high-contrast .modal-backdrop { background: rgba(0, 0, 0, 0.85); }
+html.high-contrast .settings-toggle { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.7); }
+
+/* --- Text size on a phone (Large fits 360 px; Larger may wrap and scroll, never clip): the rows that were sized for Normal ---------------- */
+@media (max-width: 480px) {
+  html[data-text-size="large"] .council-toolbar, html[data-text-size="larger"] .council-toolbar { flex-wrap: wrap; row-gap: var(--sp-2); }
+  html[data-text-size="large"] .battle-sendrow, html[data-text-size="larger"] .battle-sendrow { flex-wrap: wrap; row-gap: 6px; gap: var(--sp-2); }
+  html[data-text-size="large"] .send-fraction-btn, html[data-text-size="larger"] .send-fraction-btn { padding: 0 7px; }
+  html[data-text-size="large"] .send-fraction-selector, html[data-text-size="larger"] .send-fraction-selector { gap: 2px; }
+  /* the power names sit in a 58 px column under their buttons: at Large and Larger they take the 12 px phone floor (Normal is 11.2 px), so
+     "BULWARK" still fits whole instead of ending in an ellipsis */
+  html[data-text-size="large"] .power-name, html[data-text-size="larger"] .power-name { font-size: 12px; }
+}

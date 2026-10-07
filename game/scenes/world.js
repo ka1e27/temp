@@ -57,6 +57,8 @@ import { ASHEN } from '../config/ashen.js';
 import { fallenLine, ashenOnFrontier, seaLines, laneLine, fordsOnFrontier } from '../meta/rivals.js';
 import { regionHarbours, touchesOpenSea } from '../world/archipelago.js';
 import { voyageLine } from '../app/dynasty.js';
+import { throneLines, usurperOnFrontier } from '../meta/crown.js'; // PLAN-PHASE13
+import { CROWN } from '../config/crown.js';
 import { MAX_BATTLES } from '../app/battles.js';
 import { fortsPanelData, buildFort, upgradeFort, demolishFort, fortName, fortsToast, fortsMarksData } from '../meta/forts.js';
 import { drawFortMarks } from '../render/fortMarks.js';
@@ -243,7 +245,7 @@ export function createWorldScene(services) {
       owned: false,
       owner,
       perk,
-      features: withSea(withRelic(withFallen(featureRows(region, false), state, world, regionId), regionId), state, world, regionId, false),
+      features: withThrone(withSea(withRelic(withFallen(featureRows(region, false), state, world, regionId), regionId), state, world, regionId, false), state, world, regionId),
       income: effectiveRegionIncome(state, world, region),
       bounty: conquestBounty(state, world, regionId), // what winning pays: the conquest bounty, or a retake's share (the payout's own function)
       crownsPayable: crownsPayable(state, regionId),
@@ -304,6 +306,19 @@ export function createWorldScene(services) {
       return { icon: (SEA_ICON.find(([re]) => re.test(line)) || [0, 'seaLane'])[1], label, text: k > 0 ? line.slice(k + 2) : line };
     });
     return { ...(rows || {}), sea };
+  }
+
+  /** PLAN-PHASE13: a Usurper region's lines (the Throne of Ages first, then his habit), as icon rows beside the sea lines (the card's generic rows). */
+  function withThrone(rows, state, world, regionId) {
+    if (!world.crown) return rows;
+    const lines = throneLines(state, world, regionId);
+    if (!lines.length) return rows;
+    const crownRows = lines.map((line) => {
+      const k = line.indexOf(': ');
+      return { icon: /^The Throne/.test(line) ? 'throne' : 'crownChains', label: k > 0 ? `${line.slice(0, k)}:` : '', text: k > 0 ? line.slice(k + 2) : line };
+    });
+    const sea = [...crownRows, ...((rows && rows.sea) || [])].slice(0, 4);
+    return { ...(rows || {}), sea, throne: true };
   }
 
   // --- Generals and Renown (DESIGN 10.11, 10.12) ------------------------------------------------------------------------
@@ -604,6 +619,7 @@ export function createWorldScene(services) {
       ...(services.goals ? services.goals.realmData() : {}), // Deeds and the Trophy wall (PLAN-PHASE4 §4C, §4D)
       ...(services.dynasty ? services.dynasty.realmData() : {}), // the Edict, its Challenge laurels and the Legacy tree (PLAN-PHASE5)
       ...(services.boons ? services.boons.realmData() : {}), // the owned-Boons strip and the Reliquary (PLAN-PHASE7)
+      ...(services.crown ? services.crown.realm() : { ascension: null }), // the Ascension ladder and the banner's crown pips (PLAN-PHASE13)
     });
   }
 
@@ -632,6 +648,7 @@ export function createWorldScene(services) {
     tutorial.notify('regionSelected');
     if (data && data.features && (data.features.type || data.features.twist)) tutorial.notify('featureCardOpened'); // a typed or twisted region's card (tutorial V1)
     if (data && data.features && data.features.ashen) tutorial.notify('ashenCardOpened'); // an Ashen region's card (tutorial A1)
+    if (data && data.features && data.features.throne) tutorial.notify('throneCardOpened'); // a Usurper region's card (tutorial U1, Phase 13)
     if (data && data.features && data.features.sea) tutorial.notify('seaCardOpened'); // a region's sea lines (tutorial S1, Phase 12)
     if (data && data.features && data.features.relic) tutorial.notify('relicCardOpened'); // a Relic's region card (tutorial L1)
     // A region that would surrender: its leader offers, once per region (selection only, not the card's 1 s refresh).
@@ -1031,7 +1048,7 @@ export function createWorldScene(services) {
   function onCeremonyFound(choice) {
     const session = services.dynasty.session;
     const house = services.dynasty.houseName(); // named before the old continent is left
-    const res = container.tryFoundDynasty({ seed: ceremonySeed, edict: choice.edict, challenges: choice.challenges, legacyBuys: session ? session.bought.slice() : [] });
+    const res = container.tryFoundDynasty({ seed: ceremonySeed, edict: choice.edict, challenges: choice.challenges, legacyBuys: session ? session.bought.slice() : [], crownOfAges: !!choice.crownOfAges, ascension: choice.ascension | 0 });
     ui.ceremony.close();
     services.dynasty.endSession();
     ceremonySeed = null;
@@ -1042,8 +1059,10 @@ export function createWorldScene(services) {
     const refused = res.founding && Array.isArray(res.founding.refused) ? res.founding.refused : [];
     if (refused.length) ui.toasts.update({ id: 'legacy-refused', type: 'warning', icon: 'tree', message: `${refused.length === 1 ? 'One Legacy node' : `${refused.length} Legacy nodes`} could not be bought; the points are still yours to spend in the Realm panel.`, duration: 6000 });
     const arch = container.get().world.archipelago; // PLAN-PHASE12 §12A: an archipelago says so, with its island count
-    if (arch) ui.toasts.update({ type: 'success', icon: 'seaLane', message: `${voyageLine(house, arch.islands.length)}${info ? ` Edict: ${info.name}.` : ''}`, duration: 7000 });
-    else ui.toasts.update({ type: 'success', icon: 'crown', message: `The House of ${house} rises on a new continent${info ? `, under the Edict of ${info.name}` : ''}.`, duration: 6000 });
+    const asc = res.founding && res.founding.ascension ? ` Ascension ${res.founding.ascension}.` : '';
+    if (container.get().world.crown) ui.toasts.update({ type: 'success', icon: 'crownChains', message: `${CROWN.copy.ceremony.replace('{house}', house)}${asc}`, duration: 8000 }); // PLAN-PHASE13
+    else if (arch) ui.toasts.update({ type: 'success', icon: 'seaLane', message: `${voyageLine(house, arch.islands.length)}${info ? ` Edict: ${info.name}.` : ''}`, duration: 7000 });
+    else ui.toasts.update({ type: 'success', icon: 'crown', message: `The House of ${house} rises on a new continent${info ? `, under the Edict of ${info.name}` : ''}.${asc}`, duration: 6000 });
     enter({ freshRealm: true, newWorld: true });
     services.autosave.save();
   }
@@ -1417,6 +1436,7 @@ export function createWorldScene(services) {
       boardUnlocked: !!(state.bounties && state.bounties.unlocked), // Q1
       ashenRegion: ashenTutorialRegion(), // A1
       fordRegion: fordTutorialRegion(), // S1 (Phase 12)
+      usurperRegion: usurperTutorialRegion(), // U1 (Phase 13)
       relicRegion: relicTutorialRegion(), // L1
       challengesOpen: !!services.challenge && services.challenge.unlocked() && !services.inChallenge?.(), // J1 (Phase 9): the Challenges have opened
     };
@@ -1502,6 +1522,14 @@ export function createWorldScene(services) {
       if (best < 0 || world.regions[id].tier < world.regions[best].tier) best = id;
     }
     return best;
+  }
+
+  /** Tutorial U1 (PLAN-PHASE13): a frontier region held by the Usurper (meta/crown.js usurperOnFrontier), its label on screen, or -1. */
+  function usurperTutorialRegion() {
+    const { state, world } = container.get();
+    if (!world.crown) return -1;
+    const id = usurperOnFrontier(state, world);
+    return id != null && anchors[id] && derived.frontier.includes(id) ? id : -1;
   }
 
   /** Tutorial L1: the lowest-tier frontier region holding a Relic (with its chest on screen), or -1. */
@@ -1625,6 +1653,11 @@ export function createWorldScene(services) {
         if (id < 0 || !anchors[id]) return null;
         return { target: regionTarget(id), key: `relic${id}`, outline: id, noRing: true };
       }
+      case 'usurperRegion': {
+        const id = usurperTutorialRegion();
+        if (id < 0) return null;
+        return { target: regionTarget(id), key: `usurper${id}`, outline: id, noRing: true };
+      }
       case 'fordRegion': {
         const id = fordTutorialRegion();
         if (id < 0 || !anchors[id]) return null;
@@ -1744,6 +1777,8 @@ export function createWorldScene(services) {
   // --- frame ----------------------------------------------------------------------
   function frame(dt, t, nowMs) {
     camera.update(dt);
+    // PLAN-PHASE13: a toppled Throne's ending plays once the map is calm (no dialog, no conquest flood, not in a challenge)
+    if (services.crown) services.crown.tick(nowMs, !flood && !document.documentElement.hasAttribute('data-dialog') && !services.inChallenge?.() && nowMs - enteredAtMs > 1200);
     ensureWorldCaches();
     refreshDerived(nowMs);
     const { state, world } = container.get();
@@ -2091,6 +2126,8 @@ export function createWorldScene(services) {
     /** Pushes the HUD now (a pip pressed, a streak changed). */
     updateHudNow() { updateHud(performance.now(), { force: true }); },
     refreshRealmIfOpen() { if (!ui.realm.el.hidden) updateRealm(); },
+    /** After the ending (PLAN-PHASE13): back over the realm. */
+    flyHome() { flyToRealm(VICTORY.pullBackMs); },
     /** Something Phase 4 shows changed (a deed, a contract, a streak): refresh what is open. */
     onGoalsChanged(opts = {}) {
       updateHud(performance.now(), { force: true, pulse: !!opts.pulse });

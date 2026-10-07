@@ -11,6 +11,7 @@ import { tileAt } from './runtime.js';
 import { checkShrines } from './features.js';
 import { damageDragon } from './dragon.js';
 import { onAssaultTrade, onClash } from './fallen.js';
+import { throneDefMult, usurperStands } from './throne.js';
 import {
   boonsOf, squadStrengthMult, assaultStrengthMult, onCapture, secondWind, besiegedGrowthMult, garrisonBoonMult,
 } from './boons.js';
@@ -38,6 +39,13 @@ function cascade(battle, winner) {
   return flipped;
 }
 
+/** The attack is won now (the Throne of Ages: the Usurper fell with the keep yours): the region surrenders. PLAN-PHASE13. */
+export function winNow(battle, t) {
+  if (battle.result) return;
+  battle.events.push({ type: 'surrender', sites: cascade(battle, PLAYER_OWNER) });
+  endBattle(battle, 'win', t);
+}
+
 function endBattle(battle, result, t) {
   battle.result = result;
   battle.stats.durationSec = t;
@@ -56,6 +64,7 @@ function checkWin(battle, capturedSite, t) {
   }
   if (capturedSite.owner !== PLAYER_OWNER) return;
   if (battle.dragon && !battle.dragon.dead) return; // a Dragon's Lair falls with its Dragon, not its keep (DESIGN §10.13)
+  if (usurperStands(battle)) return; // the Throne of Ages falls with the Usurper, not its keep (PLAN-PHASE13: he marches on it)
   battle.events.push({ type: 'surrender', sites: cascade(battle, PLAYER_OWNER) });
   endBattle(battle, 'win', t);
 }
@@ -117,7 +126,8 @@ export function resolveCombat(battle, dt, t) {
     const boons = boonsOf(battle); // PLAN-PHASE7: Phalanx / Martyr's Crown on the assault, Siegecraft on a Gate (1 without Boons)
     const atkPerTroop = squadPerTroopStrength(attackerOwner, player, arena.enemyFaction, enemy) * assaultStrengthMult(battle, attackerOwner, atkTotal, t);
     const gateCut = site.type === 'gate' && attackerOwner === PLAYER_OWNER && boons.gateDefMult ? boons.gateDefMult : 1;
-    const defPerTroop = garrisonPerTroopStrength(site, site.owner, player, arena.enemyFaction, enemy, t) * gateCut * garrisonBoonMult(battle, site, t); // Last Stand (PLAN-PHASE8)
+    const defPerTroop = garrisonPerTroopStrength(site, site.owner, player, arena.enemyFaction, enemy, t) * gateCut * garrisonBoonMult(battle, site, t) // Last Stand (PLAN-PHASE8)
+      * (battle.throne ? throneDefMult(battle, site, t) : 1); // the Throne (PLAN-PHASE13): the Champions harden the Gate, the borrowed Plague weakens your sites
     const beforeDef = site.troops;
     const traded = applyStrengthTrade({
       atkTroops: atkTotal, atkPerTroop, defTroops: site.troops, defPerTroop, dt,

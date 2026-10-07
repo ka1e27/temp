@@ -120,6 +120,7 @@ export function createDynasty({ getState, getWorld, ui, services }) {
       challengeBonus: `Tick any number. Each one kept until the next founding adds +${pct(CHALLENGES.legacyBonus)} Legacy points then.`,
       challengeWarning: 'Harder: Challenges cannot be removed until the next founding.',
       save,
+      ...(services.crown ? services.crown.ceremony(houseName()) : {}), // PLAN-PHASE13: the Crown of Ages choice (dynasty 7+) and the Ascension picker
     };
   }
 

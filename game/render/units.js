@@ -235,5 +235,11 @@ export function createUnitLayer() {
     ctx.restore();
   }
 
-  return { snapshot, draw, drawIntent, reset };
+  /** PLAN-PHASE13: a squad's blended world point this frame (the Usurper's hero is drawn over his squad), or null. */
+  function positionOf(battle, squadId, alpha) {
+    const sq = battle.squads.find((q) => q.id === squadId);
+    return sq ? interpolated(battle, sq, alpha) : null;
+  }
+
+  return { snapshot, draw, drawIntent, reset, positionOf };
 }

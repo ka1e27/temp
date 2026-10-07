@@ -74,8 +74,9 @@ export function boonsUnlocked(state) {
  * Does a battle win over `region` draft (BOONS.draftLabels / draftTyped / draftCapitals)? `label`: the card's label at attack time
  * (BattleRun.labelAtAttack). Pure: the unlock is boonsUnlocked's.
  */
-export function winDrafts(region, label) {
+export function winDrafts(region, label, hardOnly = false) {
   if (!region) return false;
+  if (hardOnly) return label === 'Hard' || label === 'Deadly'; // Lean Fortunes (PLAN-PHASE13 Ascension 5): only Hard or Deadly wins draft
   if (BOONS.draftCapitals && region.isCapital) return true;
   if (BOONS.draftTyped && region.type) return true;
   return BOONS.draftLabels.includes(label);

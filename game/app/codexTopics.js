@@ -2,6 +2,8 @@
 // typed. Pure data for the UI kit (game/ui/codex.js imports nothing from the game): `codexData(state, world)` -> { groups, topics }.
 // A topic is locked ("Not yet discovered") until the player has met its system: `seen(state)` reads the save, never mutates it.
 import { BATTLE, POWERS, SUPPLY } from '../config/battle.js';
+import { PALETTES, PALETTE_IDS, PALETTE_BAR } from '../config/palettes.js';
+import { TEXT_SIZES, HOLD_CONFIRM_MS, EFFECTS_IDS } from '../config/options.js';
 import { ECONOMY } from '../config/meta.js';
 import { PAR, BOUNTY_FRACTION_PER_CROWN, CROWN_KEYS } from '../config/crowns.js';
 import { PROSPERITY } from '../config/prosperity.js';
@@ -25,6 +27,9 @@ import { CHALLENGE_MODE, DAILY, RECORD, BANNERS } from '../config/challenges.js'
 import { SCENARIO_LIST, SCENARIOS } from '../config/scenarios.js';
 import { UNREST } from '../config/unrest.js';
 import { SEA, FORD, LANE, TIDE, BROADSIDE, ARCHIPELAGO } from '../config/sea.js';
+import { CROWN, THRONE } from '../config/crown.js';
+import { ASCENSION } from '../config/ascension.js';
+import { isCrowned } from '../meta/ascension.js';
 
 // --- number words (from config values only) ---
 export const pct = (x) => `${Math.round(x * 100)}%`;
@@ -57,6 +62,9 @@ const evAny = (state) => Object.values(evLog(state)).some((n) => (n | 0) > 0) ||
 const boons2 = (state) => o(state.boons2);
 const relicsFound = (state) => (Array.isArray(o(state.reliquary).found) ? o(state.reliquary).found.length : 0)
   + (Array.isArray(o(state.relics).owned) ? o(state.relics).owned.length : 0);
+const crowned = (state) => { try { return isCrowned(state); } catch { return false; } };
+const roman = (n) => ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][n] || String(n);
+const pctDown = (mult) => `−${Math.round((1 - mult) * 100)}%`;
 const relicSeen = (state) => relicsFound(state) > 0 || anyKeys(o(state.relics).placed) && won(state);
 
 /** The groups, in the plan's order. */
@@ -71,7 +79,9 @@ export const CODEX_GROUPS = [
   { id: 'boons', title: 'Boons and Relics' },
   { id: 'ashen', title: 'The Ashen Host' },
   { id: 'sea', title: 'The sea' },
+  { id: 'crown', title: 'The Crown of Ages' },
   { id: 'challenges', title: 'Challenges' },
+  { id: 'options', title: 'Options' }, // Phase 14: Play your way
 ];
 // Phase 9: the Challenges open after the realm's first conquest beyond home (CHALLENGE_MODE.unlockConquests), or in any later dynasty
 const challengesOpen = (s) => dynastyLevel(s) > 1 || (o(s.stats).regionsConquered | 0) >= CHALLENGE_MODE.unlockConquests;
@@ -238,6 +248,19 @@ export const CODEX_TOPICS = [
     lines: ['Topple the Tide Fortress to recruit the Admiral, a swift General. Your squads sailing sea lanes take no tower fire under the Admiral.',
       'Broadside: for a few seconds every coastal enemy settlement loses troops each second.'],
     numbers: [['Broadside lasts', secs(BROADSIDE.duration)], ['Troops lost a second', pct(BROADSIDE.perSec)]] },
+  // --- The Crown of Ages (Phase 13) ---
+  { id: 'crownOfAges', group: 'crown', title: 'The Crown of Ages', icon: 'crownChains', seen: (s) => dynastyLevel(s) >= CROWN.fromDynasty || crowned(s) || !!s.crownOfAges,
+    lines: [`From the founding of Dynasty ${roman(CROWN.fromDynasty)} the ceremony offers a final choice: seek the Crown of Ages. It is optional: you can keep founding ordinary dynasties.`,
+      'The final continent holds every rival kind, and the Usurper at its heart. His capital, the Throne of Ages, is the last battle: a Gate held by three Champions, then he borrows each rival’s weapon in turn, then takes the field himself.',
+      'Topple the Throne to see the ending and unlock Ascension.'],
+    numbers: [['Regions', `about ${CROWN.regionCount}`], ['Champions at the Gate', String(THRONE.champions.length)], ['Gate, per Champion standing', `+${pct(THRONE.championGateDef)} defence`],
+      ['He borrows a weapon every', secs(THRONE.borrow.everySec)], ['Warning before each', secs(THRONE.borrow.telegraphSec)], ['The Plague', `${pctDown(THRONE.borrow.plagueDefMult)} defence for ${secs(THRONE.borrow.plagueSec)}`],
+      ['He takes the field below', `${pct(THRONE.fieldAt)} of the keep`]] },
+  { id: 'ascension', group: 'crown', title: 'Ascension', icon: 'ascension', seen: (s) => crowned(s),
+    lines: ['After the ending, every founding may choose an Ascension level, up to one above the highest you have cleared. Each level adds one lasting modifier to all the levels below it.',
+      'Clear a level by completing that dynasty. Each level cleared adds Legacy points and a crown pip on your realm banner.'],
+    numbers: [['Levels', String(ASCENSION.maxLevel)], ['Legacy per level', `+${pct(ASCENSION.legacyPerLevel)}`],
+      ...ASCENSION.ladder.map((l) => [`Level ${l.level}`, l.name])] },
   // --- Challenges (Phase 9) ---
   { id: 'daily', group: 'challenges', title: 'The Daily', icon: 'sun', seen: challengesOpen,
     lines: ['Every day brings one challenge that everyone plays: the same small continent, Edict, Boons, General and goal. Play it from the title screen or Settings > Challenges.',
@@ -250,12 +273,19 @@ export const CODEX_TOPICS = [
       `Each earns up to ${SCENARIOS.starsEach} stars. The first ${SCENARIOS.alwaysOpen} are always open; the others open once you have met their system in your realm.`],
     numbers: [['Scenarios', String(SCENARIO_LIST.length)], ['Stars', String(SCENARIO_LIST.length * SCENARIOS.starsEach)],
       ...bannerOf('stars').map((b) => [`${b.name} banner`, `all ${b.unlock.n} stars`])] },
+  // --- Options (PLAN-PHASE14 §14B) ---
+  { id: 'options', group: 'options', title: 'Options', icon: 'scroll', seen: () => true,
+    lines: ['Settings has a Display section: colour-vision presets that repaint every faction for red-green or blue-yellow colour blindness, territory patterns so colour is never the only cue, three text sizes, a high-contrast mode and an Effects slider.',
+      'Under Controls you can rebind every battle key (a key already in use swaps with the old one) and turn on Hold to confirm, so Retreat, Reset, a New Realm over your save and Demolish need a held press.',
+      'Audio has separate Music, Effects and Voices levels, and the game falls silent while its tab is hidden. Options are kept on this device and apply at once.'],
+    numbers: [['Colour presets', PALETTE_IDS.map((id) => PALETTES[id].short).join(' · ')], ['Faction colours apart', `CIEDE2000 ${PALETTE_BAR}+ for the chosen vision`],
+      ['Text sizes', Object.values(TEXT_SIZES).map(pct).join(' · ')], ['Effects', EFFECTS_IDS.map((e) => e[0].toUpperCase() + e.slice(1)).join(' · ')], ['Hold to confirm', `${(HOLD_CONFIRM_MS / 1000).toFixed(1)} s`]] },
 ];
 
 /** Which topic each panel's "?" opens. */
 export const PANEL_TOPICS = {
   council: 'council', realm: 'prosperity', regions: 'bounties', generals: 'generals', settings: 'sending', boonDraft: 'boons',
-  ceremony: 'founding', reliquary: 'reliquary', works: 'works', forts: 'forts', battle: 'sending', merchant: 'worldEvents', challenges: 'daily',
+  ceremony: 'founding', reliquary: 'reliquary', works: 'works', forts: 'forts', battle: 'sending', merchant: 'worldEvents', challenges: 'daily', options: 'options',
 };
 
 /**

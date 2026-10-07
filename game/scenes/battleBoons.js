@@ -11,8 +11,9 @@ import { icon } from '../ui/icons.js';
 import { BOON_ICONS } from '../app/boons.js';
 import { drawBurnGround } from '../render/ashenFx.js';
 import { hexRadiusToWorld } from '../battle/geom.js';
+import { effects } from '../render/accessibility.js';
 
-const MAX_POPS = 6;
+const MAX_POPS = () => effects().pops; // Settings > Effects (PLAN-PHASE14): 6 / 4 / 2 at once
 const LIFE_MS = 1500;
 const MERGE_MS = 700;
 const BADGE_PX = 22;
@@ -80,7 +81,7 @@ export function createBattleBoons(deps) {
     const key = `${boon}:${ev.site ?? ''}:${Math.round(ev.x * 2)}:${Math.round(ev.y * 2)}`;
     const old = pops.find((p) => p.key === key && nowMs - p.born < MERGE_MS);
     if (old) { old.count += ev.count || 0; old.text = (WORDS[boon] || (() => null))({ ...ev, count: old.count }); return true; }
-    if (pops.length >= MAX_POPS) pops.shift();
+    while (pops.length >= MAX_POPS()) pops.shift();
     pops.push({ key, boon, x: ev.x, y: ev.y, count: ev.count || 0, born: nowMs, text: (WORDS[boon] || (() => null))(ev) });
     deps.sfx?.play('click', { pitch: 1.6, volume: 0.25 });
     return true;

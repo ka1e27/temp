@@ -213,6 +213,8 @@ export function createGame(seed, world, now) {
     edict: defaultEdict(),
     rivals: [2, 3, 4], // PLAN-PHASE6 §6A: the rival line-up (the classic three in Dynasty 1; foundDynasty draws the next one)
     archipelago: false, // PLAN-PHASE12 §12A: never in Dynasty 1 (foundDynasty draws it from Dynasty 3)
+    crownOfAges: false, // PLAN-PHASE13 §13A: the final continent (chosen at a founding from dynasty 7)
+    ascension: 0, // PLAN-PHASE13 §13C: this dynasty's Ascension level (0 = none)
   };
   return resetRegions(state, world, now);
 }

@@ -2,6 +2,7 @@
 // "Controls" in Settings. Browser only; no game-logic imports.
 import { h } from './dom.js';
 import { createModal } from './modal.js';
+import { labelOf } from './keymap.js';
 
 /** [key or gesture, what it does] rows, in the order a player meets them. Exported so a test can check that nothing is missing. */
 export const CONTROLS = Object.freeze({
@@ -43,9 +44,23 @@ export const CONTROLS = Object.freeze({
   ]),
 });
 
+/** The keyboard rows name the player's own keys (Settings > Keyboard controls, ui/keymap.js), not the defaults. */
+function liveKey(k) {
+  const join = (ids) => ids.map(labelOf).join(' ');
+  switch (k) {
+    case '1 2 3 4': return join(['send25', 'send50', 'send75', 'send100']);
+    case 'Q W E R T': return join(['power1', 'power2', 'power3', 'power4', 'power5']);
+    case 'A': return labelOf('selectAll');
+    case 'Auto (S)': return `Auto (${labelOf('auto')})`;
+    case 'Space': return labelOf('pause');
+    case 'M': return labelOf('mute');
+    default: return k;
+  }
+}
+
 export function showControls() {
-  const col = (title, rows) => h('div.hd-controls-col', {}, h('h3', {}, title), ...rows.map(([k, v]) => h('p', {}, h('b', {}, k), ` ${v}`)));
-  const body = h('div.hd-controls', {}, col('Mouse and keyboard', CONTROLS.mouse), col('Touch', CONTROLS.touch));
+  const col = (title, rows, live) => h('div.hd-controls-col', {}, h('h3', {}, title), ...rows.map(([k, v]) => h('p', {}, h('b', {}, live ? liveKey(k) : k), ` ${v}`)));
+  const body = h('div.hd-controls', {}, col('Mouse and keyboard', CONTROLS.mouse, true), col('Touch', CONTROLS.touch));
   const modal = createModal({
     title: 'Controls',
     body,

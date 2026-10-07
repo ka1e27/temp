@@ -651,3 +651,18 @@ test('import graph: chronicleState.js is a leaf (config only), so state.js and s
     assert.ok(!/from '\.\/chronicle\.js'/.test(text), `${rel} must import ./chronicleState.js, never ./chronicle.js`);
   }
 });
+
+test('a faction named with its article never reads "…’s The Usurper" or "the The Usurper"', () => {
+  // every template, with the Usurper as the rival (data supplies the names, so no world is needed)
+  const bad = [];
+  for (const [kind, list] of Object.entries(CHRONICLE.templates)) {
+    for (let i = 0; i < list.length; i++) {
+      const text = chronicleText({ kind, t: i * 977, data: { faction: 'The Usurper', leader: 'Usurper-King Sevvane of the Stolen Crown', region: 'Frostborough', regionId: i, factionId: 7, n: 2, dynasty: 7, stars: 9 } });
+      if (/’s The |\bthe The\b/i.test(text)) bad.push(`${kind}: ${text}`);
+    }
+  }
+  assert.deepEqual(bad, []);
+  // and a faction without an article is untouched
+  const plain = chronicleText({ kind: 'conquest', t: 1, data: { faction: 'Crimson Legion', leader: 'Warlord Brann', region: 'Ashford', regionId: 3, factionId: 2 } });
+  assert.ok(!/The Crimson|the the/i.test(plain), plain);
+});

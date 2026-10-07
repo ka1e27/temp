@@ -148,7 +148,8 @@ export function onFirestormLanded(battle, p, t) {
 /** The Rising's interval: ASHEN.rising.everySec, x risingIntervalMult with the Seal of the Margrave Relic (PLAN-PHASE8). */
 export function risingEverySec(battle) {
   const k = battle.player && battle.player.boons && battle.player.boons.risingIntervalMult;
-  return ASHEN.rising.everySec * (k > 0 ? k : 1);
+  const q = battle.enemy && battle.enemy.hazardIntervalMult > 0 ? battle.enemy.hazardIntervalMult : 1; // Quickening (PLAN-PHASE13 Ascension 9)
+  return ASHEN.rising.everySec * (k > 0 ? k : 1) * q;
 }
 
 function risingState(battle) {

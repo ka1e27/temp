@@ -37,6 +37,7 @@ const THRONE_STAT_BY_PERSONALITY = Object.freeze({
   swarm: 'growth',
   undying: 'growth', // the Ashen Host (PLAN-PHASE6): its dead keep rising
   raider: 'speed', // the Sea Kings (PLAN-PHASE12): their longships' speed
+  usurper: 'atk', // the Usurper (PLAN-PHASE13): the Throne of Ages' might
 });
 
 const THRONE_INCOME_PCT = 0.25;

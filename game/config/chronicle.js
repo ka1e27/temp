@@ -64,9 +64,10 @@ export const CHRONICLE = Object.freeze({
       'Your first banner rises over {region}, handed over by {rival}.',
     ]),
     capital: Object.freeze([
-      '{rival} loses the throne at {region}, and the realm stands taller for it.',
-      '{leader}’s throne falls at {region}; the {faction} reels.',
-      'The seat of the {faction} at {region} is yours: {leader} is deposed.',
+      // {leader} only (it falls back to the faction's name): "{rival}" / "the {faction}" garble a faction named with its article (The Usurper)
+      '{leader} loses the throne at {region}, and the realm stands taller for it.',
+      '{leader}’s throne falls at {region}, and the realm stands taller for it.',
+      'The seat at {region} is yours: {leader} is deposed.',
     ]),
     'capital.surrender': Object.freeze([
       '{rival} {yields} {region}, throne and all, and the {faction} reels.',

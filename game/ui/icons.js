@@ -6,6 +6,11 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 
+// Phase 13: the Usurper's crown-and-chains emblem (crown, band, two shackles and the link between them), drawn evenodd. Shared with render/sprites.js.
+export const CROWN_CHAINS_D = 'M4.2 11 3.2 3.6l4.2 3.1L12 1.6l4.6 5.1 4.2-3.1-1 7.4Z M4.2 11.4h15.6v2.2H4.2Z M5.9 13.6h1.4v1.4H5.9Z M16.7 13.6h1.4v1.4h-1.4Z '
+  + 'M3.2 18.4a3.4 3.4 0 1 0 6.8 0a3.4 3.4 0 1 0-6.8 0Z M4.8 18.4a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0Z '
+  + 'M14 18.4a3.4 3.4 0 1 0 6.8 0a3.4 3.4 0 1 0-6.8 0Z M15.6 18.4a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0Z M10 17.5h4v1.8h-4Z';
+
 function el(tag, attrs = {}) {
   const node = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
@@ -808,6 +813,19 @@ const ICONS = {
     circle(12, 14, 3, { fill: '#000', 'fill-opacity': 0.45 }),
   ],
 
+  // The Usurper (Phase 13): a crown over a pair of shackles joined by a chain. One evenodd path, shared with render/sprites.js (CROWN_CHAINS_D).
+  // Bounding box x 3.2..20.8, y 1.6..21.8 (centred on 12,11.7).
+  crownChains: () => [
+    path(CROWN_CHAINS_D, { 'fill-rule': 'evenodd' }),
+    rect(4.2, 11.4, 15.6, 2.2, { rx: 0.5, fill: '#000', 'fill-opacity': 0.35 }),
+    circle(12, 7.6, 1, { fill: '#000', 'fill-opacity': 0.45 }),
+  ],
+  // an Ascension level: a crown over a rising chevron
+  ascension: () => [
+    path('M5 11.4 4.2 4.6l3.6 2.6L12 2.4l4.2 4.8 3.6-2.6-.8 6.8Z'),
+    path('M3.6 20.8 12 14.6l8.4 6.2v-3.2L12 11.4l-8.4 6.2Z', { 'fill-opacity': 0.8 }),
+  ],
+
   // --- Phase 12: the sea ------------------------------------------------------
   // The Sea Kings: a barbed trident. Bounding box x 4.1..19.9, y 1.6..22.6 (centred on 12,12.1).
   trident: () => [
@@ -919,6 +937,9 @@ ICONS.drownedCrown = ICONS.relicDrownedCrown;
 // the Ashen Host's emblem under the spellings a config may use
 ICONS['skull-crown'] = ICONS.skullCrown;
 ICONS.crownSkull = ICONS.skullCrown;
+// the Usurper's emblem under the spellings a config may use
+ICONS['crown-chains'] = ICONS.crownChains;
+ICONS.crownAndChains = ICONS.crownChains;
 
 /** An Edict crest: the shared heater shield behind a symbol. */
 function crest(symbol) {

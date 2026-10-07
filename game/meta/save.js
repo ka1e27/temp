@@ -25,6 +25,7 @@ import { sanitizeLegacy } from './legacy.js';
 import { sanitizeBoons2, sanitizeRelics } from './boonsState.js';
 import { UPGRADES } from './upgrades.js';
 import { FACTIONS } from '../config/world.js';
+import { sanitizeAscensionLevel } from './ascension.js'; // PLAN-PHASE13
 
 export const SAVE_KEY = 'hexdominion.v2';
 const CURRENT_VERSION = 1;
@@ -240,6 +241,8 @@ function withDefaults(raw) {
     edict: sanitizeEdict(src.edict),
     rivals: sanitizeRivals(src.rivals), // PLAN-PHASE6: a save from before rotation keeps the classic three
     archipelago: src.archipelago === true, // PLAN-PHASE12: this dynasty's continent is an archipelago (the world is regenerated from it)
+    crownOfAges: src.crownOfAges === true, // PLAN-PHASE13: this dynasty's continent is the Crown of Ages (the world is regenerated from it)
+    ascension: sanitizeAscensionLevel(src.ascension), // PLAN-PHASE13: this dynasty's Ascension level (0..10)
     // Phase 7 (PLAN-PHASE7): this dynasty's Boons and Relics (an old save: none owned; relics.syncRelics places the Relics on load).
     // The lifetime Reliquary rides inside `generals` (sanitizeGenerals)
     boons2: sanitizeBoons2(src.boons2),

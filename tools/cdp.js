@@ -29,6 +29,7 @@ export async function launch({ url, port, width = 1440, height = 900, gpu = fals
   const debugPort = port ?? (20000 + Math.floor(Math.random() * 20000));
   const proc = spawn(CHROME, [
     '--headless=new',
+    '--mute-audio', // headless Chrome still plays the game's music through the speakers on Windows; the checks never need sound
     '--no-sandbox',
     ...(gpu ? [] : ['--disable-gpu']),
     ...args,

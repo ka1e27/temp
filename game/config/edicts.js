@@ -56,6 +56,15 @@ export const EDICT_NEUTRAL = Object.freeze({
   noPowers: false,          // Iron Will: powers refused in battle (PlayerStats.powersBlocked)
   noAbility: false,         // Lone Banner: no General abilities
   forceCaptain: false,      // Lone Banner: the Militia Captain commands every battle
+  // --- Ascension (PLAN-PHASE13 §13C, config/ascension.js; meta/ascension.js ascensionMods) ---
+  raidGraceMult: 1,         // the raid grace (FRONTIER.graceSec) x this (frontier.inGrace)
+  gateTroopMult: 1,         // every Gate's garrison x this (enemyBattleStats.gateTroopMult: arena and card)
+  unrestIdleAdd: 0,         // + seconds before Unrest begins (UNREST.idleSec; meta/unrest.js)
+  boonHardOnly: false,      // Boon drafts only after a Hard or Deadly win (meta/boons.js winDrafts)
+  vendettaGrudgeMult: 1,    // a Vendetta is sworn at GRUDGES.max x this (meta/grudges.js)
+  throneHpMult: 1,          // the Usurper's health (arena via EnemyStats.throneHpMult)
+  hazardIntervalMult: 1,    // the Usurper's borrowing, the Barrow Keep's Rising and the Tide Fortress's Tide come x this often (EnemyStats)
+  enemySpeedMult: 1,        // enemy squads' march speed (EnemyStats.speed)
 });
 
 /** Numbers that take the largest value instead of adding (a source SETS them). */

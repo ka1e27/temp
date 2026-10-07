@@ -87,7 +87,7 @@ export function createTitleScene(services) {
         body: 'Your current realm and its save will be overwritten. This cannot be undone.',
         actions: [
           { label: 'Cancel', variant: 'secondary', onClick: () => modal.destroy() },
-          { label: 'New Realm', variant: 'primary', onClick: () => { modal.destroy(); startFreshRealm(); } },
+          { label: 'New Realm', variant: 'primary', hold: true, onClick: () => { modal.destroy(); startFreshRealm(); } },
         ],
       }, { onDismiss: () => modal.destroy() });
       document.body.appendChild(modal.el);
@@ -116,7 +116,9 @@ export function createTitleScene(services) {
 
     services.hideAllPanels();
     ui.title.el.hidden = false;
-    ui.title.update({ hasSave: services.hasSaveOnDisk(), version, challenges: !!services.challenge && services.challenge.unlocked() });
+    const hasSave = services.hasSaveOnDisk();
+    // PLAN-PHASE13 §13B: the lasting Crown ("Crowned in Year N") once the Throne of Ages has fallen in the saved realm
+    ui.title.update({ hasSave, version, challenges: !!services.challenge && services.challenge.unlocked(), crown: hasSave && services.crown ? services.crown.title() : null });
   }
 
   function exit() {

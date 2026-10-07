@@ -5,6 +5,7 @@
 import { FEATURES as MAP_FEATURES } from '../config/features.js';
 import { ASHEN } from '../config/ashen.js';
 import { SEA } from '../config/sea.js';
+import { CROWN } from '../config/crown.js';
 
 const SHRINE_HOLD_SEC = MAP_FEATURES.shrine.holdSec; // tutorial V3's words
 
@@ -186,6 +187,8 @@ export const TUTORIAL_STEPS = Object.freeze([
   { id: 'V1', scene: 'world', calm: true, intro: 'variety', anchor: 'featureRegion', after: ['M1'], seenOn: ['featureCardOpened'], needs: 'frontier', timeoutSec: 10, text: 'Some regions hold a treasure or a twist: the icon by the name says which. Open one to see.' },
   { id: 'V2', scene: 'battle', urgent: true, anchor: 'gate', seenOn: ['gateTaken'], needs: 'frontier', timeoutSec: 10, text: 'Take the Gate to open the keep.' },
   { id: 'V3', scene: 'battle', urgent: true, anchor: 'shrine', seenOn: ['shrinesHeld'], needs: 'frontier', timeoutSec: 10, text: `Hold all three Shrines for ${SHRINE_HOLD_SEC} s to win.` },
+  // PLAN-PHASE13: U2, the Usurper's first borrowed weapon (urgent, like the Dragon's warning: it strikes in a few seconds)
+  { id: 'U2', scene: 'battle', urgent: true, anchor: 'borrow', seenOn: ['usurperStrike'], needs: 'frontier', timeoutSec: 6, text: 'The Usurper borrows a weapon: get clear of the warning ring before it strikes.' },
   { id: 'V4', scene: 'battle', urgent: true, anchor: 'telegraph', seenOn: ['bulwark'], needs: 'frontier', timeoutSec: 6, text: 'Bulwark the target!' },
   { id: 'V5', scene: 'world', urgent: true, anchor: 'eventToast', seenOn: ['eventAnswered'], needs: 'frontier', timeoutSec: 12, text: 'A world event: answer it before its time runs out.' },
   // Goals and Rivals (PLAN-PHASE4): the Bounty Board the moment it opens (after M1, so it never crowds the first lessons), and the first Vendetta's warning.
@@ -201,6 +204,8 @@ export const TUTORIAL_STEPS = Object.freeze([
   { id: 'A1', scene: 'world', calm: true, intro: 'ashen', anchor: 'ashenRegion', after: ['M1'], seenOn: ['ashenCardOpened'], timeoutSec: 12, afterDone: true, text: ASHEN.copy.hint },
   // The sea (PLAN-PHASE12): the first time fords (and so the lanes) appear on the frontier of an archipelago (Dynasty 3 on, so `afterDone`). Right after A1,
   // like it: every earlier step that is due goes first, the pacer holds it behind the last new system, and it is seen once a region's sea lines are read.
+  // PLAN-PHASE13: U1, the Usurper's land on the frontier of the Crown of Ages (after M1 like A1; before S1: on the final continent he matters more than the fords)
+  { id: 'U1', scene: 'world', calm: true, intro: 'crown', anchor: 'usurperRegion', after: ['M1'], seenOn: ['throneCardOpened'], timeoutSec: 12, afterDone: true, text: CROWN.copy.hint },
   { id: 'S1', scene: 'world', calm: true, intro: 'sea', anchor: 'fordRegion', after: ['M1'], seenOn: ['seaCardOpened'], timeoutSec: 12, afterDone: true, text: SEA.copy.hint },
   // Phase 7 (PLAN-PHASE7): K1 lives inside the first Boon draft (a static line: the coach layer sits under dialogs, like D1); L1 is the first Relic on
   // the frontier (its label and chest), last in the list and after M1 like A1, so every earlier step that is due goes first; it steps aside after 12 s

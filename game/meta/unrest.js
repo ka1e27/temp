@@ -6,7 +6,7 @@
 import { UNREST } from '../config/unrest.js';
 import { attackableFrontier, difficulty } from './progression.js';
 import { bestFreeGeneral } from './generals.js';
-import { commanderFor } from './edicts.js';
+import { commanderFor, edictMods } from './edicts.js';
 import { ensureUnrest, unrestThin } from './unrestState.js';
 
 export * from './unrestState.js';
@@ -47,7 +47,7 @@ export function tickUnrest(state, world, dtSec, nowMs = 0) {
   }
   if (calm) { u.idleSec = 0; return out; }
   u.idleSec += dtSec;
-  if (u.target == null && u.idleSec >= UNREST.idleSec && best) {
+  if (u.target == null && u.idleSec >= UNREST.idleSec + edictMods(state).unrestIdleAdd && best) { // Loyal Subjects (PLAN-PHASE13 Ascension 4)
     u.target = best.id;
     out.started = best.id;
   }

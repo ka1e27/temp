@@ -32,7 +32,7 @@ export function systemsInState(state) {
   return [...new Set(out)];
 }
 // tutorial steps whose having been seen means their system is known (the steps' own `intro` names, kept here so a save can be read without the table)
-const INTRO_OF_SEEN = { M2: 'scout', M3: 'works', R1: 'festival', V1: 'variety', Q1: 'board', G2: 'generals', L1: 'relics', H1: 'codex', J1: 'challenges', F4: 'fortify', S1: 'sea' };
+const INTRO_OF_SEEN = { M2: 'scout', M3: 'works', R1: 'festival', V1: 'variety', Q1: 'board', G2: 'generals', L1: 'relics', H1: 'codex', J1: 'challenges', F4: 'fortify', S1: 'sea', U1: 'crown' };
 
 /**
  * @param {{ getState: () => object, gapSec?: number | (() => number), hold?: (name: string) => boolean }} deps  a function is read live (main.js: 0 under the checks'

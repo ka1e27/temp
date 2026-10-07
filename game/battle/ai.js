@@ -28,6 +28,7 @@ import { getRuntime } from './runtime.js';
 import { routeCost, canRoute, routeFor } from './routing.js';
 import { UNDYING_AI } from '../config/ashen.js';
 import { RAIDER_AI } from '../config/sea.js';
+import { USURPER_AI } from '../config/crown.js';
 
 const SITE_VALUE = { hamlet: 15, village: 35, town: 55, fort: 60, tower: 25, keep: 100, camp: 90, bandit: 40, gate: 60, shrine: 70, harbour: 30 };
 
@@ -56,6 +57,7 @@ const PERSONALITY = {
   },
   undying: UNDYING_AI.tuning, // the Ashen Host (PLAN-PHASE6): holds thickly, counterattacks once you've spent troops (attritionWindow)
   raider: RAIDER_AI.tuning, // the Sea Kings (PLAN-PHASE12): holds lightly, evacuates a lost coastal site by sea (longships)
+  usurper: USURPER_AI.tuning, // the Usurper (PLAN-PHASE13): guards his keep like the Covenant, strikes in two waves like the Legion
   passive: {
     reserve: 0.6, keepGuard: 1.6, margin: 1.2, maxCommit: 1.0, waves: 0, thinkMult: 1.1, open: 0,
     extend: 1, softOnly: true, neutrals: false, losing: 0, sources: 3,

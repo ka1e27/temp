@@ -64,7 +64,7 @@ export function laneRoute(battle, owner, fromId, toId) {
 }
 
 /** The tile a squad stands on now (the one it is leaving until halfway, then the one it enters). */
-function squadTile(battle, squad) {
+export function squadTile(battle, squad) {
   if (!squad.path || !squad.path.length) return battle.sites[squad.from] ? battle.sites[squad.from].tile : null;
   const seg = Math.min(squad.seg, squad.path.length - 1);
   if (seg === 0 && squad.prog < 0.5) return battle.sites[squad.from] ? battle.sites[squad.from].tile : squad.path[0];
@@ -76,7 +76,8 @@ function processTide(battle, t) {
   const tide = battle.arena.sea && battle.arena.sea.tide;
   if (!tide) return;
   const st = seaState(battle);
-  if (!st.tide) st.tide = { nextAt: TIDE.everySec, warned: false, floodUntil: -1, n: 0, done: false };
+  const every = TIDE.everySec * (battle.enemy && battle.enemy.hazardIntervalMult > 0 ? battle.enemy.hazardIntervalMult : 1); // Quickening (PLAN-PHASE13 Ascension 9)
+  if (!st.tide) st.tide = { nextAt: every, warned: false, floodUntil: -1, n: 0, done: false };
   const s = st.tide;
   if (s.done) return;
   const keep = battle.sites[tide.site];
@@ -93,7 +94,7 @@ function processTide(battle, t) {
   if (t + 1e-9 >= s.nextAt) {
     s.floodUntil = s.nextAt + TIDE.floodSec;
     s.n += 1;
-    s.nextAt += TIDE.everySec;
+    s.nextAt += every;
     s.warned = false;
     battle.events.push({ type: 'tideFlood', site: keep.id, until: s.floodUntil, tiles: tide.tiles.slice(), ...pos(battle, keep) });
   }

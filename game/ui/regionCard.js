@@ -18,6 +18,7 @@ import { createGrudgeMeter } from './grudgeMeter.js';
 import { icon as uiIcon } from './icons.js';
 import { drawTypeIcon, drawTwistGlyph } from '../render/featureGlyphs.js';
 import { drawEmblem } from '../render/sprites.js';
+import { makeHoldButton } from './holdConfirm.js';
 
 /** The Fortifications panel's words (DESIGN 10.3); the effect lines and prices come in the data (meta/forts.js fortsPanelData). */
 const FORTS_PANEL_COPY = Object.freeze({
@@ -302,6 +303,8 @@ export function createRegionCard({
   });
   fortsPanel.el.classList.add('is-forts');
   fortsPanel.el.hidden = true;
+  // Settings > Hold to confirm (PLAN-PHASE14): Demolish, in both panels, needs a held press while the option is on
+  for (const b of [...worksPanel.el.querySelectorAll('.works-demolish'), ...fortsPanel.el.querySelectorAll('.works-demolish')]) makeHoldButton(b);
 
   function setMode(next) {
     if (mode === next) return;

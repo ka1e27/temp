@@ -332,7 +332,10 @@ export function chronicleText(entry, ctx = {}) {
     const l = leaderFor(state.seed, state.dynasty.level, factionId);
     leader = l ? l.fullName : null;
   }
-  const rival = leader ? `${leader}’s ${faction}` : faction;
+  // A faction named with its article ("The Usurper") must not read "…’s The Usurper" or "the The Usurper": inside a possessive and
+  // after a template's own "the", the bare name is used.
+  const bare = faction.replace(/^the\s+/i, '');
+  const rival = leader ? `${leader}’s ${bare}` : faction;
   const n = d.n != null ? d.n : d.streak != null ? d.streak : 0;
   const vars = {
     region,
@@ -348,7 +351,9 @@ export function chronicleText(entry, ctx = {}) {
     stars: String(d.stars != null ? d.stars : 0),
     years: String(d.years != null ? d.years : 0),
   };
-  return tpl.replace(/\{(\w+)\}/g, (whole, key) => (vars[key] != null ? vars[key] : whole));
+  return tpl
+    .replace(/\b([Tt]he) \{faction\}/g, (whole, the) => `${the} ${bare}`)
+    .replace(/\{(\w+)\}/g, (whole, key) => (vars[key] != null ? vars[key] : whole));
 }
 
 /** "Year 2": the entry's Year within its dynasty. */

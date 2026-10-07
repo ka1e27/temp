@@ -57,6 +57,8 @@
   --ashen-glow: #a9dfd6; /* the cold ember glow: the faction's light variant */
   --faction-seakings: #3eefd8; /* light sea-green (Phase 12); its light variant is near-white #effffb */
   --sea-foam: #9fe8e0; /* the sea lines on a region card */
+  --faction-usurper: #650824; /* deep royal wine (Phase 13); gold on the emblem, light variant #f2c4cf */
+  --usurper-gold: #e9c46a;
   --ember-burn: #ff8a3d; /* Firestorm burning the dead */
 
   /* --- Type --------------------------------------------------------------- */
@@ -119,4 +121,20 @@ html.reduce-motion {
   --dur-fast: 0ms;
   --dur-med: 0ms;
   --dur-slow: 0ms;
+}
+
+/* High-contrast UI (Settings > High contrast, PLAN-PHASE14 §14B.3): opaque panels, strong borders, brighter text. Body text clears 7:1 on every
+   panel (measured on --panel-bg-solid: text 20.0:1, muted 16.3:1, dim 14.2:1; game/tests/ui.options.test.js). The rest is styles/components/options.css. */
+html.high-contrast {
+  --panel-bg: rgba(6, 8, 13, 1);
+  --panel-bg-solid: #06080d;
+  --panel-border: rgba(255, 255, 255, 0.6);
+  --panel-border-light: rgba(255, 255, 255, 0.75);
+  --panel-blur: 0px;
+  --text: #ffffff;
+  --text-muted: #e4e8ef;
+  --text-dim: #d4d9e3;
+  --btn-secondary-bg: rgba(255, 255, 255, 0.1);
+  --btn-secondary-bg-hover: rgba(255, 255, 255, 0.2);
+  --btn-secondary-border: rgba(255, 255, 255, 0.75);
 }

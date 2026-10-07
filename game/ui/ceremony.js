@@ -70,6 +70,8 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
   let page = 0;
   let edict = null;
   const challenges = new Set();
+  let crownPick = false; // PLAN-PHASE13: "Seek the Crown of Ages" chosen on the last page (dynasty 7+)
+  let ascension = 0; // PLAN-PHASE13 §13C: the Ascension level picked on the Challenges page (after the ending)
 
   // --- the stepper -------------------------------------------------------------------------------------------------------------------------
   const steps = PAGES.map((p, i) => h('li.ceremony-step', { 'data-page': p.id }, h('span.ceremony-step-dot.nums', { 'aria-hidden': 'true' }, String(i + 1)), h('span.ceremony-step-word', {}, p.short)));
@@ -117,15 +119,42 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
   const challengeBonus = h('p.ceremony-lead', {}, '');
   const warningText = h('span', {}, '');
   const warningEl = h('p.challenge-warning', { role: 'note' }, icon('flame', 16), warningText);
-  const pageChallenges = h('section.ceremony-page', { 'data-page': 'challenges' }, challengeBonus, challengeList, warningEl);
+  // PLAN-PHASE13 §13C: the Ascension picker, once the Crown of Ages has been won (levels up to one above the highest cleared)
+  const ascLevels = h('div.ascension-levels', { role: 'radiogroup', 'aria-label': 'Ascension level' });
+  const ascTitle = h('span.ascension-detail-title', {}, '');
+  const ascBonus = h('span.ascension-detail-bonus', {}, '');
+  const ascAdded = h('p.ascension-detail-added', {}, '');
+  const ascAll = h('ul.ascension-detail-all');
+  const ascNote = h('p.ceremony-note', {}, '');
+  const ascEl = h('section.ascension-pick', { 'aria-label': 'Ascension' },
+    h('h3.ascension-pick-title', {}, icon('ascension', 18), h('span', {}, 'Ascension')), ascNote, ascLevels,
+    h('div.ascension-detail', { 'aria-live': 'polite' }, h('div.ascension-detail-head', {}, ascTitle, ascBonus), ascAdded, ascAll));
+  ascEl.hidden = true;
+  const ascButtons = [];
+  const pageChallenges = h('section.ceremony-page', { 'data-page': 'challenges' }, challengeBonus, challengeList, warningEl, ascEl);
   const challengeEls = new Map();
 
   // --- page 5: found it ---------------------------------------------------------------------------------------------------------------------
   const recap = h('ul.ceremony-recap');
   const foundBtnLabel = h('span', {}, 'Found the House');
   const foundBtn = h('button.btn.btn-primary.btn-block.ceremony-found', { type: 'button', onClick: () => found() }, icon('crown', 18), foundBtnLabel);
-  const pageFound = h('section.ceremony-page', { 'data-page': 'found' },
-    h('p.ceremony-lead', {}, 'A new continent awaits, with tougher enemies. Your House goes with you.'), recap, foundBtn);
+  // PLAN-PHASE13 §13A: at a dynasty 7+ founding, a distinct final choice in a regal frame: an ordinary new continent, or the Crown of Ages
+  const crownWarn = h('p.crown-choice-warning', { role: 'note' }, icon('flame', 14), h('span', {}, ''));
+  const crownLines = h('ul.crown-choice-lines');
+  const pathNew = h('button.crown-path.is-new', { type: 'button', role: 'radio', 'data-path': 'new', onClick: () => pickCrown(false) },
+    icon('map', 26), h('span.crown-path-text', {}, h('span.crown-path-name', {}, 'A new continent'), h('span.crown-path-line', {}, 'Found another dynasty, as before.')));
+  const pathCrown = h('button.crown-path.is-crown', { type: 'button', role: 'radio', 'data-path': 'crown', onClick: () => pickCrown(true) },
+    h('span.crown-path-emblem', { 'aria-hidden': 'true' }, icon('crownChains', 34)),
+    h('span.crown-path-text', {}, h('span.crown-path-name', {}, 'Seek the Crown of Ages'), h('span.crown-path-line', {}, '')));
+  for (const b of [pathNew, pathCrown]) b.addEventListener('keydown', (ev) => {
+    if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(ev.key)) return;
+    pickCrown(!crownPick); (crownPick ? pathCrown : pathNew).focus(); ev.preventDefault();
+  });
+  const crownEl = h('section.crown-choice', { 'aria-label': 'The final choice' },
+    h('p.crown-choice-kicker', {}, 'A final choice'), h('div.crown-paths', { role: 'radiogroup', 'aria-label': 'Where the House goes' }, pathNew, pathCrown), crownLines, crownWarn);
+  crownEl.hidden = true;
+  const foundLead = h('p.ceremony-lead', {}, 'A new continent awaits, with tougher enemies. Your House goes with you.');
+  const pageFound = h('section.ceremony-page', { 'data-page': 'found' }, foundLead, crownEl, recap, foundBtn);
 
   const pages = [pageSummary, pageLegacy, pageEdict, pageChallenges, pageFound];
   const bodyEl = h('div.ceremony-body.scroll-y', {}, ...pages);
@@ -167,7 +196,7 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
   function found() {
     if (!data) return;
     if (data.edicts.length && !edict) { go(2); return; }
-    onFound?.({ edict: data.edicts.length ? edict : null, challenges: [...challenges] });
+    onFound?.({ edict: data.edicts.length ? edict : null, challenges: [...challenges], crownOfAges: !!(data.crown && crownPick), ascension: data.ascension ? ascension : 0 });
   }
 
   function titleFor(id) {
@@ -177,7 +206,7 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
       case 'legacy': return 'The Legacy';
       case 'edict': return 'Proclaim an Edict';
       case 'challenges': return 'Raise the stakes';
-      default: return `Found the House of ${house}`;
+      default: return data && data.crown && crownPick ? 'Seek the Crown of Ages' : `Found the House of ${house}`;
     }
   }
 
@@ -202,7 +231,8 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
 
   function renderRecap() {
     if (!data) return;
-    put(foundBtnLabel, `Found the House of ${data.house}`);
+    put(foundBtnLabel, data.crown && crownPick ? 'Seek the Crown of Ages' : `Found the House of ${data.house}`);
+    foundBtn.classList.toggle('is-crown', !!(data.crown && crownPick));
     const e = data.edicts.find((x) => x.id === edict);
     const items = [
       [icon('star', 16), `Dynasty ${toRoman(data.level + 1)}: ${data.starsTotal} stars`],
@@ -212,7 +242,9 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
         : [icon('laurel', 16), 'No Challenges'],
       [icon('tree', 16), `${data.legacy.available} Legacy point${data.legacy.available === 1 ? '' : 's'} left to spend`],
     ];
-    if (data.voyage) items.unshift([icon('seaLane', 16), data.voyage]);
+    if (data.voyage && !(data.crown && crownPick)) items.unshift([icon('seaLane', 16), data.voyage]);
+    if (data.crown && crownPick) items.unshift([icon('crownChains', 16), data.crown.recap]);
+    if (data.ascension && ascension) items.push([icon('ascension', 16), `Ascension ${ascension}: ${data.ascension.levels.find((x) => x.level === ascension)?.legacy || ''}`]);
     recap.replaceChildren(...items.map(([ic, t]) => h('li', {}, ic, h('span', {}, t))));
   }
 
@@ -265,6 +297,69 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
     const rec = { label, box, name, rule };
     challengeEls.set(c.id, rec);
     return rec;
+  }
+
+  // --- PLAN-PHASE13: the Crown of Ages path and the Ascension level --------------------------------------------------------------------------------
+  function pickCrown(on) {
+    crownPick = !!(on && data && data.crown);
+    for (const [b, v] of [[pathNew, false], [pathCrown, true]]) {
+      b.classList.toggle('is-picked', crownPick === v);
+      setAttr(b, 'aria-checked', crownPick === v ? 'true' : 'false');
+      b.tabIndex = crownPick === v ? 0 : -1;
+    }
+    crownEl.classList.toggle('is-crown', crownPick);
+    el.classList.toggle('is-crown', crownPick);
+    crownWarn.hidden = !crownPick;
+    if (PAGES[page].id === 'found') put(titleEl, titleFor('found'));
+    put(foundLead, crownPick && data.crown ? data.crown.lead : 'A new continent awaits, with tougher enemies. Your House goes with you.');
+    renderRecap();
+  }
+
+  function pickAscension(n) {
+    const a = data && data.ascension;
+    if (!a) { ascension = 0; return; }
+    ascension = Math.max(0, Math.min(a.max, n | 0));
+    ascButtons.forEach((b, i) => {
+      const on = i === ascension;
+      b.classList.toggle('is-picked', on);
+      setAttr(b, 'aria-checked', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+    const lv = a.levels.find((x) => x.level === ascension);
+    put(ascTitle, ascension ? `Ascension ${ascension}` : 'No Ascension');
+    put(ascBonus, ascension && lv ? lv.legacy : '');
+    put(ascAdded, ascension && lv ? lv.text : 'The standard rules. Pick a level to add its modifier, and every one below it.');
+    const below = a.levels.filter((x) => x.level > 0 && x.level < ascension);
+    const sig = below.map((x) => x.level).join(',');
+    if (ascAll.dataset.sig !== sig) {
+      ascAll.dataset.sig = sig;
+      ascAll.replaceChildren(...below.map((x) => h('li', {}, h('span.nums', {}, `${x.level}`), h('span', {}, x.text))));
+    }
+    ascAll.hidden = !below.length;
+    el.classList.toggle('is-ascended', ascension > 0);
+    renderRecap();
+  }
+
+  function renderAscension(a) {
+    ascEl.hidden = !a;
+    if (!a) return;
+    put(ascNote, a.note || '');
+    if (ascLevels.dataset.max !== String(a.max)) {
+      ascLevels.dataset.max = String(a.max);
+      ascButtons.length = 0;
+      for (let i = 0; i <= a.max; i++) {
+        const b = h('button.ascension-level', { type: 'button', role: 'radio', 'data-level': String(i), onClick: () => pickAscension(i),
+          'aria-label': i ? `Ascension ${i}` : 'No Ascension' }, i ? h('span.nums', {}, String(i)) : h('span', {}, 'Off'));
+        b.addEventListener('keydown', (ev) => {
+          const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[ev.key];
+          if (!step) return;
+          pickAscension((ascension + step + a.max + 1) % (a.max + 1)); ascButtons[ascension].focus(); ev.preventDefault();
+        });
+        ascButtons.push(b);
+      }
+      ascLevels.replaceChildren(...ascButtons);
+    }
+    pickAscension(Math.min(ascension, a.max));
   }
 
   function syncChallenges() {
@@ -326,6 +421,15 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
     }
     put(warningText, d.challengeWarning || '');
     syncChallenges();
+    renderAscension(d.ascension || null);
+    crownEl.hidden = !d.crown;
+    if (d.crown) {
+      put(pathCrown.querySelector('.crown-path-line'), d.crown.line);
+      put(crownWarn.lastChild, d.crown.warning);
+      const sig = d.crown.lines.join('|');
+      if (crownLines.dataset.sig !== sig) { crownLines.dataset.sig = sig; crownLines.replaceChildren(...d.crown.lines.map((x) => h('li', {}, icon('crown', 12), h('span', {}, x)))); }
+    }
+    pickCrown(crownPick);
     render();
   }
 
@@ -342,6 +446,8 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
   function open(d) {
     edict = null;
     challenges.clear();
+    crownPick = false;
+    ascension = 0;
     page = 0;
     update(d);
     el.hidden = false;
@@ -356,7 +462,10 @@ export function createCeremony({ onBuyLegacy, onFound, onClose, onSaveMap, onPag
     saveMap: saveBtn,
     setSaveStatus: (message, kind) => saveBtn.setStatus(message, kind),
     get page() { return PAGES[page].id; },
-    get choice() { return { edict, challenges: [...challenges] }; },
+    get choice() { return { edict, challenges: [...challenges], crownOfAges: crownPick, ascension }; },
+    pickCrown, pickAscension, // dev / checks
+    crownPath: (which) => (crownEl.hidden ? null : which === 'crown' ? pathCrown : pathNew),
+    ascensionLevel: (n) => (ascEl.hidden ? null : ascButtons[n] || null),
     /** The Edict cards (the tutorial points at them). */
     edictList: () => (pageEdict.hidden || !data || !data.edicts.length ? null : edictList),
     stepButton: (kind) => (kind === 'next' ? nextBtn : kind === 'back' ? backBtn : foundBtn),

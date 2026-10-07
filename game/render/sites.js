@@ -5,6 +5,7 @@
 import { drawSettlement, drawBanner, drawTroopBadge, drawSelectionRing, BANNER_ANCHOR, bannerStyleVersion } from './sprites.js';
 import { ACCENTS, rgba } from './palette.js';
 import { nearestBucket } from '../scenes/timing.js';
+import { lookVersion } from './accessibility.js';
 
 // Must mirror sprites.js's own (unexported) building-footprint geometry so the
 // live highlight glow / selection ring line up with the cached sprite exactly.
@@ -56,7 +57,15 @@ export function createSiteSpriteCache() {
   const fastStrips = new Map(); // bucket -> [factionId] -> strip
 
   let styleVer = bannerStyleVersion();
+  let look = lookVersion();
+  /** A colour-vision preset repainted the factions (PLAN-PHASE14): every settlement sprite and flag is rebaked in the new colours. */
+  function checkLook() {
+    if (look === lookVersion()) return;
+    look = lookVersion();
+    cache.clear(); fastSprites.clear(); bannerCache.clear(); fastStrips.clear();
+  }
   function getBannerStrip(factionId, s) {
+    checkLook();
     // Phase 9: the realm's banner style changed: every baked flag is rebaked (only the player's look differs, but it is a rare event)
     if (styleVer !== bannerStyleVersion()) { styleVer = bannerStyleVersion(); bannerCache.clear(); fastStrips.clear(); }
     const bucket = bucketOf(s);
@@ -90,6 +99,7 @@ export function createSiteSpriteCache() {
   }
 
   function getSprite(type, factionId, s) {
+    checkLook();
     const bucket = bucketOf(s); // device px per world unit
     let row = null;
     if (typeof factionId === 'number') {

@@ -11,6 +11,8 @@
 import { drawHexTint, drawHexEdge, elevOffset, hexCorners, hexPath } from './tiles.js';
 import { factionColor, factionColorLight, faction, rgba } from './palette.js';
 import { DIRS } from '../core/hex.js';
+import { patternOf, patternsEnabled } from './accessibility.js';
+import { drawPatternTile, patternInk } from './territoryPatterns.js';
 
 export const FREE_FOLK_OWNER = 1;
 
@@ -25,7 +27,10 @@ const BAND_RIVAL = 0.62;
 // The Ashen Host's slate is nearly grey: at the rivals' alpha its wash vanished into the terrain (PLAN-PHASE6). An 'undying' faction's interior
 // wash is this much stronger, so its land reads as ashen at a glance, like the saturated rivals' land does.
 const UNDYING_TINT = 1.9;
-const tintBoost = (owner) => (faction(owner)?.personality === 'undying' ? UNDYING_TINT : 1);
+// PLAN-PHASE13: the Usurper's deep royal wine (the only dark family that clears the colour-blind bar against all seven others) also sinks into
+// forest at the rivals' alpha; a smaller boost keeps it wine, not mud.
+const USURPER_TINT = 1.8;
+const tintBoost = (owner) => { const p = faction(owner)?.personality; return p === 'undying' ? UNDYING_TINT : p === 'usurper' ? USURPER_TINT : 1; };
 const BAND_DEPTH = 0.38; // in hexes (world units): 0.3-0.4 per the brief
 
 // Overlay-blend strength multiplier by terrain: rock and snow drink colour and turn muddy/purple.
@@ -147,6 +152,18 @@ export function drawTerritory(target, world, landTiles, ownerOf, s, ox, oy, dpr 
     hexPath(ctx, x, topY, s);
     ctx.fill();
     ctx.globalAlpha = 1;
+  }
+
+  // Pass 1b (Settings > Patterns, PLAN-PHASE14): each faction's pattern over its land, the Free Folk's too, under the bands and borders.
+  if (patternsEnabled()) {
+    for (const t of landTiles) {
+      const owner = ownerOfOrNone(t);
+      if (owner < 0) continue;
+      const kind = patternOf(owner);
+      if (kind === 'none') continue;
+      const lift = elevOffset(t, s);
+      drawPatternTile(ctx, kind, ox + t.x * s, oy + t.y * s - lift, s, ox, oy, lift, patternInk(faction(owner)));
+    }
   }
 
   // Pass 2: inner bands along borders, clipped to the tile's own top face.

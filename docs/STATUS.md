@@ -703,3 +703,34 @@ harder or judgment-heavy tasks directly. Use `subagent_type: opus55-engineer` (d
 `C:UserskylegProjects.claudeagents` and this repo's `.claude/agents/`; loads only at session start).
 In a session started before that file existed, use a general-purpose agent with `model: "opus"`.
 Sonnet 5.5 (`sonnet55-engineer`) is no longer preferred.
+- **Phase 12 DONE** (integration, uncommitted on 9a98333): archipelago rendering (turquoise shallows with shoals, piers, dotted lanes),
+  longboats and wading, Sea Kings #3eefd8 / #11786c / #effffb (closest CVD pair 17.5 against the 15 bar), the Tide telegraph and flood with merged
+  pops, the Admiral (bicorne) + Broadside, the Shipwreck toast, hint S1, a Codex group "The sea"; perf within budget (archipelago
+  pan 17.7/21.2 ms, Tide fight 18.2/25.3 ms). Snapshot scratchpad/p12snap (93 files on 9a98333) PASSED the full gate (npm 1217, full check.mjs, --base=temp). **Committed b2d3faa and pushed to redesign +
+  main** at the user's "deploy Phase 12" (2026-10-06); the main tree was reset onto it with the Phase 13 WIP kept. **LIVE** (Pages run passed first time).
+- **2026-10-06 PHASE 13 "The Crown of Ages" STARTED** (docs/PLAN-PHASE13.md): a final continent from D7 (all rival kinds + the
+  Usurper), the 3-phase Throne of Ages boss, an ending (cinematic, the Chronicle of your reign, credits, a title Crown), Ascension 1-10.
+  Sim/meta + integration engineers.
+- **Sim/meta Phase 13 DONE** (npm 1230): world/crown.js (30-34 regions, 2 classic + Ashen + a Sea Kings island coast + the Usurper
+  at the centre), FACTIONS[7] usurper, throneArena.js/throne.js (3 phases; the keep warded until 3 borrows), the ending (result.crowned,
+  generals.crowned, endingRecord), Ascension 1-10 folded into edictMods. 87 existing worlds byte-identical (tools/_p13digest.mjs). Throne:
+  12/14 won, median 8.3 min, 2 timeouts; Crown continent 1.56x a D7. The Throne card reads a little harder than it plays (86 % won at
+  Fair; accepted for a finale). Watch: two seeds have very long late-game continents (pre-existing in D7).
+- **Integration Phase 13 DONE** (uncommitted on b2d3faa): the ceremony final choice + Ascension picker, the Usurper #650824/#33020f/#f2c4cf
+  (closest CVD 19.0), Throne visuals (battleThrone.js, throneFx.js), the ending (ui/ending.js, lazy: tour, Chronicle scroll, credits;
+  skippable), title Crown, Ascension ladder, hints U1/U2, Codex group. The gate is green in 18 groups + --base=temp; perf frames noisy on a
+  busy machine (the A/B against HEAD shows no regression). Lead fixes requested: plural "1 rival capitals", a garbled Usurper Chronicle
+  line, the recap showing the archipelago line when the Crown is chosen. Also this session: tools/cdp.js now launches Chrome with
+  --mute-audio (the user heard the game music from headless checks).
+  Lead fixed the Chronicle article bug in pure code (chronicleText strips a leading "The " inside {rival} and after "the {faction}"), with a
+  test over every template with the Usurper as rival. Integration: proper plurals on the scroll; radio marks on the final-choice cards.
+- **Phase 13 READY TO DEPLOY:** snapshot scratchpad/p13snap (83 files on b2d3faa) passed the full gate (npm 1231, full check.mjs,
+  --base=temp). Perf A/B against live b2d3faa, back to back under the same load: Phase 13 equal or faster on every frame row.
+- **2026-10-06 PHASE 14 STARTED** (docs/PLAN-PHASE14.md): 14A late-game pacing (a human policy for D1-D7 + the Crown; D2-D7 medians <= 2 h,
+  no wait > 60 min, Crown <= 2.5 h, Ascension A1 <= A0 + 15 %) and 14B options (colour-vision presets with CIEDE2000 >= 25 per
+  preset + pattern overlay, text size, high contrast, Effects slider, rebindable keys, hold-to-confirm, audio sliders + mute when hidden).
+- **Phase 14A DONE** (uncommitted, npm 1244): the late walls were mostly the bot (battle/bot.js: supply-line actions blocked its attack plan;
+  supply squads counted toward its 14-squad limit; it also drives Quick Conquest), plus patience scaling 7x by D7 (PATIENCE_MAX_SEC 600),
+  the Throne card (factor 0.35 -> 0.25) and Holy Ground garrisons starting far above cap (FEATURES.holy.startCap 2). Human: D5 2.02 -> 1.50 h,
+  D7 2.14 -> 1.61 h (worst wait 662 -> 24 min), Crown 4.03 -> 1.78 h; A1 +1-4 % over A0. D1 human pace unchanged. Later: a label
+  calibration pass (late Hard fights play easier than they read; Holy Ground Easy reads optimistic).

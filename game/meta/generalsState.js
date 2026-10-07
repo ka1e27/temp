@@ -14,6 +14,7 @@ import { hash32 } from '../core/rng.js';
 import { recordDeed, sanitizeDeeds } from './deeds.js'; // a leaf: the Deeds live inside this record (state.generals.deeds)
 import { sanitizeLegacy } from './legacy.js'; // a leaf: so does the Legacy (state.generals.legacy)
 import { sanitizeReliquary } from './boonsState.js'; // a leaf: and the Reliquary (state.generals.reliquary, PLAN-PHASE7)
+import { sanitizeAscensionRecord, sanitizeCrowned, sanitizeReignRecord } from './ascension.js'; // a leaf: the crowned marker and the Ascension record (PLAN-PHASE13)
 
 const KINDS = new Set(Object.keys(GENERALS.kinds));
 const STYLES = new Set(GENERALS.mercenaryStyles);
@@ -294,5 +295,12 @@ export function sanitizeGenerals(raw, seed = 0) {
   if (raw.deeds && typeof raw.deeds === 'object') out.deeds = sanitizeDeeds(raw.deeds); // the lifetime Deeds ride with the roster
   if (raw.legacy && typeof raw.legacy === 'object') out.legacy = sanitizeLegacy(raw.legacy); // and so does the Legacy (PLAN-PHASE5)
   if (raw.reliquary && typeof raw.reliquary === 'object') out.reliquary = sanitizeReliquary(raw.reliquary); // and the Reliquary (PLAN-PHASE7)
+  // PLAN-PHASE13: the crowned marker, the highest Ascension cleared and the reign's Edicts (lasting, absent until earned)
+  const crowned = sanitizeCrowned(raw.crowned);
+  if (crowned) out.crowned = crowned;
+  const asc = sanitizeAscensionRecord(raw.ascension);
+  if (asc) out.ascension = asc;
+  const reign = sanitizeReignRecord(raw.reign);
+  if (reign) out.reign = reign;
   return out;
 }

@@ -9,6 +9,7 @@ import { createSaveMapButton } from './saveMapButton.js';
 import { createDeedsSection, createTrophySection } from './deedsPanel.js';
 import { createEdictSection, createLegacySection } from './dynastyPanel.js';
 import { createBoonStrip, createReliquary } from './boonsPanel.js';
+import { createAscensionSection, crownPipsEl } from './ascensionPanel.js';
 
 const STAT_ROWS = [
   ['battlesWon', 'trophy', 'Battles won'],
@@ -89,8 +90,12 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy, o
   const saveMap = createSaveMapButton({ onSave: () => onSaveMap?.() });
   savers.add(saveMap);
 
+  // PLAN-PHASE13: a crown pip on the dynasty banner for every Ascension level cleared, and the Ascension ladder (after the ending)
+  let crownPips = crownPipsEl(0);
+  const dynastyHeader = h('div.dynasty-header', {}, dynastyLevelEl, dynastyStarsEl);
+  const ascension = createAscensionSection();
   const dynastyEl = h('section.dynasty-panel', {},
-    h('div.dynasty-header', {}, dynastyLevelEl, dynastyStarsEl),
+    dynastyHeader,
     dynastyDescEl,
     foundBtn,
   );
@@ -109,10 +114,11 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy, o
   const reliquary = createReliquary();
   // Order (lead decision 2026-10-04): [Dynasty, when the continent is won] · the Edict and Challenges (one compact line) · the Chronicle (on a 390x844 phone it
   // starts on the first screen) · Deeds · Trophies · the stats · the Legacy tree; the Dynasty section sits last until the continent is won.
-  const bodyEl = h('div.realm-body.scroll-y', {}, edictSection.el, boonStrip.el, boonEl, chronicle.el, saveMap.el, saveMap.statusEl, deeds.el, reliquary.el, trophies.el, statsSection, legacySection.el, dynastyEl);
+  const bodyEl = h('div.realm-body.scroll-y', {}, edictSection.el, boonStrip.el, boonEl, chronicle.el, saveMap.el, saveMap.statusEl, deeds.el, reliquary.el, ascension.el, trophies.el, statsSection, legacySection.el, dynastyEl);
   const el = h('div.realm.glass-panel', {},
     h('div.realm-header', {},
       h('h2.realm-title', {}, 'Realm'),
+      crownPips,
       h('button.btn-icon.realm-close', { onClick: () => onClose?.(), 'aria-label': 'Close' }, icon('close', 16)),
     ),
     bodyEl,
@@ -148,6 +154,8 @@ export function createRealm({ onFoundDynasty, onSaveMap, onClose, onBuyLegacy, o
       if (boonText.textContent !== text) boonText.textContent = text;
     }
     if (data.dynastyRules !== undefined) edictSection.update(data.dynastyRules);
+    if (data.ascension !== undefined) ascension.update(data.ascension);
+    if (data.crownPips !== undefined && crownPips.childElementCount !== (data.crownPips | 0)) { const next = crownPipsEl(data.crownPips); crownPips.replaceWith(next); crownPips = next; }
     if (data.boonStrip !== undefined) boonStrip.update(data.boonStrip);
     if (data.reliquary !== undefined) reliquary.update(data.reliquary);
     if (data.legacy !== undefined) legacySection.update(data.legacy);

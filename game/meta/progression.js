@@ -37,6 +37,11 @@ import { offerBoons, boonsUnlocked, titheOnConquest, winDrafts } from './boons.j
 import { claimRelic, syncRelics } from './relics.js';
 import { quayTile } from '../world/archipelago.js';
 import { HARBOUR } from '../config/sea.js';
+import { THRONE } from '../config/crown.js';
+import { onThroneToppled, clearAscension, crownOfAgesAvailable, noteReign } from './crown.js'; // PLAN-PHASE13
+import { crownRivals } from '../world/crown.js';
+import { usurperTroops } from '../battle/throneArena.js';
+import { cleanAscensionChoice } from './ascension.js';
 
 /** The roster for a new dynasty: every General keeps level, XP and skills; where they last fought is forgotten. */
 function carryGenerals(state) {
@@ -157,6 +162,7 @@ export function enemyDepth(world, region) {
   const span = Number.isFinite(world.ladderSpan) ? world.ladderSpan : ENEMY_SCALING.atkDefByTier.length - 2;
   // the curve shapes the realm's ladder (PLAN-PHASE11); a challenge's short ladder stays evenly spaced, as Phase 9 tuned it
   const curve = Number.isFinite(world.ladderSpan) ? 1 : ENEMY_SCALING.ladderCurve;
+  if (region.throne && THRONE.topRung) return 1 + span; // PLAN-PHASE13: the Throne of Ages is the top rung, wherever it sits
   return 1 + span * Math.pow(ladderPosition(world, region), curve);
 }
 
@@ -260,7 +266,7 @@ export function enemyBattleStats(world, state, regionId) {
     atk: atkDef,
     def: atkDef,
     growth,
-    speed: 1,
+    speed: em.enemySpeedMult, // The Last Age (Ascension 10): +10%
     troopMult,
     capMult,
     thinkSec,
@@ -269,9 +275,13 @@ export function enemyBattleStats(world, state, regionId) {
     factionId,
     // PLAN-PHASE5, read by battle/arena.js: Merchant Princes' towers and forts, Kingmaker's capital Gates, Age of Dragons' Dragon
     fortTroopMult: em.enemyFortTroopMult,
-    gateTroopMult: region.isCapital ? em.capitalGateTroopMult : 1,
+    gateTroopMult: (region.isCapital ? em.capitalGateTroopMult : 1) * em.gateTroopMult, // Kingmaker; Iron Gates (Ascension 3)
     dragonHpMult: em.dragonHpMult,
     keepTroopMult: boonMods(state).enemyKeepTroopMult, // Kingslayer (PLAN-PHASE7): the keep's starting garrison (arena.js)
+    // PLAN-PHASE13 (Ascension): the Usurper's health, the hazards' interval (the Throne's borrowing, the Rising, the Tide)
+    throneHpMult: em.throneHpMult,
+    hazardIntervalMult: em.hazardIntervalMult,
+    ...(region.twist === 'holy' && FEATURES.holy.startCap ? { startCapCredit: FEATURES.holy.startCap } : {}), // PLAN-PHASE14 (arena.js)
   };
 }
 
@@ -382,7 +392,7 @@ export function conquer(state, world, regionId, now, opts = {}) {
   // ... and only when the win counts (meta/boons.js winDrafts: Fair or harder at attack time, typed regions, capitals). `opts.labelAtAttack`
   // is the card's label when the attack began (BattleRun.labelAtAttack); without it, the card's label now (before the region flips).
   const draftBoons = !!(opts && opts.viaBattle) && boonsUnlocked(state)
-    && winDrafts(region, opts.labelAtAttack || difficulty(state, world, regionId).label);
+    && winDrafts(region, opts.labelAtAttack || difficulty(state, world, regionId).label, edictMods(state).boonHardOnly); // Lean Fortunes (Ascension 5)
   syncRelics(state, world);
 
   state.owner[regionId] = PLAYER_FACTION;
@@ -442,6 +452,13 @@ export function conquer(state, world, regionId, now, opts = {}) {
     const tithe = titheOnConquest(state);
     if (tithe) { result.tithe = tithe; result.renown = (result.renown || 0) + tithe; }
   }
+  // PLAN-PHASE13: the Throne of Ages fell (the ending: the crowned marker, the deed, this dynasty's Ascension cleared); or the continent is
+  // whole at an Ascension level (cleared)
+  if (region.throne && !occupied && loser > 1) {
+    result.crowned = onThroneToppled(state, world, now);
+    if (result.crowned.ascension) result.ascension = result.crowned.ascension;
+  }
+  if (!result.ascension && canFoundDynasty(state, world)) { const a = clearAscension(state); if (a) result.ascension = a; }
   if (draftBoons) {
     const choices = offerBoons(state, world, 'battle');
     if (choices) {
@@ -525,13 +542,19 @@ function featureStrength(region, enemy, siteValue, world = null) {
   const unit = enemy.atk * enemy.def;
   const capped = (type, troops) => {
     const cfg = SITE_TYPES[type];
-    const cap = cfg.cap * (enemy.capMult ?? 1);
+    const cap = cfg.cap * (enemy.capMult ?? 1) * (region.throne ? THRONE.capMult : 1); // the Throne's sites hold more (PLAN-PHASE13)
     return (Math.min(troops, DIFFICULTY.overCapCredit * cap) + cfg.growth * enemy.growth * DIFFICULTY.horizonSec) * cfg.def * unit;
   };
   let sum = 0;
   if (region.type === 'bandit') sum += capped('bandit', FEATURES.bandit.troops * tm) * FEATURES.bandit.vet * FEATURES.bandit.vet;
   if (region.type === 'ruins') sum += capped('tower', FEATURES.ancientTower.troops * tm) * (1 + FRONTIER.occupation.towerCredit * 3);
-  if (region.twist === 'siege') sum += capped('gate', FEATURES.gate.troops * tm * (enemy.gateTroopMult ?? 1)); // Kingmaker
+  const gateTroops = region.throne ? THRONE.gateTroops : FEATURES.gate.troops; // PLAN-PHASE13: the Throne's Gate is the realm's last wall
+  if (region.twist === 'siege') sum += capped('gate', gateTroops * tm * (enemy.gateTroopMult ?? 1)); // Kingmaker
+  if (region.throne) { // PLAN-PHASE13: the three Champions' posts (veterans) and the Usurper's health
+    const vet = THRONE.championVet * THRONE.championVet;
+    sum += capped('bandit', THRONE.championTroops * tm) * vet * THRONE.champions.length;
+    sum += usurperTroops(enemy) * THRONE.usurperPower * unit * THRONE.card.usurperWeight;
+  }
   if (region.twist === 'raid') sum += capped('shrine', FEATURES.shrine.troops * tm) * FEATURES.shrine.count;
   if (region.type === 'dragon') sum += FEATURES.dragon.hp * tm * (enemy.dragonHpMult ?? 1) * FEATURES.difficulty.dragonHpWeight; // Age of Dragons
   if (world && quayTile(world, region.id) != null) sum += capped('harbour', HARBOUR.quayTroops * tm); // PLAN-PHASE12: the quay (seaArena.js)
@@ -560,13 +583,13 @@ function featureFactor(region, scouted) {
 function estimateStrength(world, region, enemy, captured = null, scouted = false) {
   const rival = enemy.factionId !== FREE_FOLK_FACTION;
   let sum = 0;
-  const siteValue = (type, neutral, defMult = 1) => {
+  const siteValue = (type, neutral, defMult = 1, capK = 1) => {
     const cfg = SITE_TYPES[type];
     if (!cfg) return 0;
     const mult = neutral ? 1 : enemy.troopMult;
     const unit = neutral ? 1 : enemy.atk * enemy.def;
     const growth = cfg.growth * (neutral ? BATTLE.freeFolkGrowthMult : enemy.growth);
-    const cap = cfg.cap * (neutral ? ENEMY_SCALING.freeFolkCapMult : (enemy.capMult ?? 1));
+    const cap = cfg.cap * (neutral ? ENEMY_SCALING.freeFolkCapMult : (enemy.capMult ?? 1)) * capK;
     const fortMult = !neutral && (type === 'tower' || type === 'fort') ? (enemy.fortTroopMult ?? 1)
       : !neutral && type === 'keep' ? (enemy.keepTroopMult ?? 1) : 1; // Merchant Princes; Kingslayer (PLAN-PHASE7)
     const start = Math.min((BATTLE.enemyStart[type] ?? 0) * mult * fortMult, DIFFICULTY.overCapCredit * cap);
@@ -575,7 +598,7 @@ function estimateStrength(world, region, enemy, captured = null, scouted = false
   for (const siteId of region.settlements) {
     const type = world.settlements[siteId].type;
     const walls = captured && (type === 'keep' || type === 'fort') ? captured.wallsMult : 1;
-    sum += siteValue(type, rival && type === 'hamlet', walls);
+    sum += siteValue(type, rival && type === 'hamlet', walls, region.throne ? THRONE.capMult : 1); // the Throne's sites hold more (PLAN-PHASE13)
   }
   // An occupied region's captured fortifications fight for the occupier (DESIGN §10.2): its Arrow Tower is one more tower site,
   // worth more per level (FRONTIER.occupation.towerCredit), and its Walls harden the keep and forts (above).
@@ -585,6 +608,7 @@ function estimateStrength(world, region, enemy, captured = null, scouted = false
   sum *= featureFactor(region, scouted);
   if (region.isCapital && enemy.personality === 'undying') sum *= DIFFICULTY.undyingCapital; // the Barrow Keep (PLAN-PHASE6)
   if (region.isCapital && enemy.personality === 'raider' && world.archipelago) sum *= DIFFICULTY.tideCapital; // the Tide Fortress (PLAN-PHASE12)
+  if (region.throne) sum *= THRONE.card.factor; // the Throne of Ages (PLAN-PHASE13): the borrowing, measured
   sum *= 1 + DIFFICULTY.fordWeight * fordShare(world, region); // PLAN-PHASE12: fords slow the attack
   return sum * DIFFICULTY.strengthScale * (DIFFICULTY.personality[enemy.personality] ?? 1)
     * Math.pow(DIFFICULTY.depthPerTier, Math.max(0, region.tier - 3))
@@ -676,6 +700,7 @@ export function difficulty(state, world, regionId, opts = {}) {
   const out = { power, strength, ratio, label: labelFor(ratio), surrender, approach, winChance: winChance(ratio) };
   if (enemy.personality === 'undying') out.mechanic = 'fallen'; // PLAN-PHASE6: the card shows The Fallen Rise (meta/rivals.js fallenLine)
   if (enemy.personality === 'raider') out.mechanic = 'sea'; // PLAN-PHASE12: the card shows the sea lines (meta/rivals.js seaLines)
+  if (enemy.personality === 'usurper') out.mechanic = 'throne'; // PLAN-PHASE13: the card shows the Usurper's lines (meta/crown.js throneLines)
   return out;
 }
 
@@ -703,6 +728,8 @@ export function perkTotals(state, world) {
  */
 export function canFoundDynasty(state, world) {
   if (!(state.owner.length > 0)) return false;
+  // PLAN-PHASE13 §13B: after the ending (the Throne of Ages toppled) the player may found anew at once, or play on
+  if (world && world.crown && state.owner[world.crown.throne] === PLAYER_FACTION) return true;
   return state.owner.every((f, id) => f === PLAYER_FACTION || (world && world.regions[id] && world.regions[id].type === 'dragon'));
 }
 
@@ -769,13 +796,18 @@ export function foundDynasty(state, newSeed, world, currentWorld, choice = {}) {
   };
   // Phase 5: this dynasty's Edict and Challenges; the lifetime Legacy (inside `generals`) gains the points founding pays
   next.edict = { ...defaultEdict(), id: edictId, challenges };
-  next.archipelago = archipelagoFor(newSeed, next.dynasty.level); // PLAN-PHASE12 §12A: a seeded 1-in-3 archipelago from dynasty 3
-  next.rivals = rivalsFor(newSeed, next.dynasty.level, { archipelago: next.archipelago }); // PLAN-PHASE6 §6A (+ the Sea Kings on an archipelago): worldOptsFor passes them on
+  // PLAN-PHASE13: Seek the Crown of Ages (from the dynasty-7 founding) and this dynasty's Ascension level (0..one above the highest cleared)
+  const crown = !!(choice && choice.crownOfAges) && crownOfAgesAvailable(state);
+  next.crownOfAges = crown;
+  next.ascension = cleanAscensionChoice(state, choice && choice.ascension);
+  next.archipelago = crown ? false : archipelagoFor(newSeed, next.dynasty.level); // PLAN-PHASE12 §12A: a seeded 1-in-3 archipelago from dynasty 3 (the Crown cuts its own coast)
+  next.rivals = crown ? crownRivals(newSeed) : rivalsFor(newSeed, next.dynasty.level, { archipelago: next.archipelago }); // PLAN-PHASE6 §6A (+ the Sea Kings on an archipelago): worldOptsFor passes them on
+  noteReign(next); // PLAN-PHASE13: the lasting record of every Edict chosen (the ending scroll)
   const legacy = ensureLegacy(next);
   legacy.points += legacyEarned;
   legacy.pendingBonus = CHALLENGES.legacyBonus * challenges.length;
   // the ceremony's Legacy purchases (choice.legacyBuys), in order, after the points are credited: a refused one is skipped and reported
-  const report = { legacyEarned, bought: [], refused: [] };
+  const report = { legacyEarned, bought: [], refused: [], crownOfAges: next.crownOfAges, ascension: next.ascension };
   for (const id of Array.isArray(choice && choice.legacyBuys) ? choice.legacyBuys : []) {
     const r = buyLegacy(next, id);
     if (r.ok) report.bought.push(id); else report.refused.push({ id, reason: r.reason });

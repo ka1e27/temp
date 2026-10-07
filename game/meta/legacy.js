@@ -8,6 +8,7 @@
 import { LEGACY_BRANCHES } from '../config/legacy.js';
 import { CHALLENGES, CHALLENGE_LIST } from '../config/edicts.js';
 import { DYNASTY } from '../config/meta.js';
+import { ascensionLegacyMult } from './ascension.js'; // a leaf (PLAN-PHASE13)
 
 const NODES = new Map();
 for (const b of LEGACY_BRANCHES) {
@@ -98,7 +99,7 @@ export function cleanChallenges(list) {
 export function legacyPointsForFounding(state) {
   const stars = DYNASTY.starBase + ((state && state.dynasty && state.dynasty.level) || 1);
   const ch = cleanChallenges(state && state.edict ? state.edict.challenges : []).length;
-  return Math.round(stars * (1 + CHALLENGES.legacyBonus * ch));
+  return Math.round(stars * (1 + CHALLENGES.legacyBonus * ch) * ascensionLegacyMult(state)); // PLAN-PHASE13: +25% per Ascension level
 }
 
 /** A save's legacy, made valid: known nodes only (and only with their prerequisite), spent never above points. Never throws. */

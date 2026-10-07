@@ -67,6 +67,8 @@ export const RULES = Object.freeze({
   A1: (c) => c.panelsClosed && !c.cardOpen && c.ashenRegion >= 0,
   // Phase 12: the first frontier region with fords on an archipelago (its label), while no card or panel is open
   S1: (c) => c.panelsClosed && !c.cardOpen && c.fordRegion >= 0,
+  U1: (c) => c.panelsClosed && !c.cardOpen && c.usurperRegion >= 0, // PLAN-PHASE13
+  U2: (c) => c.live && c.borrowTelegraph,
   // Phase 7: K1 lives in the first Boon draft (never picked by a scene); L1 a Relic's region on the frontier, while no card or panel is open
   K1: () => false,
   L1: (c) => c.panelsClosed && !c.cardOpen && c.relicRegion >= 0,

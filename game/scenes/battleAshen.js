@@ -13,6 +13,7 @@ import { PLAYER_OWNER } from '../battle/owner.js';
 import { hexRadiusToWorld } from '../battle/geom.js';
 import { drawWisp, drawAshRing, drawBurnGround, ASHEN_FX } from '../render/ashenFx.js';
 import { factionColorLight } from '../render/palette.js';
+import { effects } from '../render/accessibility.js'; // Settings > Effects (PLAN-PHASE14): fewer wisps at Reduced / Minimal
 
 const MAX_WISPS = 90;
 const POP_MS = 550; // rises at one site within this window add up into one "+N risen" pop
@@ -50,8 +51,9 @@ export function createBattleAshen(deps) {
   function spawnWisps(c, n, { rIn = 0.45, rOut = 1.1, color = ASHEN_FX.glow, fade = 'in', nowMs, spread = 380, life = 1300, cap = PER_SITE }) {
     const rm = reduceMotion();
     const near = wisps.reduce((k, w) => k + (Math.abs(w.x1 - c.x) < 0.3 && Math.abs(w.y1 - c.y) < 1.2 ? 1 : 0), 0);
-    const count = Math.min(Math.max(0, cap - near), Math.max(1, Math.round(rm ? Math.min(n, 2) : n)));
-    for (let i = 0; i < count && wisps.length < MAX_WISPS; i++) {
+    const k = effects().wisps;
+    const count = Math.min(Math.max(0, Math.round(cap * k) - near), Math.max(1, Math.round((rm ? Math.min(n, 2) : n) * k)));
+    for (let i = 0; i < count && wisps.length < MAX_WISPS * k; i++) {
       const a = rnd() * Math.PI * 2;
       const d = rIn + rnd() * (rOut - rIn);
       const x0 = c.x + Math.cos(a) * d;

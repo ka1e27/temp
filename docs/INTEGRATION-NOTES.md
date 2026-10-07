@@ -1216,3 +1216,121 @@ pushed the gear past the bar's right edge on a 390 px phone (it predates Phase 1
 **Perf** (`node tools/perf.mjs`, new rows `archipelago map, slow pan` and `Tide Fortress fight`, 2026-10-06, second of two runs; the first ran on a busy machine
 and put the unchanged land rows 2x over): title 2452 ms, map 3597 ms; map pan 16.7 / 19.8 ms; big battle 16.7 / 20.1; Ashen 16.9 / 23.6; Dragon 17.9 / 24.6;
 archipelago pan 17.7 / 21.2; Tide Fortress 18.2 / 25.3 (median / p95, budgets 20 / 33); meta 0.52 ms; save 6.5 KB (13.4 KB mid-battle).
+
+## Phase 13: the Crown of Ages (2026-10-06)
+Spec: `docs/PLAN-PHASE13.md`. Pure API: `docs/briefs/phase13-hookup.md`.
+
+**Faction look.** `FACTIONS[7]`, the Usurper: deep royal wine `#650824`, dark `#33020f`, light `#f2c4cf` (text on panels), the emblem `crownChains` (a crown
+over two shackles and their chain: one evenodd path, `CROWN_CHAINS_D`, the same string in `ui/icons.js` and `render/sprites.js`). Searched over sRGB with
+`core/colorDistance.js`: with eight factions only near-black/wine and a pale cream clear every bar. Closest pairs (CIEDE2000): Ashen Host 19.0 protan /
+20.4 deutan, Violet Covenant 21.1 tritan, Crimson Legion 24.1 normal (bars 20 normal, 15 CVD; `ui.a11y.test.js`). Tokens `--faction-usurper`,
+`--usurper-gold`. Its territory wash is drawn 1.8x (`render/territory.js` `USURPER_TINT`): dark wine sank into forest at the rivals' alpha.
+
+**Glue: `app/crown.js createCrown(...)`** (as `services.crown`) owns no rules: `ceremony(house)` (the Crown choice when `crownOfAgesAvailable`, the Ascension
+picker when `ascensionInfo().unlocked`; merged into `dynasty.ceremonyData`), `realm()` (the ladder, `crownPips = ascensionHighest`), `title()` (`crownLine`),
+`tick(nowMs, calm)` and `playEnding()`. `stateContainer.tryFoundDynasty` passes `crownOfAges` and `ascension` to `foundDynasty`.
+
+**The ceremony** (`ui/ceremony.js`): the Found page carries "A final choice" at a dynasty 7+ founding: two radio cards, "A new continent" and the regal
+wine-and-gold "Seek the Crown of Ages" (its lines, a warning, the panel's rim and the Found button turn wine). The Challenges page carries the Ascension
+picker after the ending (Off, 1..maxChoice; the level's modifier, every one below it, and "+N% Legacy at the next founding"). The choice is
+`{ edict, challenges, crownOfAges, ascension }`. Arrival toast: `CROWN.copy.ceremony` (+ "Ascension N."). Dev: `ceremony.pickCrown(on)`, `pickAscension(n)`.
+
+**The Throne of Ages** (`scenes/battleThrone.js`, drawing in `render/throneFx.js`; reuses `seaFx.drawTideRing/drawFloodTile` and `ashenFx.drawAshRing`).
+Handled FIRST in `battle.js handleEvent` (a borrowed `tideHit` is the Throne's even on a coast).
+
+| Event | What it shows |
+|---|---|
+| (always) | three Champion banners on the Gate, in each Champion's colour and emblem; a fallen one leans over, torn and faded |
+| `throneChampion` | gold shockwave, "The Barrow Knight has fallen!", a throne banner "... N Champions left" |
+| `thronePhase` 2 / 3 | "The Gate falls! The Usurper reaches for borrowed power" / "The Usurper takes the field!" |
+| `usurperBorrow` telegraph | "The Usurper borrows the Rising / the Tide / a Plague!"; the ash ring on the keep, tide rings on `arena.throne.tide`, plague rings on every site of yours |
+| `usurperBorrow` strike / end | the flood (until `until`), the plague aura with its time arc, the Rising's shockwave; `end` clears them |
+| `usurperField` / `usurperHit` | the Usurper-King drawn over his squad (`units.positionOf`, interpolated) or beside the site he holds, a wine health bar with a crown cap; hit flash |
+| `usurperFell` | his fall (1.5 s, instant under Reduce Motion), embers, "The Usurper falls!" and the banner |
+
+Banners use `battleHud.showChampionBanner(text, icon, 'throne')`, which now QUEUES (a banner finishes its 2.6 s before the next; at most 3 wait;
+`clearBanners()` on reset). The HUD feature line: "3 Champions guard the Gate" (bar), "The Usurper borrows the Tide in 12 s", "The Tide in 3 s!",
+"The Usurper-King" (his health), "The Usurper has fallen: take the keep!". The Usurper-King's `THRONE_LINES` go to the leader banner
+(`services.leaderLine`, held while a card is up), at most one per 9 s except his field and his fall. Region card: `throneLines` as icon rows
+(`throne`, `crownChains`) in the card's generic sea rows (`features.throne`). Dev: `__hd.throneInfo()`.
+
+**The ending** (`ui/ending.js`, lazy: `import()` on first use, listed in `hd-lazy`). One `watchDialog` (so toasts, leader lines and battles wait), three
+moments: a letterbox camera tour (home, rival capitals taken, the Throne, the whole continent; `ENDING.cinematicStops`; a repeat crowning tours only the
+Throne and the continent), "The Chronicle of Your Reign" (a parchment scroll built from `endingRecord()`: the Crown, Edicts, Generals, Deeds, remembered
+highlights via `chronicleText`; drifts slowly unless Reduce Motion or the reader scrolls), the credits (`ENDING.credits`). Skip (top right) and Escape end
+it from any moment; `html[data-ending]` hides `#ui`. Trigger: the world scene's frame calls `crown.tick(nowMs, calm)` (no dialog, no conquest flood, not in a
+challenge); it plays 1.6 s after the map is calm whenever `generals.crowned.times` exceeds the device's `hexdominion.v2.endingSeen` (so a reload never loses
+it). Reduce Motion: camera cuts, no drift, no fades. Fits 360 px (the scroll goes full screen). After it: back over the realm, autosave.
+
+**Title, Realm, Codex, hints.** The title shows a wine pill "Crowned in Year N" with a diamond pip per Ascension cleared (`title.update({ crown })`). Realm
+panel: crown pips beside the title and the Ascension ladder (`ui/ascensionPanel.js`: ten rungs, highest on top, cleared / open / locked, the dynasty's
+own marked). A new highest Ascension cleared toasts once (digest) with a Chronicle line. Codex group "The Crown of Ages": `crownOfAges`, `ascension`
+(numbers from `config/crown.js` / `config/ascension.js`). Tutorial U1 (map, `calm`, `intro: 'crown'`, `afterDone`, anchor `usurperRegion`, seen on
+`throneCardOpened`: `CROWN.copy.hint`) and U2 (battle, `urgent`, anchor `borrow`, the first borrowed weapon's ring, seen on `usurperStrike`). (C1/C2 were taken.)
+
+**Checks and dev hooks.** `check.mjs --only=phase13` (`tools/phase13Checks.mjs`, desktop 1440x900 and a 360x740 phone; `PHASE13_ONLY`, `PHASE13_SHOTS=0`).
+Dev: `__hd.crownRealm(choice)` (completes the realm at Dynasty VI+ and founds the Crown of Ages, seed 7 by default), `__hd.crown` (`playEnding()`,
+`pending()`, `devForget()`), `__hd.throneInfo()`; `__hd.foundDynasty` passes `crownOfAges` / `ascension`. Gallery: `screenshots/phase13/`.
+
+**Perf** (`node tools/perf.mjs`, 2026-10-06): title 2626 ms, map 5731 ms (budgets 3500 / 6000), meta 1.07 ms, save 6.6 KB (13.6 KB mid-battle): all within budget.
+Every frame row was over 20 / 33 ms that evening, but on a slow machine: an A/B run back to back (`--only=frames`, HEAD b2d3faa from a `git archive` copy
+via `--root`, then the Phase 13 tree) put HEAD at map 31.0 / 59.2, big battle 26.1 / 46.4, Ashen 25.1 / 51.4, Dragon 27.3 / 54.8, archipelago 20.2 / 38.1,
+Tide Fortress 27.3 / 55.0 and the Phase 13 tree at 21.7 / 39.2, 23.5 / 43.1, 21.8 / 41.3, 23.5 / 41.2, 21.9 / 41.2, 33.4 / 57.3 (median / p95 ms): no
+regression beyond run-to-run noise (the same HEAD measured 16-18 ms medians on 2026-10-06 morning). The ending module is lazy (not in the boot graph).
+
+## Phase 14B: Play your way (accessibility and options, 2026-10-06)
+Spec: `docs/PLAN-PHASE14.md` §14B. Checks: `node tools/check.mjs --only=options` (`tools/optionsChecks.mjs` + `optionsPresetChecks.mjs`,
+`optionsControlChecks.mjs`, `optionsFitChecks.mjs`); unit tests `game/tests/ui.options.test.js`. Gallery `screenshots/phase14/`.
+
+**Where the state lives.** The new options belong to the DEVICE, not the realm: `game/app/options.js` (`defaultOptions`, `sanitizeOptions`,
+`loadOptions(storage)`, `saveOptions`), storage key `hexdominion.options.v1`, whitelisted and clamped on load. So they survive New Realm, Reset Save, an
+import and a challenge, and a save code never carries them. Shape: `{ palette: 'default'|'deutan'|'tritan', patterns, textSize: 'normal'|'large'|'larger',
+highContrast, effects: 'full'|'reduced'|'minimal', holdToConfirm, voicesVolume, muteHidden (default true), keys: {action: KeyboardEvent.code} }`. Sound, music
+and effects volume, Reduce Motion, hints, slow battles and leader voices stay in `state.settings` (game/meta untouched). `main.js applyOptions()` applies
+everything live (called from `applyWorld` and on every change); Settings rows call `onOption(key, value, final)` (sliders save on release). Dev hooks:
+`__hd.options()`, `__hd.setOption(k, v)`, `__hd.voicesSaid()`, `__hd.sfxMuted()`.
+
+**Colour-vision presets** (`game/config/palettes.js`, `game/render/accessibility.js`). Default = `config/world.js FACTIONS` unchanged. The two others remap all
+eight factions (the player's azure included); names, emblems and patterns stay. Found by a seeded annealing search with `core/colorDistance.js` (identity =
+normal-vision distance to the default colour). Minimum pair distances (CIEDE2000, Machado 2009 full severity): **deutan preset** deutan 27.5, protan 27.5,
+normal 26.1; **tritan preset** tritan 28.0, normal 22.3; Default normal 24.1 (its CVD numbers are the 15+ of ui.a11y.test.js). Bars: `PALETTE_BAR` 25 for the
+targeted vision, `PALETTE_NORMAL_BAR` 20. Applying a preset REPAINTS the faction records in place: the eight objects inside `FACTIONS` (the array is frozen, the
+records are not), a world's `world.factions` copies (`paintWorld`, called in `applyWorld`) and the CSS `--faction-*` tokens; the defaults are snapshotted at
+load and restored exactly. Colours never reach the sim or the save. `lookVersion()` bumps on a change of look: the terrain chunk signature, the arena's
+territory bake and the site sprite / banner caches (`render/sites.js checkLook`) key on it, so the map re-bakes through the existing time-boxed path.
+**Pattern overlay** (`render/territoryPatterns.js`, pass 1b of `territory.js`): one pattern per faction id (`PATTERNS`: yours plain, then dots, stripes,
+cross-hatch, back-stripes, horizontal, vertical, grid), in the faction's dark ink (light ink for a dark faction), anchored to the world plane so it runs on
+across tiles; works under any preset.
+
+**Text size**: the root font size (`TEXT_SIZES` 100 / 112.5 / 125 %); every UI size is rem. **High contrast**: `html.high-contrast` (tokens.css: opaque
+`#06080d` panels, 0.6-alpha borders, text 20.0, muted 16.3, dim 14.2 :1) plus component overrides in `styles/components/options.css` (no blur, 2 px borders on
+panels, toasts, the coach, the leader card). **Effects** (`config/options.js EFFECTS`, read through `effects()`): particle counts (fx-kinds `n()`, at least one
+speck), shake strength (`fx.shake`), Ashen wisps (`battleAshen.spawnWisps`), Boon pops on screen at once (`battleBoons`), confetti, and the map's birds and
+dense smoke (`ambient.js`). Reduce Motion still applies on top.
+
+**Controls.** `game/ui/keymap.js` (DOM-free): `KEY_ACTIONS` (send 25/50/75/100, powers 1-5, ability G, Auto S, select all A, pause Space, speed F (new),
+mute M), `matches(action, e)` (a digit binding also answers to the numpad), `rebind` SWAPS when the key is taken (so the map never holds a conflict;
+`findConflicts` and `sanitizeBindings` cover junk storage), reserved keys (Escape, Tab, Enter, arrows, brackets, plus, minus, modifiers) are refused.
+battleHud, battle.js (pause, select all) and the M handler read it; the HUD relabels its key chips on `onBindingsChange`; the Controls card shows the player's
+keys. The dialog is `ui/keybindings.js` (Settings > Keyboard controls). **Hold to confirm** (`ui/holdConfirm.js makeHoldButton`): wired once, reads the
+option at press time (`html[data-hold-confirm]` shows the fill and the "Hold" word); a tap only nudges, an early release or blur cancels, Space/Enter hold
+works. Applied to every `danger` modal action (Retreat, Delete forever), modal actions with `hold: true` (New Realm over a save) and the Works / Forts
+Demolish buttons (wired in regionCard.js, so worksPanel keeps its import purity).
+
+**Audio.** Voices volume drives `app/voiceSfx.js`: a short formant murmur pitched per faction under every leader line that reaches the screen (wrapper
+on `ui.leaderBanner.update`), into the sfx master bus. Mute when hidden: `applyHiddenMute()` on `visibilitychange` (Sound off always wins). The Codex has
+an Options group and topic (`codexTopics.js`, `PANEL_TOPICS.options`).
+
+**Gotchas found while checking (Phase 14B).** The "Hold" word on a hold button is CSS `content` (`.hold-hint::after`), never a text node: the tools
+match buttons by their exact text ("New Realm"), and a text node turned it into "New RealmHold" (robust 2 and the keepsakes check failed on it). A text-size
+change dispatches a `resize` on the next frame, so the self-measuring layouts refit (the battle HUD's `fitNames`). At Large and Larger below 480 px the
+council toolbar and the battle send row may wrap, the send buttons are tighter and the power names take the 12 px floor (`options.css`), so Large fits a
+360 px phone with nothing off screen or clipped and Larger wraps instead of overflowing (`optionsFitChecks.mjs` audits the Settings panel, the HUD and a
+region card, a toast, the War Council and the battle HUD at each size). A slider's `change` after its `input` carries the same value: `onOption` still
+plays the Voices sample and saves on release.
+
+**Perf (2026-10-07).** `node tools/perf.mjs`: title 2374 ms, map 4472 ms, every frame row within 20 / 33 ms (map 14.9 / 27.2, big battle 11.3 / 24.3,
+Ashen 10.5 / 20.1, Dragon 11.8 / 26.8, archipelago 12.8 / 23.8, Tide Fortress 14.9 / 30.5), meta 0.67 ms, save 6.6 KB (13.6 KB mid-battle). Effects A/B,
+back to back, `--only=frames` with the option preset in localStorage (Full, then Minimal; median / p95 ms, cpu median): map 13.1 / 22.9 (6.9) vs 11.2 / 21.8
+(5.9), big battle 10.9 / 23.5 (5.6) vs 11.3 / 24.8 (5.8), Ashen 11.2 / 21.5 (6.5) vs 10.3 / 19.5 (5.6), Dragon 11.2 / 28.4 vs 11.3 / 23.3, archipelago
+10.5 / 22.2 vs 10.5 / 21.5, Tide 12.4 / 26.7 vs 12.1 / 25.3: Minimal is never slower beyond run-to-run noise and is cheaper where the effects are dense.

@@ -19,6 +19,8 @@ import { processDragon, initialDragon } from './dragon.js';
 import { initialChampion, championSquadRef, processChampion } from './champion.js';
 import { processRising } from './fallen.js';
 import { processSea } from './sea.js';
+import { initialThrone, processThrone, afterThrone, usurperSquadRef } from './throne.js';
+import { winNow } from './resolve.js';
 import { processBoons } from './boons.js';
 import { FEATURES } from '../config/features.js';
 import { sendFromSite } from './squads.js';
@@ -70,6 +72,7 @@ export function createBattle(arena, player, enemy, opts = {}) {
     if (s.squadPower != null) site.squadPower = s.squadPower;
     if (s.coastal) site.coastal = true; // PLAN-PHASE12: touches open sea (sea lanes, Broadside)
     if (s.port) site.port = true;       // PLAN-PHASE12: a harbour (holding one opens the lanes)
+    if (s.throneChampion) site.throneChampion = s.throneChampion; // PLAN-PHASE13: a Champion's post at the Throne's Gate
     if (s.type === 'tower') site.nextVolley = 0;
     return site;
   });
@@ -105,6 +108,7 @@ export function createBattle(arena, player, enemy, opts = {}) {
     ...modeFields,
     ...(arenaCopy.dragon ? { dragon: initialDragon(arenaCopy) } : {}),
     ...(arenaCopy.champion ? { champion: initialChampion(arenaCopy) } : {}), // a Vendetta's Champion (PLAN-PHASE4 §4D, battle/champion.js)
+    ...(arenaCopy.throne ? { throne: initialThrone(arenaCopy) } : {}), // the Throne of Ages (PLAN-PHASE13, battle/throne.js)
   };
   if (battle.dragon && battle.dragon.perch >= 0) battle.sites[battle.dragon.perch].dragonDef = FEATURES.dragon.perchDef;
   return battle;
@@ -243,6 +247,7 @@ export function step(battle, dt) {
   battle.tick += 1;
   const t = battle.t;
   const champion = battle.champion ? championSquadRef(battle) : null; // the Champion's squad before this step (did it die, or settle?)
+  const usurper = battle.throne ? usurperSquadRef(battle) : null; // the Usurper's squad before this step (PLAN-PHASE13)
 
   processSupply(battle, t);
   const blocked = resolveEngagements(battle);
@@ -252,12 +257,14 @@ export function step(battle, dt) {
   processDragon(battle, t); // a Dragon's Lair (DESIGN §10.13): flights, telegraphed breath
   processRising(battle, t); // a Barrow Keep (PLAN-PHASE6): its dead rise every 20 s, telegraphed
   processSea(battle, dt, t); // PLAN-PHASE12: the Tide Fortress's Tide and boats, Broadside (nothing on a land continent)
+  processThrone(battle, dt, t); // PLAN-PHASE13: the Throne of Ages' Champions, phases and borrowing (nothing elsewhere)
   resolveCombat(battle, dt, t);
   resolveTowerVolleys(battle, getRuntime(battle), t);
   processBoons(battle, dt, t); // Boons and Relics (PLAN-PHASE7, battle/boons.js): scorched ground, fire arrows, Martyr's Crown
   applyGrowth(battle, dt);
   checkEndConditions(battle, t);
   if (battle.champion) processChampion(battle, t, champion); // launches it on time; its fall cuts the war band's attack
+  if (battle.throne && afterThrone(battle, t, usurper)) winNow(battle, t); // the Usurper fell with the keep yours: the Throne is won
 
   return battle;
 }

@@ -25,6 +25,8 @@ export const DEED_KEYS = Object.freeze({
   prosperity: 'max',           // the highest prosperity level a held region reached
   generalLevel: 'max',         // the highest level a General reached
   relics: 'max',               // Relics in the lifetime Reliquary (PLAN-PHASE7 §7B: each new find is a step)
+  crownOfAges: 'sum',          // PLAN-PHASE13: the Throne of Ages toppled (meta/crown.js onThroneToppled)
+  ascension: 'max',            // PLAN-PHASE13: the highest Ascension level cleared (meta/crown.js clearAscension)
 });
 
 /**
@@ -46,6 +48,9 @@ export const DEEDS = Object.freeze([
   { id: 'duellist', name: 'Duellist', icon: 'swords', key: 'duel', tiers: [1, 5], stat: 'renownPerDuel', per: 1, text: '+{v} Renown per Duel won' },
   // PLAN-PHASE7 §7B: the Reliquarian. A convenience reward (Renown), outside the +10% power budget
   { id: 'reliquarian', name: 'Reliquarian', icon: 'chest', key: 'relics', tiers: [1, 6, 12], stat: 'renownPerRelic', per: 1, text: '+{v} Renown for each Relic claimed' },
+  // PLAN-PHASE13 §13B/§13C: the Crown of Ages (the ending) and the Ascension tiers. Convenience rewards, outside the +10% power budget
+  { id: 'crownOfAges', name: 'Crown of Ages', icon: 'crownChains', key: 'crownOfAges', tiers: [1], stat: 'renownAtDynastyStart', per: 1, text: '+{v} Renown at each dynasty start' },
+  { id: 'ascendant', name: 'Ascendant', icon: 'crown', key: 'ascension', tiers: [1, 5, 10], stat: 'freeRerolls', per: 1, text: '+{v} free reroll each dynasty' },
   { id: 'nemesis', name: 'Nemesis', icon: 'skull', key: 'vendetta', tiers: [1, 3], stat: 'vsVendetta', per: 0.05, text: '+{v}% strength against Vendetta war bands' },
 ].map((d) => Object.freeze({ ...d, tiers: Object.freeze(d.tiers) })));
 
@@ -55,8 +60,8 @@ export const DEED_CAPS = Object.freeze({
   defenceMult: 0.06,
   bountyMult: 0.03,
   attackVs: 0.03,              // per faction
-  renownAtDynastyStart: 1,
-  freeRerolls: 3,
+  renownAtDynastyStart: 2,     // the Dragonslayer's 1 + the Crown of Ages' 1 (PLAN-PHASE13)
+  freeRerolls: 6,              // the Contractor's 3 + the Ascendant's 3 (PLAN-PHASE13)
   streakWindowSec: 90,
   festivalDiscount: 0.1,
   xpMult: 0.1,

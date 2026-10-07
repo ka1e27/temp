@@ -293,8 +293,29 @@ function emblemTrident(ctx, color) {
   ctx.restore();
 }
 
+// The Usurper (Phase 13): a crown over two shackles and their chain, the same evenodd path as the `crownChains` UI icon (CROWN_CHAINS_D in
+// ui/icons.js; ui.phase13.test.js holds the two equal). The crown is drawn in the emblem colour; Path2D is built lazily (browser only).
+export const CROWN_CHAINS_D = 'M4.2 11 3.2 3.6l4.2 3.1L12 1.6l4.6 5.1 4.2-3.1-1 7.4Z M4.2 11.4h15.6v2.2H4.2Z M5.9 13.6h1.4v1.4H5.9Z M16.7 13.6h1.4v1.4h-1.4Z '
+  + 'M3.2 18.4a3.4 3.4 0 1 0 6.8 0a3.4 3.4 0 1 0-6.8 0Z M4.8 18.4a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0Z '
+  + 'M14 18.4a3.4 3.4 0 1 0 6.8 0a3.4 3.4 0 1 0-6.8 0Z M15.6 18.4a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0Z M10 17.5h4v1.8h-4Z';
+let crownChainsPath = null;
+function emblemCrownChains(ctx, color) {
+  if (!crownChainsPath) crownChainsPath = new Path2D(CROWN_CHAINS_D);
+  ctx.save();
+  ctx.scale(1 / 21, 1 / 21);
+  ctx.translate(-12, -11.7);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(20,16,10,0.8)';
+  ctx.stroke(crownChainsPath);
+  ctx.fillStyle = color;
+  ctx.fill(crownChainsPath, 'evenodd');
+  ctx.restore();
+}
+
 const EMBLEMS = { star: emblemStar, wheat: emblemWheat, sword: emblemSword, sun: emblemSun };
-const CUSTOM_EMBLEMS = { eye: emblemEye, skullCrown: emblemSkullCrown, 'skull-crown': emblemSkullCrown, crownSkull: emblemSkullCrown, trident: emblemTrident };
+const CUSTOM_EMBLEMS = { eye: emblemEye, skullCrown: emblemSkullCrown, 'skull-crown': emblemSkullCrown, crownSkull: emblemSkullCrown, trident: emblemTrident,
+  crownChains: emblemCrownChains, 'crown-chains': emblemCrownChains, crownAndChains: emblemCrownChains };
 
 /**
  * A single-colour, colour-blind-safe emblem glyph, centred at (x, y).

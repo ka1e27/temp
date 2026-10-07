@@ -4,12 +4,14 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { openDialog, closeDialog } from './dialogs.js';
+import { makeHoldButton } from './holdConfirm.js';
 
 /**
  * @typedef {Object} ModalAction
  * @property {string} label
  * @property {'primary'|'secondary'|'danger'} [variant]
  * @property {() => void} [onClick]
+ * @property {boolean} [hold]   irreversible: with Settings > Hold to confirm on, it acts only after a held press (every 'danger' action is too)
  */
 
 /**
@@ -68,9 +70,11 @@ export function createModal(initial = {}, { onDismiss } = {}) {
     if (data.actions) {
       clear(actionsEl);
       for (const action of data.actions) {
-        actionsEl.appendChild(h(`button.btn.btn-${action.variant || 'secondary'}`, {
+        const b = h(`button.btn.btn-${action.variant || 'secondary'}`, {
           onClick: action.onClick,
-        }, action.label));
+        }, action.label);
+        if (action.hold || action.variant === 'danger') makeHoldButton(b, () => action.onClick?.());
+        actionsEl.appendChild(b);
       }
     }
     if (data.dismissible != null) {

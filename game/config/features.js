@@ -37,7 +37,10 @@ export const FEATURES = Object.freeze({
   // Holy Ground takes the player's powers away, most of a late army's worth on the card: its garrisons and settlement caps shrink by
   // garrison / (1 + the card's power bonus) so it changes how the fight plays, not how hard it is (with a flat x0.6 a late Holy
   // region still read Hard for three hours on seed 7). floor: never below this share
-  holy: Object.freeze({ garrison: 0.8, floor: 0.08 }),
+  // startCap (PLAN-PHASE14): a Holy Ground garrison starts at no more than this x its cap (the card's DIFFICULTY.overCapCredit, so the card
+  // is unchanged). Late garrisons start 10-25x over their caps; with no Bulwark or Levy to weather that opening rush a player holding one
+  // or two border sites lost in 30-60 s, and Holy Ground fights read Easy were won 12 of 20 (3 of 14 at Ascension 10; tools/_p14pace.mjs).
+  holy: Object.freeze({ garrison: 0.8, floor: 0.08, startCap: 2 }),
 
   // --- The Dragon (game/battle/dragon.js) -------------------------------------------------------------------------------------
   dragon: Object.freeze({

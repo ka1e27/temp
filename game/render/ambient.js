@@ -13,6 +13,7 @@
 // sprites are baked once per zoom bucket, everything is culled to the view, and the hot loops use
 // no allocation (screen positions are computed inline from the camera's fields).
 import { AMBIENT } from '../config/ambient.js';
+import { effects } from './accessibility.js'; // Settings > Effects: Minimal = no birds, the sparse smoke (PLAN-PHASE14)
 import { buildCaravanRoutes, sampleRoute } from '../world/caravanRoutes.js';
 import { collectChimneys, buildBoatLanes, forestSpots } from '../world/ambientPlaces.js';
 import { createProsperityPlan, FEATURE_LEVEL } from '../world/prosperityPlan.js';
@@ -195,7 +196,7 @@ export function createAmbient(opts) {
     const d = dt > 0.25 ? 0.25 : dt < 0 ? 0 : dt;
     t += d;
     carT += d * (reduceMotion ? AMBIENT.reduceMotion.caravanSpeed : 1);
-    if (reduceMotion && !AMBIENT.reduceMotion.birds) return;
+    if ((reduceMotion && !AMBIENT.reduceMotion.birds) || !effects().ambient) return;
     birds.update(d, haveView ? lastView : null, hidden, qf);
   }
 
@@ -291,7 +292,7 @@ export function createAmbient(opts) {
     if (zk <= 0.02 || !smoke.n) return;
     // Half the smoke (Reduce Motion, low quality, and every settlement that is not the player's) = the
     // sparse baked wisp.
-    const sparse = reduceMotion || qf < 0.75;
+    const sparse = reduceMotion || qf < 0.75 || !effects().ambient;
     // Fewer plumes when the view is far out, thinned by a stable per-chimney priority (no popping).
     const cap = Math.max(8, Math.floor(S.maxPlumes * qf * Math.min(1, Math.max(0.25, (F.z - 12) / 14))));
     // Keep the `cap` best plumes by priority, judged with last frame's counts: the player's own first, then the rest.
@@ -372,7 +373,7 @@ export function createAmbient(opts) {
     sprites.beginFrame(spriteBudgetMs);
     if (features.smoke) drawSmoke(ctx); else smokeDrawn = 0;
     if (features.sails) drawSails(ctx); else sailsDrawn = 0;
-    birdsDrawn = !features.birds || (reduceMotion && !AMBIENT.reduceMotion.birds) ? 0 : birds.draw(ctx, F);
+    birdsDrawn = !features.birds || (reduceMotion && !AMBIENT.reduceMotion.birds) || !effects().ambient ? 0 : birds.draw(ctx, F);
     lastAirMs = clock() - t0;
     airMs += (lastAirMs - airMs) * 0.08;
   }

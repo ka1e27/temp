@@ -17,7 +17,7 @@ export const FRONTIER = Object.freeze({
   raidMeanSec: 10 * MIN,       // one raid per bordering rival per this many active seconds, before the multipliers
   // How often each personality raids, x the mean rate. Free Folk ('passive') never raid. 'defensive' raids rarely, and at
   // `provoked` once you have taken one of its regions within `provokedSec`.
-  personalityRate: Object.freeze({ aggressive: 1.4, swarm: 1.6, defensive: 0.25, passive: 0, undying: 0.8, raider: 1.2 }), // undying (PLAN-PHASE6): patient, raids a little under the mean; raider (PLAN-PHASE12): raids often, from the sea
+  personalityRate: Object.freeze({ aggressive: 1.4, swarm: 1.6, defensive: 0.25, passive: 0, undying: 0.8, raider: 1.2, usurper: 1.0 }), // usurper (PLAN-PHASE13): raids at the mean; // undying (PLAN-PHASE6): patient, raids a little under the mean; raider (PLAN-PHASE12): raids often, from the sea
   provokedRate: 1.0,
   provokedSec: 30 * MIN,
   decapitatedRate: 0.5,        // a faction whose capital you hold raids half as often
@@ -67,7 +67,7 @@ export const FRONTIER = Object.freeze({
     depthCurve: Object.freeze([[1, 0.22], [1.5, 0.5], [2.2, 1]]), // x this by raid depth (interpolated): raids on a young realm's first ring are gentler
     haloShare: 0.5,            // the attacker's settlements in the arena join with this share of their usual garrison
     realmLean: 0.5,
-    personalityStrength: Object.freeze({ aggressive: 1.0, swarm: 0.75, defensive: 1.1, passive: 1, undying: 0.9, raider: 0.85 }), // raider (PLAN-PHASE12): a light landing party that can strike any coast // undying: a smaller band that grows from the defenders it kills (ASHEN.warBandShare); swarm: more raids, weaker ones
+    personalityStrength: Object.freeze({ aggressive: 1.0, swarm: 0.75, defensive: 1.1, passive: 1, undying: 0.9, raider: 0.85, usurper: 1.0 }), // usurper (PLAN-PHASE13): a plain band; // raider (PLAN-PHASE12): a light landing party that can strike any coast // undying: a smaller band that grows from the defenders it kills (ASHEN.warBandShare); swarm: more raids, weaker ones
     firstRaidMult: 0.6,        // the first raid of a realm is weak and forgiving (the tutorial's first defense, ARCHITECTURE §10.5)
     capMult: 1.15,             // the camp's cap is this x its starting war band (or the region's cap, if larger)
     perFortLevel: 0.12,        // siege preparation: x (1 + this x the target's total fortification levels)

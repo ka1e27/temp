@@ -10,6 +10,7 @@ import { BOUNTIES } from '../config/bounties.js';
 import { hash32 } from '../core/rng.js';
 import { rivalsOf, classicRivals } from './rivals.js';
 import { legacyNodes, legacyNode, legacyTree, cleanChallenges } from './legacy.js';
+import { ascensionMods, ascensionLevel } from './ascension.js'; // PLAN-PHASE13: the Ascension ladder folds in here (a leaf)
 
 const BY_ID = new Map(EDICT_LIST.map((e) => [e.id, e]));
 const CH_BY_ID = new Map(CHALLENGE_LIST.map((c) => [c.id, c]));
@@ -58,13 +59,15 @@ export function edictMods(state) {
   const ch = e && Array.isArray(e.challenges) ? e.challenges : [];
   const nodes = legacyNodes(state);
   const cm = state && state.challenge && state.challenge.mods && typeof state.challenge.mods === 'object' ? state.challenge.mods : null; // PLAN-PHASE9: a challenge sandbox's own mods
-  const key = `${id}|${ch.join(',')}|${Object.keys(nodes).join(',')}|${cm ? JSON.stringify(cm) : ''}`;
+  const asc = ascensionLevel(state); // PLAN-PHASE13 §13C: this dynasty's Ascension level (0 = none)
+  const key = `${id}|${ch.join(',')}|${Object.keys(nodes).join(',')}|${cm ? JSON.stringify(cm) : ''}|${asc}`;
   if (key === memoKey) return memoVal;
   const out = { ...NEUTRAL };
   if (id) fold(out, BY_ID.get(id).mods);
   if (cm) fold(out, cm);
   for (const c of cleanChallenges(ch)) fold(out, CH_BY_ID.get(c).mods);
   for (const n of Object.keys(nodes)) { const d = nodes[n] === true ? legacyNode(n) : null; if (d) fold(out, d.mods); }
+  if (asc > 0) fold(out, ascensionMods(asc));
   out.bountySlots += out.bountySlotsAdd;
   out.edictChoices = EDICTS.choices + out.edictChoicesAdd;
   memoKey = key;
@@ -86,7 +89,8 @@ export function worldOptsFor(state) {
   if (id) opts.edict = id;
   const rivals = rivalsOf(state); // PLAN-PHASE6 §6A: the dynasty's rival line-up (stored at founding); omitted when classic (byte-identical)
   if (!classicRivals(rivals)) opts.rivals = rivals;
-  if (state && state.archipelago === true) opts.archipelago = true; // PLAN-PHASE12: islands, fords, harbours and sea lanes (omitted on land: byte-identical)
+  if (state && state.crownOfAges === true) opts.crownOfAges = true; // PLAN-PHASE13: the Crown of Ages (its own coast: archipelago is not passed)
+  else if (state && state.archipelago === true) opts.archipelago = true; // PLAN-PHASE12: islands, fords, harbours and sea lanes (omitted on land: byte-identical)
   return opts;
 }
 

@@ -13,6 +13,7 @@ import { fortEffects, fortTowerTiles } from './fortSites.js';
 import { FEATURES } from '../config/features.js';
 import { banditTile, ancientTowerTile, gateTile, shrineTiles } from '../world/regionFeatures.js';
 import { decorateSea, touchingFords } from './seaArena.js';
+import { decorateThrone } from './throneArena.js'; // PLAN-PHASE13
 
 function isAdjacentToPlayer(world, owners, regionId) {
   return world.regions[regionId].neighbors.some((n) => owners[n] === PLAYER_OWNER);
@@ -333,6 +334,8 @@ export function buildArena(world, owners, regionId, player, enemy, opts = {}) {
         * (!isNeutralHamlet && s.type === 'keep' ? (enemy.keepTroopMult ?? 1) : 1), // Kingslayer (PLAN-PHASE7)
       capMult,
     };
+    // Holy Ground (PLAN-PHASE14): no powers to weather the opening rush of an over-cap garrison, so it starts no higher than the card counts it
+    if (!isNeutralHamlet && enemy.startCapCredit) site.troops = Math.min(site.troops, enemy.startCapCredit * (SITE_TYPES[s.type] ? SITE_TYPES[s.type].cap : 0) * capMult);
     if (captured && captured.wallsMult !== 1 && (s.type === 'keep' || s.type === 'fort')) site.defMult = captured.wallsMult;
     rest.push(site);
   }
@@ -434,6 +437,8 @@ export function buildArena(world, owners, regionId, player, enemy, opts = {}) {
       .sort((a, b) => hexDistance(world.tiles[a.tile], end) - hexDistance(world.tiles[b.tile], end) || a.id - b.id)[0];
     arena.marches.push({ to: near ? near.id : 0, tiles: stripTiles.map((t) => t.i), approach: true });
   }
+  // PLAN-PHASE13: the Throne of Ages (the Usurper's capital): the Gate's three Champions, the borrowed Tide's tiles, the Usurper (throneArena.js)
+  if (region.throne && enemy.personality === 'usurper' && !opts.noFeatures) decorateThrone(world, arena, regionId, enemy);
   // PLAN-PHASE12: on an archipelago, coastal sites, harbours (a quay when the region has none), sea lanes and the Tide Fortress (seaArena.js)
   decorateSea(world, arena, { regionId, owner: owners[regionId], enemy, mode: 'attack' });
   openCorridors(arena, region.tier === 1 ? BATTLE.openingTargetsFirstRing : BATTLE.openingTargets);

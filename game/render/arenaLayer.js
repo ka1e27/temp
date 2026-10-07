@@ -12,6 +12,7 @@
 import { drawTerritory } from './territory.js';
 import { pickBucket } from './terrainCache.js';
 import { elevOffset } from './tiles.js';
+import { lookVersion } from './accessibility.js';
 
 const HEX = Array.from({ length: 6 }, (_, k) => {
   const a = ((-90 + 60 * k) * Math.PI) / 180;
@@ -212,6 +213,7 @@ export function createArenaLayer(world) {
     drawTerritory({ tint: tctx, over: octx, overlay: false }, world, arena.regionTiles, ownerOf,
       bucket, -bbox.minX * bucket, -bbox.minY * bucket, dpr);
     e.sig = sig;
+    e.look = lookVersion(); // a colour-vision preset or the pattern overlay changed mid-battle: re-bake (PLAN-PHASE14)
     return e;
   }
 
@@ -225,7 +227,7 @@ export function createArenaLayer(world) {
     if (!arena) return;
     arena.bucket = pickBucket(camera.zoom * dpr, arena.bucket);
     let e = arena.entry;
-    if (!e || e.sig !== sig || e.bucket !== arena.bucket) e = bakeTerritory(arena.bucket, ownerOf, sig);
+    if (!e || e.sig !== sig || e.bucket !== arena.bucket || e.look !== lookVersion()) e = bakeTerritory(arena.bucket, ownerOf, sig);
     const k = camera.zoom / e.bucket;
     const p = camera.worldToScreen(arena.bbox.minX, arena.bbox.minY);
     ctx.save();

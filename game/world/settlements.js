@@ -19,6 +19,7 @@ const TYPE_WEIGHTS = {
   swarm: { village: 0.6, hamlet: 0.4 },
   undying: { fort: 0.2, town: 0.3, village: 0.5 }, // the Ashen Host (PLAN-PHASE6) holds its sites thickly: forts and towns, no hamlets
   raider: { village: 0.45, town: 0.2, hamlet: 0.35 }, // the Sea Kings (PLAN-PHASE12) hold their land lightly: fishing villages, few walls
+  usurper: { fort: 0.15, town: 0.3, village: 0.35, hamlet: 0.2 }, // the Usurper (PLAN-PHASE13): mixed garrisons, a little of every rival he has subjugated
 };
 
 const HILLS_FORT_CHANCE = 0.4;

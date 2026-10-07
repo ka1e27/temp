@@ -79,6 +79,10 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/render/tiles-water.js">
 <link rel="modulepreload" href="./game/render/tiles.js">
 <link rel="modulepreload" href="./game/core/hex.js">
+<link rel="modulepreload" href="./game/config/palettes.js">
+<link rel="modulepreload" href="./game/config/options.js">
+<link rel="modulepreload" href="./game/render/accessibility.js">
+<link rel="modulepreload" href="./game/render/territoryPatterns.js">
 <link rel="modulepreload" href="./game/render/territory.js">
 <link rel="modulepreload" href="./game/core/rng.js">
 <link rel="modulepreload" href="./game/config/ambient.js">
@@ -94,6 +98,7 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/config/features.js">
 <link rel="modulepreload" href="./game/config/ashen.js">
 <link rel="modulepreload" href="./game/config/sea.js">
+<link rel="modulepreload" href="./game/config/crown.js">
 <link rel="modulepreload" href="./game/scenes/timing.js">
 <link rel="modulepreload" href="./game/render/sites.js">
 <link rel="modulepreload" href="./game/render/clouds.js">
@@ -119,8 +124,9 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/battle/dragon.js">
 <link rel="modulepreload" href="./game/config/grudges.js">
 <link rel="modulepreload" href="./game/battle/champion.js">
-<link rel="modulepreload" href="./game/battle/movement.js">
+<link rel="modulepreload" href="./game/battle/throne.js">
 <link rel="modulepreload" href="./game/battle/resolve.js">
+<link rel="modulepreload" href="./game/battle/movement.js">
 <link rel="modulepreload" href="./game/battle/sim.js">
 <link rel="modulepreload" href="./game/render/units.js">
 <link rel="modulepreload" href="./game/world/caravanRoutes.js">
@@ -143,8 +149,11 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/world/lakes.js">
 <link rel="modulepreload" href="./game/world/terrain.js">
 <link rel="modulepreload" href="./game/world/archipelago.js">
+<link rel="modulepreload" href="./game/world/crown.js">
 <link rel="modulepreload" href="./game/meta/rivals.js">
 <link rel="modulepreload" href="./game/config/legacy.js">
+<link rel="modulepreload" href="./game/config/ascension.js">
+<link rel="modulepreload" href="./game/meta/ascension.js">
 <link rel="modulepreload" href="./game/meta/legacy.js">
 <link rel="modulepreload" href="./game/meta/edicts.js">
 <link rel="modulepreload" href="./game/meta/renownState.js">
@@ -208,10 +217,12 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/ui/worksPanel.js">
 <link rel="modulepreload" href="./game/ui/grudgeMeter.js">
 <link rel="modulepreload" href="./game/render/featureGlyphs.js">
+<link rel="modulepreload" href="./game/ui/holdConfirm.js">
 <link rel="modulepreload" href="./game/ui/regionCard.js">
 <link rel="modulepreload" href="./game/ui/dialogs.js">
 <link rel="modulepreload" href="./game/ui/council.js">
 <link rel="modulepreload" href="./game/ui/modal.js">
+<link rel="modulepreload" href="./game/ui/keymap.js">
 <link rel="modulepreload" href="./game/ui/battleHud.js">
 <link rel="modulepreload" href="./game/ui/results.js">
 <link rel="modulepreload" href="./game/ui/title.js">
@@ -220,20 +231,24 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/ui/generalsPanel.js">
 <link rel="modulepreload" href="./game/config/leadersAshen.js">
 <link rel="modulepreload" href="./game/config/leadersSea.js">
+<link rel="modulepreload" href="./game/config/leadersUsurper.js">
 <link rel="modulepreload" href="./game/config/leaders.js">
 <link rel="modulepreload" href="./game/battle/seaArena.js">
 <link rel="modulepreload" href="./game/battle/defenseArena.js">
 <link rel="modulepreload" href="./game/world/regionFeatures.js">
+<link rel="modulepreload" href="./game/battle/throneArena.js">
 <link rel="modulepreload" href="./game/battle/arena.js">
 <link rel="modulepreload" href="./game/config/intel.js">
 <link rel="modulepreload" href="./game/meta/intelState.js">
 <link rel="modulepreload" href="./game/meta/boons.js">
+<link rel="modulepreload" href="./game/meta/crown.js">
 <link rel="modulepreload" href="./game/meta/progression.js">
 <link rel="modulepreload" href="./game/meta/leaders.js">
 <link rel="modulepreload" href="./game/meta/chronicle.js">
 <link rel="modulepreload" href="./game/meta/generals.js">
 <link rel="modulepreload" href="./game/ui/live.js">
 <link rel="modulepreload" href="./game/ui/controls.js">
+<link rel="modulepreload" href="./game/ui/optionsPanel.js">
 <link rel="modulepreload" href="./game/ui/settings.js">
 <link rel="modulepreload" href="./game/ui/coach.js">
 <link rel="modulepreload" href="./game/ui/chroniclePanel.js">
@@ -242,6 +257,7 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/ui/legacyTree.js">
 <link rel="modulepreload" href="./game/ui/dynastyPanel.js">
 <link rel="modulepreload" href="./game/ui/boonsPanel.js">
+<link rel="modulepreload" href="./game/ui/ascensionPanel.js">
 <link rel="modulepreload" href="./game/ui/realm.js">
 <link rel="modulepreload" href="./game/ui/regionsPanel.js">
 <link rel="modulepreload" href="./game/ui/welcome.js">
@@ -317,6 +333,8 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/scenes/battleAshen.js">
 <link rel="modulepreload" href="./game/render/seaFx.js">
 <link rel="modulepreload" href="./game/scenes/battleSea.js">
+<link rel="modulepreload" href="./game/render/throneFx.js">
+<link rel="modulepreload" href="./game/scenes/battleThrone.js">
 <link rel="modulepreload" href="./game/app/boons.js">
 <link rel="modulepreload" href="./game/scenes/battleBoons.js">
 <link rel="modulepreload" href="./game/scenes/battleThreat.js">
@@ -327,15 +345,19 @@ if (location.protocol === 'file:') {
 <link rel="modulepreload" href="./game/meta/bounties.js">
 <link rel="modulepreload" href="./game/app/goalsCopy.js">
 <link rel="modulepreload" href="./game/app/goals.js">
-<link rel="modulepreload" href="./game/app/quickConquest.js">
 <link rel="modulepreload" href="./game/ui/ceremony.js">
+<link rel="modulepreload" href="./game/app/crown.js">
+<link rel="modulepreload" href="./game/app/quickConquest.js">
 <link rel="modulepreload" href="./game/ui/quickOverlay.js">
 <link rel="modulepreload" href="./game/ui/boonDraft.js">
 <link rel="modulepreload" href="./game/ui/duoReveal.js">
 <link rel="modulepreload" href="./game/ui/relicClaim.js">
 <link rel="modulepreload" href="./game/config/challenges.js">
 <link rel="modulepreload" href="./game/app/challengeMode.js">
-<meta name="hd-lazy" content="./game/battle/bot.js ./game/meta/quick.js ./game/meta/dates.js ./game/meta/challengeSetup.js ./game/meta/daily.js ./game/config/scenarios.js ./game/meta/scenarios.js ./game/meta/challengeGoals.js ./game/meta/challenges.js ./game/meta/challengesState.js ./game/app/codexTopics.js ./game/ui/challengeHub.js ./game/ui/challengeResult.js ./game/ui/goalTracker.js ./game/app/challengeKit.js ./game/ui/codex.js">
+<link rel="modulepreload" href="./game/app/options.js">
+<link rel="modulepreload" href="./game/app/voiceSfx.js">
+<link rel="modulepreload" href="./game/ui/keybindings.js">
+<meta name="hd-lazy" content="./game/ui/ending.js ./game/battle/bot.js ./game/meta/quick.js ./game/meta/dates.js ./game/meta/challengeSetup.js ./game/meta/daily.js ./game/config/scenarios.js ./game/meta/scenarios.js ./game/meta/challengeGoals.js ./game/meta/challenges.js ./game/meta/challengesState.js ./game/app/codexTopics.js ./game/ui/challengeHub.js ./game/ui/challengeResult.js ./game/ui/goalTracker.js ./game/app/challengeKit.js ./game/ui/codex.js">
 <!-- modulepreload:end -->
 </head>
 <body>

@@ -27,6 +27,11 @@ export const FACTIONS = Object.freeze([
   // Sea-green and white with a trident. Colours chosen by integration: the light sea-green is the only family left that clears 15 CIEDE2000 from all
   // six others under every kind of vision (closest: Free Folk 17.5 deutan / 18.1 protan, Your Realm 25.3 tritan, Free Folk 30.2 normal; ui.a11y.test.js).
   { id: 6, name: 'Sea Kings', color: '#3eefd8', colorDark: '#11786c', colorLight: '#effffb', emblem: 'trident', personality: 'raider' },
+  // PLAN-PHASE13 §13A: the Usurper, the final enemy, only on the Crown of Ages continent (config/crown.js). Crown and chains.
+  // Deep royal wine with a gold emblem, chosen by integration: searched over sRGB with core/colorDistance.js, the only families that clear the bar against
+  // all seven others are near-black/wine and a pale cream. Closest pairs (CIEDE2000): Ashen Host 19.0 protan / 20.4 deutan, Violet Covenant 21.1 tritan,
+  // Crimson Legion 24.1 normal (bars: 20 normal, 15 CVD; ui.a11y.test.js).
+  { id: 7, name: 'The Usurper', color: '#650824', colorDark: '#33020f', colorLight: '#f2c4cf', emblem: 'crownChains', personality: 'usurper' },
 ]);
 
 // Movement cost per terrain (Infinity = impassable). Roads replace the base cost.

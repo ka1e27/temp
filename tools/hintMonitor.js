@@ -134,11 +134,18 @@ export function installHintMonitor() {
       return box && p ? [{ box, probe: p }] : null;
     }
     // The Ashen Host (A1): the Ashen frontier region; the sea (S1, Phase 12): the frontier region with fords
-    if (/the fallen rise/i.test(text) || /fords cross the straits/i.test(text)) {
+    if (/the fallen rise/i.test(text) || /fords cross the straits/i.test(text) || /^the throne of ages: break the gate/i.test(text)) { // + the Usurper's land (U1, Phase 13)
       const id = hd.hintOutline ? hd.hintOutline() : -1;
       const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
       const p = id >= 0 ? hd.regionScreenPos(id) : null;
       return box && p ? [{ box, probe: p }] : null;
+    }
+    if (/the usurper borrows a weapon/i.test(text)) { // U2 (Phase 13): the borrowed weapon's ring
+      const info = hd.throneInfo ? hd.throneInfo() : null;
+      const w = info && info.telegraphPoint;
+      if (!w) return null;
+      const p = hd.camera.worldToScreen(w.x, w.y);
+      return [{ box: siteBox(p, zoom) }];
     }
     if (/take the gate to open the keep/i.test(text)) return list(...sites.filter((s) => s.type === 'gate' && s.owner !== 0).map(siteT));
     if (/hold all three shrines/i.test(text)) return list(...sites.filter((s) => s.type === 'shrine').map(siteT));

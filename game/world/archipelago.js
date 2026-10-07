@@ -222,12 +222,22 @@ export function applyArchipelago(seed, tiles, regions, settlements, startRegion,
   const portable = (r) => r.settlements.some((id) => touchesOpenSea(tiles, settlements[id].tile, cols, rows));
   const split = chooseSplit(seed, regions, startRegion, portable);
   if (!split) return null;
-  const islands = Array.from({ length: split.k }, () => []);
-  regions.forEach((r) => { r.island = split.island[r.id]; islands[r.island].push(r.id); });
-  const fords = cutStraits(tiles, split.island, cols, rows);
+  return applyIslands(seed, tiles, regions, settlements, split.island, split.k, cols, rows);
+}
+
+/**
+ * Cuts a continent into the given islands (`island[regionId]` = 0..k-1; island 0 holds the start region): straits become fords, every
+ * island gets its harbours and the ports of different islands their sea lanes. applyArchipelago's second half, shared with the Crown of
+ * Ages' partial archipelago (PLAN-PHASE13: world/crown.js passes island 0 = the mainland, 1.. = the Sea Kings' islands). MUTATES.
+ * @returns {{ islands: number[][], harbours: number[], seaLanes: object[], fords: number }}
+ */
+export function applyIslands(seed, tiles, regions, settlements, island, k, cols, rows) {
+  const islands = Array.from({ length: k }, () => []);
+  regions.forEach((r) => { r.island = island[r.id]; islands[r.island].push(r.id); });
+  const fords = cutStraits(tiles, island, cols, rows);
   for (const r of regions) r.coastal = r.tiles.some((i) => tiles[i].land && tiles[i].coast !== 0);
   const harbours = placeHarbours(seed, tiles, regions, settlements, islands, cols, rows);
-  const seaLanes = buildLanes(tiles, regions, settlements, harbours, split.island, cols, rows);
+  const seaLanes = buildLanes(tiles, regions, settlements, harbours, island, cols, rows);
   return { islands, harbours, seaLanes, fords: fords.length };
 }
 

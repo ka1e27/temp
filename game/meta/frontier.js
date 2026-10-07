@@ -68,7 +68,7 @@ function ownedCount(state) {
 /** True while raids are held off (DESIGN §10.1): the first FRONTIER.graceSec active seconds, or fewer than minRegions held. */
 export function inGrace(state) {
   const f = ensureFrontier(state);
-  return f.activeSec < FRONTIER.graceSec || ownedCount(state) < FRONTIER.minRegions;
+  return f.activeSec < FRONTIER.graceSec * edictMods(state).raidGraceMult || ownedCount(state) < FRONTIER.minRegions; // Restless Borders (Ascension 2)
 }
 
 /**

@@ -23,6 +23,7 @@ import { createPool, release, releaseAll } from './fx-pool.js';
 import { SPAWNERS, updateParticle, isAdditiveKind, explodeFireball } from './fx-kinds.js';
 import { drawParticle } from './fx-draw.js';
 import { clamp01 } from './fx-easing.js';
+import { effects } from './accessibility.js';
 
 const DEFAULT_MAX_PARTICLES = 600;
 const SHAKE_MAX_PX = 16; // CSS px at full intensity — matches camera.js's ballpark
@@ -106,7 +107,8 @@ export function createFx({ maxParticles = DEFAULT_MAX_PARTICLES, reduceMotion = 
    */
   function shake(strength, duration = 0.3) {
     if (rm) return;
-    const incoming = Math.max(0, strength);
+    const incoming = Math.max(0, strength) * effects().shake; // Settings > Effects: Reduced halves it, Minimal has none
+    if (incoming <= 0) return;
     if (incoming >= shakeIntensity()) {
       shakeStrength = incoming;
       shakeElapsed = 0;

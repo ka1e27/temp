@@ -54,9 +54,11 @@ const { phase5Checks } = await import('./phase5Checks.mjs');
 const { phase6Checks } = await import('./phase6Checks.mjs');
 const { phase7Checks } = await import('./phase7Checks.mjs');
 const { phase12Checks } = await import('./phase12Checks.mjs');
+const { phase13Checks } = await import('./phase13Checks.mjs');
 const { codexChecks } = await import('./codexChecks.mjs');
 const { topLaneChecks } = await import('./topLaneChecks.mjs');
 const { challengeChecks } = await import('./challengeChecks.mjs');
+const { optionsChecks } = await import('./optionsChecks.mjs'); // Phase 14: Play your way
 
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
   const [k, ...v] = a.slice(2).split('=');
@@ -1122,7 +1124,7 @@ const watchdog = setTimeout(() => {
   process.exit(1);
 }, (SUBPATH ? 20 : 32) * 60 * 1000); // the main flow grew (supply lines, Works, front lines, robustness, keepsakes); a loaded machine needs the room
 
-// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|phase7|phase12|codex|toplane|challenges|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
+// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|phase7|phase12|phase13|codex|toplane|challenges|options|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
 // plain mode only: they do not depend on the deployed shape, so --base=... runs the two variants and the deploy checks.
 const only = flags.only;
 const wants = (name) => !only || only === name;
@@ -1146,9 +1148,11 @@ if (!SUBPATH && wants('phase5')) await phase5Checks({ launch, BASE, ok, sleep, a
 if (!SUBPATH && wants('phase6')) await phase6Checks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('phase7')) await phase7Checks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('phase12')) await phase12Checks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('phase13')) await phase13Checks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('codex')) await codexChecks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('toplane')) await topLaneChecks({ launch, BASE, ok, sleep, allErrors });
 if (!SUBPATH && wants('challenges')) await challengeChecks({ launch, BASE, ok, sleep, allErrors });
+if (!SUBPATH && wants('options')) await optionsChecks({ launch, BASE, ok, sleep, allErrors });
 if (SUBPATH && wants('deploy')) await deployChecks();
 clearTimeout(watchdog);
 stopServer();

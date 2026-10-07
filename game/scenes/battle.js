@@ -59,10 +59,12 @@ import { createArenaOwnership } from './arenaOwnership.js';
 import { createBattleFeatures } from './battleFeatures.js';
 import { createBattleAshen } from './battleAshen.js';
 import { createBattleSea } from './battleSea.js';
+import { createBattleThrone } from './battleThrone.js'; // PLAN-PHASE13: the Throne of Ages
 import { drawSeaLane } from '../render/seaMarks.js';
 import { createBattleBoons } from './battleBoons.js';
 import { championTitle } from '../meta/leaders.js';
 import { computeThreats } from './battleThreat.js';
+import { matches, bindingOf, actionFor } from '../ui/keymap.js';
 import {
   frameInRect, openCameraLimits, pickLandTile,
 } from './worldLayers.js';
@@ -259,10 +261,16 @@ export function createBattleScene(services) {
   const boonFx = createBattleBoons({ ctx, camera, ui, sfx, reduceMotion });
   // PLAN-PHASE12: harbours, sea lanes, the Tide Fortress's Tide and boats, the Admiral's Broadside (scenes/battleSea.js)
   const seaFx = createBattleSea({ ctx, camera, renderer, sfx, reduceMotion, siteWorldPos });
+  // PLAN-PHASE13: the Throne of Ages: Champion banners, phase banners, the borrowed Rising / Tide / Plague, the Usurper-King (scenes/battleThrone.js)
+  const throne = createBattleThrone({
+    ctx, camera, renderer, sfx, ui, reduceMotion, siteWorldPos, tutorial, getState: () => container.get().state,
+    leaderLine: (d) => services.leaderLine?.({ ...d, faction: world.factions[d.faction] }),
+  });
 
   // --- fx / sfx event routing (INTEGRATION-NOTES event mapping) ---------------------
   function handleEvent(ev, nowMs) {
     const fx = renderer.fx;
+    if (throne.onEvent(ev, nowMs)) return; // first: a borrowed tideHit is the Throne's, even on a coast
     if (ashen.onEvent(ev, nowMs)) return;
     if (seaFx.onEvent(ev, nowMs)) return;
     if (boonFx.onEvent(ev, nowMs)) return;
@@ -1031,14 +1039,17 @@ export function createBattleScene(services) {
   }
 
   function onKey(key, event) {
-    // Digits 1-4, the power hotkeys (Q W E R T) and S belong to the battle HUD's own listener. Letters use the physical key (`event.code`).
+    // The send sizes, the powers, Auto, the ability and the speed belong to the battle HUD's own listener; pause and select-all are here. All of them
+    // go through the rebindable map (ui/keymap.js, physical keys).
     if (!active) return;
     const code = event ? event.code : '';
     if (key === 'Escape') { onCancel(); return; }
     if (key === 'Tab' && event && !event.ctrlKey && !event.metaKey && !event.altKey && cycleBattle(event.shiftKey ? -1 : 1)) { event.preventDefault(); return; }
-    if (key === ' ' || key === 'Spacebar' || code === 'Space') { togglePause(); return; }
+    if (event && (matches('pause', event) || (!code && (key === ' ' || key === 'Spacebar') && bindingOf('pause') === 'Space'))) { togglePause(); return; }
+    const bound = event ? actionFor(event) : null;
+    if (bound && bound !== 'selectAll') return; // a key the player bound to a HUD action does nothing else here
     if (event && document.activeElement === renderer.canvas && !event.ctrlKey && !event.metaKey && !event.altKey && phase === 'live' && onCursorKey(key, event)) return;
-    if ((code === 'KeyA' || (!code && (key === 'a' || key === 'A'))) && phase === 'live') {
+    if ((matches('selectAll', event) || (!code && bindingOf('selectAll') === 'KeyA' && (key === 'a' || key === 'A'))) && phase === 'live') {
       selection = new Set(battle.sites.filter((s) => s.owner === PLAYER_OWNER).map((s) => s.id));
     }
   }
@@ -1292,7 +1303,7 @@ export function createBattleScene(services) {
       paused: paused || dialogOpen,
       auto: autoMode,
       ability: abilityHud(),
-      feature: feat.hud(), // "Hold all 3 Shrines", the Dragon's health, "take the Gate first", the twist (DESIGN 10.13)
+      feature: throne.hud() || feat.hud(), // the Throne's phase (PLAN-PHASE13); "Hold all 3 Shrines", the Dragon's health, "take the Gate first", the twist (DESIGN 10.13)
       powers: POWER_IDS.map((id) => {
         const level = battle.player.powers[id] || 0;
         const locked = level < 1;
@@ -1377,6 +1388,7 @@ export function createBattleScene(services) {
       gateStanding: !!feat.anchors().gate,
       raid: feat.twist() === 'raid' && !!feat.anchors().shrine,
       telegraph: !!feat.anchors().telegraph,
+      borrowTelegraph: !!throne.anchors().telegraph, // PLAN-PHASE13: U2, the Usurper's first borrowed weapon
       bulwarkUnlocked: (battle.player.powers.bulwark || 0) >= 1 && feat.twist() !== 'holy',
       features: FEATURES,
     };
@@ -1406,6 +1418,10 @@ export function createBattleScene(services) {
         return { target: { find: () => powerBtnEl('bulwark') }, prefer: 'above', key: 'telegraph' };
       }
       case 'enemyKeep': return { target: { get: () => siteBoxOf(enemyKeepSite()) } };
+      case 'borrow': { // PLAN-PHASE13 (U2): the borrowed weapon's warning ring
+        if (!throne.anchors().telegraph) return null;
+        return { target: { get: () => { const p = throne.anchors().telegraph; return p ? siteBox(camera.worldToScreen(p.x, p.y), camera.zoom) : null; } }, key: 'borrow' };
+      }
       case 'twoSites': {
         // the camp and the nearest other site of yours: two things to click
         return {
@@ -1904,11 +1920,13 @@ export function createBattleScene(services) {
     seaFx.drawGround(t, nowMs); // the lanes, the piers, the Tide's rising ring and flooded fords (PLAN-PHASE12)
     boonFx.drawGround(t); // Scorched Earth's burning ground (Phase 7)
     feat.drawGround(t, nowMs); // high water, Night's tower reach, the Shrine rings, the Dragon's warning
+    throne.drawGround(t, nowMs); // the borrowed Tide, the Plague's ring and aura, the Rising's ash ring (PLAN-PHASE13)
     const chips = drawSites(t, nowMs);
     renderer.units.draw(ctx, camera, battle, alpha, t, { still: reduceMotion(), championColor: run && run.vendetta ? factionColor(run.vendetta.faction) : undefined });
     if (!stopped) fx.update(dt);
     fx.draw(ctx, camera);
     feat.drawAir(t, nowMs); // the Dragon, its health and its breath
+    throne.drawAir(t, nowMs, alpha); // the Champion banners on the Gate, the Usurper-King and his health bar (PLAN-PHASE13)
     ashen.drawAir(t, nowMs); // The Fallen Rise's wisps and "+N risen" pops
     seaFx.drawAir(t, nowMs); // Broadside's flashes, the Tide's and the boats' pops (PLAN-PHASE12)
     boonFx.drawAir(t, nowMs); // the Boons' small icon pops (Phase 7)
@@ -1970,6 +1988,7 @@ export function createBattleScene(services) {
     feat.reset(battle, world, regionId);
     ashen.reset(battle);
     seaFx.reset(battle);
+    throne.reset(battle);
     boonFx.reset(battle);
     const holeTiles = new Map();
     for (const t of battle.arena.tiles) holeTiles.set(t.i, world.tiles[t.i]);
@@ -2208,6 +2227,8 @@ export function createBattleScene(services) {
     boonInfo() { return battle ? boonFx.info() : null; },
     /** Dev/automation: what the sea layer has shown this battle (PLAN-PHASE12): lanes, ports, Tide telegraphs and floods, Broadside. */
     seaInfo() { return battle ? seaFx.info() : null; },
+    /** Dev/automation (PLAN-PHASE13): the Throne's phase, Champions, borrows shown, the Usurper drawn. */
+    throneInfo() { return battle ? throne.info() : null; },
     /** Dev/automation: every site with its owner, troops and screen position. */
     siteInfo() {
       if (!battle) return [];

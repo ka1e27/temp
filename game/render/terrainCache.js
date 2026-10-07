@@ -27,6 +27,7 @@ import {
   drawWaterGlints, isWaterTile, elevOffset,
 } from './tiles.js';
 import { drawChunkTerritory } from './territory.js';
+import { lookVersion } from './accessibility.js'; // a colour-vision preset or the pattern overlay re-bakes territory (PLAN-PHASE14)
 import { createProsperityPlan, drawProsperityGround, drawProsperityStructures } from './prosperityDecor.js';
 import { createSeaField, seaBackgroundStops } from './seaField.js';
 import { drawSandbar } from './seaMarks.js';
@@ -179,7 +180,7 @@ export function createTerrainCache(world) {
 
   function chunkSig(desc, owners) {
     if (!owners) return 'none';
-    let sig = '';
+    let sig = `${lookVersion()}|`;
     for (const r of desc.regions) sig += `${owners[r] ?? -1}:${levels[r] | 0},`;
     return sig;
   }

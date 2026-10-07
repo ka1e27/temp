@@ -1,4 +1,5 @@
 // Battle tuning. Owned by the battle module; the balance harness tunes these.
+import { THRONE } from './crown.js'; // PLAN-PHASE13: the Throne's patience
 export const TICK_SEC = 0.05; // fixed simulation timestep (20 Hz)
 
 // Caps are DESIGN §4.2's table x2 (camp 80 -> 160): ENEMY_SCALING multiplies garrisons per tier, and
@@ -81,11 +82,16 @@ export const PATIENCE_SEC = Object.freeze({ early: 150, mid: 240, capital: 300 }
 // Later dynasties fight bigger garrisons on purpose (DYNASTY.enemyMult*), so the patience grows with them: this share of the band's seconds per
 // dynasty above the first.
 export const PATIENCE_PER_DYNASTY = 1;
+// PLAN-PHASE14: ... but never past this many seconds (the Throne has its own). Won battles take a median 2-2.5 minutes in EVERY dynasty
+// (tools/_p14pace.mjs, 12 seeds, human and optimal), so a dynasty-7 patience of 17-35 minutes only measured stalemates: one timeout
+// was a 35-70 minute wait for a person. QUICK's cap (min(maxSimSec 600, 2 x this)) is unchanged at every dynasty.
+export const PATIENCE_MAX_SEC = 600;
 
 /** The patience cap for a region: its band's seconds, longer in later dynasties. Tools only. */
 export function patienceFor(region, dynastyLevel = 1) {
+  if (region.throne) return THRONE.patienceSec; // PLAN-PHASE13: the Throne of Ages (a timeout past 15 minutes)
   const base = region.isCapital ? PATIENCE_SEC.capital : region.tier <= 2 ? PATIENCE_SEC.early : PATIENCE_SEC.mid;
-  return base * (1 + PATIENCE_PER_DYNASTY * Math.max(0, dynastyLevel - 1)); // tougher dynasties are meant to be longer
+  return Math.min(PATIENCE_MAX_SEC, base * (1 + PATIENCE_PER_DYNASTY * Math.max(0, dynastyLevel - 1))); // tougher dynasties are meant to be longer
 }
 
 // Supply lines (DESIGN §4.3): a standing order from one settlement to another. While it stands, the source sends
@@ -111,7 +117,7 @@ export const ENEMY_SCALING = Object.freeze({
   // thirteen times as strong as ring 1 and its Free Folk keeps a four-minute siege): the top is pinned by the
   // stalemate bound (a garrison must regrow less than fightRateMin per second), so the ladder cannot be steeper.
   atkDefByTier: [1, 0.88, 1.22, 1.523, 1.826, 2.128, 2.431, 2.734],
-  personalityStat: { passive: 1.09, defensive: 0.86, aggressive: 0.82, swarm: 0.77, undying: 0.75, raider: 0.8 }, // raider (PLAN-PHASE12): light garrisons, it evacuates by sea rather than holding; // undying (PLAN-PHASE6): softer per troop than the others, because its garrisons grow from your dead (0.86 made D2 1.6x a classic D2); extra atk AND def from depth 2. Free Folk only 9%: they never attack, so a stronger keep is not a harder fight, it is a stalemate (+40% gave 100-troop keeps the bot timed out on)
+  personalityStat: { passive: 1.09, defensive: 0.86, aggressive: 0.82, swarm: 0.77, undying: 0.75, raider: 0.8, usurper: 0.84 }, // usurper (PLAN-PHASE13): between the classic factions' (mixed garrisons); // raider (PLAN-PHASE12): light garrisons, it evacuates by sea rather than holding; // undying (PLAN-PHASE6): softer per troop than the others, because its garrisons grow from your dead (0.86 made D2 1.6x a classic D2); extra atk AND def from depth 2. Free Folk only 9%: they never attack, so a stronger keep is not a harder fight, it is a stalemate (+40% gave 100-troop keeps the bot timed out on)
   regionJitter: 0.05,        // each region's atk AND def x 1 +/- this (hash of world seed + region id): regions of one rung are not clones
   ladderCurve: 1.12,         // 1 = evenly spaced rungs; >1 keeps more regions easy and crowds the hard ones at the end. PLAN-PHASE11: 1.12 (was 1). A person shopping every few minutes (tools/campaign.mjs --policy=human, 32 seeds) had an Easy or Fair fight in 50% of the first hour's minutes at 1 and 79% at 1.12; the optimal D1 falls from 1.33 h to 1.01 h (24 seeds), the floor of its 1.0-1.6 h band (1.15: 0.99-1.01 h, 1.2: 0.95 h). Challenge worlds keep 1 (progression.js enemyDepth)
   capitalStat: 1.038,        // capitals' atk AND def x this on top (capitals already carry capitalMult troops)

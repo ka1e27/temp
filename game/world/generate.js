@@ -17,6 +17,8 @@ import { assignPerks } from './perks.js';
 import { assignRegionFeatures } from './regionFeatures.js';
 import { RIVALS } from '../config/ashen.js';
 import { applyArchipelago } from './archipelago.js';
+import { crownRivals, applyCrownFactions, crownIslands } from './crown.js';
+import { CROWN } from '../config/crown.js';
 
 /** The classic line-up: generation is exactly the pre-rotation pipeline (5 faction entries, no remap). */
 function isClassicLineup(rivals) {
@@ -99,10 +101,13 @@ export function generateWorld(seed, opts = {}) {
     regionCount += (opts.dynasty - 1) * DYNASTY.regionsPerDynasty;
   }
   regionCount = Math.min(regionCount, DYNASTY.maxRegions);
+  const crownOfAges = !!opts.crownOfAges; // PLAN-PHASE13: the final continent (world/crown.js); every other world kind never reaches its lines
+  if (crownOfAges) regionCount = Math.min(DYNASTY.maxRegions, Math.max(regionCount, CROWN.regionCount));
   const worldCfg = { ...WORLD, regionCount };
 
   const rng = createRng(seed);
-  const classic = isClassicLineup(opts.rivals);
+  const rivalsIn = crownOfAges ? (Array.isArray(opts.rivals) ? opts.rivals : crownRivals(seed)) : opts.rivals; // the Crown's three sector rivals
+  const classic = isClassicLineup(rivalsIn);
   const factionDefs = FACTIONS.filter((f) => f.id <= RIVALS.classic[RIVALS.classic.length - 1]); // the classic 5: generation is unchanged
 
   const { tiles, mainLandmass, beachInfo } = generateTerrain(seed, rng.fork('terrain'), cols, rows, WORLD.landFraction);
@@ -120,7 +125,10 @@ export function generateWorld(seed, opts = {}) {
   computeTiers(regions, startRegion);
 
   const sectorFactions = assignFactions(rng.fork('factions'), regions, startRegion, factionDefs);
-  const factions = classic ? sectorFactions : applyRivals(regions, sectorFactions, opts.rivals);
+  let factions = classic ? sectorFactions : applyRivals(regions, sectorFactions, rivalsIn);
+  // PLAN-PHASE13 §13A: the Usurper takes the centre, the Sea Kings a coast (before settlements: each region gets its owner's mix)
+  const crown = crownOfAges ? applyCrownFactions(seed, tiles, regions, sectorFactions, rivalsIn, cols, rows) : null;
+  if (crown) factions = crown.factions;
 
   const settlements = placeSettlements(
     rng.fork('settlements'), tiles, regions, factions, startRegion, worldCfg, cols, rows,
@@ -129,7 +137,8 @@ export function generateWorld(seed, opts = {}) {
   buildRoads(tiles, regions, settlements, mainLandmass, cols, rows);
   // PLAN-PHASE12 §12A: an archipelago cuts the continent into islands joined by fords, with harbours and sea lanes (hash-seeded: a land
   // continent never reaches this line, so every non-archipelago world stays byte-identical)
-  const arch = opts.archipelago ? applyArchipelago(seed, tiles, regions, settlements, startRegion, cols, rows) : null;
+  const arch = crown ? crownIslands(seed, tiles, regions, settlements, crown.crown, cols, rows) // PLAN-PHASE13: the Sea Kings' partial archipelago
+    : opts.archipelago ? applyArchipelago(seed, tiles, regions, settlements, startRegion, cols, rows) : null;
 
   assignNames(rng.fork('names'), regions, settlements);
   assignPerks(rng.fork('perks'), regions, tiles, startRegion);
@@ -139,7 +148,8 @@ export function generateWorld(seed, opts = {}) {
     bounds: computeBounds(tiles),
   };
   if (arch) world.archipelago = arch; // PLAN-PHASE12: { islands, harbours, seaLanes, fords }; absent on a land continent
-  if (!classic) world.rivals = [...opts.rivals]; // PLAN-PHASE6: set only when the line-up is not the classic one (D1 stays byte-identical)
+  if (!classic) world.rivals = [...rivalsIn]; // PLAN-PHASE6: set only when the line-up is not the classic one (D1 stays byte-identical)
+  if (crown && crown.crown) world.crown = { ...crown.crown }; // PLAN-PHASE13: { throne, usurper: regionIds, seaKings: regionIds }; absent on every other world
   assignRegionFeatures(world, { edict: opts.edict }); // region types and battle twists (DESIGN §10.13), from hashes only: nothing above changes; an Edict (PLAN-PHASE5) may reshape them
   return world;
 }

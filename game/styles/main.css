@@ -25,4 +25,6 @@
 @import url('./components/codex.css'); /* Phase 8: the Codex and the panels' "?" */
 @import url('./components/boons.css'); /* Phase 7: the Boon draft, the Duo reveal, the owned-Boons strip, Relics and the Reliquary */
 @import url('./components/challenges.css'); /* Phase 9: the Challenges hub, the result, the tracker, banner styles */
+@import url('./components/crown.css'); /* Phase 13: the Crown of Ages, the ending, Ascension */
+@import url('./components/options.css'); /* Phase 14: Play your way (colour vision, text size, high contrast, the keyboard map, hold to confirm) */
 @import url('./components/a11y.css'); /* last: it only ever RAISES sizes (touch targets), so it must win the cascade */

@@ -105,7 +105,9 @@ function relayFor(battle, mySites, source, target) {
  * themselves count only as far as they can be relayed to a settlement that can. */
 function planGreedyCapture(battle, mySites, reserve, margin, peak) {
   const { player, enemy, arena } = battle;
-  if (battle.squads.filter((q) => q.owner === PLAYER_OWNER).length >= MAX_LIVE_SQUADS) return [];
+  // supply-line squads (squad.auto) march by themselves: they never fill the hands of a person managing an attack (PLAN-PHASE14: with
+  // Supply Wagons' lines up, 14+ of them were always on the road and the bot never attacked again: 70-minute stalemates at Siege capitals)
+  if (battle.squads.filter((q) => q.owner === PLAYER_OWNER && !q.auto).length >= MAX_LIVE_SQUADS) return [];
   const myStats = ownerStats(PLAYER_OWNER, player, arena.enemyFaction, enemy);
   const sources = mySites.filter((s) => s.troops > reserve * peak[s.id]);
   if (sources.length === 0) return [];
@@ -379,7 +381,10 @@ export function decide(battle, t, memo = {}) {
   commands.push(...reinforceThreatened(battle, mySites, peak));
   // a look that only fired powers or the ability still plans a capture (with very short cooldowns a power fires at every look, and
   // the bot used to stand still for the whole battle: dragon fights in later dynasties timed out at 12 minutes)
-  if (!commands.some((c) => c.type === 'send' || c.type === 'supply' || c.type === 'unsupply')) {
+  // Standing supply lines are set and forget (PLAN-PHASE14): re-pointing or dropping one does not cost the look its attack. With Supply
+  // Wagons the 'overflow' lines flip at almost every look (Levy refills a drained site past the threshold), and when that blocked the
+  // capture the bot pooled thousands of troops at the hub and never attacked again (20-70 minute timeouts at Siege capitals).
+  if (!commands.some((c) => c.type === 'send')) {
     const idle = t - (memo.lastAct || 0) - IMPATIENT_AFTER;
     const k = Math.max(0, Math.min(1, idle / IMPATIENT_RAMP));
     const k2 = Math.max(0, Math.min(1, (idle - IMPATIENT_RAMP) / ATTRITION_RAMP));

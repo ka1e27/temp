@@ -29,6 +29,7 @@ import { FACTIONS } from '../config/world.js';
 // (gold coins, gold sparkles) are the exact same gold as the HUD's gold
 // counter and gold token (DESIGN §7.5), not a close-but-different hardcode.
 import { ACCENTS } from './palette.js';
+import { effects } from './accessibility.js'; // Settings > Effects (PLAN-PHASE14): Full / Reduced / Minimal scale the counts
 import {
   spawnShockwave, spawnRipple, spawnFloatText, spawnCoins, spawnArrow, spawnFireball,
   explodeFireball, spawnFireBloom, spawnTelegraph, spawnFlood, spawnScorch, spawnShield, spawnRally,
@@ -46,8 +47,8 @@ const SMOKE_COLOR = '#6b6f76';
 const CONFETTI_DEFAULT = FACTIONS.map((f) => f.color);
 
 /** Count scaled for reduceMotion (spec: "particle counts × 0.35"). */
-function n(base, rm) {
-  return Math.max(1, Math.round(base * (rm ? 0.35 : 1)));
+function n(base, rm) { // and by Settings > Effects; at least one speck always survives
+  return Math.max(1, Math.round(base * (rm ? 0.35 : 1) * effects().particles));
 }
 /** Duration scaled for reduceMotion (spec: "shorter durations"). */
 function d(base, rm) {
@@ -196,7 +197,7 @@ function spawnLevy(pool, x, y, opts, rm) {
 }
 
 function spawnConfettiPieces(pool, x, y, opts, rm) {
-  if (rm) return; // spec: reduceMotion disables confetti entirely
+  if (rm || !effects().confetti) return; // spec: reduceMotion disables confetti entirely (and Effects: Minimal)
   const count = Math.max(1, Math.round(opts.count ?? 70));
   const colors = opts.colors ?? CONFETTI_DEFAULT;
   const spread = opts.spread ?? 7;

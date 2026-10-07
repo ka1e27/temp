@@ -102,7 +102,10 @@ export function createStateContainer({ storage, now }) {
     const seed = (choice.seed ?? randomSeed()) >>> 0;
     // the continent being left (its Dragon's Lair may stand: it is optional); the Edict and Challenges are applied by foundDynasty
     const buys = Array.isArray(choice.legacyBuys) ? choice.legacyBuys : [];
-    const next = foundDynasty(state, seed, undefined, world, { edict: choice.edict ?? null, challenges: choice.challenges || [], legacyBuys: buys });
+    // PLAN-PHASE13: `crownOfAges` (honoured only when offered) and `ascension` (clamped to what the record allows) ride along; foundDynasty checks both
+    const next = foundDynasty(state, seed, undefined, world, {
+      edict: choice.edict ?? null, challenges: choice.challenges || [], legacyBuys: buys, crownOfAges: !!choice.crownOfAges, ascension: choice.ascension | 0,
+    });
     if (!next) return false;
     // the Legacy bought during the ceremony (on a preview) is applied by foundDynasty (`legacyBuys`, before the dynasty-start effects); its report rides on
     // the non-saved `next.founding` ({ legacyEarned, bought, refused }), handed back to the scene

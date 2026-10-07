@@ -71,6 +71,7 @@ export const INTEL = Object.freeze({
     passive: 'Passive: never attacks, only supports its own sites',
     undying: 'Undying: holds thickly, strikes once you have spent troops',
     raider: 'Raider: holds lightly, slips away by sea, strikes any coast',
+    usurper: 'Usurper: guards his keep, strikes in waves, borrows every rival\'s weapon', // PLAN-PHASE13
   }),
   // One plain line under the weak point (shown on touch too, where there is no hover): what the words mean.
   glossary: Object.freeze({
