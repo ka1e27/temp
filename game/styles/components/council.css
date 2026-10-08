@@ -144,6 +144,19 @@
   padding: var(--sp-2);
   font-size: var(--fs-xs);
 }
+.upgrade-card-price { display: contents; }
+.upgrade-card-forbid { display: none; }
+/* Iron Will (a founding Challenge): a power cannot be bought, and the button says why instead of a price */
+.upgrade-card-buy.is-forbidden .upgrade-card-price { display: none; }
+.upgrade-card-buy.is-forbidden .upgrade-card-forbid { display: contents; }
+.upgrade-card.is-forbidden .upgrade-card-icon { color: var(--text-dim); background: rgba(255, 255, 255, 0.05); }
+.council-notice {
+  display: flex; align-items: flex-start; gap: var(--sp-2); margin: 0; padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--panel-radius-sm); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--text); font-size: var(--fs-xs); font-weight: 700; line-height: 1.35;
+}
+.council-notice[hidden] { display: none; }
+.council-notice > .icon { flex: 0 0 auto; color: var(--warn); margin-top: 1px; }
 .upgrade-card-buy.is-unlock::before {
   content: 'Unlock';
   font-size: 0.62rem;

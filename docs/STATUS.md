@@ -773,3 +773,10 @@ Sonnet 5.5 (`sonnet55-engineer`) is no longer preferred.
   scale/slide; the ending scroll has a fixed height so Continue stays put; the HUD gold/income use tabular digits). Full gate green
   (npm 1253, check.mjs 32 min, --base=temp). The user's "powers don't work in Dynasty II" is not reproduced on a fresh realm: waiting
   for their save code or a description.
+- **651e72a pushed, CI failed the same check** (results Continue 9.4 px on phase13 phone). Real cause found with a per-frame probe: the
+  crown row's "+25%" tag was `display: none` until each crown landed (~440 ms after the card shows), so the centred card grew and Continue
+  dropped 8.6 px. The tag's line is now held from the start (`.crown-bonus.is-pending { visibility: hidden }`): 0 px over 4 s.
+- **The powers report, most likely Iron Will** ("powers don't work, my General does, they all show locked" = the Challenge's exact rule).
+  Fixes: the War Council's Powers tab says "Iron Will is on..." and sells no power (the Buy button is a lock reading "Iron Will"; onBuy
+  refuses too); a refused power says "Iron Will, your founding Challenge: no powers until your next founding. Your General's ability still
+  works." for 4.5 s; refusals (`toast.now`) no longer wait 3 s behind a leader's banner on a phone. A phase5 check covers the council.

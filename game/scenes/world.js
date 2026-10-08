@@ -580,26 +580,31 @@ export function createWorldScene(services) {
     bestValueId = best ? best.id : null;
   }
 
+  const POWERS_IRON_WILL = 'Iron Will is on: powers cannot be cast in battle until your next founding, so they cannot be bought. Your General’s ability still works.';
+
   function councilRow(id) {
     const { state } = container.get();
     const def = UPGRADES[id];
     const level = levelOf(state, id);
     const locked = def.tab === 'powers' && level < 1;
     const maxed = def.max != null && level >= def.max;
+    const forbidden = def.tab === 'powers' && edictMods(state).noPowers ? 'Iron Will' : null; // the Challenge refuses every power in battle: no buying them either
     return {
       id, tab: def.tab, icon: def.icon, name: def.name, desc: def.desc, level,
       max: def.max ?? null, locked,
       current: locked ? 'Locked' : def.effectText(level),
       next: maxed ? null : def.effectText(level + 1),
       cost: maxed ? null : upgradeCost(id, level),
-      affordable: !maxed && canBuy(state, id),
+      affordable: !maxed && !forbidden && canBuy(state, id),
       bestValue: id === bestValueId,
+      forbidden,
     };
   }
 
   function updateCouncil(force = false) {
     refreshBestValue(performance.now(), force);
-    ui.council.update({ upgrades: Object.keys(UPGRADES).map(councilRow) });
+    const { state } = container.get();
+    ui.council.update({ upgrades: Object.keys(UPGRADES).map(councilRow), powersNotice: edictMods(state).noPowers ? POWERS_IRON_WILL : null });
   }
 
   // Keepsakes: the "Save the map" button's words and busy state (the picture takes about half a second to render, and a second press must not start a second render)
@@ -976,8 +981,17 @@ export function createWorldScene(services) {
     afterWorksChange();
   }
 
+  /** Iron Will refuses powers in battle, so the council refuses to sell them (the cards say so; this catches a stale press). */
+  function powersForbidden(state, id) {
+    if (UPGRADES[id].tab !== 'powers' || !edictMods(state).noPowers) return false;
+    sfx.play('error');
+    ui.council.setStatus('Iron Will: no powers this dynasty.', 'warning');
+    return true;
+  }
+
   function onBuy(id) {
     const { state } = container.get();
+    if (powersForbidden(state, id)) return;
     const level = buy(state, id);
     if (level) {
       sfx.play('upgrade');
@@ -994,6 +1008,7 @@ export function createWorldScene(services) {
 
   function onBuyMax(id) {
     const { state } = container.get();
+    if (powersForbidden(state, id)) return;
     const res = buyMax(state, id);
     if (res.levels > 0) {
       sfx.play('upgrade');

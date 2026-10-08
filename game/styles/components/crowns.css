@@ -67,6 +67,7 @@
   font-variant-numeric: tabular-nums;
 }
 .crown-bonus:empty { display: none; }
+.crown-bonus.is-pending { visibility: hidden; } /* its line is held while the crown is still landing (crownRow.js) */
 
 /* --- states ---------------------------------------------------------------------- */
 .crown-slot[data-state='target'] .crown-label { color: var(--text-muted); }

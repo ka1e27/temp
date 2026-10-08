@@ -23,6 +23,7 @@ const TABS = [['army', 'Army'], ['realm', 'Realm'], ['powers', 'Powers']];
  * @property {number|null} cost      null if maxed
  * @property {boolean} affordable
  * @property {boolean} [bestValue]    Army tab: the ONE upgrade that raises Army Power the most per gold right now (computed by the scene, passed in as data)
+ * @property {string|null} [forbidden] Powers under Iron Will: why it cannot be bought ("Iron Will"); the Buy button is replaced by a lock
  */
 
 /**
@@ -75,6 +76,12 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
     if (on) { pointerEl.textContent = `Best value on ${tabLabel(bestTab)} ›`; pointerEl.setAttribute('aria-label', `Best value is on the ${tabLabel(bestTab)} tab: show it`); }
   }
   const listEl = h('div.council-list.scroll-y', { id: 'council-list', role: 'tabpanel', 'aria-labelledby': 'council-tab-army' });
+  // The Powers tab under Iron Will says so at the top, before any card: a player who ticked it at the founding bought every power and found
+  // them all locked in battle (user report, 2026-10-08). The scene passes the words (`powersNotice`); null hides it.
+  const noticeText = h('span', {}, '');
+  const noticeEl = h('p.council-notice', { role: 'note' }, icon('lock', 16), noticeText);
+  let notice = null;
+  listEl.appendChild(noticeEl);
 
   // Feedback for a purchase made IN the council appears in the council (a toast would sit over the dialog): one polite status line IN the header, between
   // the title and the close button. It never takes a row of its own: one that opened under the header pushed every Buy button down on the first purchase
@@ -110,6 +117,7 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
     }
     listEl.setAttribute('aria-labelledby', `council-tab-${tab}`);
     for (const [id, card] of cards) card.el.hidden = card.tab !== tab;
+    noticeEl.hidden = !(notice && tab === 'powers');
     refreshPointer();
   }
   selectTab(activeTab);
@@ -128,9 +136,10 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
     let effectMeasured = false;
     const nextEl = h('span.upgrade-card-next', {}, '');
     const costLabelEl = h('span.upgrade-card-cost-value.nums', {}, '');
+    const forbidEl = h('span.upgrade-card-forbid', {}, icon('lock', 14), h('span', {}, ''));
     const buyBtn = h('button.btn.btn-primary.upgrade-card-buy', {
       onClick: () => (buyMaxOn ? onBuyMax : onBuy)?.(data.id),
-    }, icon('coin', 14), costLabelEl);
+    }, h('span.upgrade-card-price', {}, icon('coin', 14), costLabelEl), forbidEl);
     const cardName = data.name;
 
     const effectEl = h('div.upgrade-card-effect', {}, currentEl, h('span.upgrade-card-arrow', {}, '→'), nextEl);
@@ -174,11 +183,15 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
         const maxed = d.next == null;
         cardEl.classList.toggle('is-maxed', maxed);
         cardEl.classList.toggle('is-affordable', !maxed && d.affordable);
-        buyBtn.disabled = maxed || !d.affordable;
+        buyBtn.disabled = maxed || !d.affordable || !!d.forbidden;
         costLabelEl.textContent = maxed ? 'MAX' : shortNumber(d.cost);
-        buyBtn.classList.toggle('is-unlock', !!d.locked);
+        buyBtn.classList.toggle('is-unlock', !!d.locked && !d.forbidden);
+        buyBtn.classList.toggle('is-forbidden', !!d.forbidden);
+        cardEl.classList.toggle('is-forbidden', !!d.forbidden);
+        if (d.forbidden && forbidEl.lastChild.textContent !== d.forbidden) forbidEl.lastChild.textContent = d.forbidden;
         // "Buy Recruitment level 1, 33 gold" / "Unlock Rally, 400 gold" / "Recruitment is at its maximum" (the visible text is only the price)
-        const label = maxed ? `${cardName} is at its maximum level`
+        const label = d.forbidden ? `${cardName} cannot be bought: ${d.forbidden} forbids powers this dynasty`
+          : maxed ? `${cardName} is at its maximum level`
           : d.locked ? `Unlock ${cardName}, ${shortNumber(d.cost)} gold`
             : buyMaxOn ? `Buy as many ${cardName} levels as you can afford, next level ${d.level + 1} costs ${shortNumber(d.cost)} gold`
               : `Buy ${cardName} level ${d.level + 1}, ${shortNumber(d.cost)} gold`;
@@ -208,6 +221,11 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
       entry.el.hidden = entry.tab !== activeTab;
     }
     if (data.upgrades) { const b = data.upgrades.find((d) => d.bestValue); bestTab = b ? b.tab : null; refreshPointer(); }
+    if (data.powersNotice !== undefined) {
+      notice = data.powersNotice || null;
+      if (notice && noticeText.textContent !== notice) noticeText.textContent = notice;
+      noticeEl.hidden = !(notice && activeTab === 'powers');
+    }
   }
 
   function destroy() {

@@ -127,8 +127,10 @@ export function createCrownRow({ size = 'md', startDelayMs = 450, gapMs = 350, o
       const status = !data.earned ? 'not earned yet' : earned ? 'earned' : 'missed';
       slot.el.title = `${text.label} — ${text.hint}`;
       slot.el.setAttribute('aria-label', `${text.label}: ${status}. ${text.hint}`);
-      // While an animated award is still landing, the bonus tag appears with its crown instead.
-      slot.bonus.textContent = data.bonusPct && earned && !data.animate ? `+${data.bonusPct}%` : '';
+      // While an animated award is still landing, the bonus tag appears with its crown instead. Its line is held from the start
+      // (invisible until the crown lands) so the row never grows under a tap: the results card is centred and its Continue would move.
+      slot.bonus.textContent = data.bonusPct && earned ? `+${data.bonusPct}%` : '';
+      slot.bonus.classList.toggle('is-pending', !!data.animate && earned);
     }
   }
 
@@ -160,7 +162,7 @@ export function createCrownRow({ size = 'md', startDelayMs = 450, gapMs = 350, o
     earnedKeys.forEach((key, i) => {
       const land = () => {
         setState(key, 'earned', !instant);
-        if (data.bonusPct) slots.get(key).bonus.textContent = `+${data.bonusPct}%`;
+        slots.get(key).bonus.classList.remove('is-pending');
         if (onAward) onAward(key, i);
       };
       if (instant) land();

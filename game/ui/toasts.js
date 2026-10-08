@@ -24,6 +24,7 @@ const DEFAULT_DURATION_MS = 4200;
  * @property {string} [accent]  a colour for the toast's accent (`--toast-accent`, `--vendetta-color`): a Vendetta banner's pennant in the leader's colour
  * @property {string} [className]  extra classes on the toast ('is-event': a world event's wide toast, buttons under the words)
  * @property {string[]} [aliases]  ids this toast also answers to in has() / dismissId() (a merged toast: the shell's post-battle digest)
+ * @property {boolean} [now]  the shell posts it at once even while a leader banner speaks on a phone (the answer to a press: a power refused)
  */
 
 export function createToasts() {

@@ -827,7 +827,8 @@ function boot() {
   function postToast(toast) {
     // an update to a toast already on screen (a raid's countdown) changes it in place: it adds nothing, so it never waits for the banner
     const live = toast && toast.id != null && [...ui.toasts.el.children].some((n) => n.dataset.id === String(toast.id) && !n.classList.contains('is-out'));
-    if (!live && renderer.cssWidth < 768 && ui.leaderBanner.isShowing()) {
+    // `now`: the answer to a press (a power refused: "Iron Will...") never waits out a leader's line, or the press seems to do nothing for 3 s
+    if (!live && !(toast && toast.now) && renderer.cssWidth < 768 && ui.leaderBanner.isShowing()) {
       toastQueue.push({ toast, at: performance.now() });
       if (!toastTimer) toastTimer = setInterval(flushToasts, 200);
       return;

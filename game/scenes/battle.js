@@ -800,7 +800,7 @@ export function createBattleScene(services) {
 
   /** A send or supply order the front-line rule refused: the target shakes, says why, and the error cue plays. */
   function onRefused(ev, nowMs) {
-    if (ev.reason === 'ironWill') { refusedPower(IRON_WILL_TEXT, ev.power); return; } // the sim refused a power under Iron Will (PLAN-PHASE5 §5C)
+    if (ev.reason === 'ironWill') { refusedPower(IRON_WILL_REFUSAL, ev.power, 4500); return; } // the sim refused a power under Iron Will (PLAN-PHASE5 §5C)
     if (ev.reason !== 'noRoute') return;
     refusal = { site: ev.to, startMs: nowMs, tipUntilMs: nowMs + 2600 };
     sfx.play('error', { volume: 0.6 });
@@ -1165,11 +1165,14 @@ export function createBattleScene(services) {
   }
 
   const IRON_WILL_TEXT = 'No powers: Iron Will';
+  // what a press says: the Challenge by name, how long it lasts, and what still works (a player who ticked it at the founding took the bare
+  // "No powers: Iron Will" flash for a bug: user report, 2026-10-08)
+  const IRON_WILL_REFUSAL = 'Iron Will, your founding Challenge: no powers until your next founding. Your General’s ability still works.';
   const noPowers = () => { const st = container.get().state; return !!edictMods(st).noPowers || !!(battle && battle.player && battle.player.powersBlocked); };
   /** A refused power is SEEN as well as heard: a toast (in place, never a pile) and the button shakes. */
-  function refusedPower(message, id) {
+  function refusedPower(message, id, duration = 1800) {
     sfx.play('error');
-    ui.toasts.update({ id: 'refused', type: 'warning', icon: 'flame', message, duration: 1800 });
+    ui.toasts.update({ id: 'refused', type: 'warning', icon: 'flame', message, duration, now: true }); // it answers a press: no waiting for a leader's banner
     if (id) ui.battleHud.refuse(id);
   }
 
@@ -1253,7 +1256,7 @@ export function createBattleScene(services) {
     if (!active || !battle || phase !== 'live') return;
     const level = battle.player.powers[id] || 0;
     if (level < 1) { sfx.play('error'); ui.toasts.update({ message: 'Unlock this power in the War Council', duration: 2200 }); return; }
-    if (noPowers()) { refusedPower(IRON_WILL_TEXT, id); return; } // Iron Will: no powers this dynasty
+    if (noPowers()) { refusedPower(IRON_WILL_REFUSAL, id, 4500); return; } // Iron Will: no powers this dynasty
     if (feat.powerFlags(id).holy) { feat.onEvent({ type: 'refused', reason: 'holy', owner: PLAYER_OWNER, power: id }, performance.now()); return; } // Holy Ground (DESIGN 10.13)
     if (battle.t < battle.cooldowns[id]) {
       const left = Math.max(1, Math.ceil(battle.cooldowns[id] - battle.t));

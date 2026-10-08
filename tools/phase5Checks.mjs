@@ -114,6 +114,16 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(realm.legacy && realm.owned, tag('the Legacy tree, Old Roads owned'));
     await pressSel('.realm-close');
 
+    // 6b. the War Council under Iron Will: the Powers tab says so and sells no power (user report, 2026-10-08: every power bought, all locked in battle)
+    await q(() => window.__hd.openCouncil());
+    await sleep(400);
+    await q(() => document.querySelector('#council-tab-powers').click());
+    await sleep(300);
+    const iw = await q(() => ({ notice: (() => { const n = document.querySelector('.council-notice'); return n && !n.hidden ? n.textContent : ''; })(), buys: [...document.querySelectorAll('.upgrade-card:not([hidden]) .upgrade-card-buy')].map((b) => b.disabled && b.classList.contains('is-forbidden')) }));
+    ok(/Iron Will/.test(iw.notice) && iw.buys.length > 0 && iw.buys.every(Boolean), tag(`the War Council's Powers tab: the Iron Will note, no power for sale (${iw.buys.length} locked)`));
+    await q(() => { document.querySelector('#council-tab-army').click(); document.querySelector('.council-close').click(); });
+    await sleep(300);
+
     // 7. Quick Conquest: the node, a strong army, an Easy region
     const easy = await q(async () => {
       const hd = window.__hd;
