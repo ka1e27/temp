@@ -46,6 +46,7 @@ import { runCampaign, hooks as campaignHooks } from './campaign.mjs';
 import { ensureGenerals, recruitChampion, addMercenary, commanderStyle } from '../game/meta/generals.js';
 import { GENERALS, CHAMPION_OF_FACTION } from '../game/config/generals.js';
 import { TICK_SEC, patienceFor } from '../game/config/battle.js';
+import { ECONOMY } from '../game/config/meta.js';
 
 export const LABELS = ['Easy', 'Fair', 'Hard', 'Deadly'];
 /** Win-rate band each label promises (DESIGN §5.3 as briefed by the lead). */
@@ -197,6 +198,11 @@ export function decideHuman(battle, t, memo = {}) {
   return commands;
 }
 
+/** PLAN-PHASE15: the label a raw (uncalibrated) ratio would read: the synthetic ladder judges the fitted estimate itself. */
+export function rawLabelOf(ratio) {
+  return (ECONOMY.difficultyLabels.find((l) => ratio >= l.min) || ECONOMY.difficultyLabels[ECONOMY.difficultyLabels.length - 1]).label;
+}
+
 export function tierBand(region) {
   if (region.isCapital) return 'capital';
   return region.tier <= 2 ? 'tier1-2' : 'mid';
@@ -235,6 +241,7 @@ export function sweepRows({
           seed, region: region.id, tier: region.tier, capital: region.isCapital, worksKind: works ? works.kind : 'none',
           band: tierBand(region), personality: enemy.personality, level, powerRatio,
           ratio: d.ratio, label: d.label, power: d.power, strength: d.strength,
+          rawRatio: d.rawRatio, rawLabel: rawLabelOf(d.rawRatio), // PLAN-PHASE15: the fitted estimate before the card's calibration
           win: result === 'win', sec, timedOut, approach: arena.marches.filter((m) => m.approach).reduce((n, m) => n + m.tiles.length, 0), // tiles of the approach strip (a mountain border) in this arena, 0 for none
           enemySites: arena.sites.filter((s) => s.owner !== 0).map((s) => [s.type, s.troops, s.owner, s.capMult ?? 1]),
           friendSites: arena.sites.filter((s) => s.owner === 0).map((s) => [s.type, s.troops]),

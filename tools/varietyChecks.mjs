@@ -10,7 +10,7 @@
 //   7. world events: the Merchant's deals (a real press buys the Renown), a Duel declined, the Plague acknowledged; a Duel lost (no occupation)
 //      and a Duel won (Renown)
 //   8. the tutorial hints V1-V5, measured by tools/hintMonitor.js (placed, never covering their target)
-import { makeOpen } from './robustChecks.mjs';
+import { makeOpen, settledCentre } from './robustChecks.mjs';
 
 const P = 0; // PLAYER_FACTION / PLAYER_OWNER
 
@@ -56,7 +56,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     const r = e.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, sel, txt || null);
-  const pressSel = async (sel, txt) => { const c = await centre(sel, txt); if (!c) return false; await sleep(150); const c2 = await centre(sel, txt); await press(c2.x, c2.y); return true; };
+  const pressSel = async (sel, txt) => { const c2 = await settledCentre(() => centre(sel, txt), sleep); if (!c2) return false; await press(c2.x, c2.y); return true; };
   const siteAt = (id) => q((x) => { const s = window.__hd.siteInfo().find((y) => y.id === x); return s ? { x: s.x, y: s.y + 4 } : null; }, id);
 
   const HELPERS = () => {

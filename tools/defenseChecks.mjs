@@ -8,6 +8,8 @@
 //   e. a defense lost: "Region lost", the region is OCCUPIED (its fortification and Work move to the occupier, its prosperity is frozen)
 //   f. retaken: the card says Retake; a real press, a won battle, Continue: the region, its fortification, its Work and its prosperity are back
 
+import { settledCentre } from './robustChecks.mjs';
+
 export async function defenseScenario(open, BASE, ok, sleep, allErrors, { width, height, mobile, name }) {
   const t = await open(`${BASE}/index.html?dev=1&seed=7`, { width, height, mobile });
   const q = (fn, ...a) => t.page.eval(fn, ...a);
@@ -24,7 +26,7 @@ export async function defenseScenario(open, BASE, ok, sleep, allErrors, { width,
     }
   };
   const centre = (sel) => q((s) => { const e = [...document.querySelectorAll(s)].find((x) => x.getClientRects().length && !x.closest('[hidden]')); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, sel);
-  const pressSel = async (sel) => { const c = await centre(sel); if (!c) return false; await press(c.x, c.y); return true; };
+  const pressSel = async (sel) => { const c = await settledCentre(() => centre(sel), sleep); if (!c) return false; await press(c.x, c.y); return true; };
   const countdown = () => q(() => { const e = [...document.querySelectorAll('.toast')].find((x) => /arrives in/.test(x.textContent)); const m = e && e.textContent.match(/arrives in (\d+)/); return m ? +m[1] : null; });
   try {
     ok(await t.atTitle(), `defense ${name}: boots`);
@@ -60,10 +62,12 @@ export async function defenseScenario(open, BASE, ok, sleep, allErrors, { width,
     // a. the raid is announced
     const raid = await q((to) => window.__hd.raid(to, { sec: 10, first: true }), T);
     ok(!!raid && raid.toRegionId === T, `defense ${name}: a war band sets out against region ${T}`);
-    ok(await t.waitFor(() => [...document.querySelectorAll('.toast')].some((e) => /marches on .+: arrives in \d+ s/.test(e.textContent) && e.querySelector('.toast-action')), 3000), `defense ${name}: a toast says who marches where and when, with Go`);
+    ok(await t.waitFor(() => [...document.querySelectorAll('.toast')].some((e) => /marches on .+: arrives in \d+ s/.test(e.textContent) && e.querySelector('.toast-action')), 12000), `defense ${name}: a toast says who marches where and when, with Go`); // (a phone's toast waits out a leader's banner)
     const c1 = await countdown();
-    await sleep(2300);
-    const c2 = await countdown();
+    // the countdown is in ACTIVE seconds (meta/frontier.js activeSec), stepped by the frame clock, whose dt is clamped to 0.25 s (input/clock.js
+    // MAX_DT): on a page drawing 2-3 frames a second (--cpu=4 at 1440x900 on a software rasteriser) it runs slower than the wall clock, by design
+    let c2 = c1;
+    for (let i = 0; i < 40 && c1 != null && c2 === c1; i++) { await sleep(250); c2 = await countdown(); }
     ok(c1 != null && c2 != null && c2 < c1, `defense ${name}: the countdown counts down (${c1} -> ${c2} s)`);
     ok(await q(() => (window.__hd.state.frontier.incoming || []).length === 1), `defense ${name}: the war band is on the map (state.frontier.incoming, drawn by render/warBands.js)`);
     ok(await pressSel('.toast .toast-action'), `defense ${name}: a real press on Go`);

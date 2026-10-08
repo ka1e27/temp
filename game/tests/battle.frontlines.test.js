@@ -515,7 +515,7 @@ test('arenas: the War Camp can attack something other than the keep at the start
       if (soft.length > 0 && open.length === 0) keepFirst += 1;
       // no march is longer than the cap, each is recorded, and every tile of it is no-man's-land
       for (const march of arena.marches) {
-        assert.ok(march.tiles.length >= 1 && march.tiles.length <= BATTLE.corridorMaxTiles, `seed ${seed} ${world.regions[id].name}: a border march of ${march.tiles.length} tiles`);
+        assert.ok(march.tiles.length >= 1 && march.tiles.length <= (march.lastResort ? BATTLE.corridorMaxTilesLastResort : BATTLE.corridorMaxTiles), `seed ${seed} ${world.regions[id].name}: a border march of ${march.tiles.length} tiles`);
         for (const i of march.tiles) {
           assert.equal(arena.tiles.find((t) => t.i === i).link, true);
           assert.equal(tileOwner(battle, i), -1);
@@ -577,7 +577,7 @@ test('arenas: no border march is longer than the cap, and a march rarely hugs th
       for (const march of arena.marches) {
         marches += 1;
         longest = Math.max(longest, march.tiles.length);
-        assert.ok(march.tiles.length <= BATTLE.corridorMaxTiles, `seed ${seed} ${region.name}: a border march of ${march.tiles.length} tiles (cap ${BATTLE.corridorMaxTiles})`);
+        assert.ok(march.tiles.length <= (march.lastResort ? BATTLE.corridorMaxTilesLastResort : BATTLE.corridorMaxTiles), `seed ${seed} ${region.name}: a border march of ${march.tiles.length} tiles (cap ${BATTLE.corridorMaxTiles})`);
         const tiles = march.tiles.map((i) => arena.tiles.find((t) => t.i === i));
         // a Siege's Gate stands next to the keep by design (DESIGN §10.13)
         if (arena.twist === 'siege') continue; // its Gate reshapes the land at the keep, so every march there is counted out

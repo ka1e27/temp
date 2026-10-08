@@ -92,9 +92,19 @@ function connect(wsUrl) {
     ws.addEventListener('error', () => reject(new Error('CDP socket error')));
 
     ws.addEventListener('open', async () => {
+      // Page.navigate can hang forever on a starved page (Phase 15B saw one at --cpu=4): bound it, so a run fails loudly instead of
+      // sitting until a watchdog. Other methods stay unbounded (Runtime.evaluate with awaitPromise legitimately runs long).
+      const NAV_TIMEOUT_MS = 45000;
       const send = (method, params = {}) => new Promise((ok, no) => {
         const id = nextId++;
-        pending.set(id, { resolve: ok, reject: no });
+        let timer = null;
+        const done = (fn) => (v) => { if (timer) clearTimeout(timer); fn(v); };
+        pending.set(id, { resolve: done(ok), reject: done(no) });
+        if (method === 'Page.navigate') {
+          timer = setTimeout(() => {
+            if (pending.has(id)) { pending.delete(id); no(new Error(`Page.navigate timed out after ${NAV_TIMEOUT_MS / 1000} s (${params.url || ''})`)); }
+          }, NAV_TIMEOUT_MS);
+        }
         ws.send(JSON.stringify({ id, method, params }));
       });
 

@@ -16,6 +16,11 @@ export const MUSIC = Object.freeze({
   minSwitchLeadSec: 0.4,      // a scene change lands on the first bar line at least this far ahead
   stallSec: 0.75,             // a tick gap longer than this (throttled tab) shifts the timeline, keeping bar phase
   lateNoteDropSec: 0.08,      // note events this far in the past (a stalled tab) are skipped, not burst
+  // On a slow page the live timer fires late; the scheduler then looks ahead (and forgives lateness) in proportion to the measured
+  // gap between passes, capped here so a truly stalled tab still skips rather than bursting (Phase 15B: 7 voices instead of 12 at 4x CPU).
+  lookaheadGapFactor: 1.5,
+  lateGapFactor: 1.2,
+  lookaheadMaxSec: 0.5,
   defaultVolume: 0.4,         // music's own volume under master
   defaultSeed: 1,
   volumeSmoothSec: 0.05,

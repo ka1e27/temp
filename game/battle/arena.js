@@ -504,9 +504,10 @@ function flood(world, arena, regionId) {
  *      first: capturing whatever is attackable and repeating must reach them all, or the keep's land is what walls them in.
  * A strip is the path to a settlement that crosses the fewest foreign tiles, at most `BATTLE.corridorMaxTiles` of them, and one
  * that would touch the keep's tile or its neighbours is only taken when nothing else works. A guarantee no short strip can give
- * is simply not given (the player's safety net, routing.js, still keeps a fight from deadlocking). Nothing is carved to join the
+ * is simply not given (the player's safety net, routing.js, still keeps a fight from deadlocking), except for (2): a settlement walled in
+ * by the keep's land gets a strip of up to `BATTLE.corridorMaxTilesLastResort` tiles when no short one exists (PLAN-PHASE15). Nothing is carved to join the
  * player's own settlements: a halo village cut off from the camp fights from where it stands. Every strip is recorded in
- * `arena.marches` ({ to, tiles }). Mutates `arena.tiles`.
+ * `arena.marches` ({ to, tiles, lastResort? }). Mutates `arena.tiles`.
  */
 function openCorridors(arena, want) {
   const sites = arena.sites;
@@ -520,7 +521,7 @@ function openCorridors(arena, want) {
   const nearKeep = (tile) => keepTiles.some((k) => hexDistance(tile, k) <= 1);
 
   /** The best strip from any of `sources` to any of `targets` (site objects, ids as in the arena) in `view`, or null. */
-  function cheapest(view, sources, targets) {
+  function cheapest(view, sources, targets, maxTiles = BATTLE.corridorMaxTiles) {
     const terr = computeTerritory(view);
     let best = null;
     for (const target of targets) {
@@ -531,7 +532,7 @@ function openCorridors(arena, want) {
         const path = findPath(byKey, tileOfSite(source), tileOfSite(target), null, extra);
         if (!path) continue;
         const tiles = path.filter(blocked);
-        if (tiles.length === 0 || tiles.length > BATTLE.corridorMaxTiles) continue; // nothing to flag, or no longer a short strip
+        if (tiles.length === 0 || tiles.length > maxTiles) continue; // nothing to flag, or no longer a short strip
         const key = [tiles.some(nearKeep) ? 1 : 0, tiles.length, path.reduce((sum, t) => sum + t.cost, 0), target.id];
         if (!best || key.some((v, i) => v !== best.key[i] && v < best.key[i] && key.slice(0, i).every((w, j) => w === best.key[j]))) {
           best = { target, tiles, key };
@@ -542,10 +543,10 @@ function openCorridors(arena, want) {
   }
 
   // (A settlement on the camp's own tile has no route to it at all and needs none; a stage with nothing to flag hands over.)
-  const flag = (best) => {
+  const flag = (best, lastResort = false) => {
     if (!best) return false;
     for (const t of best.tiles) t.link = true;
-    arena.marches.push({ to: best.target.id, tiles: best.tiles.map((t) => t.i) });
+    arena.marches.push({ to: best.target.id, tiles: best.tiles.map((t) => t.i), ...(lastResort ? { lastResort: true } : {}) });
     return true;
   };
 
@@ -571,6 +572,9 @@ function openCorridors(arena, want) {
       }
     }
     const stuck = simSoft.filter((x) => x.owner !== PLAYER_OWNER);
-    if (stuck.length === 0 || !flag(cheapest(simView, sim.filter((x) => x.owner === PLAYER_OWNER), stuck))) return;
+    if (stuck.length === 0) return;
+    const owned = sim.filter((x) => x.owner === PLAYER_OWNER);
+    // a settlement the keep's land walls in feeds the keep from out of reach: a longer strip is better than none (PLAN-PHASE15)
+    if (!flag(cheapest(simView, owned, stuck)) && !flag(cheapest(simView, owned, stuck, BATTLE.corridorMaxTilesLastResort ?? BATTLE.corridorMaxTiles), true)) return;
   }
 }

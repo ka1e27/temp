@@ -679,6 +679,9 @@ function boot() {
   // Phase 14: a line that reaches the screen is also heard, a short murmur in the speaker's pitch (Settings > Voices volume; app/voiceSfx.js)
   const bannerUpdate = ui.leaderBanner.update;
   ui.leaderBanner.update = (data) => {
+    // THE CLICK RULE for the top lane (Phase 15B): a line that arrives (or swaps in, at another height) while a press is on a toast would push the toast
+    // column down under the finger; it waits (heldLine, spoken by syncHeldLine once the press is over) like a line that arrives over a card
+    if (data && data.line && ui.toasts.pressHeld?.() && ui.toasts.el.querySelector(':scope > .toast:not(.is-out)')) { heldLine = { data, at: performance.now(), epoch: container.epoch }; return; }
     bannerUpdate(data);
     if (data && data.faction && data.line) voiceSfx.say(Number(data.faction.id) || 0, String(data.line));
   };
@@ -713,7 +716,7 @@ function boot() {
   function syncHeldLine() {
     const up = modalUp();
     if (up) { modalSeenAt = performance.now(); if (ui.leaderBanner.isShowing()) ui.leaderBanner.hide(); return; }
-    if (heldLine && performance.now() - modalSeenAt > 400) releaseHeldLine();
+    if (heldLine && performance.now() - modalSeenAt > 400 && !ui.toasts.pressHeld?.()) releaseHeldLine();
   }
   function releaseHeldLine() {
     if (!heldLine || modalUp()) return;
@@ -1042,16 +1045,20 @@ function boot() {
     const focusedId = services.battles.focusedId;
     ui.tray.update({
       visible,
-      runs: runs.map((r) => {
+      // (a saved battle that is broken inside, e.g. a null squad, waits in the manager until Continue clears it: robust 4 under --cpu=4 caught a tray
+      // refresh in that window; the tray skips what it cannot read rather than throwing every frame)
+      runs: runs.filter((r) => r && r.battle && Array.isArray(r.battle.sites) && Array.isArray(r.battle.squads)).map((r) => {
         const b = r.battle;
+        const sites = b.sites.filter(Boolean);
+        const squads = b.squads.filter(Boolean);
         let mine = 0;
         let total = 0;
-        for (const site of b.sites) { total += site.troops; if (site.owner === PLAYER_OWNER) mine += site.troops; }
-        for (const q of b.squads) { total += q.count; if (q.owner === PLAYER_OWNER) mine += q.count; }
+        for (const site of sites) { total += site.troops; if (site.owner === PLAYER_OWNER) mine += site.troops; }
+        for (const q of squads) { total += q.count; if (q.owner === PLAYER_OWNER) mine += q.count; }
         // a settlement of ours that the marching enemy outnumbers
         const incoming = new Map();
-        for (const q of b.squads) if (q.owner !== PLAYER_OWNER && q.state === 'march') incoming.set(q.to, (incoming.get(q.to) || 0) + q.count);
-        const threatened = b.sites.some((site) => site.owner === PLAYER_OWNER && (incoming.get(site.id) || 0) > site.troops);
+        for (const q of squads) if (q.owner !== PLAYER_OWNER && q.state === 'march') incoming.set(q.to, (incoming.get(q.to) || 0) + q.count);
+        const threatened = sites.some((site) => site.owner === PLAYER_OWNER && (incoming.get(site.id) || 0) > site.troops);
         const sec = Math.max(0, Math.floor(b.t));
         return {
           id: r.id, kind: r.kind, regionName: world.regions[r.regionId] ? world.regions[r.regionId].name : 'a region',

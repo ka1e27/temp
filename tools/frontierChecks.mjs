@@ -8,7 +8,7 @@
 //   6. the tray at phone width: on screen, clear of the battle HUD, touch targets >= 44 px
 //
 // Usage: await frontierChecks({ launch, BASE, ok, sleep, allErrors })
-import { makeOpen } from './robustChecks.mjs';
+import { makeOpen, settledCentre } from './robustChecks.mjs';
 import { defenseScenario } from './defenseChecks.mjs';
 
 async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobile, name }) {
@@ -27,7 +27,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     }
   };
   const centre = (sel) => q((s) => { const e = [...document.querySelectorAll(s)].find((x) => x.getClientRects().length && !x.closest('[hidden]')); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; }, sel);
-  const pressSel = async (sel) => { const c = await centre(sel); if (!c) return false; await press(c.x, c.y); return true; };
+  const pressSel = async (sel) => { const c = await settledCentre(() => centre(sel), sleep); if (!c) return false; await press(c.x, c.y); return true; };
   try {
     ok(await t.atTitle(), `frontier ${name}: boots`);
     ok(await t.clickText('button', 'New Realm'), `frontier ${name}: New Realm`);
@@ -52,6 +52,8 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(await t.waitFor(() => window.__hd.scene === 'world', 8000), `frontier ${name}: back on the map`);
     const t1 = await q(() => window.__hd.battles.list()[0].battle.t);
     await sleep(1500);
+    // (game time steps by the frame clock, dt clamped to 0.25 s: at 2-3 frames a second, --cpu=4 at 1440x900, it runs slower than the wall clock)
+    await t.waitFor((a) => { const r = window.__hd.battles.list()[0]; return !r || r.battle.t > a + 0.5; }, 6000, t1);
     const run1 = await q(() => { const r = window.__hd.battles.list()[0]; return r ? { id: r.id, t: r.battle.t, region: r.regionId } : null; });
     ok(!!run1 && run1.region === A, `frontier ${name}: the battle is still running (state.battles has it)`);
     ok(!!run1 && run1.t > t1 + 0.5, `frontier ${name}: and its clock moves while nobody watches (${t1.toFixed(1)} -> ${run1 && run1.t.toFixed(1)} s)`);

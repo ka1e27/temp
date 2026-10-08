@@ -81,6 +81,42 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     ok(await t.clickSel('.hud-btn[aria-label="War Council"]'), tag('the council again, with the banner up'));
     ok(await t.waitFor(() => document.querySelector('.leader-banner').dataset.state !== 'in', 1500), tag('the banner leaves when a modal card opens'));
     await t.clickSel('.council-close');
+
+    // Phase 15B (a real bug found by the --cpu=4 sweep): a leader line or a new toast that arrived while a finger was down on a toast's button pushed the
+    // column down under it (a Duel's Decline slid 124 px and the decline was lost). Now the column holds still for the press: the line and the toast wait
+    // until it is over. Staged: a Duel offer (voices off, so its own line does not speak), a held press on Decline, and meanwhile a line and a toast.
+    await q(() => { const hd = window.__hd; hd.state.settings.leaderVoices = false; hd.services.ui.leaderBanner.hide(); for (const b of document.querySelectorAll('.toasts .toast-close')) b.click(); });
+    await sleep(1200);
+    const duel = await q(() => window.__hd.offerEvent('duel'));
+    ok(!!duel, tag('15B: a Duel is offered'));
+    const DECLINE = '.toast[data-id="world-event"]:not(.is-out) .toast-secondary';
+    const rectOf = () => q((s) => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, DECLINE);
+    let at = null;
+    for (let i = 0, prev = null; i < 30 && !at; i++) { await sleep(150); const c = await rectOf(); if (c && prev && Math.abs(c.x - prev.x) < 0.5 && Math.abs(c.y - prev.y) < 0.5) at = c; prev = c; }
+    ok(!!at, tag('15B: the offer has settled'));
+    await q(() => { window.__hd.state.settings.leaderVoices = true; }); // (a held line is dropped with voices off)
+    if (at) {
+      if (mobile) await t.page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y, id: 1 }] });
+      else { await t.page.mouse('mouseMoved', at.x, at.y, 'none', 0); await t.page.mouse('mousePressed', at.x, at.y, 'left', 1); }
+      await sleep(80);
+      await q(() => {
+        const hd = window.__hd; const ui = hd.services.ui; const f = hd.world.factions.find((x) => x.id > 1 && !x.absent);
+        ui.leaderBanner.update({ name: 'Gashrok', title: 'Khan', line: 'A duel? My champion will break yours.', faction: f, durationMs: 6000 });
+        ui.toasts.update({ id: 'tl-15b', type: 'info', icon: 'star', message: 'News that arrived mid-press', duration: 8000 });
+      });
+      await sleep(450);
+      const mid = await rectOf();
+      if (process.env.PHASE8_SHOTS !== '0') { await mkdir('screenshots/phase15', { recursive: true }); await t.page.screenshot(`screenshots/phase15/toplane-${name}-15b-mid-press.png`); }
+      const midState = await q(() => ({ banner: document.querySelector('.leader-banner').dataset.state, news: !!document.querySelector('.toast[data-id="tl-15b"]') }));
+      if (mobile) await t.page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      else await t.page.mouse('mouseReleased', at.x, at.y, 'left', 0);
+      const moved = mid ? Math.hypot(mid.x - at.x, mid.y - at.y) : NaN;
+      ok(mid && moved <= 2, tag(`15B: Decline holds still under the press while a line and a toast arrive (moved ${moved.toFixed(1)} px)`));
+      ok(midState.banner !== 'in' && !midState.news, tag(`15B: the line and the toast wait for the press (banner ${midState.banner}, toast shown ${midState.news})`));
+      ok(await t.waitFor(() => !window.__hd.state.worldEvents.pending, 2000), tag('15B: the release declines the Duel'));
+      // (a phone shows one toast beside the banner: the news may wait its turn in the queue, but it is not lost)
+      ok(await t.waitFor((m) => document.querySelector('.leader-banner').dataset.state === 'in' && (m ? window.__hd.services.ui.toasts.has('tl-15b') : !!document.querySelector('.toast[data-id="tl-15b"]')), 3000, mobile), tag(`15B: then the line is spoken and the toast ${mobile ? 'is shown or queued' : 'shows'} ${JSON.stringify(await q(() => ({ banner: document.querySelector('.leader-banner').dataset.state, toasts: [...document.querySelectorAll('.toasts > .toast')].map((n) => `${n.dataset.id}${n.className.includes('is-out') ? ' out' : ''}`), queued: window.__hd.services.ui.toasts.queued() })))}`));
+    }
   } catch (e) {
     ok(false, tag(`unexpected error: ${e && e.stack}`));
   } finally {

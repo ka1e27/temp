@@ -167,5 +167,34 @@ export const DIFFICULTY = Object.freeze({
   // reads it harder (2.27 x the Free Folk factor 0.585 x the scale) so the first ring shows Easy-but-not-trivial
   // and stays under the surrender ratio on every seed.
   tierFactor: [1, 1.5, 1.094], // tier 1: the first ring reads Easy on 28 of 30 seeds (the tutorial pick on 10 of 12) and stays under the surrender ratio (card ratio 1.3-2.7); tier 2 was 0.948 before the ladder cliff was smoothed
+  // PLAN-PHASE15 (Honest labels): the card's calibration, read by progression.js calibrateRatio: the label, the chance and the strength bar
+  // read factor x raw ratio^exponent (x the factors below; above 1 reads easier); surrender stays on the raw ratio. Fitted by maximum
+  // likelihood (tools/_p15fit.mjs) on tools/labelAudit.mjs runs before AND after it (the card steers which states arise): ~120,000 bot
+  // battles, every attackable frontier region at every conquest (plus the fights really chosen) of 12 seeds x {bot, human} x {D1-D7, the
+  // Crown, D3-D4 at Ascension 0/5/10}. Before it, Fair fights were won 93 %, Hard 90 %, Deadly 60 %.
+  calibration: Object.freeze({
+    // [exponent, factor] per dynasty (D7 also serves the Crown and later). The real win rate climbs far more slowly with the raw ratio than
+    // the label curve (the card over-spreads region strength), and ever more slowly as the bot's patience grows each dynasty (config/battle.js
+    // PATIENCE_PER_DYNASTY: at D7 a 0.25 raw ratio was won 61 %); the factor rises as the dynasty multiplier over-counts the garrisons.
+    dynasty: Object.freeze([[0.95, 1.29], [0.81, 1.69], [0.84, 2.03], [0.72, 2.1], [0.7, 2.33], [0.6, 1.97], [0.52, 2.13]]),
+    crown: 0.96,              // the Crown continent: a hair harder than a D7 (all the rival kinds at once)
+    ascensionPerLevel: 0.994, // each Ascension level x this (A10 x0.94): its modifiers are mostly already in the stats
+    capital: 1.16,            // capitals play easier than their Gate, keep and capital stats say (the bot won 96 % of Fair capitals)
+    throne: 0.72,             // the Throne of Ages plays harder than its card (the borrowing, the Champions), on top of THRONE.card.factor
+    // per rival: the swarm punishes slow armies (0.9); the defensive rival (1.1) and the Usurper's few regions (1.15) are softer than
+    // their stats say
+    personality: Object.freeze({ passive: 1.05, aggressive: 1.02, defensive: 1.1, swarm: 0.91, undying: 0.97, raider: 0.98, usurper: 1.15 }),
+    // per twist and type, on top of FEATURES.difficulty: Night plays a little harder than it reads (0.95), Flooded and Blizzard
+    // easier (1.17, 1.07), Holy Ground harder (0.89, plus the ceiling below); Bandit Holds (1.27), Ruins (1.13), Monasteries (1.04) and the
+    // Lair (1.92: its health is over-counted) play easier, Gold Mines harder (0.92)
+    twist: Object.freeze({ night: 0.95, blizzard: 1.07, flooded: 1.17, holy: 0.89, siege: 1.04, raid: 0.99 }),
+    type: Object.freeze({ goldmine: 0.92, monastery: 1.04, bandit: 1.27, ruins: 1.13, dragon: 1.92 }),
+    // per tier: the first ring is won almost always (and its chance climbs steeply: exponent x1.39), tier 2 a little less than its size
+    // says; the deepest regions' win rate climbs faster with the ratio than the rest (tierExp: exponent x1.07 at tier 5; tiers 7+ read as 6)
+    tier: Object.freeze({ 1: 1.37, 2: 0.71, 3: 0.93, 4: 1.1, 5: 1.01, 6: 0.79 }),
+    tierExp: Object.freeze({ 1: 1.39, 5: 1.07 }),
+    // Holy Ground never reads Easy: its fights top out near 70-75 % won at any ratio (no powers; one D3 Gold Mine is lost at raw 2.6)
+    ceiling: Object.freeze({ holy: 1.25 }),
+  }),
   personality: Object.freeze({ passive: 1.468, defensive: 1.63, aggressive: 1.63, swarm: 2.4, undying: 2.1, raider: 1.63, usurper: 1.63 }), // usurper (PLAN-PHASE13): starts at the classic factions', measured below; // raider (PLAN-PHASE12): starts at aggressive's, measured below; // undying (PLAN-PHASE6): measured with The Fallen Rise live, see below; Free Folk never attack; rival AIs punish a 3-second-cadence player (swarm 2.48 -> 2.4 with Generals and a varied map: its campaign Fair fights were won 93%; 2.3 broke the synthetic ladder)
 });

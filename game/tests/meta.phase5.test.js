@@ -313,8 +313,9 @@ test('Legacy and Edict effects: Masons, Old Alliances, Veteran Camp, Swift Banne
   s.stats.battlesWon = 1;
   const ff = attackableFrontier(s, world).find((id) => world.factions[world.regions[id].faction].personality === 'passive');
   s.upgrades.muster = 0; let lvl = 0;
-  while (difficulty(s, world, ff).ratio < 2.45 && lvl < 400) { lvl += 1; s.upgrades.muster = lvl; }
-  const r = difficulty(s, world, ff).ratio;
+  // surrender reads the raw ratio (PLAN-PHASE15: the label reads the calibrated one)
+  while (difficulty(s, world, ff).rawRatio < 2.45 && lvl < 400) { lvl += 1; s.upgrades.muster = lvl; }
+  const r = difficulty(s, world, ff).rawRatio;
   assert.ok(r >= 2.4 && r < ECONOMY.surrenderRatio, `test setup: ratio ${r}`);
   assert.equal(difficulty(s, world, ff).surrender, false, 'below 3.0 no surrender without the node');
   withNodes(s, 'veteranCamp', 'swiftBanners', 'drillmasters', 'oldRoads', 'masons', 'royalTreasury', 'quickConquest', 'oldAlliances');

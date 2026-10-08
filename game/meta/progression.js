@@ -41,7 +41,7 @@ import { THRONE } from '../config/crown.js';
 import { onThroneToppled, clearAscension, crownOfAgesAvailable, noteReign } from './crown.js'; // PLAN-PHASE13
 import { crownRivals } from '../world/crown.js';
 import { usurperTroops } from '../battle/throneArena.js';
-import { cleanAscensionChoice } from './ascension.js';
+import { cleanAscensionChoice, ascensionLevel } from './ascension.js';
 
 /** The roster for a new dynasty: every General keeps level, XP and skills; where they last fought is forgotten. */
 function carryGenerals(state) {
@@ -655,6 +655,33 @@ export function winChance(ratio) {
   return Math.min(Math.max(p, band.lo), band.hi === ceil ? ceil : band.hi - 1e-9);
 }
 
+/**
+ * PLAN-PHASE15 (Honest labels): the card's calibration. The raw ratio (power / strength) is what the fitted model above estimates;
+ * tools/labelAudit.mjs fights every frontier region from real campaign states and found the real win rate climbs more slowly with
+ * the ratio than the label curve does, and how fast differs by dynasty (the patience grows each dynasty), rival, twist and region type.
+ * The calibrated ratio is factor x raw^exponent: per dynasty an [exponent, factor] pair, then one factor per Crown, Ascension level,
+ * rival personality, twist, region type, capital, the Throne and tier (DIFFICULTY.calibration, each with its reason), and a ceiling
+ * for a twist that is never won as often as the better labels promise. Above 1 reads easier. Monotonic in the raw ratio for one
+ * region, so a stronger army never reads worse. `cal` overrides the config (the fit tool).
+ * @param {number} raw power / strength
+ * @param {{ dynasty?: number, crown?: boolean, ascension?: number, personality?: string, twist?: string|null, type?: string|null,
+ *   capital?: boolean, throne?: boolean, tier?: number }} ctx
+ * @returns {number}
+ */
+export function calibrateRatio(raw, ctx, cal = DIFFICULTY.calibration) {
+  if (!cal || !(raw > 0) || raw === Infinity) return raw;
+  const rows = cal.dynasty;
+  const tier = Math.min(ctx.tier, 6); // tiers 7+ are rare: they read as tier 6
+  const [exp, k] = rows[Math.max(0, Math.min(rows.length - 1, (ctx.dynasty || 1) - 1))];
+  const f = k * (ctx.crown ? cal.crown : 1) * Math.pow(cal.ascensionPerLevel, ctx.ascension || 0)
+    * (cal.personality[ctx.personality] ?? 1)
+    * (ctx.twist ? cal.twist[ctx.twist] ?? 1 : 1) * (ctx.type ? cal.type[ctx.type] ?? 1 : 1)
+    * (ctx.throne ? cal.throne : ctx.capital ? cal.capital : 1) * (cal.tier[tier] ?? 1);
+  const q = f * Math.pow(raw, exp * ((cal.tierExp && cal.tierExp[tier]) ?? 1)); // deep regions' win rate climbs faster with the ratio
+  const ceil = ctx.twist && cal.ceiling ? cal.ceiling[ctx.twist] : undefined; // a twist whose fights are never won as often as a label promises
+  return ceil ? Math.min(q, ceil) : q;
+}
+
 function labelFor(ratio) {
   for (const entry of ECONOMY.difficultyLabels) {
     if (ratio >= entry.min) return entry.label;
@@ -666,7 +693,10 @@ function labelFor(ratio) {
  * @param {import('./state.js').GameState} state
  * @param {import('../world/generate.js').World} world
  * @param {number} regionId
- * @returns {{ power: number, strength: number, ratio: number, label: string, surrender: boolean, approach: number, winChance: number }}
+ * @returns {{ power: number, strength: number, ratio: number, rawRatio: number, rawStrength: number, label: string, surrender: boolean,
+ *   approach: number, winChance: number }}
+ *   `ratio`: the calibrated ratio (calibrateRatio, PLAN-PHASE15) the label and `winChance` read; `strength` = power / ratio (the bar)
+ *   `rawRatio` / `rawStrength`: the fitted estimate before calibration; surrender is offered at rawRatio >= ECONOMY.surrenderRatio
  *   `winChance`: the estimated chance of winning, 0..1 (see `winChance(ratio)`), what the card's bar shows
  *   `approach`: tiles of the War Camp's approach strip (0 for an ordinary border; the card charges for them)
  */
@@ -686,7 +716,13 @@ export function difficulty(state, world, regionId, opts = {}) {
   const captured = occ && occ.forts && occ.forts.length ? fortEffects(occ.forts) : null;
   const scouted = isScouted(state, regionId) || boonMods(state).scoutAll; // the Seer's Lens (PLAN-PHASE7)
   const strength = estimateStrength(world, region, enemy, captured, scouted) * (1 + DIFFICULTY.approachPerTile * approach);
-  const ratio = strength > 0 ? power / strength : Infinity;
+  const rawRatio = strength > 0 ? power / strength : Infinity;
+  // PLAN-PHASE15: the label, the chance and the strength bar read the calibrated ratio; surrender stays on the raw one (a proven army).
+  // A challenge's small continent (world.ladderSpan, PLAN-PHASE9) keeps the raw card: its short ladder was tuned on it, not audited here.
+  const ratio = Number.isFinite(world.ladderSpan) ? rawRatio : calibrateRatio(rawRatio, {
+    dynasty: state.dynasty.level, crown: !!state.crownOfAges, ascension: ascensionLevel(state), personality: enemy.personality,
+    twist: region.twist || null, type: region.type || null, capital: !!region.isCapital, throne: !!region.throne, tier: region.tier,
+  });
 
   // Surrender is a reward for a proven army: never offered before the first battle is won, so the
   // tutorial fight always happens (DESIGN §5.3).
@@ -695,9 +731,10 @@ export function difficulty(state, world, regionId, opts = {}) {
   const ffs = [edictMods(state).freeFolkSurrender, boonMods(state).freeFolkSurrender].filter((x) => x > 0);
   const ff = ffs.length ? Math.min(...ffs) : 0;
   const surrenderAt = ff > 0 && enemy.personality === 'passive' ? Math.min(ff, ECONOMY.surrenderRatio) : ECONOMY.surrenderRatio;
-  const surrender = ratio >= surrenderAt && state.stats.battlesWon > 0;
+  const surrender = rawRatio >= surrenderAt && state.stats.battlesWon > 0;
 
-  const out = { power, strength, ratio, label: labelFor(ratio), surrender, approach, winChance: winChance(ratio) };
+  const shown = ratio > 0 && ratio < Infinity ? power / ratio : strength; // the strength bar agrees with the label (power / shown = ratio)
+  const out = { power, strength: shown, ratio, rawRatio, rawStrength: strength, label: labelFor(ratio), surrender, approach, winChance: winChance(ratio) };
   if (enemy.personality === 'undying') out.mechanic = 'fallen'; // PLAN-PHASE6: the card shows The Fallen Rise (meta/rivals.js fallenLine)
   if (enemy.personality === 'raider') out.mechanic = 'sea'; // PLAN-PHASE12: the card shows the sea lines (meta/rivals.js seaLines)
   if (enemy.personality === 'usurper') out.mechanic = 'throne'; // PLAN-PHASE13: the card shows the Usurper's lines (meta/crown.js throneLines)

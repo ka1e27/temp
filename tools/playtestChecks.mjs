@@ -160,6 +160,7 @@ export async function playtestChecks({ launch, BASE, ok, sleep, allErrors, shots
         const sentBefore = await q(() => window.__hd.battle.stats.sent);
         await t.page.drag(plan.camp, plan.dest, 14);
         await sleep(500);
+        await t.waitFor(() => /orders go out when you resume/i.test([...document.querySelectorAll('.toast')].map((e) => e.textContent).join(' | ')), 5000); // a slow page (--cpu) shows it later
         const queued = await q(() => ({ commands: window.__hd.battle.commands.length, sent: window.__hd.battle.stats.sent, toast: [...document.querySelectorAll('.toast')].map((e) => e.textContent).join(' | ') }));
         ok(queued.commands >= 1 && queued.sent === sentBefore, `9: the order waits in the queue while paused (${queued.commands} queued, nothing sent yet)`);
         ok(/orders go out when you resume/i.test(queued.toast), `9: a toast says so ("${queued.toast.slice(0, 50)}")`);

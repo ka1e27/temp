@@ -813,6 +813,9 @@ function attemptConquest(state, world, regionId, wallSecRef, battleDurations, fo
     capital: region.isCapital, sites: region.settlements.length, regionId, throne: !!region.throne, // PLAN-PHASE13: the Throne of Ages
     ...(battle.throne ? { thronePhase: battle.throne.phase, usurperFell: battle.throne.usurper.fell, winChance: diffAtAttack.winChance, throneAt: { ...battle.throne.at }, borrows: battle.throne.borrow.n } : {}),
     boons: state.boons2 ? state.boons2.owned.slice() : [], dynasty: state.dynasty.level, // PLAN-PHASE7: the per-Boon report
+    // PLAN-PHASE15 (tools/labelAudit.mjs): what the card promised and the slices the audit cuts by
+    promised: diffAtAttack.winChance, rawRatio: diffAtAttack.rawRatio, twist: region.twist || null, type: region.type || null, ascension: state.ascension || 0,
+    crown: !!state.crownOfAges, archipelago: !!world.archipelago,
   });
 
   const attackRun = { kind: 'attack', regionId, commander: general ? general.id : null, labelAtAttack: diffAtAttack.label };
@@ -1251,6 +1254,7 @@ export function runHumanHour(seed, flags = {}, carry = null) {
     if (res.unattackable) { blocked.set(pick.regionId, wall.sec); continue; }
     segs.push({ a: t0, b: wall.sec, ok: !hard });
     if (!res.won) lost.set(pick.regionId, { ratio: pick.diff.ratio, at: wall.sec });
+    else if (hooks.onConquest) hooks.onConquest(state, world, { n: net(), wallSec: wall.sec, human: true }); // PLAN-PHASE15: the label audit's probes
     attacks.push({ t: t0, sec: wall.sec - t0, label: pick.diff.label, ratio: pick.diff.ratio, won: res.won, kind: res.surrendered ? 'surrender' : res.quick ? 'quick' : 'battle', regionId: pick.regionId, hard, timedOut: !!res.timedOut });
     spend(HUMAN.afterSec, !hard);
   }

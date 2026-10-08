@@ -12,7 +12,7 @@
 //      "{Leader}'s champion has fallen!"; won -> the Trophy (toast, Realm wall), the grudge back to 0
 //   9. the Realm panel: the Deeds grid; an earned Deed's toast
 //  10. the hint monitor's verdict on Q1 / Q2
-import { makeOpen } from './robustChecks.mjs';
+import { makeOpen, settledCentre } from './robustChecks.mjs';
 import { TOASTS_DIGEST } from '../game/scenes/timing.js';
 
 async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobile, name }) {
@@ -38,7 +38,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     const r = e.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, sel, txt || null);
-  const pressSel = async (sel, txt) => { const c = await centre(sel, txt); if (!c) return false; await sleep(150); const c2 = await centre(sel, txt); if (!c2) return false; await press(c2.x, c2.y); return true; };
+  const pressSel = async (sel, txt) => { const c2 = await settledCentre(() => centre(sel, txt), sleep); if (!c2) return false; await press(c2.x, c2.y); return true; };
   const closePanels = () => q(() => { for (const s of ['.regions-close', '.realm-close']) { const b = document.querySelector(s); if (b && !b.closest('[hidden]')) b.click(); } });
 
   const HELPERS = () => {

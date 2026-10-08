@@ -225,11 +225,11 @@ export function createMusic(sfx, opts = {}) {
     if (active.length > peakVoices) peakVoices = active.length;
   }
 
-  function handle(e, now, hear) {
+  function handle(e, now, hear, lateSec = cfg.lateNoteDropSec) {
     const t = Math.max(e.t, now);
     switch (e.type) {
       case 'note':
-        if (hear && e.t >= now - cfg.lateNoteDropSec && (!only || only.has(e.voice))) track(buildNote(rig, e, t));
+        if (hear && e.t >= now - lateSec && (!only || only.has(e.voice))) track(buildNote(rig, e, t));
         break;
       case 'bar':
         applyBar(e, t);
@@ -276,15 +276,35 @@ export function createMusic(sfx, opts = {}) {
     active.length = w;
   }
 
+  // A slow page runs the timer late: notes were then already past `lateNoteDropSec` and dropped, and the score thinned (7 voices
+  // instead of 12 at 4x CPU). With the live timer, look ahead (and forgive lateness) in proportion to the measured gap between
+  // passes, within cfg.lookaheadMaxSec so a stalled tab still skips instead of bursting. Manual/offline ticks keep the fixed values.
+  let lastTickAt = null;
+  let gapAvg = 0;
+  function adaptiveWindow(now) {
+    if (opts.manual) return { ahead: cfg.lookaheadSec, late: cfg.lateNoteDropSec };
+    if (lastTickAt !== null) {
+      const gap = now - lastTickAt;
+      if (gap > 0 && gap < 2) gapAvg = gapAvg ? gapAvg * 0.8 + gap * 0.2 : gap;
+    }
+    lastTickAt = now;
+    const max = cfg.lookaheadMaxSec ?? cfg.lookaheadSec;
+    return {
+      ahead: Math.min(max, Math.max(cfg.lookaheadSec, gapAvg * (cfg.lookaheadGapFactor ?? 1.5))),
+      late: Math.min(max, Math.max(cfg.lateNoteDropSec, gapAvg * (cfg.lateGapFactor ?? 1.2))),
+    };
+  }
+
   /** One scheduling pass. Called by the timer; public for offline rendering and tests. */
   function tick() {
     if (!live() || desired.paused) return;
     if (!opts.ignoreState && ctx.state !== 'running') return;
     try {
       const now = ctx.currentTime;
-      const events = conductor.advance(now, now + cfg.lookaheadSec);
+      const win = adaptiveWindow(now);
+      const events = conductor.advance(now, now + win.ahead);
       const hear = audible();
-      for (const e of events) handle(e, now, hear);
+      for (const e of events) handle(e, now, hear, win.late);
       reap(now);
       errors = 0;
     } catch (err) {

@@ -32,7 +32,20 @@ export function createToasts() {
   // place (a spree of purchases) changes that text once: one announcement of the latest words.
   const el = h('div.toasts', { 'data-keep-live': '' });
   let seq = 0;
-  const say = (node, message) => { clearTimeout(node._sayTimer); node._sayTimer = setTimeout(() => { const m = node.querySelector('.toast-message'); if (m) m.textContent = message; }, 40); };
+  // THE CLICK RULE for the column (Phase 15B): while a finger or the mouse is down on a toast, and for PRESS_SETTLE_MS after it lifts (a touch's click comes
+  // after touchend), nothing in the column moves: a new toast waits in the queue, a dismissed one keeps its (invisible) room, and an updated message keeps
+  // its words until the press is over (a longer line can wrap and move the buttons). main.js holds a new leader banner too (`pressHeld`), which would push
+  // the whole column down: on a slow device that slid a Duel's Decline 124 px away under the press and the decline was lost.
+  const PRESS_SETTLE_MS = 250;
+  let pressing = false;
+  let pressUpAt = -1e9;
+  const pressHeld = () => pressing || Date.now() - pressUpAt < PRESS_SETTLE_MS;
+  /** Runs `fn` now, or once the press on the column is over. */
+  const afterPress = (fn) => { if (!pressHeld()) { fn(); return; } setTimeout(() => afterPress(fn), pressing ? 60 : Math.max(20, PRESS_SETTLE_MS - (Date.now() - pressUpAt) + 10)); };
+  const say = (node, message) => { clearTimeout(node._sayTimer); node._sayTimer = setTimeout(() => afterPress(() => { const m = node.querySelector('.toast-message'); if (m && node.dataset.message === message) m.textContent = message; }), 40); };
+  el.addEventListener('pointerdown', (e) => { if (e.target instanceof Element && e.target.closest('.toast')) pressing = true; }, true);
+  const pressEnd = () => { if (!pressing) return; pressing = false; pressUpAt = Date.now(); setTimeout(pump, PRESS_SETTLE_MS + 20); };
+  if (typeof window !== 'undefined') { window.addEventListener('pointerup', pressEnd, true); window.addEventListener('pointercancel', pressEnd, true); }
 
   // A toast waits while it is being read: hovering it or focusing inside it pauses its timer; leaving restarts it with at least a couple of seconds (WCAG 2.2.1)
   const arm = (node, ms) => {
@@ -98,6 +111,7 @@ export function createToasts() {
   function pump() {
     clearTimeout(pumpTimer);
     if (held || !queue.length || showing().length >= maxVisible) return;
+    if (pressHeld()) { pumpTimer = setTimeout(pump, 120); return; } // nothing joins the column under a press
     const i = queue.findIndex(urgent);
     const next = queue.splice(i >= 0 ? i : 0, 1)[0];
     update(next);
@@ -138,6 +152,7 @@ export function createToasts() {
         return;
       }
     }
+    if (pressHeld()) { enqueue(toast); clearTimeout(pumpTimer); pumpTimer = setTimeout(pump, 120); return; } // a new toast waits for the press to end
     if (showing().length >= maxVisible) {
       // an urgent toast (an offer, a Go) takes the slot of the newest ordinary toast, which steps back into the queue
       const bump = urgent(toast) ? showing().filter((n) => !urgentNode(n)).pop() : null;
@@ -191,7 +206,7 @@ export function createToasts() {
     clearTimeout(node._toastTimer);
     node.classList.remove('is-in');
     node.classList.add('is-out');
-    setTimeout(() => node.remove(), 260);
+    setTimeout(() => afterPress(() => node.remove()), 260); // its room closes only once no press is on the column
     if (queue.length) pumpTimer = setTimeout(pump, 280); // the next one waiting for room
   }
 
@@ -217,5 +232,5 @@ export function createToasts() {
     return queue.some(isId(id)) || [...el.children].some((n) => nodeIs(n, id) && n.isConnected && !n.classList.contains('is-out'));
   }
 
-  return { el, update, destroy, dismissId, has, setHeld, setMaxVisible, isHeld: () => held, queued: () => queue.length };
+  return { el, update, destroy, dismissId, has, setHeld, setMaxVisible, isHeld: () => held, queued: () => queue.length, pressHeld };
 }

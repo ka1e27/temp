@@ -59,7 +59,8 @@ export function installHintMonitor() {
     if (/drag to move the map|scroll .*zoom/i.test(text)) return 'none';
     if (/glowing region/i.test(text)) {
       const id = M.regionId ?? hintRegion();
-      if (id == null || id < 0) return null;
+      if (id == null) return 'pending'; // the monitor's own imports (intel, progression) have not landed yet: a slow page (--cpu) shows the hint first
+      if (id < 0) return null;
       // the whole region on screen (not just its label): the player is looking for the glowing REGION, so a bubble beside the name still sat on it
       const box = hd.regionHintBox ? hd.regionHintBox(id) : null;
       const p = hd.regionScreenPos(id);
@@ -167,7 +168,7 @@ export function installHintMonitor() {
     }
     // M3 (Works), three stages: the owned region at the edge of the realm, then its Build button, then the Barracks row of the chooser
     if (/build works in your regions/i.test(text)) {
-      if (!worksMod) return null;
+      if (!worksMod) return 'pending';
       const id = worksMod.worksTutorialRegion(hd.state, hd.world);
       const box = id >= 0 && hd.regionHintBox ? hd.regionHintBox(id) : null;
       const p = id >= 0 ? hd.regionScreenPos(id) : null;
@@ -289,7 +290,7 @@ export function installHintMonitor() {
       if (overlapArea(bb0(br), cb, 0) > 0.25 * cb.w * cb.h) note(text, 'bubble covers a control', `${(ctl.getAttribute('aria-label') || ctl.textContent || ctl.className).toString().trim().slice(0, 30)} (${ctl.className}) at ${Math.round(cb.x)},${Math.round(cb.y)} ${Math.round(cb.w)}x${Math.round(cb.h)}; bubble ${Math.round(br.left)},${Math.round(br.top)} ${Math.round(br.width)}x${Math.round(br.height)}; toasts ${(() => { const t = document.querySelector('.toasts'); if (!t) return 'none'; const r = t.getBoundingClientRect(); return `${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)} kids ${t.children.length}`; })()}`);
     }
     const exp = expNow;
-    if (exp === 'none') return; // a card with no pointer
+    if (exp === 'none' || exp === 'pending') return; // a card with no pointer; or the monitor is still loading what it measures with
     if (exp == null || exp.length === 0) { note(text, 'hint shown but its target does not exist', ''); return; }
     const tip = tipOf(coach);
     const bb = boxOfRect(br);
@@ -352,4 +353,55 @@ export function installHintMonitor() {
     violations: M.violations.slice(0, 60),
   });
   return M;
+}
+
+/**
+ * The layout-shift guard (Phase 15B): no interactive element under an active pointer may move more than SHIFT_MAX px (its centre), be hidden or be
+ * removed between pointerdown and pointerup. That is the whole class of the Phase 10 bug (b694eb8: a hint opened room in the phone's bottom sheet
+ * 2.5 s after the card opened, and a tap at that moment landed on whatever slid under the finger) and of THE CLICK RULE (a node replaced under a
+ * press swallows the click). Self-contained, so tools/check.mjs injects `(${installShiftGuard})()` into EVERY page of every section at document start;
+ * a violation is reported through the CDP binding `__hdShift` (JSON) when present, and always kept in `window.__shiftLog`.
+ * Measured at window capture phase, BEFORE any of the game's own handlers run (a pointerup handler that closes the panel is not a shift).
+ * The centre, not the edges: a pressed `.btn` scales 0.98 and drops 1 px (base.css), a power button scales 0.94; both keep the centre within 2 px.
+ */
+export function installShiftGuard() {
+  if (window.__shiftGuard) return;
+  window.__shiftGuard = true;
+  const SHIFT_MAX = 2;
+  const INTERACTIVE = 'button, [role="button"], [role="tab"], [role="switch"], [role="menuitem"], a[href], input, select, textarea, summary, label[for]';
+  const log = (window.__shiftLog = []);
+  const presses = new Map();
+  const centre = (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+  };
+  const name = (el) => {
+    const t = (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    const cls = String(el.className || '').trim().split(/\s+/).slice(0, 2).join('.');
+    return `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''} "${t}"`;
+  };
+  const report = (v) => {
+    if (log.length < 200) log.push(v);
+    try { if (typeof window.__hdShift === 'function') window.__hdShift(JSON.stringify(v)); } catch { /* the binding is optional */ }
+  };
+  addEventListener('pointerdown', (e) => {
+    const el = e.target instanceof Element ? e.target.closest(INTERACTIVE) : null;
+    if (!el || el.disabled) return;
+    presses.set(e.pointerId, { el, c: centre(el), label: name(el), t: performance.now(), x: e.clientX, y: e.clientY, hold: el.classList.contains('is-hold') });
+  }, true);
+  addEventListener('pointerup', (e) => {
+    const p = presses.get(e.pointerId);
+    if (!p) return;
+    presses.delete(e.pointerId);
+    const ms = Math.round(performance.now() - p.t);
+    const at = `${Math.round(p.x)},${Math.round(p.y)} in ${innerWidth}x${innerHeight}`;
+    // a hold-to-confirm button (ui/holdConfirm.js) acts when the hold completes, before the release: its dialog closing then is the press working
+    const held = p.hold && document.documentElement.hasAttribute('data-hold-confirm');
+    if (!p.el.isConnected) { if (!held) report({ kind: 'removed under the press', el: p.label, ms, at }); return; }
+    const c = centre(p.el);
+    if (c.w === 0 && c.h === 0) { if (!held) report({ kind: 'hidden under the press', el: p.label, ms, at }); return; }
+    const d = Math.hypot(c.x - p.c.x, c.y - p.c.y);
+    if (d > SHIFT_MAX) report({ kind: 'moved under the press', el: p.label, ms, at, d: +d.toFixed(1), dx: +(c.x - p.c.x).toFixed(1), dy: +(c.y - p.c.y).toFixed(1) });
+  }, true);
+  addEventListener('pointercancel', (e) => { presses.delete(e.pointerId); }, true);
 }

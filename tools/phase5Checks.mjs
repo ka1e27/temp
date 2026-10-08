@@ -10,7 +10,7 @@
 //   7. Quick Conquest: the node owned, an Easy region's card shows the button (the D2 hint points at it); a real press -> the overlay with
 //      its bar -> the region is ours with the Victory crown only, and the toast says so
 //   8. no console errors
-import { makeOpen } from './robustChecks.mjs';
+import { makeOpen, settledCentre } from './robustChecks.mjs';
 
 async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobile, name }) {
   const t = await open(`${BASE}/index.html?dev=1&seed=7`, { width, height, mobile });
@@ -36,7 +36,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, sel, txt || null);
   // the element is found, scrolled into view, measured again once settled, then pressed for real
-  const pressSel = async (sel, txt) => { const c = await centre(sel, txt); if (!c) return false; await sleep(160); const c2 = await centre(sel, txt); if (!c2) return false; await press(c2.x, c2.y); await sleep(250); return true; };
+  const pressSel = async (sel, txt) => { const c2 = await settledCentre(() => centre(sel, txt), sleep); if (!c2) return false; await press(c2.x, c2.y); await sleep(250); return true; };
   const text = (sel) => q((s) => { const e = document.querySelector(s); return e ? e.textContent : null; }, sel);
 
   try {

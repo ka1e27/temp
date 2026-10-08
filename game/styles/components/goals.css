@@ -125,7 +125,7 @@ html.reduce-motion .hud-pip { animation: none; }
 .rivals-title { margin: 0 0 2px; font-family: var(--font-title); font-size: var(--fs-sm); color: var(--text-muted); letter-spacing: 0.05em; }
 .rival-row { display: grid; grid-template-columns: 34px 1fr; gap: 2px var(--sp-2); align-items: center; padding: 6px var(--sp-2); border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
 .rival-portrait { grid-row: span 2; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--chip-color, #888) 32%, #10131b); border: 2px solid var(--chip-color, #888); color: #fff; }
-.rival-name { font-size: var(--fs-sm); font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rival-name { font-size: var(--fs-sm); font-weight: 800; color: var(--text); } /* wraps (the faction's name onto a second line), never an ellipsis (Phase 15B) */
 .rival-name small { font-weight: 700; color: var(--text-muted); }
 .grudge-meter { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 800; color: var(--text-muted); }
 .grudge-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; min-width: 60px; }

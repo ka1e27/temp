@@ -35,9 +35,21 @@ const { launch: rawLaunch } = await import('./cdp.js');
 // these tools an offer waits on the HUD chip instead (app/boons.js reads this flag in ?dev=1 only). tools/phase7Checks.mjs turns the moments back on.
 // --cpu=N throttles every page's CPU N-fold and --tz=Zone overrides its timezone (opt-in, to reproduce a slow 2-core CI
 // runner in UTC locally: `node tools/check.mjs --only=desktop --cpu=4 --tz=UTC`). Off by default.
+// Phase 15B, the layout-shift guard: every page of every section carries tools/hintMonitor.js installShiftGuard from document start; a press whose
+// interactive element moved more than 2 px, was hidden or was removed before pointerup is reported through the `__hdShift` binding and fails the section.
+const { installShiftGuard } = await import('./hintMonitor.js');
+const shiftLog = [];
+let currentSection = 'boot';
 const launch = async (opts) => {
   const page = await rawLaunch(opts);
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__HD_TEST_NO_BOON_MOMENTS = true; window.__HD_TEST_NO_PACING = true;' });
+  const section = currentSection;
+  await page.send('Runtime.addBinding', { name: '__hdShift' });
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${installShiftGuard})();` });
+  page.on((method, params) => {
+    if (method !== 'Runtime.bindingCalled' || params.name !== '__hdShift') return;
+    try { shiftLog.push({ section, ...JSON.parse(params.payload) }); } catch { /* malformed */ }
+  });
   const cpu = Number(flags.cpu);
   if (cpu > 1) await page.send('Emulation.setCPUThrottlingRate', { rate: cpu });
   if (flags.tz && flags.tz !== 'true') await page.send('Emulation.setTimezoneOverride', { timezoneId: flags.tz });
@@ -59,6 +71,7 @@ const { codexChecks } = await import('./codexChecks.mjs');
 const { topLaneChecks } = await import('./topLaneChecks.mjs');
 const { challengeChecks } = await import('./challengeChecks.mjs');
 const { optionsChecks } = await import('./optionsChecks.mjs'); // Phase 14: Play your way
+const { textAuditChecks } = await import('./textAuditChecks.mjs'); // Phase 15B: Large and Larger text on two phones
 
 const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => {
   const [k, ...v] = a.slice(2).split('=');
@@ -319,7 +332,7 @@ async function variant(name, { width, height, mobile }) {
     // counts as an activation when it ENDS, so this is what proves the phone unlock).
     {
       // a voice has sounded (peakVoices): the live count drops to 0 between notes, and a slow page (--cpu, a CI runner) polls seldom enough to miss every note
-      const playing = await waitFor(() => { const m = window.__hd.music.getDebug(); return m.started && !m.paused && m.peakVoices > 0 && m.errors === 0; }, 8000);
+      const playing = await waitFor(() => { const m = window.__hd.music.getDebug(); return m.started && !m.paused && m.peakVoices > 0 && m.errors === 0; }, Math.min(30000, 8000 * Math.max(1, Number(flags.cpu) || 1))); // (--cpu: the first note can come late on a page drawing 1-2 frames a second)
       const dbg = playing ? '' : `: ${JSON.stringify(await page.eval(() => { const m = window.__hd.music.getDebug(); return { started: m.started, paused: m.paused, peakVoices: m.peakVoices, activeVoices: m.activeVoices, errors: m.errors }; }))}`;
       ok(playing, `the first click unlocked audio and the music is playing (voices > 0, no errors)${dbg}`);
     }
@@ -365,6 +378,8 @@ async function variant(name, { width, height, mobile }) {
       const p = pts.find(onMap) || pts[0];
       return { id, name: world.regions[id].name, x: p.x, y: p.y };
     });
+    // aim once the camera has stopped (the world's opening drift / a fly-to): on a slow page (--cpu) a point computed mid-move landed on another region
+    for (let i = 0, prev = ''; i < 30; i++) { const c = await page.eval(() => { const k = window.__hd.camera; return `${k.x.toFixed(1)},${k.y.toFixed(1)},${k.zoom.toFixed(3)}`; }); if (c === prev) break; prev = c; await sleep(150); }
     const target = await frontierTarget();
     // the page's own clock at the first frame the card is up (the Attack hint counts from there; see 3b)
     await page.eval(() => { window.__cardUpAt = null; const poll = () => { const d = document.querySelector('.hd-dock'); if (d && !d.hidden && d.getClientRects().length) window.__cardUpAt = performance.now(); else requestAnimationFrame(poll); }; poll(); });
@@ -850,7 +865,7 @@ async function variant(name, { width, height, mobile }) {
     });
     ok(await waitFor(() => { const p = document.querySelector('.welcome-prospered'); return !!p && !p.hidden && /prospered while you were away/.test(p.textContent); }, 5000),
       'the welcome-back card names the regions that prospered while away');
-    await clickReal('.welcome-collect', null, 'Collect');
+    await clickReal('.welcome-collect', null, 'Collect', { stable: true }); // aimed once the card's pop (420 ms) has landed
     ok(await waitFor(() => document.querySelector('.welcome-card')?.closest('[hidden]') != null || document.querySelector('.welcome-card')?.offsetParent === null, 4000), 'Collect closes the welcome card');
     await sleep(800);
 
@@ -1122,12 +1137,14 @@ async function deployChecks() {
 const watchdog = setTimeout(() => {
   console.error('\ncheck.mjs: overall timeout');
   process.exit(1);
-}, (SUBPATH ? 20 : 32) * 60 * 1000); // the main flow grew (supply lines, Works, front lines, robustness, keepsakes); a loaded machine needs the room
+}, (SUBPATH ? 20 : 60) * 60 * 1000); // the main flow grew (supply lines, Works, front lines, robustness, keepsakes; Phase 15 added the text audit and the
+// layout-shift guard): it passed 32 min on a loaded machine and about 30 on the CI runner. A GitHub job may run 6 h; 60 leaves room without hiding a hang
+// (tools/cdp.js bounds Page.navigate at 45 s).
 
-// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|phase7|phase12|phase13|codex|toplane|challenges|options|deploy runs one section (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
+// --only=desktop|phone|robust|keepsakes|playtest|frontier|generals|variety|goals|phase5|phase6|phase7|phase12|phase13|codex|toplane|challenges|options|textaudit|deploy runs one section (a,b runs several) (--shots=<dir> keeps the playtest screenshots). The robustness and keepsake scenarios (tools/robustChecks.mjs, tools/keepsakeChecks.mjs) run in the
 // plain mode only: they do not depend on the deployed shape, so --base=... runs the two variants and the deploy checks.
 const only = flags.only;
-const wants = (name) => !only || only === name;
+const wants = (name) => !only || String(only).split(',').includes(name); // --only=a,b runs several
 // Phase 8: index.html's modulepreload block must list exactly the boot's module graph (tools/modulepreload.mjs writes it)
 {
   const { execFileSync } = await import('node:child_process');
@@ -1135,27 +1152,39 @@ const wants = (name) => !only || only === name;
   try { execFileSync(process.execPath, ['tools/modulepreload.mjs', '--check'], { cwd: new globalThis.URL('..', import.meta.url), stdio: 'pipe' }); } catch { fresh = false; }
   ok(fresh, 'index.html: the modulepreload block matches the boot module graph (node tools/modulepreload.mjs)');
 }
-if (wants('desktop')) await variant('desktop', { width: 1440, height: 900, mobile: false });
-if (wants('phone')) await variant('phone', { width: 390, height: 844, mobile: true });
-if (!SUBPATH && wants('robust')) await robustChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('keepsakes')) await keepsakeChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('playtest')) await playtestChecks({ launch, BASE, ok, sleep, allErrors, shotsDir: flags.shots || null });
-if (!SUBPATH && wants('frontier')) await frontierChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('generals')) await generalsChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('variety')) await varietyChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('goals')) await goalsChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('phase5')) await phase5Checks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('phase6')) await phase6Checks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('phase7')) await phase7Checks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('phase12')) await phase12Checks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('phase13')) await phase13Checks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('codex')) await codexChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('toplane')) await topLaneChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('challenges')) await challengeChecks({ launch, BASE, ok, sleep, allErrors });
-if (!SUBPATH && wants('options')) await optionsChecks({ launch, BASE, ok, sleep, allErrors });
-if (SUBPATH && wants('deploy')) await deployChecks();
+/** Runs one section and then asserts the layout-shift guard over every page it opened. */
+async function section(name, fn) {
+  currentSection = name;
+  const from = shiftLog.length;
+  await fn();
+  const mine = shiftLog.slice(from).filter((v) => v.section === name);
+  const seen = new Set();
+  const lines = mine.map((v) => `${v.kind}: ${v.el}${v.d != null ? ` by ${v.d} px (${v.dx}, ${v.dy})` : ''} after ${v.ms} ms at ${v.at}`).filter((l) => !seen.has(l) && seen.add(l));
+  ok(mine.length === 0, `[${name}] layout-shift guard: no interactive element moved more than 2 px, hid or vanished under a press${mine.length ? ` (${mine.length}): ${lines.slice(0, 4).join(' | ')}` : ''}`);
+}
+if (wants('desktop')) await section('desktop', () => variant('desktop', { width: 1440, height: 900, mobile: false }));
+if (wants('phone')) await section('phone', () => variant('phone', { width: 390, height: 844, mobile: true }));
+if (!SUBPATH && wants('robust')) await section('robust', () => robustChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('keepsakes')) await section('keepsakes', () => keepsakeChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('playtest')) await section('playtest', () => playtestChecks({ launch, BASE, ok, sleep, allErrors, shotsDir: flags.shots || null }));
+if (!SUBPATH && wants('frontier')) await section('frontier', () => frontierChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('generals')) await section('generals', () => generalsChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('variety')) await section('variety', () => varietyChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('goals')) await section('goals', () => goalsChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('phase5')) await section('phase5', () => phase5Checks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('phase6')) await section('phase6', () => phase6Checks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('phase7')) await section('phase7', () => phase7Checks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('phase12')) await section('phase12', () => phase12Checks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('phase13')) await section('phase13', () => phase13Checks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('codex')) await section('codex', () => codexChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('toplane')) await section('toplane', () => topLaneChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('challenges')) await section('challenges', () => challengeChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('options')) await section('options', () => optionsChecks({ launch, BASE, ok, sleep, allErrors }));
+if (!SUBPATH && wants('textaudit')) await section('textaudit', () => textAuditChecks({ launch, BASE, ok, sleep, allErrors }));
+if (SUBPATH && wants('deploy')) await section('deploy', () => deployChecks());
 clearTimeout(watchdog);
 stopServer();
 
+if (allErrors.length) console.log(`\nconsole errors:\n${allErrors.slice(0, 8).map((e) => `  ${String(e).slice(0, 400)}`).join('\n')}`);
 console.log(failures || allErrors.length ? `\nFAILED (${failures} failed checks, ${allErrors.length} console errors)` : '\nALL CHECKS PASSED');
 process.exit(failures || allErrors.length ? 1 : 0);

@@ -11,7 +11,7 @@
 //   7. the Admiral commands an attack: a real press on Broadside, coastal enemy sites lose troops (broadsideHit)
 //   8. no console errors
 import { mkdir } from 'node:fs/promises';
-import { makeOpen } from './robustChecks.mjs';
+import { makeOpen, settledCentre } from './robustChecks.mjs';
 
 const OUT = 'screenshots/phase12';
 
@@ -40,7 +40,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     const r = e.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, sel, txt || null);
-  const pressSel = async (sel, txt) => { const c = await centre(sel, txt); if (!c) return false; await sleep(160); const c2 = await centre(sel, txt); if (!c2) return false; await press(c2.x, c2.y); await sleep(250); return true; };
+  const pressSel = async (sel, txt) => { const c2 = await settledCentre(() => centre(sel, txt), sleep); if (!c2) return false; await press(c2.x, c2.y); await sleep(250); return true; };
   const sea = () => q(() => window.__hd.seaInfo());
   // dev conquests toward `target` until it is attackable (the same walk as phase6Checks)
   const conquerToward = (target) => q(async (c) => {

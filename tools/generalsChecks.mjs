@@ -8,7 +8,7 @@
 //   5. a Festival from the owned card raises the region's prosperity a level and costs Renown
 //   6. a capital won in battle recruits its champion: the recruitment card and a Chronicle line
 //   7. Found a Dynasty: the roster keeps its levels and skills, Renown resets
-import { makeOpen } from './robustChecks.mjs';
+import { makeOpen, settledCentre } from './robustChecks.mjs';
 
 async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobile, name }) {
   const t = await open(`${BASE}/index.html?dev=1&seed=7`, { width, height, mobile });
@@ -32,7 +32,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     const r = e.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, sel, txt || null);
-  const pressSel = async (sel, txt) => { const c = await centre(sel, txt); if (!c) return false; await sleep(150); const c2 = await centre(sel, txt); await press(c2.x, c2.y); return true; };
+  const pressSel = async (sel, txt) => { const c2 = await settledCentre(() => centre(sel, txt), sleep); if (!c2) return false; await press(c2.x, c2.y); return true; };
   const key = async (k, code, vk) => {
     await t.page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk });
     await t.page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk });

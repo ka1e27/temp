@@ -12,6 +12,23 @@
 const EXPECTED = /^\[scene\] could not enter|battle resume failed|could not enter battle/;
 
 /** Opens a fresh Chrome (own profile) on `url`; returns the page and the helpers every scenario uses. */
+/**
+ * Where an element IS once it has stopped moving: two looks 120 ms apart agree within 0.5 px (at most about 2 s), like a player who aims at a button
+ * that has finished sliding in (a toast's or the results card's entrance). Phase 15B: on a slow page (--cpu) a press that landed mid-entrance moved
+ * under the pointer and tripped the layout-shift guard. `look()` returns { x, y } or null.
+ */
+export async function settledCentre(look, sleep) {
+  let prev = await look();
+  for (let i = 0; i < 16 && prev; i++) {
+    await sleep(120);
+    const c = await look();
+    if (!c) return null;
+    if (Math.abs(c.x - prev.x) < 0.5 && Math.abs(c.y - prev.y) < 0.5) return c;
+    prev = c;
+  }
+  return prev;
+}
+
 export function makeOpen(launch, sleep) {
   return async function open(url, { width = 1280, height = 800, mobile = false, init } = {}) {
     const page = await launch({ url: 'about:blank', width, height });
@@ -48,19 +65,19 @@ export function makeOpen(launch, sleep) {
     };
 
     const clickText = async (sel, text) => {
-      const pos = await page.eval((s, t) => {
+      const pos = await settledCentre(() => page.eval((s, t) => {
         const b = [...document.querySelectorAll(s)].find((e) => e.textContent.trim().toLowerCase() === t.toLowerCase() && e.getClientRects().length && !e.closest('[hidden]'));
         if (!b) return null;
         const r = b.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      }, sel, text);
+      }, sel, text), sleep);
       if (!pos) return false;
       await press(pos.x, pos.y);
       return true;
     };
     // a real click on the first visible element matching a CSS selector (and, when given, containing the text), scrolled into view first
     const clickSel = async (sel, text) => {
-      const pos = await page.eval(async (q, t) => {
+      const pos = await settledCentre(() => page.eval(async (q, t) => {
         const els = [...document.querySelectorAll(q)].filter((e) => e.getClientRects().length && !e.closest('[hidden]') && (!t || e.textContent.toLowerCase().includes(t.toLowerCase())));
         const el = els[0];
         if (!el) return null;
@@ -68,7 +85,7 @@ export function makeOpen(launch, sleep) {
         await new Promise((r) => setTimeout(r, 120));
         const r = el.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      }, sel, text || null);
+      }, sel, text || null), sleep);
       if (!pos) return false;
       await press(pos.x, pos.y);
       return true;
@@ -133,6 +150,7 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
         // and even when something DOES throw while entering the battle (a bug elsewhere), the player is put back on the map with a word, not left on a frozen one
         await t.page.eval((id) => window.__hd.goto.battle({ regionId: id }), bad);
         await sleep(900);
+        await t.waitFor(() => /couldn.t start that battle/i.test([...document.querySelectorAll('.toast')].map((e) => e.textContent).join(' | ')), 6000); // a slow page (--cpu) posts it later
         st = await t.page.eval(() => ({
           scene: window.__hd.scene,
           hud: !!document.querySelector('.hud') && document.querySelector('.hud').getClientRects().length > 0,
@@ -274,7 +292,7 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
       ok(await t.waitFor(() => window.__hd.scene === 'world', 12000), 'robust 4: a session starts');
       await t.page.eval(() => { const id = window.__hd.world.regions.find((r) => r.tier === 1).id; window.__hd.startBattle(id); });
       ok(await t.waitFor(() => window.__hd.scene === 'battle', 12000), 'robust 4: a battle starts');
-      ok(await t.waitFor(() => { try { const s = JSON.parse(localStorage.getItem('hexdominion.v2')); return Array.isArray(s.battles) && !!s.battles[0] && s.battles[0].battle.version === 1; } catch { return false; } }, 15000), 'robust 4: the battle is in the save');
+      ok(await t.waitFor(() => { try { const s = JSON.parse(localStorage.getItem('hexdominion.v2')); return Array.isArray(s.battles) && !!s.battles[0] && s.battles[0].battle.version === 1; } catch { return false; } }, 40000), 'robust 4: the battle is in the save');
       const good = await t.page.eval(() => localStorage.getItem('hexdominion.v2'));
       // leave the game page (its pagehide autosave would overwrite what the next steps write), then edit the save
       const variants = [
@@ -297,6 +315,7 @@ export async function robustChecks({ launch, BASE, ok, sleep, allErrors }) {
         await t.page.eval((s) => localStorage.setItem('hexdominion.v2', s), JSON.stringify(save));
         await t.page.goto(`${URL0}`);
         ok(await t.atTitle(), `robust 4 [${name}]: the title shows (the save loads)`);
+        await sleep(1200); // Phase 15B: a few frames on the title with the saved battle loaded (the battle tray read a null squad there: a frame error each refresh)
         const clicked = await t.clickText('button', 'Continue');
         ok(clicked, `robust 4 [${name}]: Continue is offered and clicked`);
         await sleep(2800);

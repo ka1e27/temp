@@ -11,7 +11,7 @@
 //   8. every rarity frame (Common, Rare, Legendary, Cursed) and the Champion's eye frame, shot
 //   9. no console errors
 import { mkdir } from 'node:fs/promises';
-import { makeOpen } from './robustChecks.mjs';
+import { makeOpen, settledCentre } from './robustChecks.mjs';
 
 const OUT = 'screenshots/phase7';
 
@@ -40,7 +40,7 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     const r = e.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, sel, txt || null);
-  const pressSel = async (sel, txt) => { const c = await centre(sel, txt); if (!c) return false; await sleep(160); const c2 = await centre(sel, txt); if (!c2) return false; await press(c2.x, c2.y); await sleep(250); return true; };
+  const pressSel = async (sel, txt) => { const c2 = await settledCentre(() => centre(sel, txt), sleep); if (!c2) return false; await press(c2.x, c2.y); await sleep(250); return true; };
   const shown = (sel) => q((s) => { const e = document.querySelector(s); return !!e && !e.hidden && !e.closest('[hidden]') && e.getClientRects().length > 0; }, sel);
   const boons = () => q(() => JSON.parse(JSON.stringify(window.__hd.state.boons2)));
   const draftCards = () => q(() => [...document.querySelectorAll('.boon-draft .boon-card')].map((c) => ({ id: c.dataset.boon, frame: c.dataset.rarity, text: c.textContent })));
@@ -98,13 +98,23 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     await q(() => window.__hd.winBattle());
     ok(await t.waitFor(() => { const c = document.querySelector('.results-card'); return !!c && !c.hidden && c.dataset.result === 'victory'; }, 30000), tag('Victory'));
     await sleep(1600);
+    // the claim is a timed veil (3.6 s on the page's clock, ui/relicClaim.js): its first and last visible frames are recorded in the page, so on a slow page
+    // (--cpu) the shot never eats the time the press needs, and the press is proven to END it early (not the veil timing out on its own)
+    await q(() => { window.__claimClick = null; addEventListener('click', (e) => { const c = document.querySelector('.relic-claim'); if (window.__claimClick == null && c && e.target instanceof Element && c.contains(e.target)) window.__claimClick = !c.hidden; }, true); });
+    await q(() => { window.__claimAt = null; window.__claimEnd = null; const poll = () => { const c = document.querySelector('.relic-claim'); const on = !!c && !c.hidden; if (on && window.__claimAt == null) window.__claimAt = performance.now(); if (!on && window.__claimAt != null) { window.__claimEnd = performance.now(); return; } requestAnimationFrame(poll); }; poll(); });
     ok(await t.clickText('.results-action', 'Continue'), tag('a press on Continue'));
     ok(await t.waitFor(() => { const c = document.querySelector('.relic-claim'); return !!c && !c.hidden; }, 5000), tag('the Relic claim moment plays'));
-    await sleep(1300);
-    await shot('03-relic-claim');
+    // at normal speed the shot waits for the art to land; a slow page presses at once (the state and the words are read after the press)
+    await sleep(200);
+    if (await q(() => window.__claimEnd == null && performance.now() - window.__claimAt < 700)) { await sleep(900); await shot('03-relic-claim'); }
+    const pressAt = await q(() => performance.now() - window.__claimAt);
+    // the press's click reached the claim while it was still up (its own click handler ends it at once): it skipped the moment, not the 3.6 s timer
+    const cc = await centre('.relic-claim'); // the veil covers the screen and does not move: pressed at once (a settled aim would eat the clock on a slow page)
+    if (cc) await press(cc.x, cc.y);
+    ok(!!cc && await t.waitFor(() => window.__claimEnd != null && window.__claimClick != null, 4000) && await q(() => window.__claimClick === true),
+      tag(`a press skips the claim moment (pressed ${Math.round(pressAt)} ms in, ended ${Math.round(await q(() => (window.__claimEnd ?? NaN) - window.__claimAt))} ms in, of 3600)`));
     const claimed = await q(() => ({ owned: window.__hd.state.relics.owned, found: window.__hd.state.generals.reliquary.found, text: document.querySelector('.relic-claim').textContent }));
     ok(claimed.owned.includes('sundial') && claimed.found.includes('sundial') && /Sundial/.test(claimed.text), tag('the Sundial is claimed for the dynasty and found for the Reliquary'));
-    ok(await pressSel('.relic-claim'), tag('a press skips the claim moment'));
     ok(await t.waitFor(() => { const d = document.querySelector('.boon-draft'); return !!d && !d.hidden; }, 5000), tag('the Boon draft follows the result card'));
     await sleep(900);
     const first = await draftCards();

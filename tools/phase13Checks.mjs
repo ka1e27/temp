@@ -123,8 +123,10 @@ async function scenario(open, BASE, ok, sleep, allErrors, { width, height, mobil
     await q(() => { const b = window.__hd.battle; const k = b.sites[b.arena.throne.keep]; k.owner = 0; k.troops = 1e6; });
     ok(await t.waitFor(() => window.__hd.throneInfo().phase === 3 && window.__hd.throneInfo().usurper.fielded, 8000), tag('phase 3: the Usurper takes the field'));
     ok(await t.waitFor(() => window.__hd.throneInfo().usurper.drawn, 6000), tag('his hero squad is drawn with a health bar'));
+    // borrowing goes on through phase 3, so for up to 10 s of every 30 the HUD line names the borrowed weapon ("Plague: …"); wait for it to name him
+    const hudOk = await t.waitFor(() => /Usurper/.test(document.querySelector('.battle-feature')?.textContent || ''), 15000);
     const hud3 = await q(() => document.querySelector('.battle-feature')?.textContent || '');
-    ok(/Usurper/.test(hud3), tag(`the HUD line follows him ("${hud3}")`));
+    ok(hudOk, tag(`the HUD line follows him ("${hud3}")`));
     await sleep(800);
     await shot('07-usurper-field');
     // he falls (dev: his troops cut), then the battle is won (we hold the keep)

@@ -52,6 +52,10 @@ export const BATTLE = Object.freeze({
   softBeforeKeep: true,
   corridorTilePenalty: 20,   // crossing a foreign tile costs this much extra when a strip is planned, so the fewest foreign tiles always wins
   corridorMaxTiles: 3,       // a border march is at most this many tiles (DESIGN §4.4: "a short strip"); a guarantee that needs more is not given
+  // PLAN-PHASE15: ... except "take the near settlements first" (softBeforeKeep), which may use a strip of up to this many tiles as a last
+  // resort. Without it a settlement walled in by the keep's land fed the keep from behind, out of reach: with only the War Camp and no
+  // powers (Holy Ground) such fights were lost at any strength (Penhold, seed 11 D3: 0 of 21 probes, up to a 2.7 raw ratio)
+  corridorMaxTilesLastResort: 6,
   // The War Camp's approach (arena.js planApproach): a region whose border with the player is only mountains is reached by a strip of at
   // most corridorMaxTiles tiles from the player's nearest passable land. With this on, the strip may climb the ridge (the mountain tiles
   // on it become hill tiles flagged `pass`, a pass over the mountains); off, it may only use passable land round the ridge, and about

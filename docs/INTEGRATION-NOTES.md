@@ -1334,3 +1334,47 @@ Ashen 10.5 / 20.1, Dragon 11.8 / 26.8, archipelago 12.8 / 23.8, Tide Fortress 14
 back to back, `--only=frames` with the option preset in localStorage (Full, then Minimal; median / p95 ms, cpu median): map 13.1 / 22.9 (6.9) vs 11.2 / 21.8
 (5.9), big battle 10.9 / 23.5 (5.6) vs 11.3 / 24.8 (5.8), Ashen 11.2 / 21.5 (6.5) vs 10.3 / 19.5 (5.6), Dragon 11.2 / 28.4 vs 11.3 / 23.3, archipelago
 10.5 / 22.2 vs 10.5 / 21.5, Tide 12.4 / 26.7 vs 12.1 / 25.3: Minimal is never slower beyond run-to-run noise and is cheaper where the effects are dense.
+
+## Phase 15B: robustness on slow devices, Large text, the layout-shift guard (2026-10-07)
+Spec: `docs/PLAN-PHASE15.md` §15B. Gallery `screenshots/phase15/` (`text-<w>x<h>-<size>-*.png`, `toplane-*-15b-mid-press{,-before}.png`).
+
+**The layout-shift guard** (`tools/hintMonitor.js installShiftGuard`, wired in `tools/check.mjs launch`). Every page of every check section carries it from
+document start (`Page.addScriptToEvaluateOnNewDocument`); at window capture phase it records the interactive element under each pointerdown (button, link,
+input, tab, switch...) and at pointerup fails the press when that element's CENTRE moved more than 2 px, or it was hidden or removed (THE CLICK RULE).
+Violations reach Node through the CDP binding `__hdShift`; `section(name, fn)` in check.mjs asserts "[name] layout-shift guard" after each section. The centre,
+not the edges: `.btn:active` drops 1 px and scales 0.98, a power button scales 0.94. Exempt: a hold-to-confirm button (`.is-hold` with
+`html[data-hold-confirm]`) that completes and closes its dialog before the release. `--only=a,b` now runs several sections; check.mjs prints the first
+console errors at the end.
+
+**Real bugs found by the --cpu=4 sweep (fixed, with regression checks):**
+- **A top notice pushed a pressed toast button away.** A leader line (or a new toast) arriving while a finger was down on a toast moved the whole column
+  (a Duel's Decline slid 84-124 px and the decline was lost; on a phone the banner's arrival cut the lane to one toast and REMOVED the Duel toast under the
+  finger). The checks had worked around it with retries ("press again"). Now `ui/toasts.js` holds the column still while a press is on a toast and for
+  `PRESS_SETTLE_MS` (250) after: a new toast waits in the queue, a dismissed one keeps its invisible room, an updated message keeps its words; `pressHeld()`
+  is exported and main.js's `ui.leaderBanner.update` wrapper parks a line in `heldLine` meanwhile (released by `syncHeldLine` once the press is over).
+  Regression: `check.mjs --only=toplane` "15B:" (a held press on Decline while a line and a toast arrive: Decline moves at most 2 px, both wait, the release
+  declines, then both show). Without the fix it fails 9 checks.
+- **The battle tray threw on a saved battle that is broken inside** (a null squad): main.js `updateTray` mapped every run every 250 ms, on the title too,
+  before Continue cleared the battle (a `frame error` each refresh). It now skips runs it cannot read and null sites / squads. Regression: robust 4 waits
+  1.2 s on the title before Continue (deterministic without the fix at normal speed).
+
+**Check staging (made robust, not weaker):** `robustChecks.mjs settledCentre(look, sleep)` aims at an element once two looks 120 ms apart agree (a toast's
+or the results card's entrance animation moved buttons under presses made the instant they appeared); used by `makeOpen`'s `clickText`/`clickSel` and every
+section's local `pressSel`. The hint monitor returns 'pending' (no verdict) while its own lazy imports load (a slow page showed W2 first). The Relic claim
+check records the claim's first and last frames in the page and proves the press ended it early. The raid countdown check waits for the tick: the countdown
+counts ACTIVE seconds stepped by the frame clock, whose dt is clamped to 0.25 s (`input/clock.js MAX_DT`), so at 2-3 frames a second (1440x900 at --cpu=4
+on the software rasteriser) game time runs slower than the wall clock, by design (open question for the lead); the frontier check's unwatched-battle
+clock waits the same way. Also: the welcome-back Collect is aimed once the card's 420 ms pop has landed (`clickReal(..., { stable: true })`); the desktop
+check aims at a frontier region once the camera has stopped; the first-note music wait scales with `--cpu`; robust 1 / playtest 9 wait for their toast and
+robust 4 for the autosave; the phone raid toast may wait out a leader's banner (12 s). Music on a slow page: `audio/music.js` drops notes more than
+`lateNoteDropSec` (0.08 s) late with a 0.15 s lookahead, so a main thread that stalls 250-400 ms per frame thins the score (peak voices 7 against 12 at
+--cpu=4, 1440x900) though it never goes silent; an adaptive lookahead (grow it to about 1.5x the measured tick gap) would fix it (game/audio, not changed here).
+
+**Large / Larger text audit** (`tools/textAuditChecks.mjs`, `--only=textaudit`): 360x740 and 390x844 touch phones, each at Large and Larger: Settings,
+Realm, Generals, War Council, Regions, the Codex list and a page, every Challenges hub tab, the five world-event offers, the Merchant's deals, a Duel's HUD
+and results card, the Boon draft (opened from the HUD chip), a Relic claim with the longest Relic text, every ceremony page (Dynasty VII after a Crown:
+the Ascension picker and both Crown choices), the ending's Chronicle and credits. `auditPanel` measures every text run by its Range boxes (clipped by a
+non-scrolling ancestor, an ellipsis included, or off screen with no scroller to reach it) and scrolls every control into view (on screen and on top).
+Fixed: the Council's effect line wraps between the values instead of an ellipsis (`council.css`; the compact rule is measured once, so a text-size change
+used to leave it stale); a rival's name wraps (`goals.css`); below 480 px at Large/Larger a Regions row puts its status under a long name and a slider row
+wraps its slider under the label (`options.css`).

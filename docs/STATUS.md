@@ -734,3 +734,24 @@ Sonnet 5.5 (`sonnet55-engineer`) is no longer preferred.
   the Throne card (factor 0.35 -> 0.25) and Holy Ground garrisons starting far above cap (FEATURES.holy.startCap 2). Human: D5 2.02 -> 1.50 h,
   D7 2.14 -> 1.61 h (worst wait 662 -> 24 min), Crown 4.03 -> 1.78 h; A1 +1-4 % over A0. D1 human pace unchanged. Later: a label
   calibration pass (late Hard fights play easier than they read; Holy Ground Easy reads optimistic).
+- **Phase 14B DONE** (uncommitted): device-local options (app/options.js, key hexdominion.options.v1): colour-vision presets
+  (config/palettes.js; deutan/protan 27.5, tritan 28.0 min CIEDE2000; Default unchanged at 24.1 normal) + territory patterns, text size
+  100/112.5/125 %, high contrast, an Effects slider, a rebindable keymap with swap-on-conflict, hold-to-confirm (opt-in), Voices volume +
+  voiceSfx murmur, mute when hidden. --only=options; gate green in groups; perf within budget. Snapshot scratchpad/p14snap (117 files on
+  b2d3faa: Phases 13 + 14) PASSED the full gate (npm 1244, full check.mjs, --base=temp) and perf (title 2.4 s, map 4.0 s, meta 0.50 ms,
+  save 6.5 KB, no row over budget). **Committed 4974809 and pushed to redesign + main** at the user's "deploy
+  Phase 13 and 14" (2026-10-07). **LIVE** (Pages run passed first time). Later: audit Large text on the Realm/Generals/ceremony panels.
+- **2026-10-07 PHASE 15 STARTED** (docs/PLAN-PHASE15.md): 15A label calibration (tools/labelAudit.mjs across dynasties, Ascension,
+  personalities, twists and types; fix the card, not the fights; a fast guard in npm test) and 15B robustness (every check section at
+  --cpu=4/6, real UX bugs fixed; Large/Larger text audit of every panel at 360/390 px; a generic "nothing moves under the pointer"
+  guard in hintMonitor).
+- **Phase 15A DONE (follow-ups running)** (npm 1252): calibrateRatio() in progression.js (factor x raw^exponent per dynasty, Crown,
+  Ascension, personality, twist, type, tier; a Holy Ground ceiling 1.25); surrender still reads the raw ratio; challenges keep the raw
+  card. tools/labelAudit.mjs (probe fights, 49-59k per run): off-target cells 117 -> 0 of 157. The pacing drift stays within targets
+  (D1 first hour 27.5 battles, 97 %, 2.1 min idle; no wait > 60). Follow-ups: the Penhold fight bug (War Camp crushed at every ratio),
+  Boons at the end of D1 and the Quick Conquest share after calibration. Lead renamed the tests to balance.audit.test.js +
+  balance.auditTable.test.js.
+  Follow-ups done (npm 1253): Penhold was a strip that was too long (a village behind the keep's land; softBeforeKeep opened strips <= 3
+  tiles) -> BATTLE.corridorMaxTilesLastResort 6 (1.7 % of arenas), test battle.penhold.test.js. Boons at the end of D1: bot 11 / human
+  15.5 (in band). The Quick Conquest-eligible share rose (human 41 -> 53 %), but real use is 0 (the node is never bought). Still 0/157 off.
+  Later: 7 deep Holy Ground/Blizzard groups never won at raw >= 1.5 (few probes; tools/_p15walls.mjs).

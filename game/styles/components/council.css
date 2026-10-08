@@ -119,10 +119,9 @@
 }
 .upgrade-card-current { color: var(--text-muted); }
 /* one line: when "+0 War Camp troops → +2 War Camp troops" does not fit, the current value keeps only its number */
-.upgrade-card-effect { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
-.upgrade-card-effect > span { min-width: 0; }
+/* (Phase 15B) and when even that does not fit (Large / Larger text on a phone), the line wraps between the values: each value stays whole, never an ellipsis */
+.upgrade-card-effect { flex-wrap: wrap; row-gap: 0; white-space: nowrap; }
 .upgrade-card-effect.is-compact .upgrade-card-current-tail { display: none; }
-.upgrade-card-effect.is-compact .upgrade-card-next { overflow: hidden; text-overflow: ellipsis; }
 .upgrade-card-arrow { color: var(--text-dim); }
 .upgrade-card-next { color: var(--good); }
 .upgrade-card.is-maxed .upgrade-card-next { color: var(--gold); }

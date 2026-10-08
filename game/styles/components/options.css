@@ -84,3 +84,12 @@ html.high-contrast .settings-toggle { box-shadow: inset 0 0 0 2px rgba(255, 255,
      "BULWARK" still fits whole instead of ending in an ellipsis */
   html[data-text-size="large"] .power-name, html[data-text-size="larger"] .power-name { font-size: 12px; }
 }
+
+/* Phase 15B, the Large / Larger audit (tools/textAuditChecks.mjs) on 360 and 390 px phones: whole words, never an ellipsis. A Regions row whose name no longer
+   fits beside its status puts the status on a line of its own; a slider row whose slider and value no longer fit beside the label wraps them under it. */
+@media (max-width: 480px) {
+  html[data-text-size="large"] .region-row, html[data-text-size="larger"] .region-row { flex-wrap: wrap; row-gap: 2px; }
+  html[data-text-size="large"] .region-row-name, html[data-text-size="larger"] .region-row-name { overflow: visible; text-overflow: clip; }
+  html[data-text-size="large"] .region-row-main, html[data-text-size="larger"] .region-row-main { min-width: auto; }
+  html[data-text-size="large"] .settings-row:has(.opt-slider-wrap), html[data-text-size="larger"] .settings-row:has(.opt-slider-wrap) { flex-wrap: wrap; row-gap: 4px; }
+}
