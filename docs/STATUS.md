@@ -755,3 +755,21 @@ Sonnet 5.5 (`sonnet55-engineer`) is no longer preferred.
   tiles) -> BATTLE.corridorMaxTilesLastResort 6 (1.7 % of arenas), test battle.penhold.test.js. Boons at the end of D1: bot 11 / human
   15.5 (in band). The Quick Conquest-eligible share rose (human 41 -> 53 %), but real use is 0 (the node is never bought). Still 0/157 off.
   Later: 7 deep Holy Ground/Blizzard groups never won at raw >= 1.5 (few probes; tools/_p15walls.mjs).
+- **Phase 15B DONE** (uncommitted): two real bugs fixed: (1) toasts moved under a press when a banner or new toast arrived (Decline slid
+  84-124 px; toasts.js pressHeld + a held leader line), (2) the battle tray threw on a broken saved battle. textAuditChecks (--only=textaudit,
+  506 checks, Large/Larger at 360/390 px; council/goals/options CSS fixes), a layout-shift guard injected into every check section,
+  settledCentre aiming. The gate is green at normal speed, --cpu=4 for all 19 sections, --cpu=6 for phone. Lead fixes: adaptive music
+  lookahead (music.js; at most 0.5 s; manual ticks unchanged) and a Page.navigate timeout of 45 s in tools/cdp.js. Snapshot
+  scratchpad/p15snap: npm 1253, --base=temp ok; the full check.mjs hit its own 32-min overall timeout (now 60 min: the suite takes ~32 min,
+  CI ~30) and then had one racy phase13 phone check (the HUD line read during a Plague borrow; it now waits for the Usurper line), which
+  passed 2/2. **Committed d388c0b and pushed to redesign + main** at the user's "deploy Phase 15" (2026-10-08).
+- **Phase 15 deploy BLOCKED by CI** (good catch by the new guard): phase13 phone, results-card Continue moved 9.4 px under a press (the
+  0.85 -> 1 scale pop). Fix (uncommitted): entrance animations of pressable panels fade only. results-card fades and the punch moves to
+  the non-pressable banner; modal-pop, ceremony-rise and vendetta-in are fade-only; the reduce-motion list is updated. Verifying the
+  full gate + phase13 at --cpu=4 on the tree; the site is still at 4974809.
+- **2026-10-08 fixes after the user report** (on d388c0b): the War Council layout (long effect values wrap as text with the arrow
+  attached, never under the Buy button; the Best value pointer on two lines; Buy Max on one line and wrapping on 360 px); buttons that
+  moved under a tap (the results card, every dialog, the ceremony, the Vendetta toast and the Welcome-back card now fade instead of
+  scale/slide; the ending scroll has a fixed height so Continue stays put; the HUD gold/income use tabular digits). Full gate green
+  (npm 1253, check.mjs 32 min, --base=temp). The user's "powers don't work in Dynasty II" is not reproduced on a fresh realm: waiting
+  for their save code or a description.

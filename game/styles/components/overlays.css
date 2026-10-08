@@ -25,9 +25,11 @@
   box-shadow: var(--panel-shadow-lg);
   animation: modal-pop var(--dur-med) var(--ease-punch);
 }
+/* Fade only: a dialog's buttons must not move under a tap made as it opens (Phase 15B's layout-shift guard caught the same scale pop
+   on the results card moving Continue 9.4 px). */
 @keyframes modal-pop {
-  from { transform: scale(0.92); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .modal-title { font-size: var(--fs-lg); }
@@ -246,7 +248,9 @@
   gap: var(--sp-3);
   text-align: center;
   box-shadow: var(--panel-shadow-lg);
-  animation: results-pop 420ms var(--ease-punch);
+  /* fade only: results-pop now animates the results banner's scale alone, which would drop this card's centring translate mid-pop and
+     move Collect under a tap (the layout-shift guard caught it); fading keeps the card and its button still */
+  animation: results-fade 260ms ease-out;
 }
 .welcome-title { font-size: var(--fs-xl); }
 .welcome-away { color: var(--text-muted); font-size: var(--fs-sm); }

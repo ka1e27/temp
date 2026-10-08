@@ -168,7 +168,8 @@ html.reduce-motion .hud-pip { animation: none; }
 .toast.is-vendetta .toast-message { font-family: var(--font-title); font-weight: 700; letter-spacing: 0.02em; font-size: var(--fs-md); line-height: 1.3; }
 .toast.is-vendetta .toast-close { color: #ffcfc4; }
 .toast.is-vendetta .toast-action { background: linear-gradient(180deg, #ffd27a, #e09a2e); }
-@keyframes vendetta-in { 0% { transform: translateY(-18px) scale(0.94); } 60% { transform: translateY(2px) scale(1.02); } 100% { transform: none; } }
+/* fade only: the banner carries the Go button, which must not move under a tap (Phase 15B layout-shift guard) */
+@keyframes vendetta-in { 0% { opacity: 0; } 100% { opacity: 1; } }
 .toast.is-vendetta.is-in { animation: vendetta-in 520ms var(--ease-punch); }
 html.reduce-motion .toast.is-vendetta.is-in { animation: none; }
 

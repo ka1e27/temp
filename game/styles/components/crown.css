@@ -26,7 +26,9 @@
 @keyframes ending-caption { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* the Chronicle scroll: parchment between two rods */
-.ending-scroll { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); width: min(600px, 100%); max-height: calc(100dvh - 32px); }
+/* a FIXED height, not a max-height: the paper fills it and its body scrolls, so Continue sits pinned at the bottom whatever the text does (a
+   late web-font swap reflowed the lines and pushed Continue 9.4 px down mid-tap; the layout-shift guard caught it on CI) */
+.ending-scroll { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); width: min(600px, 100%); height: min(780px, calc(100dvh - 32px)); }
 .ending-scroll-paper { position: relative; display: flex; flex-direction: column; width: 100%; min-height: 0; flex: 1; animation: ending-unroll 900ms var(--ease-out) both; }
 @keyframes ending-unroll { from { clip-path: inset(48% 0 48% 0); } to { clip-path: inset(0 0 0 0); } }
 .ending-rod { display: block; height: 14px; margin: 0 -10px; border-radius: 7px; background: linear-gradient(180deg, #e9c46a, #8a5a12 70%, #4a2c06); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5); flex: none; }
@@ -63,7 +65,7 @@
 html.reduce-motion .ending *, .ending.is-still * { animation: none !important; transition: none !important; }
 @media (max-width: 640px) {
   .ending { padding: 0; }
-  .ending-scroll { width: 100%; max-height: 100dvh; padding: 60px 8px 12px; }
+  .ending-scroll { width: 100%; height: 100dvh; padding: 60px 8px 12px; box-sizing: border-box; }
   .ending-scroll-body { padding: var(--sp-4) var(--sp-3); }
   .ending-rod { margin: 0 -4px; }
   .ending-tour-words { bottom: calc(11vh + 10px); }

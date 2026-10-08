@@ -21,7 +21,8 @@
   animation: ceremony-rise var(--dur-slow) var(--ease-out);
 }
 @keyframes ceremony-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes ceremony-rise { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+/* fade only: the ceremony's buttons must not move under a tap as a page appears (Phase 15B layout-shift guard) */
+@keyframes ceremony-rise { from { opacity: 0; } to { opacity: 1; } }
 html.reduce-motion .ceremony-veil, html.reduce-motion .ceremony-panel { animation: none; }
 
 .ceremony-header { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-4) var(--sp-4) var(--sp-2); }

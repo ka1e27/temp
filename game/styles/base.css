@@ -187,7 +187,8 @@ html.reduce-motion .upgrade-card.upgrade-bought,                         /* upgr
 html.reduce-motion .power-btn.is-ready,                                  /* power-ready-glow */
 html.reduce-motion .power-btn.is-armed,                                  /* power-armed-pulse */
 html.reduce-motion .power-btn.power-just-ready,                          /* power-just-ready-pop */
-html.reduce-motion .results-card,                                        /* results-pop */
+html.reduce-motion .results-card,                                        /* results-fade */
+html.reduce-motion .results-card .results-banner,                        /* results-pop */
 html.reduce-motion .modal-panel,                                         /* modal-pop */
 html.reduce-motion .gold-pulse,                                          /* hud-gold-pulse */
 html.reduce-motion .hud-gold-block.is-flashing::before,                  /* hud-gold-flash-bg */

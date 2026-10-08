@@ -14,13 +14,19 @@
   gap: var(--sp-2);
   text-align: center;
   box-shadow: var(--panel-shadow-lg);
-  animation: results-pop 420ms var(--ease-punch);
+  /* The card only fades in: its buttons must not move under a tap made as it appears (the Phase 15B layout-shift guard caught Continue
+     moving 9.4 px during the old 0.85 -> 1 scale pop). The punch lives on the banner, which is not pressable. */
+  animation: results-fade 260ms ease-out;
 }
+@keyframes results-fade {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.results-card .results-banner { animation: results-pop 420ms var(--ease-punch); }
 @keyframes results-pop {
-  0% { transform: translate(-50%, -50%) scale(0.85); opacity: 0; }
-  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
-
 .results-banner {
   font-family: var(--font-title);
   font-weight: 700;
