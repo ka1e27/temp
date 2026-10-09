@@ -7,7 +7,7 @@
   z-index: var(--z-panel);
   top: 76px;
   right: var(--sp-3);
-  width: 420px;
+  width: 480px; /* wide enough that most "current → next" lines and the toolbar (tabs, Best value pointer, Buy Max) each fit one line */
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 96px);
   display: flex;
@@ -102,7 +102,7 @@
   color: var(--gold);
 }
 .upgrade-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.upgrade-card-name-row { display: flex; align-items: center; gap: var(--sp-2); }
+.upgrade-card-name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 2px var(--sp-2); } /* the Best value tag drops under the name on a phone instead of running under the Buy button */
 .upgrade-card-name { font-weight: 800; font-size: var(--fs-sm); }
 .upgrade-card-level { font-size: 0.65rem; }
 .upgrade-card-level.is-locked { color: var(--text-dim); }
@@ -122,19 +122,14 @@
   font-size: var(--fs-xs);
   font-weight: 700;
 }
-.upgrade-card-current { color: var(--text-muted); }
-/* one line: when "+0 War Camp troops → +2 War Camp troops" does not fit, the current value keeps only its number */
-/* (Phase 15B) and when even that does not fit (Large / Larger text on a phone), the line wraps between the values: each value stays whole, never an ellipsis */
-.upgrade-card-effect { flex-wrap: wrap; row-gap: 0; white-space: nowrap; }
-.upgrade-card-effect.is-compact .upgrade-card-current-tail { display: none; }
-/* a single value longer than the line (Rally: "Send 50% from every settlement · 28.5s cooldown") wraps at its own spaces instead of running
-   under the Buy button; short values still break only between "current → next" (user report, 2026-10-08) */
-.upgrade-card-current, .upgrade-card-next { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-/* when a value wraps, the arrow stays at the end of the current value (flex left it alone on its own line): flow the line as text */
-.upgrade-card-effect { display: block; }
-.upgrade-card-effect > * { display: inline; margin-right: 6px; }
+.upgrade-card-head, .upgrade-card-current { color: var(--text-muted); }
+/* "current → next" shows only what changes (council.js effectDiff): "+0% → +3% troop growth". The line flows as text, so a long value
+   (Rally's "Send 50% from every settlement · 30s → 28.5s cooldown") wraps at its own spaces, never under the Buy button (user report, 2026-10-08) */
+.upgrade-card-effect { display: block; overflow-wrap: break-word; }
+.upgrade-card-effect > * { display: inline; margin-right: 5px; }
+.upgrade-card-effect > :empty { display: none; }
 .upgrade-card-arrow { color: var(--text-dim); }
-.upgrade-card-next { color: var(--good); }
+.upgrade-card-next, .upgrade-card-tail { color: var(--good); }
 .upgrade-card.is-maxed .upgrade-card-next { color: var(--gold); }
 
 .upgrade-card-buy {
@@ -157,6 +152,8 @@
 }
 .council-notice[hidden] { display: none; }
 .council-notice > .icon { flex: 0 0 auto; color: var(--warn); margin-top: 1px; }
+/* the price on one line beside its coin (the coin over the number made a tall button and a faint coin); Unlock and Iron Will keep the stack */
+.upgrade-card-buy:not(.is-unlock):not(.is-forbidden) { flex-direction: row; gap: 4px; min-width: 60px; min-height: 44px; padding: var(--sp-2) 10px; }
 .upgrade-card-buy.is-unlock::before {
   content: 'Unlock';
   font-size: 0.62rem;
@@ -186,6 +183,8 @@
     max-height: 72vh;
   }
   .upgrade-card-desc { display: none; }
+  .upgrade-card { gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); }
+  .upgrade-card-icon { width: 34px; height: 34px; }
 }
 
 /* Army tab: the one upgrade that raises Army Power the most per gold right now (game/app/bestValue.js). */

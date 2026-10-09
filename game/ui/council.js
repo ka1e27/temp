@@ -9,6 +9,22 @@ import { watchDialog } from './dialogs.js';
 const TABS = [['army', 'Army'], ['realm', 'Realm'], ['powers', 'Powers']];
 
 /**
+ * An upgrade's "current → next" with only what changes: the words both values share before and after the change are written once.
+ * effectDiff('+0% troop growth', '+3% troop growth') -> { head: '', cur: '+0%', next: '+3%', tail: 'troop growth' }
+ * effectDiff('Send 50% from every settlement · 30s cooldown', '... · 28.5s cooldown') -> { head: 'Send 50% from every settlement ·', cur: '30s', next: '28.5s', tail: 'cooldown' }
+ * Each side keeps at least one word of its own.
+ */
+export function effectDiff(cur, next) {
+  const a = String(cur).split(' ');
+  const b = String(next).split(' ');
+  let p = 0;
+  while (p < a.length - 1 && p < b.length - 1 && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < a.length - 1 - p && s < b.length - 1 - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  return { head: a.slice(0, p).join(' '), cur: a.slice(p, a.length - s).join(' '), next: b.slice(p, b.length - s).join(' '), tail: a.slice(a.length - s).join(' ') };
+}
+
+/**
  * @typedef {Object} UpgradeCardData
  * @property {string} id
  * @property {'army'|'realm'|'powers'} tab
@@ -127,14 +143,12 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
     const levelEl = h('span.upgrade-card-level.pill', {}, '');
     const tagEl = h('span.upgrade-card-tag', { title: 'Raises your Army Power the most per gold right now' }, 'Best value');
     tagEl.hidden = true;
+    // only what changes, the shared words written once (effectDiff): "+0 → +2 War Camp troops", "Send 50% from every settlement · 30s → 28.5s cooldown"
+    const headEl = h('span.upgrade-card-head', {}, '');
     const currentEl = h('span.upgrade-card-current', {}, '');
-    // "+0 War Camp troops → +2 War Camp troops" wrapped over two ragged lines: when the line does not fit, the current value drops its shared words ("+0 → +2 War Camp troops")
-    const currentHead = h('span.upgrade-card-current-head', {}, '');
-    const currentTail = h('span.upgrade-card-current-tail', {}, '');
-    currentEl.append(currentHead, currentTail);
-    let effectKey = '';
-    let effectMeasured = false;
     const nextEl = h('span.upgrade-card-next', {}, '');
+    const tailEl = h('span.upgrade-card-tail', {}, '');
+    let effectKey = '';
     const costLabelEl = h('span.upgrade-card-cost-value.nums', {}, '');
     const forbidEl = h('span.upgrade-card-forbid', {}, icon('lock', 14), h('span', {}, ''));
     const buyBtn = h('button.btn.btn-primary.upgrade-card-buy', {
@@ -142,7 +156,7 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
     }, h('span.upgrade-card-price', {}, icon('coin', 14), costLabelEl), forbidEl);
     const cardName = data.name;
 
-    const effectEl = h('div.upgrade-card-effect', {}, currentEl, h('span.upgrade-card-arrow', {}, '→'), nextEl);
+    const effectEl = h('div.upgrade-card-effect', {}, headEl, currentEl, h('span.upgrade-card-arrow', {}, '→'), nextEl, tailEl);
     const cardEl = h('div.upgrade-card', {},
       iconEl,
       h('div.upgrade-card-info', {},
@@ -166,19 +180,15 @@ export function createCouncil({ onBuy, onBuyMax, onClose } = {}) {
         const cur = d.locked ? '—' : d.current;
         const nxt = d.next ?? 'MAX';
         const key = `${cur}|${nxt}`;
-        if (key !== effectKey || (!effectMeasured && effectEl.getClientRects().length)) {
+        if (key !== effectKey) {
           effectKey = key;
-          effectMeasured = !!effectEl.getClientRects().length;
-          // the words both values share after the number ("War Camp troops"), so the current one can drop them when space is short
-          const sp = cur.indexOf(' ');
-          const tail = sp > 0 && nxt.indexOf(' ') > 0 && cur.slice(sp) === nxt.slice(nxt.indexOf(' ')) ? cur.slice(sp) : '';
-          currentHead.textContent = tail ? cur.slice(0, sp) : cur;
-          currentTail.textContent = tail;
-          nextEl.textContent = nxt;
-          effectEl.classList.remove('is-compact');
-          requestAnimationFrame(() => { // measured once laid out: more than one line, and it can be shortened -> compact
-            if (tail && effectEl.getClientRects().length && effectEl.scrollWidth > effectEl.clientWidth + 1) effectEl.classList.add('is-compact');
-          });
+          const diff = d.next == null ? { head: '', cur, next: nxt, tail: '' } : effectDiff(cur, nxt);
+          const glue = (t) => t.replace(/ ·/g, ' ·'); // a "·" separator never starts a line
+          headEl.textContent = glue(diff.head);
+          currentEl.textContent = glue(diff.cur);
+          nextEl.textContent = glue(diff.next);
+          tailEl.textContent = glue(diff.tail);
+          effectEl.setAttribute('aria-label', d.next == null ? `${cur}, at its maximum` : `now ${cur}, next level ${nxt}`); // the whole values for a screen reader
         }
         const maxed = d.next == null;
         cardEl.classList.toggle('is-maxed', maxed);

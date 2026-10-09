@@ -152,7 +152,17 @@
 /* 64px desktop / 56px phone (media query below), icon ~28px, a small-caps
    name below the circle, a hotkey badge (desktop only — Q/W/E/R/T), the
    level pip, and a centred numeral over the sweep while cooling. */
-.power-buttons { display: flex; gap: var(--sp-3); flex-wrap: wrap; justify-content: center; }
+.power-buttons { position: relative; display: flex; gap: var(--sp-3); flex-wrap: wrap; justify-content: center; }
+/* Iron Will / Holy Ground: the rule that locks every power, across the greyed bar (battleHud.js). It takes no room and lets presses through. */
+.power-rule {
+  position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none;
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; white-space: nowrap; max-width: 100%;
+  background: rgba(12, 15, 24, 0.9); border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent); color: var(--text);
+  font-size: var(--fs-xs); font-weight: 800; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.power-rule[hidden] { display: none; }
+.power-rule * { pointer-events: none; } /* base.css turns every #ui descendant back on: the words must let the tap through too */
+.power-rule > .icon { color: var(--warn); flex: 0 0 auto; }
 .power-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .power-btn {
   position: relative;

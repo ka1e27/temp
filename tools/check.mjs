@@ -748,7 +748,9 @@ async function variant(name, { width, height, mobile }) {
     ok(await page.eval(async () => {
       const { ECONOMY } = await import(new URL('game/config/meta.js', document.baseURI).href);
       const card = [...document.querySelectorAll('.upgrade-card')].find((x) => /treasury/i.test(x.querySelector('.upgrade-card-name')?.textContent || ''));
-      return !!card && card.textContent.includes(`${ECONOMY.offlineCapHours} h offline cap`);
+      // the line shows only what changes ("2 → 3 h offline cap", council.js effectDiff); its label carries the whole values
+      const eff = card && card.querySelector('.upgrade-card-effect');
+      return !!eff && (eff.getAttribute('aria-label') || '').includes(`now ${ECONOMY.offlineCapHours} h offline cap`) && eff.querySelector('.upgrade-card-current').textContent === String(ECONOMY.offlineCapHours);
     }), 'the Treasury line quotes the offline cap from config (ECONOMY.offlineCapHours), not a typed base');
     await clickReal('.council-close', null, 'War Council (close)');
     await sleep(500);

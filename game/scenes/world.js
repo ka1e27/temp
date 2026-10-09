@@ -133,6 +133,30 @@ export function createWorldScene(services) {
 
   function markDirty() { derived.dirty = true; }
 
+  // Upgrades made visible (backlog "label arrows"): a purchase that makes a frontier region's label easier marks it "▲" on the map, so the
+  // loop "fight, then upgrade" shows what the upgrade bought. The marks last while the council is open and 20 s after it closes.
+  const LABEL_RANK = { Easy: 0, Fair: 1, Hard: 2, Deadly: 3 };
+  const improvedIds = new Set();
+  let improvedUntilMs = 0;
+  function frontierRanks() {
+    const { state, world } = container.get();
+    const out = new Map();
+    for (const id of frontier(state, world)) out.set(id, LABEL_RANK[difficulty(state, world, id, { commander: commanderFor(id) }).label] ?? 0);
+    return out;
+  }
+  function noteEasier(before) {
+    const after = frontierRanks();
+    const gained = [];
+    for (const [id, rank] of after) if (before.has(id) && rank < before.get(id) && !improvedIds.has(id)) { improvedIds.add(id); gained.push(id); }
+    if (!gained.length) return;
+    improvedUntilMs = performance.now() + 20000;
+    markDirty();
+    const { world } = container.get();
+    const first = world.regions[gained[0]].name;
+    // posted now, shown when the council closes (no toast covers a dialog)
+    ui.toasts.update({ id: 'easier', icon: 'sword', type: 'success', message: gained.length === 1 ? `▲ ${first} is easier now` : `▲ ${first} and ${gained.length - 1} more ${gained.length === 2 ? 'region is' : 'regions are'} easier now`, duration: 4200 });
+  }
+
   function refreshDerived(nowMs) {
     const { state, world } = container.get();
     const key = state.owner.join(',');
@@ -146,6 +170,10 @@ export function createWorldScene(services) {
     for (const r of world.regions) if (!derived.revealed[r.id]) derived.hidden.push(r.id);
     const labels = [];
     const frontierSet = new Set(derived.frontier);
+    if (improvedIds.size) { // the "▲" marks hold while the council is open, then 20 s more
+      if (!ui.council.el.hidden) improvedUntilMs = nowMs + 20000;
+      else if (nowMs >= improvedUntilMs) improvedIds.clear();
+    }
     for (const region of world.regions) {
       const isRevealed = derived.revealed[region.id] || services.devRevealAll;
       if (!isRevealed) continue;
@@ -155,7 +183,10 @@ export function createWorldScene(services) {
       const datum = { x: a.x, y: a.y, name: region.name, isCapital: rivalCapital, regionId: region.id };
       // Placement priority (labels.js): selected 0 > frontier 1 > rival capital 2 > owned 3 > the rest 4.
       // PLAN-PHASE11: the map reads what the card reads (its default commander credited): a plain label said Hard where the card said Fair
-      if (frontierSet.has(region.id)) { datum.difficulty = difficulty(state, world, region.id, { commander: commanderFor(region.id) }); datum.kind = 1; }
+      if (frontierSet.has(region.id)) {
+        datum.difficulty = difficulty(state, world, region.id, { commander: commanderFor(region.id) }); datum.kind = 1;
+        if (improvedIds.has(region.id) && (!ui.council.el.hidden || nowMs < improvedUntilMs)) datum.improved = true; // "▲": an upgrade just made it easier
+      }
       else if (rivalCapital) datum.kind = 2;
       else if (owned) datum.kind = 3;
       else datum.kind = 4;
@@ -992,7 +1023,9 @@ export function createWorldScene(services) {
   function onBuy(id) {
     const { state } = container.get();
     if (powersForbidden(state, id)) return;
+    const before = frontierRanks();
     const level = buy(state, id);
+    if (level) noteEasier(before);
     if (level) {
       sfx.play('upgrade');
       // feedback for a purchase made in the council stays IN the council (the bought card flashes; a polite status line under the header), never a toast over the dialog
@@ -1009,7 +1042,9 @@ export function createWorldScene(services) {
   function onBuyMax(id) {
     const { state } = container.get();
     if (powersForbidden(state, id)) return;
+    const before = frontierRanks();
     const res = buyMax(state, id);
+    if (res.levels > 0) noteEasier(before);
     if (res.levels > 0) {
       sfx.play('upgrade');
       ui.council.setStatus(`Bought ${UPGRADES[id].name} +${res.levels} ${res.levels === 1 ? 'level' : 'levels'}, now level ${res.level ?? ''}`.replace(/, now level $/, ''));

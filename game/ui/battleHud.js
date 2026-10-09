@@ -138,6 +138,10 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
   // in normal column flow), powers row second (renders last => closest to
   // the pinned bottom edge) — see .battle-bottom's flex-direction: column.
   const powersEl = h('div.power-buttons', {});
+  // a rule that locks every power (Iron Will, Holy Ground), written across the bar; it lets presses through (a press still explains in a toast)
+  const powersRuleEl = h('div.power-rule', { 'aria-hidden': 'true' }, icon('lock', 14), h('span', {}, ''));
+  powersRuleEl.hidden = true;
+  powersEl.appendChild(powersRuleEl);
   const bottomEl = h('div.battle-bottom', {}, sendRowEl, powersEl);
 
   // the name of an ability just used, under the battle header (DESIGN 10.11): a banner, not world text a settlement badge could cover
@@ -368,6 +372,11 @@ export function createBattleHud({ onSendFraction, onPower, onPauseToggle, onSpee
       pausedTag.hidden = !lastPaused;
     }
 
+    if (data.powersRule !== undefined) {
+      const rule = data.powersRule || '';
+      if (powersRuleEl.hidden !== !rule) powersRuleEl.hidden = !rule;
+      if (rule) setText(powersRuleEl.lastChild, rule);
+    }
     if (data.powers) {
       lastPowers = data.powers;
       data.powers.forEach((p, i) => {

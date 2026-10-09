@@ -524,9 +524,11 @@ export function createBattleScene(services) {
   function situationalTip() {
     const region = world.regions[regionId];
     const hasFort = region.settlements.some((id) => world.settlements[id].type === 'fort');
-    if (hasFort) return 'Forts defend at 1.8× — soften them with Firestorm first.';
-    if (battle.player.powers.rally >= 1 && battle.stats.sent > 0 && battle.stats.captured === 0) {
-      return 'Try sending from more than one settlement at once, or use Rally to hit all at once.';
+    // a tip never names a power the player cannot use here (Iron Will, Holy Ground, not unlocked): "soften them with Firestorm" read as a cruel joke
+    const usable = (id) => (battle.player.powers[id] || 0) >= 1 && !noPowers() && !feat.powerFlags(id).holy;
+    if (hasFort) return usable('firestorm') ? 'Forts defend at 1.8× — soften them with Firestorm first.' : 'Forts defend at 1.8× — take the settlements around one first, then hit it with one big send.';
+    if (battle.stats.sent > 0 && battle.stats.captured === 0) {
+      return usable('rally') ? 'Try sending from more than one settlement at once, or use Rally to hit all at once.' : 'Try sending from more than one settlement at once: a squad that arrives alone just feeds the garrison.';
     }
     if (battle.stats.sent === 0) return 'Drag from your War Camp to a settlement to send troops — the fight will not start itself.';
     if (battle.stats.lost > battle.stats.killed * 1.4) return 'Upgrade Muster or Steel in the War Council: you are trading troops badly.';
@@ -1323,6 +1325,8 @@ export function createBattleScene(services) {
           blocked: noPowers() ? IRON_WILL_TEXT : null, // Iron Will: every power locked, with the reason
         };
       }),
+      // when EVERY power is locked by a rule, the bar says which rule before any press (five padlocks alone read as a bug: user report, 2026-10-08)
+      powersRule: noPowers() ? 'Iron Will · no powers this dynasty' : feat.powerFlags(POWER_IDS[0]).holy ? 'Holy Ground · no powers here' : null,
     });
   }
 

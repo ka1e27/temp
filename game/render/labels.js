@@ -151,7 +151,7 @@ export function drawRegionLabels(ctx, camera, labelData, opts = {}) {
     if (p.x < -120 || p.x > W + 120 || p.y < -60 || p.y > H + 60) continue;
     const nameW = textWidth(ctx, nameFont, d.name);
     const hasChip = !!(d.difficulty && showChips);
-    const chipW = hasChip ? textWidth(ctx, chipFontStr, d.difficulty.label) + chipFont * 1.1 + (d.twist ? chipFont * 1.25 : 0) : 0;
+    const chipW = hasChip ? textWidth(ctx, chipFontStr, d.difficulty.label) + chipFont * 1.1 + (d.twist ? chipFont * 1.25 : 0) + (d.improved ? chipFont * 0.95 : 0) : 0;
     const hasPips = !!(d.crowns > 0 && showChips); // same zoom threshold as the difficulty chips
     const pipsW = hasPips ? d.crowns * pipPx + (d.crowns - 1) * Math.max(1, pipPx * 0.22) : 0;
     const torchW = (d.sabotage > 0 ? fontPx * 1.3 : 0) + (d.occupied ? fontPx * 1.3 : 0) + (d.plague ? fontPx * 1.3 : 0) + (d.unrest ? fontPx * 1.3 : 0); // right of the name / the occupied badge (the capital crown takes the left)
@@ -208,7 +208,7 @@ export function drawRegionLabels(ctx, camera, labelData, opts = {}) {
     if (c.hasPips) drawCrownPips(ctx, c.x, y + fontPx * 0.35 + pipPx * 0.4, d.crowns, pipPx);
     drawMarks(ctx, c, d, y, fontPx, opts);
     if (c.hasChip) {
-      const chipBake = useBakes ? bake(`chip|${d.difficulty.label}|${d.twist || ''}|${chipFontStr}|${c.chipW}`, dpr, () => ({ w: (c.chipW + 6) * dpr, h: (chipH + 6) * dpr, ox: (c.chipW / 2 + 3) * dpr, oy: 3 * dpr }), (bctx, ox, oy) => {
+      const chipBake = useBakes ? bake(`chip|${d.difficulty.label}|${d.twist || ''}|${d.improved ? 'up' : ''}|${chipFontStr}|${c.chipW}`, dpr, () => ({ w: (c.chipW + 6) * dpr, h: (chipH + 6) * dpr, ox: (c.chipW / 2 + 3) * dpr, oy: 3 * dpr }), (bctx, ox, oy) => {
         bctx.scale(dpr, dpr);
         drawChip(bctx, c, d, ox / dpr, oy / dpr, chipFont, chipFontStr, chipH);
       }) : null;
@@ -263,7 +263,21 @@ function drawChip(ctx, c, d, x, chipY, chipFont, chipFontStr, chipH) {
   ctx.textBaseline = 'middle';
   const glyphW = d.twist ? chipFont * 1.25 : 0;
   if (d.twist) drawTwistGlyph(ctx, d.twist, x - chipW / 2 + chipFont * 0.55 + glyphW / 2 - chipFont * 0.1, chipY + chipH / 2, chipFont * 1.15);
+  // an upgrade just made it easier (world.js noteEasier): a green "▲" after the label
+  const upW = d.improved ? chipFont * 0.95 : 0;
+  if (upW) {
+    const ax = x + chipW / 2 - chipFont * 0.45 - upW / 2;
+    const ay = chipY + chipH / 2;
+    const s = chipFont * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay - s);
+    ctx.lineTo(ax + s * 1.05, ay + s * 0.8);
+    ctx.lineTo(ax - s * 1.05, ay + s * 0.8);
+    ctx.closePath();
+    ctx.fillStyle = DIFFICULTY_COLORS.Easy;
+    ctx.fill();
+  }
   ctx.fillStyle = color;
-  ctx.fillText(label, x + glyphW / 2, chipY + chipH / 2 + 0.5);
+  ctx.fillText(label, x + glyphW / 2 - upW / 2, chipY + chipH / 2 + 0.5);
   ctx.textBaseline = 'alphabetic';
 }

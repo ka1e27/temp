@@ -780,3 +780,13 @@ Sonnet 5.5 (`sonnet55-engineer`) is no longer preferred.
   Fixes: the War Council's Powers tab says "Iron Will is on..." and sells no power (the Buy button is a lock reading "Iron Will"; onBuy
   refuses too); a refused power says "Iron Will, your founding Challenge: no powers until your next founding. Your General's ability still
   works." for 4.5 s; refusals (`toast.now`) no longer wait 3 s behind a leader's banner on a phone. A phase5 check covers the council.
+- **Phase 15 LIVE at 5f60a7c** (2026-10-08; CI green: verify, browser, deploy).
+- **Phase 16 (Clear menus, clear rules) built** at the user's "continue working" (docs/PLAN-PHASE16.md):
+  - the War Council shows only what changes ("+0% → +3% troop growth", effectDiff + unit test); desktop panel 480 px; one-line price buttons
+  - an "Iron Will · no powers this dynasty" / "Holy Ground · no powers here" caption across a fully locked power bar
+  - defeat tips never advise a power you can't use
+  - a green ▲ on frontier chips a purchase made easier, with a toast
+  - Verified by probes and screenshots; options, textaudit and phase5 green, npm 1255. Gate (snapshot p16snap): npm 1255; full check.mjs green except one stale check (the Treasury line read the old "2 h offline cap" text: it now reads
+    the effect line's label + the shown number) -> desktop + phone rerun green, --base=temp green. The gate also caught a real bug: base.css
+    `:where(#ui *) { pointer-events: auto }` made the power-bar caption's words swallow taps (textaudit "covered"); `.power-rule *` lets them
+    through now. Ready to deploy; waits for "deploy Phase 16".
